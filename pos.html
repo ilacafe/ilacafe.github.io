@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="apple-touch-icon" href="/icon.png" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ILA Cafe | Smart POS</title>
@@ -44,7 +43,7 @@
             margin: 0 auto;
         }
 
-        /* --- DASHBOARD BAR (MINIMAL REDESIGN) --- */
+        /* --- DASHBOARD BAR (MINIMAL) --- */
         .dashboard-bar {
             background-color: rgba(0, 0, 0, 0.15);
             padding: 15px 20px;
@@ -66,9 +65,7 @@
             transition: opacity 0.2s;
         }
 
-        .dash-stat:active {
-            opacity: 0.5;
-        }
+        .dash-stat:active { opacity: 0.5; }
 
         .dash-label {
             font-size: 0.7rem;
@@ -79,16 +76,8 @@
             font-weight: 700;
         }
 
-        .dash-value {
-            font-size: 1.2rem;
-            font-weight: 700;
-        }
-
-        .dash-divider {
-            width: 1px;
-            height: 35px;
-            background-color: rgba(255, 255, 255, 0.2);
-        }
+        .dash-value { font-size: 1.2rem; font-weight: 700; }
+        .dash-divider { width: 1px; height: 35px; background-color: rgba(255, 255, 255, 0.2); }
 
         /* --- TYPOGRAPHY & MENUS --- */
         h2 {
@@ -112,15 +101,8 @@
             font-weight: 500;
         }
 
-        .item-name {
-            flex-grow: 1;
-        }
-
-        .price-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        .item-name { flex-grow: 1; }
+        .price-group { display: flex; align-items: center; gap: 10px; }
 
         .add-btn {
             background-color: var(--brand-text);
@@ -137,10 +119,7 @@
             justify-content: center;
             transition: opacity 0.2s;
         }
-
-        .add-btn:active {
-            opacity: 0.5;
-        }
+        .add-btn:active { opacity: 0.5; }
 
         .coffee-header {
             display: grid;
@@ -163,20 +142,12 @@
             font-size: 1.1rem;
             font-weight: 500;
         }
-
-        .coffee-price {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 8px;
-        }
+        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
         /* --- Floating Cart --- */
         #cart-banner {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
+            bottom: 0; left: 0; width: 100%;
             background-color: var(--brand-text);
             color: var(--brand-bg);
             padding: 15px 20px;
@@ -190,27 +161,10 @@
             z-index: 1000;
         }
 
-        #cart-banner.visible {
-            transform: translateY(0);
-        }
-
-        .cart-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .cart-total {
-            font-weight: 700;
-            font-size: 1.2rem;
-        }
-
-        .cart-clear {
-            font-size: 0.8rem;
-            text-decoration: underline;
-            cursor: pointer;
-            margin-top: 2px;
-            opacity: 0.8;
-        }
+        #cart-banner.visible { transform: translateY(0); }
+        .cart-info { display: flex; flex-direction: column; }
+        .cart-total { font-weight: 700; font-size: 1.2rem; }
+        .cart-clear { font-size: 0.8rem; text-decoration: underline; cursor: pointer; margin-top: 2px; opacity: 0.8; }
 
         .checkout-btn {
             background-color: var(--brand-bg);
@@ -226,22 +180,14 @@
 
         /* --- Modals (Pop-ups) --- */
         .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-            opacity: 0;
-            pointer-events: none;
+            display: flex; justify-content: center; align-items: center;
+            z-index: 2000; opacity: 0; pointer-events: none;
             transition: opacity 0.3s ease;
         }
 
-        .modal-overlay.active {
-            opacity: 1;
-            pointer-events: auto;
-        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
 
         .modal-content {
             background-color: var(--brand-bg);
@@ -256,11 +202,7 @@
             overflow-y: auto;
         }
 
-        .modal-content h3 {
-            margin-top: 0;
-            font-size: 1.4rem;
-            margin-bottom: 10px;
-        }
+        .modal-content h3 { margin-top: 0; font-size: 1.4rem; margin-bottom: 10px; }
 
         .remark-input, .sweetness-select {
             width: 90%;
@@ -276,153 +218,66 @@
             box-sizing: border-box;
         }
 
-        .sweetness-group {
-            text-align: left;
-            width: 90%;
-            margin: 15px auto;
-            display: none; 
-        }
-
-        .table-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 10px;
-            margin: 20px 0 15px 0;
-        }
+        .sweetness-group { text-align: left; width: 90%; margin: 15px auto; display: none; }
+        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0 15px 0; }
 
         .table-btn {
-            background-color: transparent;
-            color: var(--brand-text);
-            border: 2px solid var(--brand-text);
-            padding: 15px 0;
-            border-radius: 10px;
-            font-weight: 700;
-            font-size: 1.2rem;
-            cursor: pointer;
-            font-family: 'Quicksand', sans-serif;
+            background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text);
+            padding: 15px 0; border-radius: 10px; font-weight: 700; font-size: 1.2rem;
+            cursor: pointer; font-family: 'Quicksand', sans-serif;
         }
-        
-        .table-btn.occupied {
-            background-color: rgba(0, 0, 0, 0.3);
-            border-color: rgba(0, 0, 0, 0.5);
-        }
+        .table-btn.occupied { background-color: rgba(0, 0, 0, 0.3); border-color: rgba(0, 0, 0, 0.5); }
 
         .takeaway-btn {
-            background-color: var(--brand-text);
-            color: var(--brand-bg);
-            border: none;
-            padding: 15px 0;
-            border-radius: 10px;
-            font-weight: 700;
-            font-size: 1.1rem;
-            cursor: pointer;
-            font-family: 'Quicksand', sans-serif;
-            width: 100%;
-            margin-bottom: 15px;
+            background-color: var(--brand-text); color: var(--brand-bg); border: none;
+            padding: 15px 0; border-radius: 10px; font-weight: 700; font-size: 1.1rem;
+            cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px;
         }
 
-        .modal-buttons {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 15px;
-            margin-bottom: 15px;
-        }
-
+        .modal-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 15px; margin-bottom: 15px; }
+        
         .btn {
-            padding: 12px 20px;
-            border-radius: 30px;
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 1rem;
-            cursor: pointer;
-            font-family: 'Quicksand', sans-serif;
-            flex: 1;
+            padding: 12px 20px; border-radius: 30px; text-decoration: none; font-weight: 700;
+            font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1;
         }
 
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); border: none; }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); }
         .btn-success { background-color: #2e7d32; color: white; border: none; }
         .btn-danger { background-color: #c62828; color: white; border: none; }
+        .btn-warning { background-color: #f57f17; color: white; border: none; width: 100%; margin-top: 10px;}
 
         .close-modal {
-            background: transparent;
-            color: var(--brand-text);
-            border: none;
-            text-decoration: underline;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-family: 'Quicksand', sans-serif;
-            opacity: 0.8;
-            margin-top: 10px;
+            background: transparent; color: var(--brand-text); border: none; text-decoration: underline;
+            cursor: pointer; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; opacity: 0.8; margin-top: 10px;
         }
 
         .active-bill-item {
-            background-color: rgba(0,0,0,0.2);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            border: 1px solid rgba(255,255,255,0.2);
+            background-color: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; margin-bottom: 10px;
+            display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: 1px solid rgba(255,255,255,0.2);
         }
 
         .bill-receipt {
-            background-color: rgba(255,255,255,0.9);
-            color: #333;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: left;
-            margin-bottom: 20px;
-            font-size: 0.9rem;
+            background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px;
+            text-align: left; margin-bottom: 15px; font-size: 0.9rem;
         }
 
         .bill-receipt-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-            border-bottom: 1px dashed #ccc;
-            padding-bottom: 5px;
+            display: flex; justify-content: space-between; margin-bottom: 5px;
+            border-bottom: 1px dashed #ccc; padding-bottom: 5px;
         }
 
-        .bill-grand-total {
-            font-size: 1.3rem;
-            font-weight: 700;
-            text-align: right;
-            margin-top: 10px;
-            color: #000;
-        }
+        .bill-grand-total { font-size: 1.3rem; font-weight: 700; text-align: right; margin-top: 10px; color: #000; }
         
-        #qr-image {
-            width: 200px;
-            height: 200px;
-            margin: 20px auto;
-            border-radius: 10px;
-            border: 5px solid white;
-        }
+        #qr-image { width: 200px; height: 200px; margin: 15px auto; border-radius: 10px; border: 5px solid white; display: block;}
 
         /* --- Ledger Styles --- */
         .ledger-box {
-            background-color: rgba(0,0,0,0.2);
-            border-radius: 10px;
-            padding: 10px;
-            max-height: 250px;
-            overflow-y: auto;
-            text-align: left;
-            margin-top: 15px;
-            border: 1px solid rgba(255,255,255,0.2);
+            background-color: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; max-height: 200px;
+            overflow-y: auto; text-align: left; margin-top: 15px; border: 1px solid rgba(255,255,255,0.2);
         }
 
-        .ledger-item {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px dashed rgba(255,255,255,0.2);
-            padding: 8px 0;
-            font-size: 0.9rem;
-        }
-
+        .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.2); padding: 8px 0; font-size: 0.9rem; }
         .ledger-item:last-child { border-bottom: none; }
         .ledger-income { color: #81c784; font-weight: bold; }
         .ledger-upi { color: #4fc3f7; font-weight: bold; }
@@ -456,155 +311,51 @@
 
         <section>
             <h2>Pizza</h2>
-            <div class="menu-row">
-                <span class="item-name">Margherita</span>
-                <div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Margherita Pizza', 400)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Marc’s Fav</span>
-                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Marc’s Fav Pizza', 500)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Fire Vodka</span>
-                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Fire Vodka Pizza', 500)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Quattro Formaggi</span>
-                <div class="price-group">₹600 <button class="add-btn" onclick="promptRemark('Quattro Formaggi Pizza', 600)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Al Funghi</span>
-                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Al Funghi Pizza', 500)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Pesto Burrata</span>
-                <div class="price-group">₹750 <button class="add-btn" onclick="promptRemark('Pesto Burrata Pizza', 750)">+</button></div>
-            </div>
+            <div class="menu-row"><span class="item-name">Margherita</span><div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Margherita Pizza', 400)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Marc’s Fav</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Marc’s Fav Pizza', 500)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Fire Vodka</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Fire Vodka Pizza', 500)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Quattro Formaggi</span><div class="price-group">₹600 <button class="add-btn" onclick="promptRemark('Quattro Formaggi Pizza', 600)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Al Funghi</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Al Funghi Pizza', 500)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Pesto Burrata</span><div class="price-group">₹750 <button class="add-btn" onclick="promptRemark('Pesto Burrata Pizza', 750)">+</button></div></div>
         </section>
 
         <section>
             <h2>Sides</h2>
-            <div class="menu-row">
-                <span class="item-name">Garlic Bread</span>
-                <div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Garlic Bread', 400)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Caprese Sandwich</span>
-                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Caprese Sandwich', 500)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Burrata Sandwich</span>
-                <div class="price-group">₹700 <button class="add-btn" onclick="promptRemark('Burrata Sandwich', 700)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Stuffed Garlic Bread</span>
-                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Stuffed Garlic Bread', 500)">+</button></div>
-            </div>
+            <div class="menu-row"><span class="item-name">Garlic Bread</span><div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Garlic Bread', 400)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Caprese Sandwich</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Caprese Sandwich', 500)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Burrata Sandwich</span><div class="price-group">₹700 <button class="add-btn" onclick="promptRemark('Burrata Sandwich', 700)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Stuffed Garlic Bread</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Stuffed Garlic Bread', 500)">+</button></div></div>
         </section>
 
         <section>
             <h2>Dessert</h2>
-            <div class="menu-row">
-                <span class="item-name">Banana Bread</span>
-                <div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Banana Bread', 200)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Carrot Cake</span>
-                <div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Carrot Cake', 200)">+</button></div>
-            </div>
+            <div class="menu-row"><span class="item-name">Banana Bread</span><div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Banana Bread', 200)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Carrot Cake</span><div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Carrot Cake', 200)">+</button></div></div>
         </section>
 
         <section>
             <h2>Coffee</h2>
-            <div class="coffee-header">
-                <div></div>
-                <div style="text-align: right;">Regular</div>
-                <div style="text-align: right;">Large</div>
-            </div>
-            <div class="coffee-row">
-                <span>Espresso</span>
-                <div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Espresso (Regular)', 150)">+</button></div>
-                <div class="coffee-price">-</div>
-            </div>
-            <div class="coffee-row">
-                <span>Americano</span>
-                <div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Americano (Regular)', 150)">+</button></div>
-                <div class="coffee-price">₹220 <button class="add-btn" onclick="promptRemark('Americano (Large)', 220)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Iced Americano</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Americano (Reg)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Americano (Lrg)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Latte</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Latte (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Latte (Large)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Cappuccino</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cappuccino (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cappuccino (Large)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Macchiato</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Macchiato (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Macchiato (Large)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Cortado</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cortado (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cortado (Large)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Flat White</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Flat White (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Flat White (Large)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Iced Coffee</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Coffee (Regular)', 200, true)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Coffee (Large)', 300, true)">+</button></div>
-            </div>
+            <div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>
+            <div class="coffee-row"><span>Espresso</span><div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Espresso (Regular)', 150)">+</button></div><div class="coffee-price">-</div></div>
+            <div class="coffee-row"><span>Americano</span><div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Americano (Regular)', 150)">+</button></div><div class="coffee-price">₹220 <button class="add-btn" onclick="promptRemark('Americano (Large)', 220)">+</button></div></div>
+            <div class="coffee-row"><span>Iced Americano</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Americano (Reg)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Americano (Lrg)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Latte</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Latte (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Latte (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Cappuccino</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cappuccino (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cappuccino (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Macchiato</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Macchiato (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Macchiato (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Cortado</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cortado (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cortado (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Flat White</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Flat White (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Flat White (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Iced Coffee</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Coffee (Regular)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Coffee (Large)', 300, true)">+</button></div></div>
         </section>
 
         <section>
             <h2>Beverages</h2>
-            <div class="coffee-header">
-                <div></div>
-                <div style="text-align: right;">Regular</div>
-                <div style="text-align: right;">Large</div>
-            </div>
-            <div class="coffee-row">
-                <span>Matcha Latte</span>
-                <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Matcha Latte (Reg)', 250, true)">+</button></div>
-                <div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Matcha Latte (Lrg)', 350, true)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Iced Matcha Latte</span>
-                <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Reg)', 250, true)">+</button></div>
-                <div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Lrg)', 350, true)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Saffron Milk</span>
-                <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Saffron Milk (Reg)', 250, true)">+</button></div>
-                <div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Saffron Milk (Lrg)', 350, true)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Rose Milk</span>
-                <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Rose Milk (Reg)', 250, true)">+</button></div>
-                <div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Rose Milk (Lrg)', 350, true)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Rose & Fennel Cooler</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Reg)', 200, true)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Lrg)', 300, true)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Saffron & Tulsi Sharbat</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Reg)', 200, true)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Lrg)', 300, true)">+</button></div>
-            </div>
+            <div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>
+            <div class="coffee-row"><span>Matcha Latte</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Matcha Latte (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Matcha Latte (Lrg)', 350, true)">+</button></div></div>
+            <div class="coffee-row"><span>Iced Matcha Latte</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Lrg)', 350, true)">+</button></div></div>
+            <div class="coffee-row"><span>Saffron Milk</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Saffron Milk (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Saffron Milk (Lrg)', 350, true)">+</button></div></div>
+            <div class="coffee-row"><span>Rose Milk</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Rose Milk (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Rose Milk (Lrg)', 350, true)">+</button></div></div>
+            <div class="coffee-row"><span>Rose & Fennel Cooler</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Reg)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Lrg)', 300, true)">+</button></div></div>
+            <div class="coffee-row"><span>Saffron & Tulsi Sharbat</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Reg)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Lrg)', 300, true)">+</button></div></div>
         </section>
     </div>
 
@@ -662,6 +413,9 @@
         <div class="modal-content">
             <h3 id="checkout-title">Table Bill</h3>
             <div id="checkout-receipt" class="bill-receipt"></div>
+            
+            <input type="tel" id="checkout-phone" class="remark-input" placeholder="Customer WhatsApp No. (Optional)" maxlength="10">
+            
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="payWithUPI()">Pay via UPI</button>
                 <button class="btn btn-success" onclick="payWithCash()">Pay via Cash</button>
@@ -678,7 +432,7 @@
             <div class="modal-buttons">
                 <button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Mark as Paid</button>
             </div>
-            <button class="close-modal" onclick="closeModal('upi-modal')">Back</button>
+            <button class="close-modal" onclick="closeModal('upi-modal')">Cancel / Back</button>
         </div>
     </div>
 
@@ -690,12 +444,14 @@
                 <div>UPI Total<br>₹<span id="modal-upi-display">0</span></div>
             </div>
             
-            <div class="modal-buttons" style="margin-bottom: 20px;">
+            <div class="modal-buttons" style="margin-bottom: 15px;">
                 <button class="btn btn-danger" onclick="openTransactionModal('expense')">Add Expense</button>
                 <button class="btn btn-secondary" onclick="openTransactionModal('withdrawal')">Withdrawal</button>
             </div>
             
-            <h4 style="text-align: left; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Transaction Log</h4>
+            <button class="btn btn-warning" onclick="promptEOD()">Send EOD Report</button>
+            
+            <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Transaction Log</h4>
             <div id="ledger-list" class="ledger-box"></div>
             
             <button class="close-modal" onclick="closeModal('cash-modal')" style="margin-top: 15px;">Close Ledger</button>
@@ -708,6 +464,8 @@
             <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
             <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason (e.g. Bought milk)">
             
+            <input type="password" id="transaction-pin" class="remark-input" placeholder="4-Digit Staff PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
+            
             <div class="modal-buttons">
                 <button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Log Transaction</button>
             </div>
@@ -717,45 +475,43 @@
 
     <script>
         // ==========================================
-        // UPI INTEGRATION
+        // CAFE SETTINGS & PINS
         // ==========================================
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
+        const OWNER_WHATSAPP = "919999016712"; 
+        
+        const STAFF_PINS = {
+            "3579": "Sona",
+            "7342": "Karishma",
+            "4789": "Pinky",
+            "1359": "Anjali"
+        };
         
         // --- System Memory ---
-        window.cart = {};
-        window.totalAmount = 0;
-        window.totalItems = 0;
-        
+        window.cart = {}; window.totalAmount = 0; window.totalItems = 0;
         window.activeTables = JSON.parse(localStorage.getItem('ila_active_tables')) || {};
         window.cashDrawer = parseFloat(localStorage.getItem('ila_cash_drawer')) || 0;
         window.upiTotal = parseFloat(localStorage.getItem('ila_upi_total')) || 0;
-        
         window.salesLedger = JSON.parse(localStorage.getItem('ila_sales_ledger')) || [];
-        if (localStorage.getItem('ila_cash_ledger') && !localStorage.getItem('ila_sales_ledger')) {
-            window.salesLedger = JSON.parse(localStorage.getItem('ila_cash_ledger'));
-        }
         
-        window.pendingItemName = "";
-        window.pendingItemPrice = 0;
-        window.isBeveragePending = false; 
-        window.checkoutTableID = ""; 
-        window.currentTransactionType = "";
+        window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
+        window.checkoutTableID = ""; window.currentTransactionType = "";
 
         // Load displays on startup
-        document.getElementById('cash-display').innerText = `₹${window.cashDrawer}`;
-        document.getElementById('upi-display').innerText = `₹${window.upiTotal}`;
-        document.getElementById('active-bills-count').innerText = Object.keys(window.activeTables).length;
+        updateDashboards();
 
         function saveMemory() {
             localStorage.setItem('ila_active_tables', JSON.stringify(window.activeTables));
             localStorage.setItem('ila_cash_drawer', window.cashDrawer);
             localStorage.setItem('ila_upi_total', window.upiTotal);
             localStorage.setItem('ila_sales_ledger', JSON.stringify(window.salesLedger));
-            
+            updateDashboards();
+        }
+
+        function updateDashboards() {
             document.getElementById('cash-display').innerText = `₹${window.cashDrawer}`;
             document.getElementById('upi-display').innerText = `₹${window.upiTotal}`;
             document.getElementById('active-bills-count').innerText = Object.keys(window.activeTables).length;
-            
             document.getElementById('modal-cash-display').innerText = window.cashDrawer;
             document.getElementById('modal-upi-display').innerText = window.upiTotal;
         }
@@ -763,52 +519,33 @@
         // --- Ledger System ---
         function addLedgerEntry(type, amount, reason) {
             const date = new Date();
-            const timeString = date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
             const entry = { date: timeString, type: type, amount: amount, reason: reason };
             window.salesLedger.unshift(entry); 
             
-            if (type === 'cash_income') {
-                window.cashDrawer += amount;
-            } else if (type === 'upi_income') {
-                window.upiTotal += amount;
-            } else {
-                window.cashDrawer -= amount; 
-            }
+            if (type === 'cash_income') window.cashDrawer += amount;
+            else if (type === 'upi_income') window.upiTotal += amount;
+            else window.cashDrawer -= amount; 
+            
             saveMemory();
         }
 
         function renderLedger() {
             const list = document.getElementById('ledger-list');
             list.innerHTML = "";
-            
-            if (window.salesLedger.length === 0) {
-                list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No transactions yet.</p>";
-                return;
-            }
+            if (window.salesLedger.length === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No transactions yet.</p>"; return; }
 
             window.salesLedger.forEach(entry => {
-                let colorClass = 'ledger-out';
-                let sign = '-';
-                let typeTag = '';
-                
-                if (entry.type === 'cash_income') {
-                    colorClass = 'ledger-income'; sign = '+'; typeTag = '[CASH] ';
-                } else if (entry.type === 'upi_income') {
-                    colorClass = 'ledger-upi'; sign = '+'; typeTag = '[UPI] ';
-                }
+                let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
+                if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = '[CASH] '; } 
+                else if (entry.type === 'upi_income') { colorClass = 'ledger-upi'; sign = '+'; typeTag = '[UPI] '; }
                 
                 list.innerHTML += `
                     <div class="ledger-item">
-                        <div>
-                            <span class="ledger-reason" style="font-weight:700;">${typeTag}</span><span>${entry.reason}</span>
-                            <span class="ledger-meta">${entry.date}</span>
-                        </div>
-                        <div class="${colorClass}">
-                            ${sign}₹${entry.amount}
-                        </div>
-                    </div>
-                `;
+                        <div><span class="ledger-reason" style="font-weight:700;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div>
+                        <div class="${colorClass}">${sign}₹${entry.amount}</div>
+                    </div>`;
             });
         }
 
@@ -816,34 +553,25 @@
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
-            window.pendingItemName = itemName;
-            window.pendingItemPrice = price;
-            window.isBeveragePending = requiresSweetness;
-            
+            window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
             document.getElementById('remark-item-title').innerText = itemName;
             document.getElementById('remark-input').value = ""; 
             
             const sweetGroup = document.getElementById('sweetness-group');
-            if (requiresSweetness) {
-                sweetGroup.style.display = 'block';
-                document.getElementById('sweetness-select').value = "Medium sweet"; 
-            } else {
-                sweetGroup.style.display = 'none';
-            }
+            if (requiresSweetness) { sweetGroup.style.display = 'block'; document.getElementById('sweetness-select').value = "Medium sweet"; } 
+            else { sweetGroup.style.display = 'none'; }
 
             document.getElementById('remark-modal').classList.add('active');
             if (!requiresSweetness) setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
         };
 
         window.confirmAddItem = function(useRemark) {
-            let finalName = window.pendingItemName;
-            let modifications = [];
+            let finalName = window.pendingItemName; let modifications = [];
             
             if (window.isBeveragePending) {
                 const sweetValue = document.getElementById('sweetness-select').value;
                 if (sweetValue !== "") modifications.push(sweetValue);
             }
-
             if (useRemark) {
                 const remarkText = document.getElementById('remark-input').value.trim();
                 if (remarkText !== "") modifications.push(remarkText);
@@ -851,40 +579,26 @@
             
             if (modifications.length > 0) finalName += ` (*${modifications.join(", ")}*)`;
 
-            if (window.cart[finalName]) {
-                window.cart[finalName].qty += 1;
-            } else {
-                window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
-            }
+            if (window.cart[finalName]) window.cart[finalName].qty += 1;
+            else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             
-            window.totalAmount += window.pendingItemPrice;
-            window.totalItems += 1;
-            updateCartUI();
-            closeModal('remark-modal');
+            window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
+            updateCartUI(); closeModal('remark-modal');
         };
 
-        window.clearCart = function() {
-            window.cart = {};
-            window.totalAmount = 0;
-            window.totalItems = 0;
-            updateCartUI();
-        };
+        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; updateCartUI(); };
 
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
-            const totalText = document.getElementById('cart-total-text');
             if (window.totalItems > 0) {
-                totalText.innerText = `₹${window.totalAmount} (${window.totalItems} items)`;
+                document.getElementById('cart-total-text').innerText = `₹${window.totalAmount} (${window.totalItems} items)`;
                 banner.classList.add('visible');
-            } else {
-                banner.classList.remove('visible');
-            }
+            } else { banner.classList.remove('visible'); }
         }
 
         // --- Sending Orders to Kitchen ---
         window.openTableModal = function() {
-            const grid = document.getElementById('sender-table-grid');
-            grid.innerHTML = "";
+            const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
             for (let i = 1; i <= 10; i++) {
                 const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
                 grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="sendOrder('${i}')">${i}</button>`;
@@ -893,16 +607,11 @@
         };
 
         window.sendOrder = function(tableID) {
-            if (!window.activeTables[tableID]) {
-                window.activeTables[tableID] = { items: {}, total: 0 };
-            }
+            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0 };
             
             for (let item in window.cart) {
-                if (window.activeTables[tableID].items[item]) {
-                    window.activeTables[tableID].items[item].qty += window.cart[item].qty;
-                } else {
-                    window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
-                }
+                if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
+                else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
             }
             window.activeTables[tableID].total += window.totalAmount;
             saveMemory();
@@ -910,29 +619,24 @@
             let message = tableID === 'Takeaway' ? `🥡 *NEW TAKEAWAY ORDER*\n\n` : `🍽 *NEW DINE-IN ORDER*\n📍 *Table: ${tableID}*\n\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item} \n`; }
             
-            const encodedMessage = encodeURIComponent(message);
-            const whatsappURL = `https://wa.me/?text=${encodedMessage}`;
+            closeModal('table-modal'); clearCart();
             
-            closeModal('table-modal');
-            clearCart();
-            window.location.href = whatsappURL;
+            setTimeout(() => {
+                window.location.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+            }, 300);
         };
 
         // --- Billing & Checkout Flow ---
         window.openActiveBills = function() {
-            const list = document.getElementById('active-bills-list');
-            list.innerHTML = "";
-            
-            if (Object.keys(window.activeTables).length === 0) {
-                list.innerHTML = "<p>No active tables right now.</p>";
-            } else {
+            const list = document.getElementById('active-bills-list'); list.innerHTML = "";
+            if (Object.keys(window.activeTables).length === 0) { list.innerHTML = "<p>No active tables right now.</p>"; } 
+            else {
                 for (let table in window.activeTables) {
                     list.innerHTML += `
                         <div class="active-bill-item" onclick="openCheckout('${table}')">
                             <span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span>
                             <span>₹${window.activeTables[table].total} ➔</span>
-                        </div>
-                    `;
+                        </div>`;
                 }
             }
             document.getElementById('active-bills-modal').classList.add('active');
@@ -941,107 +645,151 @@
         window.openCheckout = function(tableID) {
             window.checkoutTableID = tableID;
             const tableData = window.activeTables[tableID];
-            
             document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway Bill' : `Table ${tableID} Bill`;
+            document.getElementById('checkout-phone').value = ""; 
             
             let receiptHTML = "";
             for (let item in tableData.items) {
-                const qty = tableData.items[item].qty;
-                const price = tableData.items[item].price;
-                receiptHTML += `<div class="bill-receipt-row"><span>${qty}x ${item}</span><span>₹${qty * price}</span></div>`;
+                receiptHTML += `<div class="bill-receipt-row"><span>${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`;
             }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${tableData.total}</div>`;
-            
             document.getElementById('checkout-receipt').innerHTML = receiptHTML;
             
-            closeModal('active-bills-modal');
-            document.getElementById('checkout-modal').classList.add('active');
+            closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
+
+        // --- Generate Customer Receipt Text ---
+        function generateCustomerReceiptStr(tableID) {
+            const tableData = window.activeTables[tableID];
+            let receipt = `🧾 *ILA CAFE - E-RECEIPT*\nThank you for your visit!\n\n`;
+            for (let item in tableData.items) {
+                receipt += `${tableData.items[item].qty}x ${item} - ₹${tableData.items[item].qty * tableData.items[item].price}\n`;
+            }
+            receipt += `\n*Total Paid: ₹${tableData.total}*\n\nFollow us on IG: @ila_cafe ☕`;
+            return receipt;
+        }
 
         // --- Payment Processing ---
         window.payWithCash = function() {
+            const phone = document.getElementById('checkout-phone').value.trim();
             const amount = window.activeTables[window.checkoutTableID].total;
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
             
+            const receiptStr = generateCustomerReceiptStr(window.checkoutTableID);
             addLedgerEntry('cash_income', amount, reason);
-            delete window.activeTables[window.checkoutTableID]; 
-            saveMemory();
+            delete window.activeTables[window.checkoutTableID]; saveMemory();
             
             closeModal('checkout-modal');
-            alert(`Payment logged to Cash Drawer.`);
+            
+            if (phone.length >= 10) {
+                setTimeout(() => { window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(receiptStr)}`; }, 300);
+            } else {
+                alert(`✅ Table cleared! ₹${amount} logged to Cash Drawer.`);
+            }
         };
 
         window.payWithUPI = function() {
             const amount = window.activeTables[window.checkoutTableID].total;
             const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA%20Cafe&am=${amount}&cu=INR`;
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiString)}`;
-            
-            document.getElementById('qr-image').src = qrUrl;
+            document.getElementById('qr-image').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiString)}`;
             document.getElementById('upi-amount-text').innerText = `Amount due: ₹${amount}`;
             
-            closeModal('checkout-modal');
-            document.getElementById('upi-modal').classList.add('active');
+            closeModal('checkout-modal'); document.getElementById('upi-modal').classList.add('active');
         };
 
         window.confirmUPIPayment = function() {
+            const phone = document.getElementById('checkout-phone').value.trim();
             const amount = window.activeTables[window.checkoutTableID].total;
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
             
+            const receiptStr = generateCustomerReceiptStr(window.checkoutTableID); 
             addLedgerEntry('upi_income', amount, reason); 
-            delete window.activeTables[window.checkoutTableID]; 
-            saveMemory();
+            delete window.activeTables[window.checkoutTableID]; saveMemory();
             
             closeModal('upi-modal');
-            alert(`UPI Payment Logged.`);
+            
+            if (phone.length >= 10) {
+                setTimeout(() => { window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(receiptStr)}`; }, 300);
+            } else {
+                alert(`✅ UPI Payment Logged. Table cleared!`);
+            }
         };
 
-        // --- Sales & Ledger Flow ---
+        // --- Ledger & EOD Flow ---
         window.openCashManagement = function() {
             renderLedger();
-            document.getElementById('modal-cash-display').innerText = window.cashDrawer;
-            document.getElementById('modal-upi-display').innerText = window.upiTotal;
             document.getElementById('cash-modal').classList.add('active');
         };
 
         window.openTransactionModal = function(type) {
             window.currentTransactionType = type;
             document.getElementById('transaction-title').innerText = type === 'expense' ? 'Add Expense' : 'Cash Withdrawal';
-            document.getElementById('transaction-amount').value = "";
-            document.getElementById('transaction-reason').value = "";
-            
-            closeModal('cash-modal');
-            document.getElementById('transaction-modal').classList.add('active');
+            document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = "";
+            closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active');
             setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100);
         };
 
-        window.closeTransactionModal = function() {
-            closeModal('transaction-modal');
-            openCashManagement(); 
-        };
+        window.closeTransactionModal = function() { closeModal('transaction-modal'); openCashManagement(); };
 
         window.confirmTransaction = function() {
-            const amountStr = document.getElementById('transaction-amount').value;
+            const amount = parseFloat(document.getElementById('transaction-amount').value);
             const reasonStr = document.getElementById('transaction-reason').value.trim();
-            const amount = parseFloat(amountStr);
+            const pinStr = document.getElementById('transaction-pin').value.trim();
 
-            if (isNaN(amount) || amount <= 0) {
-                alert("Please enter a valid amount.");
-                return;
-            }
-            if (reasonStr === "") {
-                alert("Please enter a reason for this transaction.");
-                return;
-            }
-            if (amount > window.cashDrawer) {
-                if(!confirm(`Warning: You only have ₹${window.cashDrawer} in the drawer. Continue anyway?`)) {
-                    return;
-                }
-            }
-
-            addLedgerEntry(window.currentTransactionType, amount, reasonStr);
+            if (isNaN(amount) || amount <= 0) { alert("Please enter a valid amount."); return; }
+            if (reasonStr === "") { alert("Please enter a reason."); return; }
             
-            closeModal('transaction-modal');
-            openCashManagement(); 
+            const staffName = STAFF_PINS[pinStr];
+            if (!staffName) { alert("❌ Invalid PIN. Transaction denied."); return; }
+            
+            if (amount > window.cashDrawer && !confirm(`Warning: Only ₹${window.cashDrawer} in drawer. Continue?`)) return;
+
+            const finalReason = `${reasonStr} (By: ${staffName})`;
+            addLedgerEntry(window.currentTransactionType, amount, finalReason);
+            
+            closeModal('transaction-modal'); openCashManagement(); 
+        };
+
+        // --- End of Day Report ---
+        window.promptEOD = function() {
+            const pinStr = prompt("Enter your 4-digit PIN to close the register for today:");
+            if (!pinStr) return;
+            
+            const staffName = STAFF_PINS[pinStr];
+            if (!staffName) { alert("❌ Invalid PIN. Access Denied."); return; }
+
+            if (Object.keys(window.activeTables).length > 0) {
+                if(!confirm("There are still active tables open! Are you sure you want to end the day?")) return;
+            }
+
+            let report = `📊 *ILA CAFE - EOD REPORT*\n👤 Closed By: ${staffName}\n📅 Date: ${new Date().toLocaleDateString()}\n\n`;
+            report += `📱 *UPI Total (Resetting):* ₹${window.upiTotal}\n`;
+            report += `💵 *Closing Cash Drawer (Carried Forward):* ₹${window.cashDrawer}\n\n`;
+            
+            report += `📉 *EXPENSES & OUTFLOW:*\n`;
+            let expensesFound = false;
+            window.salesLedger.forEach(entry => {
+                if (entry.type !== 'cash_income' && entry.type !== 'upi_income') {
+                    report += `- ₹${entry.amount} | ${entry.reason}\n`;
+                    expensesFound = true;
+                }
+            });
+            if (!expensesFound) report += `No expenses logged today.\n`;
+
+            if (confirm("Send Report to WhatsApp and reset UPI/Tables for tomorrow? (Cash balance will remain in drawer)")) {
+                
+                // Wipe Tables, UPI, and Ledger for the next day. KEEP CASH.
+                window.activeTables = {}; 
+                window.upiTotal = 0; 
+                window.salesLedger = []; 
+                saveMemory();
+                
+                closeModal('cash-modal');
+                
+                setTimeout(() => {
+                    window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`;
+                }, 300);
+            }
         };
     </script>
 </body>
