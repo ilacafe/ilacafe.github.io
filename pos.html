@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ILA Cafe | Staff Order System</title>
+    <title>ILA Cafe | Smart POS</title>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -28,12 +28,12 @@
             width: 90%;
             max-width: 600px;
             margin: 0 auto;
-            padding: 40px 20px 20px 20px;
+            padding: 20px 20px 20px 20px;
         }
 
         header {
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 20px;
         }
 
         .logo {
@@ -43,13 +43,52 @@
             margin: 0 auto;
         }
 
+        /* --- DASHBOARD BAR --- */
+        .dashboard-bar {
+            background-color: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .active-bills-btn {
+            background-color: var(--brand-text);
+            color: var(--brand-bg);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-family: 'Quicksand', sans-serif;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .tracker-group {
+            font-weight: 700;
+            font-size: 0.95rem;
+            text-align: right;
+            cursor: pointer;
+        }
+
+        .tracker-group div {
+            margin-bottom: 3px;
+        }
+        
+        .tracker-group span {
+            text-decoration: underline;
+        }
+
         h2 {
             font-weight: 700;
             font-size: 1.8rem;
             text-transform: uppercase;
             letter-spacing: 2px;
             text-align: center;
-            margin-top: 40px;
+            margin-top: 20px;
             margin-bottom: 30px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.3);
             padding-bottom: 10px;
@@ -123,6 +162,7 @@
             gap: 8px;
         }
 
+        /* --- Floating Cart --- */
         #cart-banner {
             position: fixed;
             bottom: 0;
@@ -203,6 +243,8 @@
             width: 85%;
             max-width: 400px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            max-height: 85vh;
+            overflow-y: auto;
         }
 
         .modal-content h3 {
@@ -211,42 +253,25 @@
             margin-bottom: 10px;
         }
 
-        .remark-input {
+        .remark-input, .sweetness-select {
             width: 90%;
             padding: 12px;
-            margin: 10px 0;
+            margin: 10px auto;
             border-radius: 10px;
             border: none;
             font-family: 'Quicksand', sans-serif;
             font-size: 1rem;
             background-color: rgba(255, 255, 255, 0.9);
             color: #333;
+            display: block;
+            box-sizing: border-box;
         }
 
-        /* Sweetness Dropdown Styles */
         .sweetness-group {
             text-align: left;
             width: 90%;
             margin: 15px auto;
             display: none; 
-        }
-
-        .sweetness-group label {
-            font-weight: 700;
-            font-size: 1rem;
-            display: block;
-            margin-bottom: 5px;
-        }
-
-        .sweetness-select {
-            width: 100%;
-            padding: 12px;
-            border-radius: 10px;
-            border: none;
-            font-family: 'Quicksand', sans-serif;
-            font-size: 1rem;
-            background-color: rgba(255, 255, 255, 0.9);
-            color: #333;
         }
 
         .table-grid {
@@ -267,10 +292,10 @@
             cursor: pointer;
             font-family: 'Quicksand', sans-serif;
         }
-
-        .table-btn:active {
-            background-color: var(--brand-text);
-            color: var(--brand-bg);
+        
+        .table-btn.occupied {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-color: rgba(0, 0, 0, 0.5);
         }
 
         .takeaway-btn {
@@ -306,17 +331,10 @@
             flex: 1;
         }
 
-        .btn-primary {
-            background-color: var(--brand-text);
-            color: var(--brand-bg);
-            border: none;
-        }
-
-        .btn-secondary {
-            background-color: transparent;
-            color: var(--brand-text);
-            border: 2px solid var(--brand-text);
-        }
+        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); border: none; }
+        .btn-secondary { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); }
+        .btn-success { background-color: #2e7d32; color: white; border: none; }
+        .btn-danger { background-color: #c62828; color: white; border: none; }
 
         .close-modal {
             background: transparent;
@@ -329,6 +347,78 @@
             opacity: 0.8;
             margin-top: 10px;
         }
+
+        .active-bill-item {
+            background-color: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .bill-receipt {
+            background-color: rgba(255,255,255,0.9);
+            color: #333;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: left;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .bill-receipt-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 5px;
+        }
+
+        .bill-grand-total {
+            font-size: 1.3rem;
+            font-weight: 700;
+            text-align: right;
+            margin-top: 10px;
+            color: #000;
+        }
+        
+        #qr-image {
+            width: 200px;
+            height: 200px;
+            margin: 20px auto;
+            border-radius: 10px;
+            border: 5px solid white;
+        }
+
+        /* --- Ledger Styles --- */
+        .ledger-box {
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            padding: 10px;
+            max-height: 250px;
+            overflow-y: auto;
+            text-align: left;
+            margin-top: 15px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .ledger-item {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px dashed rgba(255,255,255,0.2);
+            padding: 8px 0;
+            font-size: 0.9rem;
+        }
+
+        .ledger-item:last-child { border-bottom: none; }
+        .ledger-income { color: #81c784; font-weight: bold; } /* Green */
+        .ledger-upi { color: #4fc3f7; font-weight: bold; } /* Blue */
+        .ledger-out { color: #e57373; font-weight: bold; } /* Red */
+        .ledger-meta { font-size: 0.75rem; opacity: 0.7; display: block; }
     </style>
 </head>
 <body>
@@ -337,6 +427,14 @@
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo">
         </header>
+
+        <div class="dashboard-bar">
+            <button class="active-bills-btn" onclick="openActiveBills()">🧾 Active Bills</button>
+            <div class="tracker-group" onclick="openCashManagement()">
+                <div>💵 Cash: <span id="cash-display">₹0</span></div>
+                <div>📱 UPI: <span id="upi-display">₹0</span></div>
+            </div>
+        </div>
 
         <section>
             <h2>Pizza</h2>
@@ -405,7 +503,6 @@
                 <div style="text-align: right;">Regular</div>
                 <div style="text-align: right;">Large</div>
             </div>
-            
             <div class="coffee-row">
                 <span>Espresso</span>
                 <div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Espresso (Regular)', 150)">+</button></div>
@@ -460,7 +557,6 @@
                 <div style="text-align: right;">Regular</div>
                 <div style="text-align: right;">Large</div>
             </div>
-            
             <div class="coffee-row">
                 <span>Matcha Latte</span>
                 <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Matcha Latte (Reg)', 250, true)">+</button></div>
@@ -505,7 +601,6 @@
     <div id="remark-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="remark-item-title">Item Name</h3>
-            
             <div id="sweetness-group" class="sweetness-group">
                 <label>Sweetness Level:</label>
                 <select id="sweetness-select" class="sweetness-select">
@@ -517,15 +612,13 @@
                     <option value="Very sweet">Very sweet</option>
                 </select>
             </div>
-
             <p style="margin-top:10px;">Any special requests?</p>
             <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
-            
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
                 <button class="btn btn-primary" onclick="confirmAddItem(true)">Add Item</button>
             </div>
-            <button class="close-modal" onclick="closeRemarkModal()">Cancel</button>
+            <button class="close-modal" onclick="closeModal('remark-modal')">Cancel</button>
         </div>
     </div>
 
@@ -533,34 +626,176 @@
         <div class="modal-content">
             <h3>Select Table</h3>
             <p>Which table is this order for?</p>
-            
-            <div class="table-grid">
-                <button class="table-btn" onclick="sendOrder(1)">1</button>
-                <button class="table-btn" onclick="sendOrder(2)">2</button>
-                <button class="table-btn" onclick="sendOrder(3)">3</button>
-                <button class="table-btn" onclick="sendOrder(4)">4</button>
-                <button class="table-btn" onclick="sendOrder(5)">5</button>
-                <button class="table-btn" onclick="sendOrder(6)">6</button>
-                <button class="table-btn" onclick="sendOrder(7)">7</button>
-                <button class="table-btn" onclick="sendOrder(8)">8</button>
-                <button class="table-btn" onclick="sendOrder(9)">9</button>
-                <button class="table-btn" onclick="sendOrder(10)">10</button>
-            </div>
-            
+            <div class="table-grid" id="sender-table-grid"></div>
             <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway / Counter</button>
             <br>
-            <button class="close-modal" onclick="closeTableModal()">Cancel Order</button>
+            <button class="close-modal" onclick="closeModal('table-modal')">Cancel</button>
+        </div>
+    </div>
+
+    <div id="active-bills-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Active Bills</h3>
+            <div id="active-bills-list" style="margin-top: 15px;"></div>
+            <button class="close-modal" onclick="closeModal('active-bills-modal')" style="margin-top: 20px;">Close Dashboard</button>
+        </div>
+    </div>
+
+    <div id="checkout-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="checkout-title">Table 1 Bill</h3>
+            <div id="checkout-receipt" class="bill-receipt"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" onclick="payWithUPI()">Pay via UPI</button>
+                <button class="btn btn-success" onclick="payWithCash()">Pay via Cash</button>
+            </div>
+            <button class="close-modal" onclick="closeModal('checkout-modal')">Cancel</button>
+        </div>
+    </div>
+
+    <div id="upi-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Scan to Pay</h3>
+            <p id="upi-amount-text">Amount due: ₹0</p>
+            <img id="qr-image" src="" alt="UPI QR Code">
+            <div class="modal-buttons">
+                <button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Mark as Paid & Close Table</button>
+            </div>
+            <button class="close-modal" onclick="closeModal('upi-modal')">Back</button>
+        </div>
+    </div>
+
+    <div id="cash-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Sales & Ledger</h3>
+            <div style="display: flex; justify-content: space-around; margin-bottom: 20px; font-size: 1.1rem; font-weight: bold;">
+                <div>Cash Drawer<br>₹<span id="modal-cash-display">0</span></div>
+                <div>UPI Total<br>₹<span id="modal-upi-display">0</span></div>
+            </div>
+            
+            <div class="modal-buttons" style="margin-bottom: 20px;">
+                <button class="btn btn-danger" onclick="openTransactionModal('expense')">Add Expense</button>
+                <button class="btn btn-secondary" onclick="openTransactionModal('withdrawal')">Withdrawal</button>
+            </div>
+            
+            <h4 style="text-align: left; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px;">Transaction Ledger</h4>
+            <div id="ledger-list" class="ledger-box">
+                </div>
+            
+            <button class="close-modal" onclick="closeModal('cash-modal')" style="margin-top: 15px;">Close Ledger</button>
+        </div>
+    </div>
+
+    <div id="transaction-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="transaction-title">New Transaction</h3>
+            <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
+            <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason (e.g., Bought milk, Owner cash)">
+            
+            <div class="modal-buttons">
+                <button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Log Transaction</button>
+            </div>
+            <button class="close-modal" onclick="closeTransactionModal()">Cancel</button>
         </div>
     </div>
 
     <script>
+        // ==========================================
+        // UPI INTEGRATION
+        // ==========================================
+        const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
+        
+        // --- System Memory ---
         window.cart = {};
         window.totalAmount = 0;
         window.totalItems = 0;
         
+        window.activeTables = JSON.parse(localStorage.getItem('ila_active_tables')) || {};
+        window.cashDrawer = parseFloat(localStorage.getItem('ila_cash_drawer')) || 0;
+        window.upiTotal = parseFloat(localStorage.getItem('ila_upi_total')) || 0;
+        
+        // Load combined ledger, migrate old cash ledger if it exists
+        window.salesLedger = JSON.parse(localStorage.getItem('ila_sales_ledger')) || [];
+        if (localStorage.getItem('ila_cash_ledger') && !localStorage.getItem('ila_sales_ledger')) {
+            window.salesLedger = JSON.parse(localStorage.getItem('ila_cash_ledger'));
+        }
+        
         window.pendingItemName = "";
         window.pendingItemPrice = 0;
         window.isBeveragePending = false; 
+        window.checkoutTableID = ""; 
+        window.currentTransactionType = "";
+
+        // Load displays on startup
+        document.getElementById('cash-display').innerText = `₹${window.cashDrawer}`;
+        document.getElementById('upi-display').innerText = `₹${window.upiTotal}`;
+
+        function saveMemory() {
+            localStorage.setItem('ila_active_tables', JSON.stringify(window.activeTables));
+            localStorage.setItem('ila_cash_drawer', window.cashDrawer);
+            localStorage.setItem('ila_upi_total', window.upiTotal);
+            localStorage.setItem('ila_sales_ledger', JSON.stringify(window.salesLedger));
+            
+            document.getElementById('cash-display').innerText = `₹${window.cashDrawer}`;
+            document.getElementById('upi-display').innerText = `₹${window.upiTotal}`;
+            document.getElementById('modal-cash-display').innerText = window.cashDrawer;
+            document.getElementById('modal-upi-display').innerText = window.upiTotal;
+        }
+
+        // --- Ledger System ---
+        function addLedgerEntry(type, amount, reason) {
+            const date = new Date();
+            const timeString = date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            const entry = { date: timeString, type: type, amount: amount, reason: reason };
+            window.salesLedger.unshift(entry); // Add to beginning of array
+            
+            if (type === 'cash_income') {
+                window.cashDrawer += amount;
+            } else if (type === 'upi_income') {
+                window.upiTotal += amount;
+            } else {
+                window.cashDrawer -= amount; // Expenses/Withdrawals subtract from cash
+            }
+            saveMemory();
+        }
+
+        function renderLedger() {
+            const list = document.getElementById('ledger-list');
+            list.innerHTML = "";
+            
+            if (window.salesLedger.length === 0) {
+                list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No transactions yet.</p>";
+                return;
+            }
+
+            window.salesLedger.forEach(entry => {
+                let colorClass = 'ledger-out';
+                let sign = '-';
+                let typeTag = '';
+                
+                if (entry.type === 'cash_income') {
+                    colorClass = 'ledger-income'; sign = '+'; typeTag = '[CASH] ';
+                } else if (entry.type === 'upi_income') {
+                    colorClass = 'ledger-upi'; sign = '+'; typeTag = '[UPI] ';
+                }
+                
+                list.innerHTML += `
+                    <div class="ledger-item">
+                        <div>
+                            <span class="ledger-reason" style="font-weight:700;">${typeTag}</span><span>${entry.reason}</span>
+                            <span class="ledger-meta">${entry.date}</span>
+                        </div>
+                        <div class="${colorClass}">
+                            ${sign}₹${entry.amount}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // --- Standard UI Controls ---
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             window.pendingItemName = itemName;
@@ -571,24 +806,15 @@
             document.getElementById('remark-input').value = ""; 
             
             const sweetGroup = document.getElementById('sweetness-group');
-            const sweetSelect = document.getElementById('sweetness-select');
-            
             if (requiresSweetness) {
                 sweetGroup.style.display = 'block';
-                sweetSelect.value = "Medium sweet"; // Automatically resets to Medium sweet
+                document.getElementById('sweetness-select').value = "Medium sweet"; 
             } else {
                 sweetGroup.style.display = 'none';
             }
 
             document.getElementById('remark-modal').classList.add('active');
-            
-            if (!requiresSweetness) {
-                setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
-            }
-        };
-
-        window.closeRemarkModal = function() {
-            document.getElementById('remark-modal').classList.remove('active');
+            if (!requiresSweetness) setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
         };
 
         window.confirmAddItem = function(useRemark) {
@@ -597,21 +823,15 @@
             
             if (window.isBeveragePending) {
                 const sweetValue = document.getElementById('sweetness-select').value;
-                if (sweetValue !== "") {
-                    modifications.push(sweetValue);
-                }
+                if (sweetValue !== "") modifications.push(sweetValue);
             }
 
             if (useRemark) {
                 const remarkText = document.getElementById('remark-input').value.trim();
-                if (remarkText !== "") {
-                    modifications.push(remarkText);
-                }
+                if (remarkText !== "") modifications.push(remarkText);
             }
             
-            if (modifications.length > 0) {
-                finalName += ` (*${modifications.join(", ")}*)`;
-            }
+            if (modifications.length > 0) finalName += ` (*${modifications.join(", ")}*)`;
 
             if (window.cart[finalName]) {
                 window.cart[finalName].qty += 1;
@@ -621,62 +841,190 @@
             
             window.totalAmount += window.pendingItemPrice;
             window.totalItems += 1;
-            window.updateCartUI();
-            
-            window.closeRemarkModal();
+            updateCartUI();
+            closeModal('remark-modal');
         };
 
         window.clearCart = function() {
             window.cart = {};
             window.totalAmount = 0;
             window.totalItems = 0;
-            window.updateCartUI();
+            updateCartUI();
         };
 
-        window.updateCartUI = function() {
+        function updateCartUI() {
             const banner = document.getElementById('cart-banner');
             const totalText = document.getElementById('cart-total-text');
-            
             if (window.totalItems > 0) {
                 totalText.innerText = `₹${window.totalAmount} (${window.totalItems} items)`;
                 banner.classList.add('visible');
             } else {
                 banner.classList.remove('visible');
             }
-        };
+        }
 
+        // --- Sending Orders to Kitchen ---
         window.openTableModal = function() {
+            const grid = document.getElementById('sender-table-grid');
+            grid.innerHTML = "";
+            for (let i = 1; i <= 10; i++) {
+                const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
+                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="sendOrder('${i}')">${i}</button>`;
+            }
             document.getElementById('table-modal').classList.add('active');
         };
 
-        window.closeTableModal = function() {
-            document.getElementById('table-modal').classList.remove('active');
-        };
-
-        window.sendOrder = function(orderType) {
-            window.closeTableModal(); 
-            
-            let message = "";
-            if (orderType === 'Takeaway') {
-                message = `🥡 *NEW TAKEAWAY ORDER*\n\n`;
-            } else {
-                message = `🍽 *NEW DINE-IN ORDER*\n📍 *Table: ${orderType}*\n\n`;
+        window.sendOrder = function(tableID) {
+            if (!window.activeTables[tableID]) {
+                window.activeTables[tableID] = { items: {}, total: 0 };
             }
             
             for (let item in window.cart) {
-                message += `${window.cart[item].qty}x ${item} \n`;
+                if (window.activeTables[tableID].items[item]) {
+                    window.activeTables[tableID].items[item].qty += window.cart[item].qty;
+                } else {
+                    window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
+                }
             }
-            
-            message += `\n*Total Bill: ₹${window.totalAmount}*`;
+            window.activeTables[tableID].total += window.totalAmount;
+            saveMemory();
+
+            let message = tableID === 'Takeaway' ? `🥡 *NEW TAKEAWAY ORDER*\n\n` : `🍽 *NEW DINE-IN ORDER*\n📍 *Table: ${tableID}*\n\n`;
+            for (let item in window.cart) { message += `${window.cart[item].qty}x ${item} \n`; }
             
             const encodedMessage = encodeURIComponent(message);
             const whatsappURL = `https://wa.me/?text=${encodedMessage}`;
             
+            closeModal('table-modal');
+            clearCart();
             window.location.href = whatsappURL;
+        };
+
+        // --- Billing & Checkout Flow ---
+        window.openActiveBills = function() {
+            const list = document.getElementById('active-bills-list');
+            list.innerHTML = "";
             
-            setTimeout(() => { window.clearCart(); }, 1000);
+            if (Object.keys(window.activeTables).length === 0) {
+                list.innerHTML = "<p>No active tables right now.</p>";
+            } else {
+                for (let table in window.activeTables) {
+                    list.innerHTML += `
+                        <div class="active-bill-item" onclick="openCheckout('${table}')">
+                            <span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span>
+                            <span>₹${window.activeTables[table].total} ➔</span>
+                        </div>
+                    `;
+                }
+            }
+            document.getElementById('active-bills-modal').classList.add('active');
+        };
+
+        window.openCheckout = function(tableID) {
+            window.checkoutTableID = tableID;
+            const tableData = window.activeTables[tableID];
+            
+            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway Bill' : `Table ${tableID} Bill`;
+            
+            let receiptHTML = "";
+            for (let item in tableData.items) {
+                const qty = tableData.items[item].qty;
+                const price = tableData.items[item].price;
+                receiptHTML += `<div class="bill-receipt-row"><span>${qty}x ${item}</span><span>₹${qty * price}</span></div>`;
+            }
+            receiptHTML += `<div class="bill-grand-total">Total: ₹${tableData.total}</div>`;
+            
+            document.getElementById('checkout-receipt').innerHTML = receiptHTML;
+            
+            closeModal('active-bills-modal');
+            document.getElementById('checkout-modal').classList.add('active');
+        };
+
+        // --- Payment Processing ---
+        window.payWithCash = function() {
+            const amount = window.activeTables[window.checkoutTableID].total;
+            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
+            
+            addLedgerEntry('cash_income', amount, reason);
+            delete window.activeTables[window.checkoutTableID]; 
+            saveMemory();
+            
+            closeModal('checkout-modal');
+            alert(`✅ Table cleared! ₹${amount} logged to Cash Drawer.`);
+        };
+
+        window.payWithUPI = function() {
+            const amount = window.activeTables[window.checkoutTableID].total;
+            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA%20Cafe&am=${amount}&cu=INR`;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiString)}`;
+            
+            document.getElementById('qr-image').src = qrUrl;
+            document.getElementById('upi-amount-text').innerText = `Amount due: ₹${amount}`;
+            
+            closeModal('checkout-modal');
+            document.getElementById('upi-modal').classList.add('active');
+        };
+
+        window.confirmUPIPayment = function() {
+            const amount = window.activeTables[window.checkoutTableID].total;
+            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
+            
+            addLedgerEntry('upi_income', amount, reason); // Logs to UPI total!
+            delete window.activeTables[window.checkoutTableID]; 
+            saveMemory();
+            
+            closeModal('upi-modal');
+            alert(`✅ UPI Payment Logged. Table cleared!`);
+        };
+
+        // --- Sales & Ledger Flow ---
+        window.openCashManagement = function() {
+            renderLedger();
+            document.getElementById('modal-cash-display').innerText = window.cashDrawer;
+            document.getElementById('modal-upi-display').innerText = window.upiTotal;
+            document.getElementById('cash-modal').classList.add('active');
+        };
+
+        window.openTransactionModal = function(type) {
+            window.currentTransactionType = type;
+            document.getElementById('transaction-title').innerText = type === 'expense' ? 'Add Expense' : 'Cash Withdrawal';
+            document.getElementById('transaction-amount').value = "";
+            document.getElementById('transaction-reason').value = "";
+            
+            closeModal('cash-modal');
+            document.getElementById('transaction-modal').classList.add('active');
+            setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100);
+        };
+
+        window.closeTransactionModal = function() {
+            closeModal('transaction-modal');
+            openCashManagement(); 
+        };
+
+        window.confirmTransaction = function() {
+            const amountStr = document.getElementById('transaction-amount').value;
+            const reasonStr = document.getElementById('transaction-reason').value.trim();
+            const amount = parseFloat(amountStr);
+
+            if (isNaN(amount) || amount <= 0) {
+                alert("Please enter a valid amount.");
+                return;
+            }
+            if (reasonStr === "") {
+                alert("Please enter a reason for this transaction.");
+                return;
+            }
+            if (amount > window.cashDrawer) {
+                if(!confirm(`Warning: You only have ₹${window.cashDrawer} in the drawer. Continue anyway?`)) {
+                    return;
+                }
+            }
+
+            addLedgerEntry(window.currentTransactionType, amount, reasonStr);
+            
+            closeModal('transaction-modal');
+            openCashManagement(); 
         };
     </script>
-
 </body>
 </html>
