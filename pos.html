@@ -70,7 +70,7 @@
         .bill-receipt-row { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
         .bill-grand-total { font-size: 1.3rem; font-weight: 700; text-align: right; margin-top: 10px; color: #000; }
         
-        #qr-image { width: 200px; height: 200px; margin: 15px auto; border-radius: 10px; border: 5px solid white; display: block;}
+        #qr-image { width: 200px; height: 200px; margin: 15px auto; border-radius: 10px; border: 5px solid white; background-color: white; display: block; object-fit: contain; }
 
         /* LEDGER */
         .ledger-box { background-color: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px; border: 1px solid rgba(255,255,255,0.2); }
@@ -98,6 +98,10 @@
             <div class="dash-divider"></div>
             <div class="dash-stat" onclick="openCashManagement()">
                 <span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span>
+            </div>
+            <div class="dash-divider"></div>
+            <div class="dash-stat" onclick="openPastBills()">
+                <span class="dash-label">History</span><span class="dash-value">View</span>
             </div>
         </div>
 
@@ -197,7 +201,28 @@
         <div class="modal-content">
             <h3>Active Bills</h3>
             <div id="active-bills-list" style="margin-top: 15px;"></div>
-            <button class="close-modal" onclick="closeModal('active-bills-modal')" style="margin-top: 20px;">Close Dashboard</button>
+            <button class="close-modal" onclick="closeModal('active-bills-modal')" style="margin-top: 20px;">Close</button>
+        </div>
+    </div>
+
+    <div id="past-bills-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Past Bills History</h3>
+            <div id="past-bills-list" class="ledger-box" style="max-height: 300px; margin-top: 15px;"></div>
+            <button class="close-modal" onclick="closeModal('past-bills-modal')" style="margin-top: 20px;">Close</button>
+        </div>
+    </div>
+
+    <div id="view-past-bill-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="past-bill-title">Receipt</h3>
+            <p id="past-bill-date" style="font-size: 0.8rem; margin-top: -5px; margin-bottom: 10px; opacity: 0.8;"></p>
+            <div id="past-bill-receipt" class="bill-receipt"></div>
+            
+            <input type="tel" id="past-bill-phone" class="remark-input" placeholder="Customer WhatsApp No." maxlength="10">
+            <button class="btn btn-whatsapp" onclick="sendPastBillWhatsApp()">Send Receipt</button>
+            
+            <button class="close-modal" onclick="closeModal('view-past-bill-modal')" style="margin-top: 20px;">Close</button>
         </div>
     </div>
 
@@ -273,8 +298,6 @@
         // ==========================================
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "919999016712"; 
-        
-        // YOUR GITHUB WEBSITE LINK 
         const CAFE_WEBSITE_LINK = "https://ilacafe.github.io"; 
         
         const STAFF_PINS = {
@@ -287,9 +310,10 @@
         window.cashDrawer = parseFloat(localStorage.getItem('ila_cash_drawer')) || 0;
         window.upiTotal = parseFloat(localStorage.getItem('ila_upi_total')) || 0;
         window.salesLedger = JSON.parse(localStorage.getItem('ila_sales_ledger')) || [];
+        window.pastBills = JSON.parse(localStorage.getItem('ila_past_bills')) || [];
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
-        window.checkoutTableID = ""; window.currentTransactionType = "";
+        window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
 
         updateDashboards();
 
@@ -298,6 +322,7 @@
             localStorage.setItem('ila_cash_drawer', window.cashDrawer);
             localStorage.setItem('ila_upi_total', window.upiTotal);
             localStorage.setItem('ila_sales_ledger', JSON.stringify(window.salesLedger));
+            localStorage.setItem('ila_past_bills', JSON.stringify(window.pastBills));
             updateDashboards();
         }
 
@@ -309,6 +334,7 @@
             document.getElementById('modal-upi-display').innerText = window.upiTotal;
         }
 
+        // --- Ledger & Past Bills System ---
         function addLedgerEntry(type, amount, reason) {
             const date = new Date();
             const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -316,6 +342,19 @@
             if (type === 'cash_income') window.cashDrawer += amount;
             else if (type === 'upi_income') window.upiTotal += amount;
             else window.cashDrawer -= amount; 
+            saveMemory();
+        }
+
+        function savePastBill(tableID, tableData) {
+            const bill = {
+                id: Date.now(),
+                table: tableID,
+                date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(),
+                items: JSON.parse(JSON.stringify(tableData.items)), // clone items
+                total: tableData.total
+            };
+            window.pastBills.unshift(bill);
+            if(window.pastBills.length > 50) window.pastBills.pop(); // keep last 50 bills
             saveMemory();
         }
 
@@ -390,6 +429,7 @@
             setTimeout(() => { window.location.href = `https://wa.me/?text=${encodeURIComponent(message)}`; }, 300);
         };
 
+        // --- Active Bills & Past Bills UI ---
         window.openActiveBills = function() {
             const list = document.getElementById('active-bills-list'); list.innerHTML = "";
             if (Object.keys(window.activeTables).length === 0) { list.innerHTML = "<p>No active tables right now.</p>"; } 
@@ -399,6 +439,48 @@
                 }
             }
             document.getElementById('active-bills-modal').classList.add('active');
+        };
+
+        window.openPastBills = function() {
+            const list = document.getElementById('past-bills-list'); list.innerHTML = "";
+            if (window.pastBills.length === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No past bills yet.</p>"; } 
+            else {
+                window.pastBills.forEach(bill => {
+                    list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="viewPastBill(${bill.id})">
+                        <div><span style="font-weight: 700;">${bill.table === 'Takeaway' ? 'Takeaway' : 'Table ' + bill.table}</span><span class="ledger-meta">${bill.date}</span></div>
+                        <span>₹${bill.total} ➔</span></div>`;
+                });
+            }
+            document.getElementById('past-bills-modal').classList.add('active');
+        };
+
+        window.viewPastBill = function(id) {
+            const bill = window.pastBills.find(b => b.id === id);
+            if (!bill) return;
+            window.currentPastBillID = id;
+            
+            document.getElementById('past-bill-title').innerText = bill.table === 'Takeaway' ? 'Takeaway Receipt' : `Table ${bill.table} Receipt`;
+            document.getElementById('past-bill-date').innerText = bill.date;
+            
+            let receiptHTML = "";
+            for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
+            receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
+            document.getElementById('past-bill-receipt').innerHTML = receiptHTML;
+            document.getElementById('past-bill-phone').value = "";
+            
+            closeModal('past-bills-modal'); document.getElementById('view-past-bill-modal').classList.add('active');
+        };
+
+        window.sendPastBillWhatsApp = function() {
+            const phone = document.getElementById('past-bill-phone').value.trim();
+            if (phone.length < 10) { alert("Please enter a valid 10-digit WhatsApp number."); return; }
+            
+            const bill = window.pastBills.find(b => b.id === window.currentPastBillID);
+            let billStr = `ILA\n\n`;
+            for (let item in bill.items) { billStr += `${bill.items[item].qty}x ${item} - ₹${bill.items[item].qty * bill.items[item].price}\n`; }
+            billStr += `\nTotal Paid: ₹${bill.total}\n\nThank you for your visit.`;
+            
+            window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
         window.openCheckout = function(tableID) {
@@ -412,7 +494,7 @@
             closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
 
-        // --- NEW WHATSAPP BILL LOGIC ---
+        // --- Payment & Checkout Logic ---
         window.sendWhatsAppBill = function() {
             const phone = document.getElementById('checkout-phone').value.trim();
             if (phone.length < 10) { alert("Please enter a valid 10-digit WhatsApp number to send the bill."); return; }
@@ -423,8 +505,7 @@
             billStr += `\nTotal Due: ₹${tableData.total}\n\n`;
             
             const paymentLink = `${CAFE_WEBSITE_LINK}/pay.html?am=${tableData.total}`;
-            billStr += `Tap link below to Pay via UPI:\n${paymentLink}\n\n`;
-            billStr += `Thank you for your visit.`;
+            billStr += `Tap link below to Pay via UPI:\n${paymentLink}\n\nThank you for your visit.`;
             
             window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
@@ -432,15 +513,18 @@
         window.payWithCash = function() {
             const amount = window.activeTables[window.checkoutTableID].total;
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
+            
+            savePastBill(window.checkoutTableID, window.activeTables[window.checkoutTableID]); // Save to history
             addLedgerEntry('cash_income', amount, reason);
             delete window.activeTables[window.checkoutTableID]; saveMemory();
+            
             closeModal('checkout-modal'); alert(`Table cleared! ₹${amount} logged to Cash Drawer.`);
         };
 
         window.payWithUPI = function() {
             const amount = window.activeTables[window.checkoutTableID].total;
             const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amount}&cu=INR`;
-            document.getElementById('qr-image').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiString)}`;
+            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
             document.getElementById('upi-amount-text').innerText = `Amount due: ₹${amount}`;
             closeModal('checkout-modal'); document.getElementById('upi-modal').classList.add('active');
         };
@@ -448,11 +532,15 @@
         window.confirmUPIPayment = function() {
             const amount = window.activeTables[window.checkoutTableID].total;
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
+            
+            savePastBill(window.checkoutTableID, window.activeTables[window.checkoutTableID]); // Save to history
             addLedgerEntry('upi_income', amount, reason); 
             delete window.activeTables[window.checkoutTableID]; saveMemory();
+            
             closeModal('upi-modal'); alert(`UPI Payment Logged. Table cleared.`);
         };
 
+        // --- Ledger & EOD Flow ---
         window.openCashManagement = function() { renderLedger(); document.getElementById('cash-modal').classList.add('active'); };
 
         window.openTransactionModal = function(type) {
@@ -500,7 +588,7 @@
             if (!expensesFound) report += `No expenses logged today.\n`;
 
             if (confirm("Send Report to WhatsApp and reset UPI/Tables for tomorrow? (Cash balance will remain in drawer)")) {
-                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; saveMemory();
+                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; saveMemory();
                 closeModal('cash-modal');
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
