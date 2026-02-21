@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ILA Cafe | Staff Order System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --brand-bg: #8c7255; 
+            --brand-text: #ffffff; 
+        }
+
+        body {
+            background-color: var(--brand-bg);
+            color: var(--brand-text);
+            font-family: 'Quicksand', sans-serif;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-bottom: 120px;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px 20px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            max-width: 350px; 
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+
+        h2 {
+            font-weight: 700;
+            font-size: 1.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+            margin-top: 40px;
+            margin-bottom: 30px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 10px;
+        }
+
+        .menu-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .item-name {
+            flex-grow: 1;
+        }
+
+        .price-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .add-btn {
+            background-color: var(--brand-text);
+            color: var(--brand-bg);
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            font-size: 1.4rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s;
+        }
+
+        .add-btn:active {
+            opacity: 0.5;
+        }
+
+        .coffee-header {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            font-weight: 700;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            opacity: 0.7;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.3);
+            padding-bottom: 5px;
+        }
+
+        .coffee-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .coffee-price {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        #cart-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: var(--brand-text);
+            color: var(--brand-bg);
+            padding: 15px 20px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
+            transform: translateY(100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1000;
+        }
+
+        #cart-banner.visible {
+            transform: translateY(0);
+        }
+
+        .cart-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .cart-total {
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+
+        .cart-clear {
+            font-size: 0.8rem;
+            text-decoration: underline;
+            cursor: pointer;
+            margin-top: 2px;
+            opacity: 0.8;
+        }
+
+        .checkout-btn {
+            background-color: var(--brand-bg);
+            color: var(--brand-text);
+            border: 2px solid var(--brand-bg);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 1rem;
+            font-family: 'Quicksand', sans-serif;
+            cursor: pointer;
+        }
+
+        /* --- Modals (Pop-ups) --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background-color: var(--brand-bg);
+            border: 2px solid var(--brand-text);
+            padding: 30px 20px;
+            border-radius: 20px;
+            text-align: center;
+            width: 85%;
+            max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            font-size: 1.4rem;
+            margin-bottom: 10px;
+        }
+
+        .remark-input {
+            width: 90%;
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 10px;
+            border: none;
+            font-family: 'Quicksand', sans-serif;
+            font-size: 1rem;
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+
+        .table-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin: 20px 0 15px 0;
+        }
+
+        .table-btn {
+            background-color: transparent;
+            color: var(--brand-text);
+            border: 2px solid var(--brand-text);
+            padding: 15px 0;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            cursor: pointer;
+            font-family: 'Quicksand', sans-serif;
+        }
+
+        .table-btn:active {
+            background-color: var(--brand-text);
+            color: var(--brand-bg);
+        }
+
+        .takeaway-btn {
+            background-color: var(--brand-text);
+            color: var(--brand-bg);
+            border: none;
+            padding: 15px 0;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            cursor: pointer;
+            font-family: 'Quicksand', sans-serif;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            font-family: 'Quicksand', sans-serif;
+            flex: 1;
+        }
+
+        .btn-primary {
+            background-color: var(--brand-text);
+            color: var(--brand-bg);
+            border: none;
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            color: var(--brand-text);
+            border: 2px solid var(--brand-text);
+        }
+
+        .close-modal {
+            background: transparent;
+            color: var(--brand-text);
+            border: none;
+            text-decoration: underline;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-family: 'Quicksand', sans-serif;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <img src="logo.png" alt="ILA Logo" class="logo">
+        </header>
+
+        <section>
+            <h2>Pizza</h2>
+            <div class="menu-row">
+                <span class="item-name">Margherita</span>
+                <div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Margherita Pizza', 400)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Marc’s Fav</span>
+                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Marc’s Fav Pizza', 500)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Fire Vodka</span>
+                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Fire Vodka Pizza', 500)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Quattro Formaggi</span>
+                <div class="price-group">₹600 <button class="add-btn" onclick="promptRemark('Quattro Formaggi Pizza', 600)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Al Funghi</span>
+                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Al Funghi Pizza', 500)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Pesto Burrata</span>
+                <div class="price-group">₹750 <button class="add-btn" onclick="promptRemark('Pesto Burrata Pizza', 750)">+</button></div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Coffee</h2>
+            <div class="coffee-header">
+                <div></div>
+                <div style="text-align: right;">Regular</div>
+                <div style="text-align: right;">Large</div>
+            </div>
+            
+            <div class="coffee-row">
+                <span>Espresso</span>
+                <div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Espresso (Regular)', 150)">+</button></div>
+                <div class="coffee-price">-</div>
+            </div>
+            <div class="coffee-row">
+                <span>Americano</span>
+                <div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Americano (Regular)', 150)">+</button></div>
+                <div class="coffee-price">₹220 <button class="add-btn" onclick="promptRemark('Americano (Large)', 220)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Iced Americano</span>
+                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Americano (Reg)', 200)">+</button></div>
+                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Americano (Lrg)', 300)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Latte</span>
+                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Latte (Regular)', 200)">+</button></div>
+                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Latte (Large)', 300)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Cappuccino</span>
+                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cappuccino (Regular)', 200)">+</button></div>
+                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cappuccino (Large)', 300)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Iced Coffee</span>
+                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Coffee (Regular)', 200)">+</button></div>
+                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Coffee (Large)', 300)">+</button></div>
+            </div>
+        </section>
+    </div>
+
+    <div id="cart-banner">
+        <div class="cart-info">
+            <span class="cart-total" id="cart-total-text">₹0 (0 items)</span>
+            <span class="cart-clear" onclick="clearCart()">Clear Cart</span>
+        </div>
+        <button class="checkout-btn" onclick="openTableModal()">Send to Kitchen</button>
+    </div>
+
+    <div id="remark-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="remark-item-title">Item Name</h3>
+            <p>Any special requests for the kitchen?</p>
+            <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
+            
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
+                <button class="btn btn-primary" onclick="confirmAddItem(true)">Add Remark</button>
+            </div>
+            <button class="close-modal" onclick="closeRemarkModal()">Cancel</button>
+        </div>
+    </div>
+
+    <div id="table-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Select Table</h3>
+            <p>Which table is this order for?</p>
+            
+            <div class="table-grid">
+                <button class="table-btn" onclick="sendOrder(1)">1</button>
+                <button class="table-btn" onclick="sendOrder(2)">2</button>
+                <button class="table-btn" onclick="sendOrder(3)">3</button>
+                <button class="table-btn" onclick="sendOrder(4)">4</button>
+                <button class="table-btn" onclick="sendOrder(5)">5</button>
+                <button class="table-btn" onclick="sendOrder(6)">6</button>
+                <button class="table-btn" onclick="sendOrder(7)">7</button>
+                <button class="table-btn" onclick="sendOrder(8)">8</button>
+                <button class="table-btn" onclick="sendOrder(9)">9</button>
+                <button class="table-btn" onclick="sendOrder(10)">10</button>
+            </div>
+            
+            <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway / Counter</button>
+            <br>
+            <button class="close-modal" onclick="closeTableModal()">Cancel Order</button>
+        </div>
+    </div>
+
+    <script>
+        window.cart = {};
+        window.totalAmount = 0;
+        window.totalItems = 0;
+        
+        window.pendingItemName = "";
+        window.pendingItemPrice = 0;
+
+        window.promptRemark = function(itemName, price) {
+            window.pendingItemName = itemName;
+            window.pendingItemPrice = price;
+            
+            document.getElementById('remark-item-title').innerText = itemName;
+            document.getElementById('remark-input').value = ""; 
+            document.getElementById('remark-modal').classList.add('active');
+            
+            setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
+        };
+
+        window.closeRemarkModal = function() {
+            document.getElementById('remark-modal').classList.remove('active');
+        };
+
+        window.confirmAddItem = function(useRemark) {
+            let finalName = window.pendingItemName;
+            
+            if (useRemark) {
+                const remarkText = document.getElementById('remark-input').value.trim();
+                if (remarkText !== "") {
+                    finalName += ` (*${remarkText}*)`;
+                }
+            }
+
+            if (window.cart[finalName]) {
+                window.cart[finalName].qty += 1;
+            } else {
+                window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
+            }
+            
+            window.totalAmount += window.pendingItemPrice;
+            window.totalItems += 1;
+            window.updateCartUI();
+            
+            window.closeRemarkModal();
+        };
+
+        window.clearCart = function() {
+            window.cart = {};
+            window.totalAmount = 0;
+            window.totalItems = 0;
+            window.updateCartUI();
+        };
+
+        window.updateCartUI = function() {
+            const banner = document.getElementById('cart-banner');
+            const totalText = document.getElementById('cart-total-text');
+            
+            if (window.totalItems > 0) {
+                totalText.innerText = `₹${window.totalAmount} (${window.totalItems} items)`;
+                banner.classList.add('visible');
+            } else {
+                banner.classList.remove('visible');
+            }
+        };
+
+        window.openTableModal = function() {
+            document.getElementById('table-modal').classList.add('active');
+        };
+
+        window.closeTableModal = function() {
+            document.getElementById('table-modal').classList.remove('active');
+        };
+
+        window.sendOrder = function(orderType) {
+            window.closeTableModal(); 
+            
+            let message = "";
+            if (orderType === 'Takeaway') {
+                message = `🥡 *NEW TAKEAWAY ORDER*\n\n`;
+            } else {
+                message = `🍽 *NEW DINE-IN ORDER*\n📍 *Table: ${orderType}*\n\n`;
+            }
+            
+            for (let item in window.cart) {
+                message += `${window.cart[item].qty}x ${item} \n`;
+            }
+            
+            message += `\n*Total Bill: ₹${window.totalAmount}*`;
+            
+            const encodedMessage = encodeURIComponent(message);
+            const whatsappURL = `https://wa.me/?text=${encodedMessage}`;
+            
+            window.location.href = whatsappURL;
+            
+            setTimeout(() => { window.clearCart(); }, 1000);
+        };
+    </script>
+
+</body>
+</html>
