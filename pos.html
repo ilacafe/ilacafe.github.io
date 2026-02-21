@@ -228,7 +228,7 @@
             text-align: left;
             width: 90%;
             margin: 15px auto;
-            display: none; /* Hidden by default */
+            display: none; 
         }
 
         .sweetness-group label {
@@ -494,10 +494,10 @@
             <div id="sweetness-group" class="sweetness-group">
                 <label>Sweetness Level:</label>
                 <select id="sweetness-select" class="sweetness-select">
-                    <option value="">Default (No change)</option>
+                    <option value="Medium sweet" selected>Medium (Default)</option>
+                    <option value="No sweetness">No sweetness</option>
                     <option value="Less sweet">Less sweet</option>
                     <option value="Less than medium sweet">Less than medium</option>
-                    <option value="Medium sweet">Medium sweet</option>
                     <option value="More than medium sweet">More than medium</option>
                     <option value="Very sweet">Very sweet</option>
                 </select>
@@ -545,7 +545,7 @@
         
         window.pendingItemName = "";
         window.pendingItemPrice = 0;
-        window.isBeveragePending = false; // Tracks if the sweetness menu should be used
+        window.isBeveragePending = false; 
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             window.pendingItemName = itemName;
@@ -555,20 +555,18 @@
             document.getElementById('remark-item-title').innerText = itemName;
             document.getElementById('remark-input').value = ""; 
             
-            // Show or hide the sweetness dropdown
             const sweetGroup = document.getElementById('sweetness-group');
             const sweetSelect = document.getElementById('sweetness-select');
             
             if (requiresSweetness) {
                 sweetGroup.style.display = 'block';
-                sweetSelect.value = ""; // Reset dropdown to default
+                sweetSelect.value = "Medium sweet"; // Automatically resets to Medium sweet
             } else {
                 sweetGroup.style.display = 'none';
             }
 
             document.getElementById('remark-modal').classList.add('active');
             
-            // Only auto-focus text input if it's not a beverage, so the keyboard doesn't hide the dropdown
             if (!requiresSweetness) {
                 setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
             }
@@ -582,7 +580,6 @@
             let finalName = window.pendingItemName;
             let modifications = [];
             
-            // 1. Check if Sweetness was selected
             if (window.isBeveragePending) {
                 const sweetValue = document.getElementById('sweetness-select').value;
                 if (sweetValue !== "") {
@@ -590,7 +587,6 @@
                 }
             }
 
-            // 2. Check if a text remark was typed (if they didn't hit "Skip")
             if (useRemark) {
                 const remarkText = document.getElementById('remark-input').value.trim();
                 if (remarkText !== "") {
@@ -598,12 +594,10 @@
                 }
             }
             
-            // Combine modifications in parentheses if any exist
             if (modifications.length > 0) {
                 finalName += ` (*${modifications.join(", ")}*)`;
             }
 
-            // Add to cart object
             if (window.cart[finalName]) {
                 window.cart[finalName].qty += 1;
             } else {
