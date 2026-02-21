@@ -214,7 +214,33 @@
         .remark-input {
             width: 90%;
             padding: 12px;
-            margin: 15px 0;
+            margin: 10px 0;
+            border-radius: 10px;
+            border: none;
+            font-family: 'Quicksand', sans-serif;
+            font-size: 1rem;
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+
+        /* Sweetness Dropdown Styles */
+        .sweetness-group {
+            text-align: left;
+            width: 90%;
+            margin: 15px auto;
+            display: none; /* Hidden by default */
+        }
+
+        .sweetness-group label {
+            font-weight: 700;
+            font-size: 1rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .sweetness-select {
+            width: 100%;
+            padding: 12px;
             border-radius: 10px;
             border: none;
             font-family: 'Quicksand', sans-serif;
@@ -341,6 +367,38 @@
         </section>
 
         <section>
+            <h2>Sides</h2>
+            <div class="menu-row">
+                <span class="item-name">Garlic Bread</span>
+                <div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Garlic Bread', 400)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Caprese Sandwich</span>
+                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Caprese Sandwich', 500)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Burrata Sandwich</span>
+                <div class="price-group">₹700 <button class="add-btn" onclick="promptRemark('Burrata Sandwich', 700)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Stuffed Garlic Bread</span>
+                <div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Stuffed Garlic Bread', 500)">+</button></div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Dessert</h2>
+            <div class="menu-row">
+                <span class="item-name">Banana Bread</span>
+                <div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Banana Bread', 200)">+</button></div>
+            </div>
+            <div class="menu-row">
+                <span class="item-name">Carrot Cake</span>
+                <div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Carrot Cake', 200)">+</button></div>
+            </div>
+        </section>
+
+        <section>
             <h2>Coffee</h2>
             <div class="coffee-header">
                 <div></div>
@@ -375,8 +433,48 @@
             </div>
             <div class="coffee-row">
                 <span>Iced Coffee</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Coffee (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Coffee (Large)', 300)">+</button></div>
+                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Coffee (Regular)', 200, true)">+</button></div>
+                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Coffee (Large)', 300, true)">+</button></div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Beverages</h2>
+            <div class="coffee-header">
+                <div></div>
+                <div style="text-align: right;">Regular</div>
+                <div style="text-align: right;">Large</div>
+            </div>
+            
+            <div class="coffee-row">
+                <span>Matcha Latte</span>
+                <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Matcha Latte (Reg)', 250, true)">+</button></div>
+                <div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Matcha Latte (Lrg)', 350, true)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Iced Matcha Latte</span>
+                <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Reg)', 250, true)">+</button></div>
+                <div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Lrg)', 350, true)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Saffron Milk</span>
+                <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Saffron Milk (Reg)', 250, true)">+</button></div>
+                <div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Saffron Milk (Lrg)', 350, true)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Rose Milk</span>
+                <div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Rose Milk (Reg)', 250, true)">+</button></div>
+                <div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Rose Milk (Lrg)', 350, true)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Rose & Fennel Cooler</span>
+                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Reg)', 200, true)">+</button></div>
+                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Lrg)', 300, true)">+</button></div>
+            </div>
+            <div class="coffee-row">
+                <span>Saffron & Tulsi Sharbat</span>
+                <div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Reg)', 200, true)">+</button></div>
+                <div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Lrg)', 300, true)">+</button></div>
             </div>
         </section>
     </div>
@@ -392,12 +490,25 @@
     <div id="remark-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="remark-item-title">Item Name</h3>
-            <p>Any special requests for the kitchen?</p>
+            
+            <div id="sweetness-group" class="sweetness-group">
+                <label>Sweetness Level:</label>
+                <select id="sweetness-select" class="sweetness-select">
+                    <option value="">Default (No change)</option>
+                    <option value="Less sweet">Less sweet</option>
+                    <option value="Less than medium sweet">Less than medium</option>
+                    <option value="Medium sweet">Medium sweet</option>
+                    <option value="More than medium sweet">More than medium</option>
+                    <option value="Very sweet">Very sweet</option>
+                </select>
+            </div>
+
+            <p style="margin-top:10px;">Any special requests?</p>
             <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
             
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
-                <button class="btn btn-primary" onclick="confirmAddItem(true)">Add Remark</button>
+                <button class="btn btn-primary" onclick="confirmAddItem(true)">Add Item</button>
             </div>
             <button class="close-modal" onclick="closeRemarkModal()">Cancel</button>
         </div>
@@ -434,16 +545,33 @@
         
         window.pendingItemName = "";
         window.pendingItemPrice = 0;
+        window.isBeveragePending = false; // Tracks if the sweetness menu should be used
 
-        window.promptRemark = function(itemName, price) {
+        window.promptRemark = function(itemName, price, requiresSweetness = false) {
             window.pendingItemName = itemName;
             window.pendingItemPrice = price;
+            window.isBeveragePending = requiresSweetness;
             
             document.getElementById('remark-item-title').innerText = itemName;
             document.getElementById('remark-input').value = ""; 
+            
+            // Show or hide the sweetness dropdown
+            const sweetGroup = document.getElementById('sweetness-group');
+            const sweetSelect = document.getElementById('sweetness-select');
+            
+            if (requiresSweetness) {
+                sweetGroup.style.display = 'block';
+                sweetSelect.value = ""; // Reset dropdown to default
+            } else {
+                sweetGroup.style.display = 'none';
+            }
+
             document.getElementById('remark-modal').classList.add('active');
             
-            setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
+            // Only auto-focus text input if it's not a beverage, so the keyboard doesn't hide the dropdown
+            if (!requiresSweetness) {
+                setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
+            }
         };
 
         window.closeRemarkModal = function() {
@@ -452,14 +580,30 @@
 
         window.confirmAddItem = function(useRemark) {
             let finalName = window.pendingItemName;
+            let modifications = [];
             
-            if (useRemark) {
-                const remarkText = document.getElementById('remark-input').value.trim();
-                if (remarkText !== "") {
-                    finalName += ` (*${remarkText}*)`;
+            // 1. Check if Sweetness was selected
+            if (window.isBeveragePending) {
+                const sweetValue = document.getElementById('sweetness-select').value;
+                if (sweetValue !== "") {
+                    modifications.push(sweetValue);
                 }
             }
 
+            // 2. Check if a text remark was typed (if they didn't hit "Skip")
+            if (useRemark) {
+                const remarkText = document.getElementById('remark-input').value.trim();
+                if (remarkText !== "") {
+                    modifications.push(remarkText);
+                }
+            }
+            
+            // Combine modifications in parentheses if any exist
+            if (modifications.length > 0) {
+                finalName += ` (*${modifications.join(", ")}*)`;
+            }
+
+            // Add to cart object
             if (window.cart[finalName]) {
                 window.cart[finalName].qty += 1;
             } else {
