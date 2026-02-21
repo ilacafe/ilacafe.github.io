@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="apple-touch-icon" href="/icon.png" />
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ILA Cafe | Smart POS</title>
+    <title>ILA | Smart POS</title>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -246,6 +247,7 @@
         .btn-success { background-color: #2e7d32; color: white; border: none; }
         .btn-danger { background-color: #c62828; color: white; border: none; }
         .btn-warning { background-color: #f57f17; color: white; border: none; width: 100%; margin-top: 10px;}
+        .btn-whatsapp { background-color: #ffffff; color: #8c7255; border: none; width: 90%; margin: 5px auto; display: block; }
 
         .close-modal {
             background: transparent; color: var(--brand-text); border: none; text-decoration: underline;
@@ -364,7 +366,7 @@
             <span class="cart-total" id="cart-total-text">₹0 (0 items)</span>
             <span class="cart-clear" onclick="clearCart()">Clear Cart</span>
         </div>
-        <button class="checkout-btn" onclick="openTableModal()">Send to Kitchen</button>
+        <button class="checkout-btn" onclick="openTableModal()">Send Order</button>
     </div>
 
     <div id="remark-modal" class="modal-overlay">
@@ -414,13 +416,16 @@
             <h3 id="checkout-title">Table Bill</h3>
             <div id="checkout-receipt" class="bill-receipt"></div>
             
-            <input type="tel" id="checkout-phone" class="remark-input" placeholder="Customer WhatsApp No. (Optional)" maxlength="10">
+            <input type="tel" id="checkout-phone" class="remark-input" placeholder="Customer WhatsApp No." maxlength="10">
+            <button class="btn btn-whatsapp" onclick="sendWhatsAppBill()">Send Bill with UPI Link</button>
+            
+            <div style="height: 1px; background-color: rgba(255,255,255,0.2); margin: 20px 0;"></div>
             
             <div class="modal-buttons">
-                <button class="btn btn-primary" onclick="payWithUPI()">Pay via UPI</button>
-                <button class="btn btn-success" onclick="payWithCash()">Pay via Cash</button>
+                <button class="btn btn-primary" onclick="payWithUPI()">Show UPI QR</button>
+                <button class="btn btn-success" onclick="payWithCash()">Log Cash</button>
             </div>
-            <button class="close-modal" onclick="closeModal('checkout-modal')">Cancel</button>
+            <button class="close-modal" onclick="closeModal('checkout-modal')">Close</button>
         </div>
     </div>
 
@@ -430,9 +435,9 @@
             <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">Amount due: ₹0</p>
             <img id="qr-image" src="" alt="UPI QR Code">
             <div class="modal-buttons">
-                <button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Mark as Paid</button>
+                <button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Log UPI Payment</button>
             </div>
-            <button class="close-modal" onclick="closeModal('upi-modal')">Cancel / Back</button>
+            <button class="close-modal" onclick="closeModal('upi-modal')">Back</button>
         </div>
     </div>
 
@@ -449,7 +454,7 @@
                 <button class="btn btn-secondary" onclick="openTransactionModal('withdrawal')">Withdrawal</button>
             </div>
             
-            <button class="btn btn-warning" onclick="promptEOD()">Send EOD Report</button>
+            <button class="btn btn-warning" onclick="promptEOD()">End of Day Report</button>
             
             <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Transaction Log</h4>
             <div id="ledger-list" class="ledger-box"></div>
@@ -577,7 +582,7 @@
                 if (remarkText !== "") modifications.push(remarkText);
             }
             
-            if (modifications.length > 0) finalName += ` (*${modifications.join(", ")}*)`;
+            if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
 
             if (window.cart[finalName]) window.cart[finalName].qty += 1;
             else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
@@ -616,7 +621,7 @@
             window.activeTables[tableID].total += window.totalAmount;
             saveMemory();
 
-            let message = tableID === 'Takeaway' ? `🥡 *NEW TAKEAWAY ORDER*\n\n` : `🍽 *NEW DINE-IN ORDER*\n📍 *Table: ${tableID}*\n\n`;
+            let message = tableID === 'Takeaway' ? `NEW TAKEAWAY ORDER\n\n` : `NEW DINE-IN ORDER - Table: ${tableID}\n\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item} \n`; }
             
             closeModal('table-modal'); clearCart();
@@ -658,39 +663,42 @@
             closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
 
-        // --- Generate Customer Receipt Text ---
-        function generateCustomerReceiptStr(tableID) {
-            const tableData = window.activeTables[tableID];
-            let receipt = `🧾 *ILA CAFE - E-RECEIPT*\nThank you for your visit!\n\n`;
-            for (let item in tableData.items) {
-                receipt += `${tableData.items[item].qty}x ${item} - ₹${tableData.items[item].qty * tableData.items[item].price}\n`;
+        // --- Send Customer Bill to WhatsApp ---
+        window.sendWhatsAppBill = function() {
+            const phone = document.getElementById('checkout-phone').value.trim();
+            if (phone.length < 10) {
+                alert("Please enter a valid 10-digit WhatsApp number to send the bill.");
+                return;
             }
-            receipt += `\n*Total Paid: ₹${tableData.total}*\n\nFollow us on IG: @ila_cafe ☕`;
-            return receipt;
-        }
+            
+            const tableData = window.activeTables[window.checkoutTableID];
+            let billStr = `ILA\n\n`;
+            for (let item in tableData.items) {
+                billStr += `${tableData.items[item].qty}x ${item} - ₹${tableData.items[item].qty * tableData.items[item].price}\n`;
+            }
+            billStr += `\nTotal Due: ₹${tableData.total}\n\n`;
+            billStr += `Pay via UPI:\nupi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${tableData.total}&cu=INR\n\n`;
+            billStr += `UPI ID: ${CAFE_UPI_ID}\n\n`;
+            billStr += `Thank you for your visit.`;
+            
+            window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
+        };
 
         // --- Payment Processing ---
         window.payWithCash = function() {
-            const phone = document.getElementById('checkout-phone').value.trim();
             const amount = window.activeTables[window.checkoutTableID].total;
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
             
-            const receiptStr = generateCustomerReceiptStr(window.checkoutTableID);
             addLedgerEntry('cash_income', amount, reason);
             delete window.activeTables[window.checkoutTableID]; saveMemory();
             
             closeModal('checkout-modal');
-            
-            if (phone.length >= 10) {
-                setTimeout(() => { window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(receiptStr)}`; }, 300);
-            } else {
-                alert(`✅ Table cleared! ₹${amount} logged to Cash Drawer.`);
-            }
+            alert(`Table cleared! ₹${amount} logged to Cash Drawer.`);
         };
 
         window.payWithUPI = function() {
             const amount = window.activeTables[window.checkoutTableID].total;
-            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA%20Cafe&am=${amount}&cu=INR`;
+            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amount}&cu=INR`;
             document.getElementById('qr-image').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiString)}`;
             document.getElementById('upi-amount-text').innerText = `Amount due: ₹${amount}`;
             
@@ -698,21 +706,14 @@
         };
 
         window.confirmUPIPayment = function() {
-            const phone = document.getElementById('checkout-phone').value.trim();
             const amount = window.activeTables[window.checkoutTableID].total;
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
             
-            const receiptStr = generateCustomerReceiptStr(window.checkoutTableID); 
             addLedgerEntry('upi_income', amount, reason); 
             delete window.activeTables[window.checkoutTableID]; saveMemory();
             
             closeModal('upi-modal');
-            
-            if (phone.length >= 10) {
-                setTimeout(() => { window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(receiptStr)}`; }, 300);
-            } else {
-                alert(`✅ UPI Payment Logged. Table cleared!`);
-            }
+            alert(`UPI Payment Logged. Table cleared.`);
         };
 
         // --- Ledger & EOD Flow ---
@@ -740,7 +741,7 @@
             if (reasonStr === "") { alert("Please enter a reason."); return; }
             
             const staffName = STAFF_PINS[pinStr];
-            if (!staffName) { alert("❌ Invalid PIN. Transaction denied."); return; }
+            if (!staffName) { alert("Invalid PIN. Transaction denied."); return; }
             
             if (amount > window.cashDrawer && !confirm(`Warning: Only ₹${window.cashDrawer} in drawer. Continue?`)) return;
 
@@ -756,17 +757,17 @@
             if (!pinStr) return;
             
             const staffName = STAFF_PINS[pinStr];
-            if (!staffName) { alert("❌ Invalid PIN. Access Denied."); return; }
+            if (!staffName) { alert("Invalid PIN. Access Denied."); return; }
 
             if (Object.keys(window.activeTables).length > 0) {
                 if(!confirm("There are still active tables open! Are you sure you want to end the day?")) return;
             }
 
-            let report = `📊 *ILA CAFE - EOD REPORT*\n👤 Closed By: ${staffName}\n📅 Date: ${new Date().toLocaleDateString()}\n\n`;
-            report += `📱 *UPI Total (Resetting):* ₹${window.upiTotal}\n`;
-            report += `💵 *Closing Cash Drawer (Carried Forward):* ₹${window.cashDrawer}\n\n`;
+            let report = `ILA - End of Day Report\nClosed By: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\n`;
+            report += `UPI Total (Resetting): ₹${window.upiTotal}\n`;
+            report += `Closing Cash Drawer (Carried Forward): ₹${window.cashDrawer}\n\n`;
             
-            report += `📉 *EXPENSES & OUTFLOW:*\n`;
+            report += `EXPENSES & OUTFLOW:\n`;
             let expensesFound = false;
             window.salesLedger.forEach(entry => {
                 if (entry.type !== 'cash_income' && entry.type !== 'upi_income') {
