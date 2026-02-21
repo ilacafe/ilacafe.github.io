@@ -43,45 +43,53 @@
             margin: 0 auto;
         }
 
-        /* --- DASHBOARD BAR --- */
+        /* --- DASHBOARD BAR (MINIMAL REDESIGN) --- */
         .dashboard-bar {
-            background-color: rgba(0,0,0,0.2);
-            padding: 15px;
-            border-radius: 15px;
+            background-color: rgba(0, 0, 0, 0.15);
+            padding: 15px 20px;
+            border-radius: 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            border: 1px solid rgba(255,255,255,0.3);
+            margin-bottom: 35px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
         }
 
-        .active-bills-btn {
-            background-color: var(--brand-text);
-            color: var(--brand-bg);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 10px;
-            font-weight: 700;
-            font-family: 'Quicksand', sans-serif;
+        .dash-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             cursor: pointer;
-            font-size: 1rem;
+            flex: 1;
+            transition: opacity 0.2s;
         }
 
-        .tracker-group {
+        .dash-stat:active {
+            opacity: 0.5;
+        }
+
+        .dash-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            opacity: 0.7;
+            margin-bottom: 4px;
             font-weight: 700;
-            font-size: 0.95rem;
-            text-align: right;
-            cursor: pointer;
         }
 
-        .tracker-group div {
-            margin-bottom: 3px;
-        }
-        
-        .tracker-group span {
-            text-decoration: underline;
+        .dash-value {
+            font-size: 1.2rem;
+            font-weight: 700;
         }
 
+        .dash-divider {
+            width: 1px;
+            height: 35px;
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* --- TYPOGRAPHY & MENUS --- */
         h2 {
             font-weight: 700;
             font-size: 1.8rem;
@@ -415,9 +423,9 @@
         }
 
         .ledger-item:last-child { border-bottom: none; }
-        .ledger-income { color: #81c784; font-weight: bold; } /* Green */
-        .ledger-upi { color: #4fc3f7; font-weight: bold; } /* Blue */
-        .ledger-out { color: #e57373; font-weight: bold; } /* Red */
+        .ledger-income { color: #81c784; font-weight: bold; }
+        .ledger-upi { color: #4fc3f7; font-weight: bold; }
+        .ledger-out { color: #e57373; font-weight: bold; }
         .ledger-meta { font-size: 0.75rem; opacity: 0.7; display: block; }
     </style>
 </head>
@@ -429,10 +437,19 @@
         </header>
 
         <div class="dashboard-bar">
-            <button class="active-bills-btn" onclick="openActiveBills()">🧾 Active Bills</button>
-            <div class="tracker-group" onclick="openCashManagement()">
-                <div>💵 Cash: <span id="cash-display">₹0</span></div>
-                <div>📱 UPI: <span id="upi-display">₹0</span></div>
+            <div class="dash-stat" onclick="openActiveBills()">
+                <span class="dash-label">Bills</span>
+                <span class="dash-value" id="active-bills-count">0</span>
+            </div>
+            <div class="dash-divider"></div>
+            <div class="dash-stat" onclick="openCashManagement()">
+                <span class="dash-label">Cash</span>
+                <span class="dash-value" id="cash-display">₹0</span>
+            </div>
+            <div class="dash-divider"></div>
+            <div class="dash-stat" onclick="openCashManagement()">
+                <span class="dash-label">UPI</span>
+                <span class="dash-value" id="upi-display">₹0</span>
             </div>
         </div>
 
@@ -602,7 +619,7 @@
         <div class="modal-content">
             <h3 id="remark-item-title">Item Name</h3>
             <div id="sweetness-group" class="sweetness-group">
-                <label>Sweetness Level:</label>
+                <label>Sweetness Level</label>
                 <select id="sweetness-select" class="sweetness-select">
                     <option value="Medium sweet" selected>Medium (Default)</option>
                     <option value="No sweetness">No sweetness</option>
@@ -612,7 +629,7 @@
                     <option value="Very sweet">Very sweet</option>
                 </select>
             </div>
-            <p style="margin-top:10px;">Any special requests?</p>
+            <p style="margin-top:10px;">Special requests</p>
             <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
@@ -625,7 +642,6 @@
     <div id="table-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Select Table</h3>
-            <p>Which table is this order for?</p>
             <div class="table-grid" id="sender-table-grid"></div>
             <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway / Counter</button>
             <br>
@@ -643,7 +659,7 @@
 
     <div id="checkout-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3 id="checkout-title">Table 1 Bill</h3>
+            <h3 id="checkout-title">Table Bill</h3>
             <div id="checkout-receipt" class="bill-receipt"></div>
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="payWithUPI()">Pay via UPI</button>
@@ -656,10 +672,10 @@
     <div id="upi-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Scan to Pay</h3>
-            <p id="upi-amount-text">Amount due: ₹0</p>
+            <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">Amount due: ₹0</p>
             <img id="qr-image" src="" alt="UPI QR Code">
             <div class="modal-buttons">
-                <button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Mark as Paid & Close Table</button>
+                <button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Mark as Paid</button>
             </div>
             <button class="close-modal" onclick="closeModal('upi-modal')">Back</button>
         </div>
@@ -678,9 +694,8 @@
                 <button class="btn btn-secondary" onclick="openTransactionModal('withdrawal')">Withdrawal</button>
             </div>
             
-            <h4 style="text-align: left; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px;">Transaction Ledger</h4>
-            <div id="ledger-list" class="ledger-box">
-                </div>
+            <h4 style="text-align: left; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Transaction Log</h4>
+            <div id="ledger-list" class="ledger-box"></div>
             
             <button class="close-modal" onclick="closeModal('cash-modal')" style="margin-top: 15px;">Close Ledger</button>
         </div>
@@ -690,7 +705,7 @@
         <div class="modal-content">
             <h3 id="transaction-title">New Transaction</h3>
             <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
-            <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason (e.g., Bought milk, Owner cash)">
+            <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason (e.g. Bought milk)">
             
             <div class="modal-buttons">
                 <button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Log Transaction</button>
@@ -714,7 +729,6 @@
         window.cashDrawer = parseFloat(localStorage.getItem('ila_cash_drawer')) || 0;
         window.upiTotal = parseFloat(localStorage.getItem('ila_upi_total')) || 0;
         
-        // Load combined ledger, migrate old cash ledger if it exists
         window.salesLedger = JSON.parse(localStorage.getItem('ila_sales_ledger')) || [];
         if (localStorage.getItem('ila_cash_ledger') && !localStorage.getItem('ila_sales_ledger')) {
             window.salesLedger = JSON.parse(localStorage.getItem('ila_cash_ledger'));
@@ -729,6 +743,7 @@
         // Load displays on startup
         document.getElementById('cash-display').innerText = `₹${window.cashDrawer}`;
         document.getElementById('upi-display').innerText = `₹${window.upiTotal}`;
+        document.getElementById('active-bills-count').innerText = Object.keys(window.activeTables).length;
 
         function saveMemory() {
             localStorage.setItem('ila_active_tables', JSON.stringify(window.activeTables));
@@ -738,6 +753,8 @@
             
             document.getElementById('cash-display').innerText = `₹${window.cashDrawer}`;
             document.getElementById('upi-display').innerText = `₹${window.upiTotal}`;
+            document.getElementById('active-bills-count').innerText = Object.keys(window.activeTables).length;
+            
             document.getElementById('modal-cash-display').innerText = window.cashDrawer;
             document.getElementById('modal-upi-display').innerText = window.upiTotal;
         }
@@ -748,14 +765,14 @@
             const timeString = date.toLocaleDateString() + " " + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
             const entry = { date: timeString, type: type, amount: amount, reason: reason };
-            window.salesLedger.unshift(entry); // Add to beginning of array
+            window.salesLedger.unshift(entry); 
             
             if (type === 'cash_income') {
                 window.cashDrawer += amount;
             } else if (type === 'upi_income') {
                 window.upiTotal += amount;
             } else {
-                window.cashDrawer -= amount; // Expenses/Withdrawals subtract from cash
+                window.cashDrawer -= amount; 
             }
             saveMemory();
         }
@@ -950,7 +967,7 @@
             saveMemory();
             
             closeModal('checkout-modal');
-            alert(`✅ Table cleared! ₹${amount} logged to Cash Drawer.`);
+            alert(`Payment logged to Cash Drawer.`);
         };
 
         window.payWithUPI = function() {
@@ -969,12 +986,12 @@
             const amount = window.activeTables[window.checkoutTableID].total;
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
             
-            addLedgerEntry('upi_income', amount, reason); // Logs to UPI total!
+            addLedgerEntry('upi_income', amount, reason); 
             delete window.activeTables[window.checkoutTableID]; 
             saveMemory();
             
             closeModal('upi-modal');
-            alert(`✅ UPI Payment Logged. Table cleared!`);
+            alert(`UPI Payment Logged.`);
         };
 
         // --- Sales & Ledger Flow ---
