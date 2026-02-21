@@ -42,6 +42,7 @@
             align-items: center; 
             justify-content: center; 
             transition: all 0.2s; 
+            padding: 0;
         }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
 
@@ -78,7 +79,26 @@
         .btn-danger { background-color: #c62828; color: white; border: none; }
         .btn-warning { background-color: #f57f17; color: white; border: none; width: 100%; margin-top: 10px;}
         .btn-whatsapp { background-color: #ffffff; color: #8c7255; border: none; width: 90%; margin: 5px auto; display: block; }
-        .mini-btn { background-color: rgba(255,255,255,0.2); border: none; color: white; border-radius: 5px; width: 24px; height: 24px; font-size: 1.1rem; font-weight: bold; cursor: pointer; margin: 0 5px; }
+        
+        /* FIXED: Edit Cart +/- buttons visibility */
+        .mini-btn { 
+            background-color: transparent; 
+            border: 1px solid #8c7255; 
+            color: #8c7255; 
+            border-radius: 5px; 
+            width: 26px; 
+            height: 26px; 
+            font-size: 1.2rem; 
+            font-weight: bold; 
+            cursor: pointer; 
+            margin: 0 5px; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            transition: all 0.2s;
+        }
+        .mini-btn:active { background-color: #8c7255; color: white; }
 
         .close-modal { background: transparent; color: var(--brand-text); border: none; text-decoration: underline; cursor: pointer; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; opacity: 0.8; margin-top: 10px; }
 
@@ -259,7 +279,7 @@
     <div id="checkout-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="checkout-title">Table Bill</h3>
-            <p style="font-size: 0.8rem; opacity: 0.7; margin-top: -10px;">Tap ✖ to remove a mistaken item</p>
+            <p style="font-size: 0.8rem; opacity: 0.7; margin-top: -10px;">Tap ✖ to remove an item</p>
             <div id="checkout-receipt" class="bill-receipt"></div>
             
             <input type="tel" id="checkout-phone" class="remark-input" placeholder="Customer WhatsApp No." maxlength="10">
@@ -365,6 +385,7 @@
             document.getElementById('modal-upi-display').innerText = window.upiTotal;
         }
 
+        // --- Ledger & Past Bills System ---
         function addLedgerEntry(type, amount, reason) {
             const date = new Date();
             const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -380,7 +401,7 @@
                 id: Date.now(),
                 table: tableID,
                 date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(),
-                items: JSON.parse(JSON.stringify(tableData.items)),
+                items: JSON.parse(JSON.stringify(tableData.items)), 
                 total: tableData.total
             };
             window.pastBills.unshift(bill);
