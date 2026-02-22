@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>ILA | Cloud Admin</title>
+    <title>ILA | Admin</title>
     <link rel="apple-touch-icon" href="/icon.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     
@@ -16,7 +16,7 @@
         .container { width: 90%; max-width: 800px; margin: 0 auto; padding: 20px; }
         
         header { text-align: center; margin-bottom: 30px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 20px; }
-        .logo { max-width: 200px; height: auto; display: block; margin: 0 auto 15px auto; }
+        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
         
         h2 { font-size: 1.4rem; letter-spacing: 1px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;}
         
@@ -35,9 +35,10 @@
         .btn:active { opacity: 0.7; }
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-success { background-color: #81c784; color: white; }
-        .btn-danger { background-color: #e57373; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; }
+        .btn-danger { background-color: #e57373; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
+        .btn-edit { background-color: #ffffff; color: #8c7255; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         
-        .btn-toggle { background-color: #81c784; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; }
+        .btn-toggle { background-color: #81c784; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-toggle.sold-out { background-color: #ffb74d; color: #333; }
 
         /* Master Status Button */
@@ -54,7 +55,7 @@
         .item-details { flex-grow: 1; }
         .item-name { font-weight: bold; font-size: 1.1rem; }
         .item-meta { font-size: 0.85rem; opacity: 0.8; margin-top: 4px;}
-        .item-actions { display: flex; gap: 10px; }
+        .item-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;}
 
         /* Badges */
         .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; }
@@ -68,8 +69,6 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo">
-            <h1 style="margin-bottom: 5px;">Cloud Admin</h1>
-            <p style="opacity: 0.8; margin-top: 0;">Master Control Panel</p>
         </header>
 
         <div class="admin-card" style="text-align: center;">
@@ -93,8 +92,8 @@
             <div id="staff-list-container" style="margin-top: 20px;"></div>
         </div>
 
-        <div class="admin-card">
-            <h2>Add Menu Item</h2>
+        <div class="admin-card" id="menu-form-section">
+            <h2>Manage Menu Items</h2>
             
             <div class="form-group">
                 <label>Category (e.g., Pizza, Coffee, Dessert)</label>
@@ -126,7 +125,7 @@
                 <label style="margin: 0; text-transform: none;">Requires Sweetness Level? (For Beverages)</label>
             </div>
 
-            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save to Live Menu</button>
+            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save / Update Item</button>
         </div>
 
         <div class="admin-card" style="border: none; background: transparent; padding: 0;">
@@ -136,11 +135,6 @@
             </div>
         </div>
 
-        <div class="admin-card" style="text-align: center; margin-top: 50px; background-color: rgba(255,255,255,0.05); border: 1px dashed rgba(255,255,255,0.2);">
-            <h2 style="border: none; margin-bottom: 5px;">One-Click Setup</h2>
-            <p style="font-size: 0.85rem; opacity: 0.7; margin-top: 0;">Click this once to automatically build your entire original menu and staff list into Firebase.</p>
-            <button class="btn btn-success" style="width: auto; padding: 10px 20px;" onclick="autoSetupDatabase()">Auto-Fill Database Now</button>
-        </div>
     </div>
 
     <script>
@@ -246,12 +240,19 @@
                 return;
             }
 
-            db.ref('menu/' + category + '/' + name).set({
+            // Using .update() here so we don't accidentally overwrite the inStock status if it already exists
+            db.ref('menu/' + category + '/' + name).update({
                 price: price,
                 requiresSweetness: requiresSweetness,
-                inStock: true,
-                visibility: visibility // "both", "pos", or "customer"
+                visibility: visibility 
             }).then(() => {
+                // If it's a completely new item, make sure inStock is set to true by default
+                db.ref('menu/' + category + '/' + name + '/inStock').once('value').then(snapshot => {
+                    if(!snapshot.exists()) {
+                        db.ref('menu/' + category + '/' + name + '/inStock').set(true);
+                    }
+                });
+
                 document.getElementById('add-name').value = "";
                 document.getElementById('add-price').value = "";
                 document.getElementById('add-sweetness').checked = false;
@@ -259,6 +260,21 @@
             }).catch(error => {
                 alert("Error saving: " + error.message);
             });
+        };
+
+        // Populate the form with existing data to easily edit it
+        window.editItem = function(category, name, price, visibility, requiresSweetness) {
+            document.getElementById('add-category').value = category;
+            document.getElementById('add-name').value = name;
+            document.getElementById('add-price').value = price;
+            document.getElementById('add-visibility').value = visibility || "both";
+            document.getElementById('add-sweetness').checked = requiresSweetness;
+            
+            // Scroll up to the form smoothly
+            document.getElementById('menu-form-section').scrollIntoView({ behavior: 'smooth' });
+            
+            // Focus on the price so they know they are ready to edit
+            document.getElementById('add-price').focus();
         };
 
         window.toggleStock = function(category, itemName, currentStatus) {
@@ -289,6 +305,7 @@
                     const item = menuData[category][itemName];
                     const safeCategory = category.replace(/'/g, "\\'");
                     const safeName = itemName.replace(/'/g, "\\'");
+                    const safeVisibility = item.visibility ? item.visibility : 'both';
                     
                     const stockLabel = item.inStock ? "In Stock" : "Sold Out";
                     const stockBadgeClass = item.inStock ? "badge-live" : "badge-out";
@@ -308,6 +325,7 @@
                                 <div class="item-meta">₹${item.price} <span class="badge badge-vis">${visLabel}</span> ${sweetLabel}</div>
                             </div>
                             <div class="item-actions">
+                                <button class="btn-edit" onclick="editItem('${safeCategory}', '${safeName}', ${item.price}, '${safeVisibility}', ${item.requiresSweetness})">Edit</button>
                                 <button class="${toggleBtnClass}" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${toggleBtnText}</button>
                                 <button class="btn-danger" onclick="deleteItem('${safeCategory}', '${safeName}')">Delete</button>
                             </div>
@@ -318,78 +336,6 @@
                 container.innerHTML += categoryHTML;
             }
         });
-
-        // ==========================================
-        // AUTO-SETUP DATA SCRIPT (RUN ONCE)
-        // ==========================================
-        window.autoSetupDatabase = function() {
-            if(!confirm("This will upload all the original ILA menu items and Staff PINs to Firebase. Continue?")) return;
-
-            const initialStaff = {
-                "3579": "Sona", "7342": "Karishma", "4789": "Pinky", "1359": "Anjali"
-            };
-
-            const initialMenu = {
-                "Pizza": {
-                    "Margherita": {price: 400, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Marc’s Fav": {price: 500, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Fire Vodka": {price: 500, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Quattro Formaggi": {price: 600, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Al Funghi": {price: 500, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Pesto Burrata": {price: 750, inStock: true, requiresSweetness: false, visibility: 'both'}
-                },
-                "Sides": {
-                    "Garlic Bread": {price: 400, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Caprese Sandwich": {price: 500, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Burrata Sandwich": {price: 700, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Stuffed Garlic Bread": {price: 500, inStock: true, requiresSweetness: false, visibility: 'both'}
-                },
-                "Dessert": {
-                    "Banana Bread": {price: 200, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Carrot Cake": {price: 200, inStock: true, requiresSweetness: false, visibility: 'both'}
-                },
-                "Coffee": {
-                    "Espresso (Regular)": {price: 150, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Americano (Regular)": {price: 150, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Americano (Large)": {price: 220, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Iced Americano (Reg)": {price: 200, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Iced Americano (Lrg)": {price: 300, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Latte (Regular)": {price: 200, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Latte (Large)": {price: 300, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Cappuccino (Regular)": {price: 200, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Cappuccino (Large)": {price: 300, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Macchiato (Regular)": {price: 200, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Macchiato (Large)": {price: 300, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Cortado (Regular)": {price: 200, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Cortado (Large)": {price: 300, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Flat White (Regular)": {price: 200, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Flat White (Large)": {price: 300, inStock: true, requiresSweetness: false, visibility: 'both'},
-                    "Iced Coffee (Regular)": {price: 200, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Iced Coffee (Large)": {price: 300, inStock: true, requiresSweetness: true, visibility: 'both'}
-                },
-                "Beverages": {
-                    "Matcha Latte (Reg)": {price: 250, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Matcha Latte (Lrg)": {price: 350, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Iced Matcha Latte (Reg)": {price: 250, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Iced Matcha Latte (Lrg)": {price: 350, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Saffron Milk (Reg)": {price: 250, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Saffron Milk (Lrg)": {price: 350, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Rose Milk (Reg)": {price: 250, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Rose Milk (Lrg)": {price: 350, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Rose & Fennel Cooler (Reg)": {price: 200, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Rose & Fennel Cooler (Lrg)": {price: 300, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Saffron Tulsi Sharbat (Reg)": {price: 200, inStock: true, requiresSweetness: true, visibility: 'both'},
-                    "Saffron Tulsi Sharbat (Lrg)": {price: 300, inStock: true, requiresSweetness: true, visibility: 'both'}
-                }
-            };
-
-            // Push to Firebase
-            db.ref('staff').set(initialStaff);
-            db.ref('menu').set(initialMenu).then(() => {
-                db.ref('settings/isOpen').set(true);
-                alert("✅ Success! The entire menu and staff list has been uploaded to the Cloud.");
-            }).catch(e => alert("Error: " + e.message));
-        };
     </script>
 </body>
 </html>
