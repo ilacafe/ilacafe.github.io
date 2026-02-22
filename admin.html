@@ -18,46 +18,44 @@
         header { text-align: center; margin-bottom: 30px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 20px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
         
-        h2 { font-size: 1.4rem; letter-spacing: 1px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;}
+        h2 { font-size: 1.2rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;}
         
-        .admin-card { background-color: rgba(0, 0, 0, 0.2); border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .admin-card { background-color: rgba(0, 0, 0, 0.15); border-radius: 12px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(255, 255, 255, 0.1); }
         
         .form-group { margin-bottom: 15px; }
         .row-group { display: flex; gap: 10px; width: 100%; }
-        label { display: block; font-size: 0.85rem; text-transform: uppercase; font-weight: bold; opacity: 0.9; margin-bottom: 5px; }
-        input[type="text"], input[type="number"], input[type="password"], select { width: 100%; padding: 12px; border-radius: 8px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; }
+        label { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; opacity: 0.8; margin-bottom: 5px; }
+        input[type="text"], input[type="number"], input[type="password"], select { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; background: rgba(255,255,255,0.9); color: #333; }
         .checkbox-group { display: flex; align-items: center; gap: 10px; font-weight: bold; margin-top: 10px; }
         
-        .btn { padding: 12px 20px; border-radius: 30px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; transition: opacity 0.2s; }
+        .btn { padding: 12px 20px; border-radius: 6px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; transition: opacity 0.2s; text-transform: uppercase; letter-spacing: 1px; }
         .btn:active { opacity: 0.7; }
+        
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
-        .btn-success { background-color: #81c784; color: white; }
-        .btn-danger { background-color: #e57373; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
-        .btn-edit { background-color: #ffffff; color: #8c7255; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
-        .btn-move { background-color: rgba(255,255,255,0.2); color: white; padding: 8px 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; border: none; cursor: pointer;}
+        .btn-secondary { background-color: transparent; border: 1px solid var(--brand-text); color: var(--brand-text); }
         
-        .btn-move-item { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 6px; cursor: pointer; padding: 6px 12px; font-size: 0.9rem; line-height: 1; transition: all 0.2s;}
-        .btn-move-item:active { background: rgba(255,255,255,0.4); }
+        .btn-action { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; width: auto; font-weight: bold; cursor: pointer; }
+        .btn-action:active { background: rgba(255,255,255,0.1); }
         
-        .btn-toggle { background-color: #81c784; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
-        .btn-toggle.sold-out { background-color: #ffb74d; color: #333; }
+        .btn-move { background-color: rgba(255,255,255,0.1); color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.9rem; border: none; cursor: pointer; }
+        .btn-move-item { background: transparent; border: none; color: rgba(255,255,255,0.6); cursor: pointer; padding: 4px; font-size: 1rem; line-height: 1;}
+        .btn-move-item:active { color: white; }
 
-        #master-status-btn { font-size: 1.5rem; padding: 20px; border-radius: 15px; text-transform: uppercase; letter-spacing: 2px; }
-        .status-open { background-color: #81c784; color: white; border: 3px solid #66bb6a; }
-        .status-closed { background-color: #e57373; color: white; border: 3px solid #ef5350; }
+        #master-status-btn { font-size: 1.2rem; padding: 15px; border-radius: 8px; }
+        .status-open { background-color: var(--brand-text); color: var(--brand-bg); }
+        .status-closed { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); opacity: 0.8;}
 
-        .list-item { display: flex; justify-content: space-between; align-items: center; background-color: rgba(255,255,255,0.1); padding: 12px 15px; border-radius: 8px; margin-bottom: 10px; }
+        .list-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 12px 0; margin-bottom: 5px; }
+        .list-item:last-child { border-bottom: none; }
+        
         .category-block { margin-top: 30px; }
-        .category-title { font-size: 1.3rem; border-bottom: 1px dashed rgba(255,255,255,0.3); padding-bottom: 5px; margin-bottom: 15px; font-weight: bold; text-transform: uppercase;}
-        .item-details { flex-grow: 1; margin-left: 15px; }
+        .category-title { font-size: 1.1rem; letter-spacing: 1px; border-bottom: 1px dashed rgba(255,255,255,0.3); padding-bottom: 5px; margin-bottom: 10px; font-weight: bold; text-transform: uppercase; opacity: 0.9;}
+        .item-details { flex-grow: 1; margin-left: 10px; }
         .item-name { font-weight: bold; font-size: 1.1rem; }
-        .item-meta { font-size: 0.85rem; opacity: 0.8; margin-top: 4px;}
+        .item-meta { font-size: 0.85rem; opacity: 0.7; margin-top: 2px;}
         .item-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;}
 
-        .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; }
-        .badge-live { background-color: rgba(129, 199, 132, 0.2); color: #81c784; }
-        .badge-out { background-color: rgba(229, 115, 115, 0.2); color: #e57373; }
-        .badge-vis { background-color: rgba(255, 255, 255, 0.2); color: #fff; border: 1px solid rgba(255,255,255,0.4); }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; border: 1px solid rgba(255,255,255,0.3); }
     </style>
 </head>
 <body>
@@ -68,54 +66,43 @@
         </header>
 
         <div class="admin-card" style="text-align: center; padding: 20px;">
-            <p style="font-size: 0.9rem; opacity: 0.8; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; margin-top: 0;">Master Switch</p>
+            <p style="font-size: 0.8rem; opacity: 0.8; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; margin-top: 0;">Master Switch</p>
             <button id="master-status-btn" class="btn" onclick="toggleCafeStatus()">Loading...</button>
         </div>
 
         <div class="admin-card">
-            <h2>Staff PIN Management</h2>
+            <h2>Staff PINs</h2>
             <div class="row-group" style="margin-bottom: 15px;">
-                <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="staff-name" placeholder="Staff Name" required></div>
+                <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="staff-name" placeholder="Name" required></div>
                 <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="staff-pin" placeholder="PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric" required></div>
             </div>
-            <button class="btn btn-primary" onclick="addStaff()">Add / Update Staff</button>
+            <button class="btn btn-secondary" onclick="addStaff()">Add Staff</button>
             <div id="staff-list-container" style="margin-top: 20px;"></div>
         </div>
 
         <div class="admin-card">
             <h2>Category Order</h2>
-            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: -10px; margin-bottom: 15px;">Arrange the order in which categories appear on the menu.</p>
-            <div id="category-order-container"><p style="opacity: 0.7; font-size: 0.9rem;">Loading...</p></div>
+            <div id="category-order-container"><p style="opacity: 0.5; font-size: 0.9rem;">Loading...</p></div>
         </div>
 
         <div class="admin-card" id="menu-form-section">
             <h2>Add / Edit Item</h2>
-            <p style="font-size: 0.8rem; opacity: 0.7; margin-top: -10px; margin-bottom: 15px;">Note: Changing the Category or Name will create a new item.</p>
             
-            <div class="form-group"><label>Category (e.g., Pizza, Coffee)</label><input type="text" id="add-category" placeholder="Type category name..." required></div>
-            <div class="form-group"><label>Item Name</label><input type="text" id="add-name" placeholder="e.g., Margherita" required></div>
+            <div class="form-group"><label>Category</label><input type="text" id="add-category" placeholder="e.g., Coffee" required></div>
+            <div class="form-group"><label>Item Name</label><input type="text" id="add-name" placeholder="e.g., Latte" required></div>
             
-            <div class="form-group checkbox-group" style="border: 1px solid rgba(255,255,255,0.2); padding: 10px; border-radius: 8px;">
-                <input type="checkbox" id="add-has-sizes" style="width: 20px; height: 20px;" onchange="toggleSizeInputs()">
-                <label style="margin: 0; text-transform: none; font-size: 1rem;">Item has <b>Regular & Large</b> sizes?</label>
+            <div class="form-group checkbox-group" style="border: 1px solid rgba(255,255,255,0.2); padding: 10px; border-radius: 6px;">
+                <input type="checkbox" id="add-has-sizes" style="width: 18px; height: 18px;" onchange="toggleSizeInputs()">
+                <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Item has Regular & Large sizes</label>
             </div>
 
             <div class="row-group" id="single-price-group" style="display: flex;">
-                <div class="form-group" style="flex: 1;">
-                    <label>Price (₹)</label>
-                    <input type="number" id="add-price" placeholder="e.g., 400">
-                </div>
+                <div class="form-group" style="flex: 1;"><label>Price (₹)</label><input type="number" id="add-price" placeholder="0"></div>
             </div>
 
             <div class="row-group" id="multi-price-group" style="display: none;">
-                <div class="form-group" style="flex: 1;">
-                    <label>Regular Price (₹)</label>
-                    <input type="number" id="add-price-reg" placeholder="e.g., 200">
-                </div>
-                <div class="form-group" style="flex: 1;">
-                    <label>Large Price (₹)</label>
-                    <input type="number" id="add-price-lrg" placeholder="e.g., 300">
-                </div>
+                <div class="form-group" style="flex: 1;"><label>Regular (₹)</label><input type="number" id="add-price-reg" placeholder="0"></div>
+                <div class="form-group" style="flex: 1;"><label>Large (₹)</label><input type="number" id="add-price-lrg" placeholder="0"></div>
             </div>
 
             <div class="form-group">
@@ -128,24 +115,21 @@
             </div>
 
             <div class="form-group checkbox-group">
-                <input type="checkbox" id="add-sweetness" style="width: 20px; height: 20px;">
-                <label style="margin: 0; text-transform: none;">Requires Sweetness Level? (For Beverages)</label>
+                <input type="checkbox" id="add-sweetness" style="width: 18px; height: 18px;">
+                <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Requires Sweetness Level</label>
             </div>
 
-            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save / Update Item</button>
+            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
         </div>
 
         <div class="admin-card" style="border: none; background: transparent; padding: 0; margin-top: 30px;">
-            <h2 style="border: none; padding: 0; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;">Live Menu Editor</h2>
-            <div id="live-menu-container"><p style="text-align: center; opacity: 0.7; margin-top: 20px;">Loading database...</p></div>
+            <h2 style="border: none; padding: 0; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;">Live Menu</h2>
+            <div id="live-menu-container"><p style="opacity: 0.5; margin-top: 20px;">Loading database...</p></div>
         </div>
 
     </div>
 
     <script>
-        // ==========================================
-        // FIREBASE CLOUD CONNECTION
-        // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
             authDomain: "ila-cafe.firebaseapp.com",
@@ -158,26 +142,17 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let isCafeOpen = true; 
-        let currentMenuData = {}; 
-        let currentCategoryOrder = []; 
-        let currentItemOrder = {};
+        let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
 
-        // ==========================================
-        // MASTER CAFE STATUS
-        // ==========================================
         db.ref('settings/isOpen').on('value', (snapshot) => {
             isCafeOpen = snapshot.val() === null ? true : snapshot.val(); 
             const btn = document.getElementById('master-status-btn');
-            if(isCafeOpen) { btn.innerText = "CAFE IS OPEN"; btn.className = "btn status-open"; } 
-            else { btn.innerText = "CAFE IS CLOSED"; btn.className = "btn status-closed"; }
+            if(isCafeOpen) { btn.innerText = "CAFE OPEN"; btn.className = "btn status-open"; } 
+            else { btn.innerText = "CAFE CLOSED"; btn.className = "btn status-closed"; }
         });
 
         window.toggleCafeStatus = function() { db.ref('settings/isOpen').set(!isCafeOpen); };
 
-        // ==========================================
-        // FETCHING DATA & SYNCING ARRAYS
-        // ==========================================
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderAllViews(); });
         db.ref('settings/itemOrder').on('value', snap => { currentItemOrder = snap.val() || {}; renderAllViews(); });
 
@@ -186,20 +161,14 @@
             let requiresCategorySave = false; let requiresItemSave = false;
             let categoriesInMenu = Object.keys(currentMenuData);
 
-            // Auto-sync category list
             categoriesInMenu.forEach(cat => {
                 if (!currentCategoryOrder.includes(cat)) { currentCategoryOrder.push(cat); requiresCategorySave = true; }
             });
 
-            // Auto-sync item list (so arrows work properly)
             categoriesInMenu.forEach(cat => {
                 if (!currentItemOrder[cat]) { currentItemOrder[cat] = []; requiresItemSave = true; }
                 let itemsInCat = Object.keys(currentMenuData[cat]);
-                
-                itemsInCat.forEach(itemName => { 
-                    if (!currentItemOrder[cat].includes(itemName)) { currentItemOrder[cat].push(itemName); requiresItemSave = true; } 
-                });
-                
+                itemsInCat.forEach(itemName => { if (!currentItemOrder[cat].includes(itemName)) { currentItemOrder[cat].push(itemName); requiresItemSave = true; } });
                 let cleanOrder = currentItemOrder[cat].filter(itemName => itemsInCat.includes(itemName));
                 if (cleanOrder.length !== currentItemOrder[cat].length) { currentItemOrder[cat] = cleanOrder; requiresItemSave = true; }
             });
@@ -209,64 +178,45 @@
             renderAllViews();
         });
 
-        // ==========================================
-        // SORTING LOGIC (THE UP/DOWN ARROWS)
-        // ==========================================
         function getSortedCategories() { return currentCategoryOrder.filter(cat => Object.keys(currentMenuData).includes(cat)); }
 
         window.moveCategory = function(index, direction) {
-            let cats = getSortedCategories(); 
-            let targetIndex = index + direction;
+            let cats = getSortedCategories(); let targetIndex = index + direction;
             if (targetIndex < 0 || targetIndex >= cats.length) return; 
-            
-            let temp = cats[index]; 
-            cats[index] = cats[targetIndex]; 
-            cats[targetIndex] = temp;
-            
+            let temp = cats[index]; cats[index] = cats[targetIndex]; cats[targetIndex] = temp;
             db.ref('settings/categoryOrder').set(cats);
         };
 
         window.moveItem = function(category, index, direction) {
             let itemsInOrder = currentItemOrder[category] || Object.keys(currentMenuData[category] || {});
             let validItems = itemsInOrder.filter(item => currentMenuData[category] && currentMenuData[category][item]);
-            
             let targetIndex = index + direction; 
             if (targetIndex < 0 || targetIndex >= validItems.length) return;
-            
-            let temp = validItems[index]; 
-            validItems[index] = validItems[targetIndex]; 
-            validItems[targetIndex] = temp;
-            
+            let temp = validItems[index]; validItems[index] = validItems[targetIndex]; validItems[targetIndex] = temp;
             db.ref('settings/itemOrder/' + category).set(validItems);
         };
 
-        // ==========================================
-        // MASTER RENDERER (Builds the UI)
-        // ==========================================
         function renderAllViews() {
             let sortedCats = getSortedCategories();
             
-            // 1. Render Category Sorter
             let sorterContainer = document.getElementById('category-order-container');
-            if (sortedCats.length === 0) sorterContainer.innerHTML = "<p>No categories.</p>";
+            if (sortedCats.length === 0) sorterContainer.innerHTML = "<p style='opacity:0.5;'>No categories.</p>";
             else {
                 let sorterHTML = "";
                 sortedCats.forEach((cat, index) => {
-                    let upDisabled = index === 0 ? 'opacity:0.3; pointer-events:none;' : '';
-                    let downDisabled = index === sortedCats.length - 1 ? 'opacity:0.3; pointer-events:none;' : '';
-                    sorterHTML += `<div class="list-item"><strong>${cat}</strong><div><button class="btn-move" style="${upDisabled}" onclick="moveCategory(${index}, -1)">↑ Up</button> <button class="btn-move" style="${downDisabled}" onclick="moveCategory(${index}, 1)">↓ Down</button></div></div>`;
+                    let upDisabled = index === 0 ? 'opacity:0.2; pointer-events:none;' : '';
+                    let downDisabled = index === sortedCats.length - 1 ? 'opacity:0.2; pointer-events:none;' : '';
+                    sorterHTML += `<div class="list-item"><strong>${cat}</strong><div><button class="btn-move" style="${upDisabled}" onclick="moveCategory(${index}, -1)">↑</button> <button class="btn-move" style="${downDisabled}" onclick="moveCategory(${index}, 1)">↓</button></div></div>`;
                 });
                 sorterContainer.innerHTML = sorterHTML;
             }
 
-            // 2. Render Live Menu Items
             let menuContainer = document.getElementById('live-menu-container');
-            if (Object.keys(currentMenuData).length === 0) { menuContainer.innerHTML = "<div class='admin-card'><p>No items.</p></div>"; return; }
+            if (Object.keys(currentMenuData).length === 0) { menuContainer.innerHTML = "<p style='opacity:0.5;'>No items.</p>"; return; }
 
             let menuHTML = "";
             sortedCats.forEach(category => {
                 menuHTML += `<div class="category-block"><div class="category-title">${category}</div>`;
-                
                 let itemsInOrder = currentItemOrder[category] || [];
                 let validItems = itemsInOrder.filter(item => currentMenuData[category][item]);
 
@@ -275,31 +225,30 @@
                     const safeCategory = category.replace(/'/g, "\\'"); const safeName = itemName.replace(/'/g, "\\'");
                     const safeVisibility = item.visibility ? item.visibility : 'both';
                     
-                    let upDisabled = index === 0 ? 'opacity:0.3; pointer-events:none;' : '';
-                    let downDisabled = index === validItems.length - 1 ? 'opacity:0.3; pointer-events:none;' : '';
+                    let upDisabled = index === 0 ? 'opacity:0.2; pointer-events:none;' : '';
+                    let downDisabled = index === validItems.length - 1 ? 'opacity:0.2; pointer-events:none;' : '';
 
-                    const stockLabel = item.inStock ? "In Stock" : "Sold Out";
-                    const stockBadgeClass = item.inStock ? "badge-live" : "badge-out";
-                    const toggleBtnClass = item.inStock ? "btn-toggle sold-out" : "btn-toggle";
-                    const sweetLabel = item.requiresSweetness ? " | <i>+Sweetness Opt.</i>" : "";
+                    let statusStyle = item.inStock ? "" : "opacity: 0.5;";
+                    let badgeHTML = item.inStock ? "" : `<span class="badge">Out</span>`;
+                    let visLabel = item.visibility === "pos" ? "POS Only" : (item.visibility === "customer" ? "App Only" : "");
+                    let visHTML = visLabel ? `<span class="badge">${visLabel}</span>` : "";
                     
-                    let priceDisplay = item.hasSizes ? `₹${item.priceReg} (Reg) / ₹${item.priceLrg} (Lrg)` : `₹${item.price}`;
-                    let visLabel = item.visibility === "pos" ? "POS Only" : (item.visibility === "customer" ? "Customer App Only" : "Both Apps");
+                    let priceDisplay = item.hasSizes ? `₹${item.priceReg} / ₹${item.priceLrg}` : `₹${item.price}`;
 
                     menuHTML += `
-                        <div class="list-item" style="${!item.inStock ? 'opacity: 0.6;' : ''}">
-                            <div style="display:flex; flex-direction:column; gap:4px;">
+                        <div class="list-item" style="${statusStyle}">
+                            <div style="display:flex; flex-direction:column; gap:2px;">
                                 <button class="btn-move-item" style="${upDisabled}" onclick="moveItem('${safeCategory}', ${index}, -1)">▲</button>
                                 <button class="btn-move-item" style="${downDisabled}" onclick="moveItem('${safeCategory}', ${index}, 1)">▼</button>
                             </div>
                             <div class="item-details">
-                                <div class="item-name">${itemName} <span class="badge ${stockBadgeClass}">${stockLabel}</span></div>
-                                <div class="item-meta">${priceDisplay} <span class="badge badge-vis">${visLabel}</span> ${sweetLabel}</div>
+                                <div class="item-name">${itemName} ${badgeHTML}</div>
+                                <div class="item-meta">${priceDisplay} ${visHTML}</div>
                             </div>
                             <div class="item-actions">
-                                <button class="btn-edit" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0})">Edit</button>
-                                <button class="${toggleBtnClass}" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${item.inStock ? "Sold Out" : "In Stock"}</button>
-                                <button class="btn-danger" onclick="deleteItem('${safeCategory}', '${safeName}')">Del</button>
+                                <button class="btn-action" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0})">Edit</button>
+                                <button class="btn-action" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${item.inStock ? "Hide" : "Show"}</button>
+                                <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="deleteItem('${safeCategory}', '${safeName}')">X</button>
                             </div>
                         </div>`;
                 });
@@ -308,9 +257,6 @@
             menuContainer.innerHTML = menuHTML;
         }
 
-        // ==========================================
-        // FORM & SAVING LOGIC
-        // ==========================================
         window.toggleSizeInputs = function() {
             if(document.getElementById('add-has-sizes').checked) {
                 document.getElementById('single-price-group').style.display = 'none';
@@ -330,104 +276,46 @@
 
             if (!category || !name) { alert("Please fill in Category and Name."); return; }
 
-            // Build the exact data to push to Firebase
-            let updateData = { 
-                requiresSweetness: requiresSweetness, 
-                visibility: visibility, 
-                hasSizes: hasSizes 
-            };
+            let updateData = { requiresSweetness: requiresSweetness, visibility: visibility, hasSizes: hasSizes };
 
             if(hasSizes) {
                 const pReg = parseFloat(document.getElementById('add-price-reg').value);
                 const pLrg = parseFloat(document.getElementById('add-price-lrg').value);
-                if(isNaN(pReg) || isNaN(pLrg)) { alert("Enter both Regular and Large prices."); return; }
-                updateData.priceReg = pReg; 
-                updateData.priceLrg = pLrg; 
-                updateData.price = pReg; // Fallback
+                if(isNaN(pReg) || isNaN(pLrg)) { alert("Enter both prices."); return; }
+                updateData.priceReg = pReg; updateData.priceLrg = pLrg; updateData.price = pReg; 
             } else {
                 const price = parseFloat(document.getElementById('add-price').value);
                 if(isNaN(price)) { alert("Enter a price."); return; }
-                updateData.price = price; 
-                updateData.priceReg = null; 
-                updateData.priceLrg = null;
+                updateData.price = price; updateData.priceReg = null; updateData.priceLrg = null;
             }
 
             db.ref('menu/' + category + '/' + name).update(updateData).then(() => {
-                // Ensure it gets marked In Stock if it's brand new
                 db.ref('menu/' + category + '/' + name + '/inStock').once('value').then(snap => {
                     if(!snap.exists()) db.ref('menu/' + category + '/' + name + '/inStock').set(true);
                 });
-                
-                // Show Success Alert
-                alert(`✅ Saved: ${name}`);
-
-                // Clear the form
-                document.getElementById('add-name').value = ""; 
-                document.getElementById('add-price').value = "";
-                document.getElementById('add-price-reg').value = ""; 
-                document.getElementById('add-price-lrg').value = "";
+                document.getElementById('add-name').value = ""; document.getElementById('add-price').value = "";
+                document.getElementById('add-price-reg').value = ""; document.getElementById('add-price-lrg').value = "";
                 document.getElementById('add-name').focus();
-            }).catch(e => alert("Error: " + e));
+            });
         };
 
         window.editItem = function(category, name, price, visibility, requiresSweetness, hasSizes, priceReg, priceLrg) {
-            document.getElementById('add-category').value = category;
-            document.getElementById('add-name').value = name;
-            document.getElementById('add-visibility').value = visibility || "both";
-            document.getElementById('add-sweetness').checked = !!requiresSweetness;
-            document.getElementById('add-has-sizes').checked = !!hasSizes;
-            window.toggleSizeInputs();
-
-            if (hasSizes) {
-                document.getElementById('add-price-reg').value = priceReg;
-                document.getElementById('add-price-lrg').value = priceLrg;
-            } else {
-                document.getElementById('add-price').value = price;
-            }
+            document.getElementById('add-category').value = category; document.getElementById('add-name').value = name; document.getElementById('add-visibility').value = visibility || "both";
+            document.getElementById('add-sweetness').checked = !!requiresSweetness; document.getElementById('add-has-sizes').checked = !!hasSizes; window.toggleSizeInputs();
+            if (hasSizes) { document.getElementById('add-price-reg').value = priceReg; document.getElementById('add-price-lrg').value = priceLrg; } 
+            else { document.getElementById('add-price').value = price; }
             document.getElementById('menu-form-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
 
         window.toggleStock = function(cat, name, status) { db.ref('menu/' + cat + '/' + name + '/inStock').set(!status); };
         window.deleteItem = function(cat, name) { if (confirm(`Delete ${name}?`)) db.ref('menu/' + cat + '/' + name).remove(); };
         
-        // ==========================================
-        // STAFF PIN LOGIC
-        // ==========================================
         window.addStaff = function() {
-            const name = document.getElementById('staff-name').value.trim(); 
-            const pin = document.getElementById('staff-pin').value.trim();
-            if(!name || pin.length !== 4) { alert("Please enter Name and a 4-Digit PIN."); return; }
-            
-            db.ref('staff/' + pin).set(name).then(() => { 
-                document.getElementById('staff-name').value = ""; 
-                document.getElementById('staff-pin').value = ""; 
-            });
+            const name = document.getElementById('staff-name').value.trim(); const pin = document.getElementById('staff-pin').value.trim();
+            if(!name || pin.length !== 4) return;
+            db.ref('staff/' + pin).set(name).then(() => { document.getElementById('staff-name').value = ""; document.getElementById('staff-pin').value = ""; });
         };
-        
-        window.removeStaff = function(pin, name) { 
-            if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); 
-        };
-
-        db.ref('staff').on('value', (snapshot) => {
-            const staffData = snapshot.val();
-            const container = document.getElementById('staff-list-container');
-            container.innerHTML = "";
-
-            if (!staffData) {
-                container.innerHTML = "<p style='opacity: 0.7; font-size: 0.9rem;'>No staff PINs registered yet.</p>";
-                return;
-            }
-
-            for (let pin in staffData) {
-                const name = staffData[pin];
-                container.innerHTML += `
-                    <div class="list-item">
-                        <div><strong style="font-size: 1.1rem;">${name}</strong> <span style="opacity: 0.7; margin-left: 10px;">PIN: ${pin}</span></div>
-                        <button class="btn-danger" onclick="removeStaff('${pin}', '${name}')">Remove</button>
-                    </div>
-                `;
-            }
-        });
+        window.removeStaff = function(pin, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); };
     </script>
 </body>
 </html>
