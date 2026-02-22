@@ -39,6 +39,9 @@
         .btn-edit { background-color: #ffffff; color: #8c7255; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-move { background-color: rgba(255,255,255,0.2); color: white; padding: 8px 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; border: none; cursor: pointer;}
         
+        .btn-move-item { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; border-radius: 6px; cursor: pointer; padding: 5px 10px; font-size: 0.8rem; line-height: 1; transition: all 0.2s;}
+        .btn-move-item:active { background: rgba(255,255,255,0.3); }
+
         .btn-toggle { background-color: #81c784; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-toggle.sold-out { background-color: #ffb74d; color: #333; }
 
@@ -53,7 +56,7 @@
         /* Menu Specific */
         .category-block { margin-top: 30px; }
         .category-title { font-size: 1.3rem; border-bottom: 1px dashed rgba(255,255,255,0.3); padding-bottom: 5px; margin-bottom: 15px; font-weight: bold; text-transform: uppercase;}
-        .item-details { flex-grow: 1; }
+        .item-details { flex-grow: 1; margin-left: 15px; }
         .item-name { font-weight: bold; font-size: 1.1rem; }
         .item-meta { font-size: 0.85rem; opacity: 0.8; margin-top: 4px;}
         .item-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;}
@@ -167,6 +170,7 @@
         let isCafeOpen = true;
         let currentMenuData = {};
         let currentCategoryOrder = [];
+        let currentItemOrder = {}; // Stores the individual item sort order { "Pizza": ["Marg", "Fav"], "Sides": [] }
 
         // ==========================================
         // MASTER CAFE STATUS
@@ -194,39 +198,65 @@
         };
 
         // ==========================================
-        // CATEGORY ORDERING LOGIC
+        // ORDERING LOGIC (CATEGORIES AND ITEMS)
         // ==========================================
         
-        // Listen for Order Array changes
         db.ref('settings/categoryOrder').on('value', (snapshot) => {
             currentCategoryOrder = snapshot.val() || [];
             renderAllViews();
         });
 
-        // Listen for actual Menu changes
+        db.ref('settings/itemOrder').on('value', (snapshot) => {
+            currentItemOrder = snapshot.val() || {};
+            renderAllViews();
+        });
+
         db.ref('menu').on('value', (snapshot) => {
             currentMenuData = snapshot.val() || {};
             
-            // Auto-detect any new categories that aren't in the sorting list yet
+            let requiresCategorySave = false;
+            let requiresItemSave = false;
             let categoriesInMenu = Object.keys(currentMenuData);
-            let requiresSave = false;
 
+            // 1. Auto-Detect new Categories
             categoriesInMenu.forEach(cat => {
                 if (!currentCategoryOrder.includes(cat)) {
                     currentCategoryOrder.push(cat);
-                    requiresSave = true;
+                    requiresCategorySave = true;
                 }
             });
 
-            // If a new category was detected, push the updated list to Firebase
-            if (requiresSave) {
-                db.ref('settings/categoryOrder').set(currentCategoryOrder);
-            }
+            // 2. Auto-Detect new Items and cleanup deleted ones
+            categoriesInMenu.forEach(cat => {
+                if (!currentItemOrder[cat]) {
+                    currentItemOrder[cat] = [];
+                    requiresItemSave = true;
+                }
+                
+                let itemsInCat = Object.keys(currentMenuData[cat]);
+                
+                // Add missing items to the end of the array
+                itemsInCat.forEach(itemName => {
+                    if (!currentItemOrder[cat].includes(itemName)) {
+                        currentItemOrder[cat].push(itemName);
+                        requiresItemSave = true;
+                    }
+                });
+
+                // Clean up deleted items from the array
+                let cleanOrder = currentItemOrder[cat].filter(itemName => itemsInCat.includes(itemName));
+                if (cleanOrder.length !== currentItemOrder[cat].length) {
+                    currentItemOrder[cat] = cleanOrder;
+                    requiresItemSave = true;
+                }
+            });
+
+            if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
+            if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
 
             renderAllViews();
         });
 
-        // Reusable sorter function
         function getSortedCategories() {
             let activeCats = Object.keys(currentMenuData);
             return currentCategoryOrder.filter(cat => activeCats.includes(cat));
@@ -236,16 +266,28 @@
             let cats = getSortedCategories();
             let targetIndex = index + direction;
             
-            if (targetIndex < 0 || targetIndex >= cats.length) return; // Out of bounds
+            if (targetIndex < 0 || targetIndex >= cats.length) return; 
             
-            // Swap logic
             let temp = cats[index];
             cats[index] = cats[targetIndex];
             cats[targetIndex] = temp;
             
-            // Ensure any empty strings/errors aren't saved, then push to cloud
             let cleanCats = cats.filter(c => c);
             db.ref('settings/categoryOrder').set(cleanCats);
+        };
+
+        window.moveItem = function(category, index, direction) {
+            let arr = currentItemOrder[category];
+            if (!arr) return;
+            
+            let targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= arr.length) return;
+            
+            let temp = arr[index];
+            arr[index] = arr[targetIndex];
+            arr[targetIndex] = temp;
+            
+            db.ref('settings/itemOrder/' + category).set(arr);
         };
 
         // Render both the Sorter Block and the Live Editor Block
@@ -275,7 +317,7 @@
                 sorterContainer.innerHTML = sorterHTML;
             }
 
-            // 2. Render Live Menu Editor Block (Using the sorted array)
+            // 2. Render Live Menu Editor Block (Items sorted by ItemArray)
             let menuContainer = document.getElementById('live-menu-container');
             if (Object.keys(currentMenuData).length === 0) {
                 menuContainer.innerHTML = "<div class='admin-card'><p style='text-align: center; margin: 0;'>No items in menu yet.</p></div>";
@@ -286,12 +328,19 @@
             sortedCats.forEach(category => {
                 menuHTML += `<div class="category-block"><div class="category-title">${category}</div>`;
                 
-                for (let itemName in currentMenuData[category]) {
+                let itemsInOrder = currentItemOrder[category] || [];
+                // Double check to only render items that actually exist in the database
+                let validItems = itemsInOrder.filter(item => currentMenuData[category][item]);
+
+                validItems.forEach((itemName, index) => {
                     const item = currentMenuData[category][itemName];
                     const safeCategory = category.replace(/'/g, "\\'");
                     const safeName = itemName.replace(/'/g, "\\'");
                     const safeVisibility = item.visibility ? item.visibility : 'both';
                     
+                    let upDisabled = index === 0 ? 'opacity:0.3; pointer-events:none;' : '';
+                    let downDisabled = index === validItems.length - 1 ? 'opacity:0.3; pointer-events:none;' : '';
+
                     const stockLabel = item.inStock ? "In Stock" : "Sold Out";
                     const stockBadgeClass = item.inStock ? "badge-live" : "badge-out";
                     const toggleBtnText = item.inStock ? "Mark Sold Out" : "Mark In Stock";
@@ -304,6 +353,10 @@
 
                     menuHTML += `
                         <div class="list-item" style="${!item.inStock ? 'opacity: 0.6;' : ''}">
+                            <div style="display:flex; flex-direction:column; gap:4px;">
+                                <button class="btn-move-item" style="${upDisabled}" onclick="moveItem('${safeCategory}', ${index}, -1)">▲</button>
+                                <button class="btn-move-item" style="${downDisabled}" onclick="moveItem('${safeCategory}', ${index}, 1)">▼</button>
+                            </div>
                             <div class="item-details">
                                 <div class="item-name">${itemName} <span class="badge ${stockBadgeClass}">${stockLabel}</span></div>
                                 <div class="item-meta">₹${item.price} <span class="badge badge-vis">${visLabel}</span> ${sweetLabel}</div>
@@ -315,7 +368,7 @@
                             </div>
                         </div>
                     `;
-                }
+                });
                 menuHTML += `</div>`;
             });
             menuContainer.innerHTML = menuHTML;
