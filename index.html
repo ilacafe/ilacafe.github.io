@@ -20,19 +20,31 @@
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
-        .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; }
-        .price-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
         
-        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
+        /* THE ULTIMATE ALIGNMENT FIX */
+        .menu-row, .coffee-row, .coffee-header { display: grid; grid-template-columns: 1fr 100px 100px; gap: 5px; align-items: center; width: 100%; }
+        .menu-row, .coffee-row { margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .coffee-header { margin-bottom: 8px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
+        
+        .item-name { padding-right: 5px; line-height: 1.2; word-break: break-word; }
+        
+        .variant-col { display: flex; justify-content: flex-end; align-items: center; width: 100%; }
+        .price-text { width: 35px; text-align: right; margin-right: 8px; font-size: 0.95rem; font-weight: 500; flex-shrink: 0;}
+        .btn-wrap { width: 55px; display: flex; justify-content: flex-end; flex-shrink: 0;}
+
+        .header-col { display: flex; justify-content: flex-end; width: 100%; }
+        .header-text-wrap { width: 55px; text-align: center; } 
+
+        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 28px; height: 28px; font-size: 1.3rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; line-height: 1;}
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
 
-        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 28px; width: 55px; box-sizing: border-box; }
+        .qty-btn { background: transparent; color: white; border: none; width: 18px; height: 100%; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; line-height: 1;}
+        .qty-btn:active { background: white; color: var(--brand-bg); }
+        .qty-num { width: 19px; text-align: center; font-weight: bold; font-size: 0.9rem; }
 
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
-        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
         .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.85rem; opacity: 0.7; }
@@ -50,8 +62,18 @@
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
         .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
         
-        .remark-input, .sweetness-select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
+        .remark-input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
+        .remark-input::placeholder { color: rgba(255,255,255,0.4); }
         
+        .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+        .type-row { display: flex; gap: 8px; margin-top: 8px; }
+        .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1;}
+        .choice-btn.selected { background: white; color: var(--brand-bg); border-color: white;}
+        
+        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
+        .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; transition: all 0.2s;}
+        .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
+
         .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
         .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; border: none; text-transform: uppercase; letter-spacing: 1px;}
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
@@ -118,12 +140,12 @@
             <h3 id="remark-item-title">Item</h3>
             <div style="text-align: left; width: 100%; margin: 15px 0;">
                 <label style="color: white; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Sweetness</label>
-                <select id="sweetness-select" class="sweetness-select">
-                    <option value="Medium sweet" selected>Medium</option>
-                    <option value="No sweetness">None</option>
-                    <option value="Less sweet">Less</option>
-                    <option value="Very sweet">Extra</option>
-                </select>
+                <div class="choice-grid">
+                    <button class="choice-btn selected" onclick="window.selectSweetness('Medium sweet', this)">Medium</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('No sweetness', this)">None</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('Less sweet', this)">Less</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('Very sweet', this)">Extra</button>
+                </div>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="closeModal('remark-modal')">Cancel</button>
@@ -146,28 +168,23 @@
                 </div>
 
                 <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
-                <select id="order-type" class="sweetness-select" style="margin-top: 5px;" onchange="window.updateDynamicFields()">
-                    <option value="Dine-in">Dine-in</option>
-                    <option value="Takeaway">Takeaway</option>
-                    <option value="Delivery">Delivery</option>
-                </select>
+                <div class="type-row">
+                    <button class="choice-btn selected" id="type-dinein" onclick="window.setOrderType('Dine-in')">Dine-in</button>
+                    <button class="choice-btn" id="type-takeaway" onclick="window.setOrderType('Takeaway')">Takeaway</button>
+                    <button class="choice-btn" id="type-delivery" onclick="window.setOrderType('Delivery')">Delivery</button>
+                </div>
                 
-                <div id="dynamic-fields" style="margin-top: 10px;">
+                <div id="dynamic-fields" style="margin-top: 15px;">
                     <div id="field-dinein" style="display: block;">
-                        <select id="dinein-table" class="sweetness-select" style="margin-top: 0;">
-                            <option value="" disabled selected>Table No.</option>
-                            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-                            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-                            <option value="7">7</option><option value="8">8</option><option value="9">9</option>
-                            <option value="10">10</option>
-                        </select>
+                        <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Table Number</label>
+                        <div class="table-grid" id="customer-table-grid"></div>
                     </div>
                     <div id="field-delivery" style="display: none;">
-                        <textarea id="delivery-address" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
+                        <textarea id="delivery-address" class="remark-input" placeholder="Delivery Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
                     </div>
                     <div id="field-takeaway" style="display: none; text-align: center; padding: 10px 0;">
                         <div style="font-weight: bold; font-size: 1rem;">Pickup: <span id="time-display">30</span> min</div>
-                        <input type="range" id="takeaway-time" min="10" max="90" step="5" value="30" oninput="document.getElementById('time-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.2); height: 2px; margin-top: 10px; outline: none;">
+                        <input type="range" id="takeaway-time" min="10" max="90" step="5" value="30" oninput="document.getElementById('time-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); border-radius: 2px; height: 2px; margin-top: 10px; outline: none;">
                     </div>
                 </div>
             </div>
@@ -224,9 +241,11 @@
         window.lastOrder = JSON.parse(localStorage.getItem('ila_last_order')) || null;
         window.lastAmount = parseFloat(localStorage.getItem('ila_last_amount')) || 0;
         window.lastAddress = localStorage.getItem('ila_last_address') || "";
-        window.lastOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
+        window.currentOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
 
-        document.getElementById('order-type').value = window.lastOrderType;
+        const tableGrid = document.getElementById('customer-table-grid');
+        for(let i=1; i<=10; i++) { tableGrid.innerHTML += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
+        
         if (window.lastAddress) document.getElementById('delivery-address').value = window.lastAddress;
 
         if (window.lastOrder && Object.keys(window.lastOrder).length > 0) {
@@ -236,16 +255,63 @@
         }
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.currentOrderInfo = null;
+        window.currentSweetness = "Medium sweet"; window.currentDineInTable = "";
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
         window.flatMenu = {}; 
 
-        function saveCart() { localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); localStorage.setItem('ila_customer_amount', window.totalAmount); localStorage.setItem('ila_customer_items', window.totalItems); }
+        function saveCart() { 
+            localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); 
+            localStorage.setItem('ila_customer_amount', window.totalAmount); 
+            localStorage.setItem('ila_customer_items', window.totalItems); 
+            updateCartUI(); 
+        }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
             if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
             else { banner.classList.remove('visible'); }
+            window.renderInlineControls(); 
         }
+
+        window.getCartQty = function(baseName) {
+            let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; }
+            }
+            return qty;
+        };
+
+        window.renderInlineControls = function() {
+            const containers = document.querySelectorAll('.inline-container');
+            containers.forEach(container => {
+                let safeName = container.getAttribute('data-item');
+                let price = container.getAttribute('data-price');
+                let reqSweet = container.getAttribute('data-sweet') === 'true';
+                let qty = window.getCartQty(safeName);
+                
+                if (qty > 0) {
+                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
+                } else {
+                    container.innerHTML = `<button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
+                }
+            });
+        };
+
+        window.decrementInline = function(safeName) {
+            let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            let targetKey = null;
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; }
+            }
+            if (targetKey) {
+                window.cart[targetKey].qty -= 1; window.totalAmount -= window.cart[targetKey].price; window.totalItems -= 1;
+                if (window.cart[targetKey].qty <= 0) delete window.cart[targetKey];
+                saveCart();
+                if (window.totalItems === 0) closeModal('checkout-modal'); 
+                else if (document.getElementById('checkout-modal').classList.contains('active')) window.openCheckoutModal();
+            }
+        };
 
         db.ref('settings/isOpen').on('value', snap => {
             const isOpen = snap.val(); const lockScreen = document.getElementById('closed-screen');
@@ -290,30 +356,55 @@
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
-                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group">₹${item.price || 0} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price || 0}, ${item.requiresSweetness || false})">+</button></div></div>`;
+                        catHTML += `<div class="menu-row">
+                            <span class="item-name">${item.originalName}</span>
+                            <div class="variant-col">
+                                <span class="price-text">₹${item.price || 0}</span>
+                                <div id="ctrl-${safeName}" class="inline-container btn-wrap" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div>
+                            </div>
+                            <div></div>
+                        </div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>+</button></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;">
+                            <span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span>
+                            <div class="variant-col">
+                                <span class="price-text">₹${item.price || 0}</span>
+                                <div class="btn-wrap"><button class="add-btn" disabled>+</button></div>
+                            </div>
+                            <div></div>
+                        </div>`;
                     }
                 });
 
                 if (sizedItems.length > 0) {
-                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
+                    catHTML += `<div class="coffee-header">
+                        <div></div>
+                        <div class="header-col"><div class="header-text-wrap">Reg</div></div>
+                        <div class="header-col"><div class="header-text-wrap">Lrg</div></div>
+                    </div>`;
+                    
                     sizedItems.forEach(item => {
                         let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
                         let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
-                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+                        
+                        let regHTML = `<div class="variant-col" style="opacity:0.4"><span class="price-text">-</span><div class="btn-wrap"><span style="width:28px; display:inline-block;"></span></div></div>`;
+                        let lrgHTML = `<div class="variant-col" style="opacity:0.4"><span class="price-text">-</span><div class="btn-wrap"><span style="width:28px; display:inline-block;"></span></div></div>`;
 
                         if (item.inStock) {
-                            if(item.priceReg) regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`; else regHTML = '-';
-                            if(item.priceLrg) lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`; else lrgHTML = '-';
+                            if(item.priceReg) regHTML = `<div class="variant-col"><span class="price-text">₹${item.priceReg}</span><div class="inline-container btn-wrap" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
+                            if(item.priceLrg) lrgHTML = `<div class="variant-col"><span class="price-text">₹${item.priceLrg}</span><div class="inline-container btn-wrap" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
                         }
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
+                        
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}">
+                            <span class="item-name">${item.originalName}</span>
+                            ${regHTML}${lrgHTML}
+                        </div>`;
                     });
                 }
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
             });
+            window.renderInlineControls(); 
         }
 
         window.validateAndSyncCart = function(cartObj) {
@@ -346,45 +437,47 @@
             }
             
             window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
-            saveCart(); updateCartUI();
-            
-            document.getElementById('order-type').value = window.lastOrderType;
+            saveCart(); window.setOrderType(window.lastOrderType || 'Dine-in');
             window.openCheckoutModal();
+        };
+
+        window.selectSweetness = function(val, btn) {
+            window.currentSweetness = val;
+            let siblings = btn.parentNode.children;
+            for(let s of siblings) s.classList.remove('selected');
+            btn.classList.add('selected');
         };
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             let finalName = itemName.replace(/&quot;/g, '"');
-            
             if (!requiresSweetness) {
                 if (window.cart[finalName]) window.cart[finalName].qty += 1; 
                 else window.cart[finalName] = { price: price, qty: 1 };
-                
-                window.totalAmount += price; 
-                window.totalItems += 1;
-                
+                window.totalAmount += price; window.totalItems += 1;
                 if (navigator.vibrate) navigator.vibrate(50);
-                
-                saveCart(); updateCartUI();
-                return;
+                saveCart(); return;
             }
 
             window.pendingItemName = itemName; window.pendingItemPrice = price; 
             document.getElementById('remark-item-title').innerText = finalName; 
-            document.getElementById('sweetness-select').value = "Medium sweet"; 
+            
+            window.currentSweetness = "Medium sweet";
+            const btns = document.querySelectorAll('#remark-modal .choice-grid .choice-btn');
+            btns.forEach(b => b.classList.remove('selected'));
+            btns[0].classList.add('selected');
+
             document.getElementById('remark-modal').classList.add('active');
         };
 
         window.confirmAddItem = function() {
             let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            const sweetValue = document.getElementById('sweetness-select').value; 
-            if (sweetValue !== "") finalName += ` (${sweetValue})`;
-            
+            if (window.currentSweetness !== "") finalName += ` (${window.currentSweetness})`;
             if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
-            saveCart(); updateCartUI(); closeModal('remark-modal');
+            saveCart(); closeModal('remark-modal');
         };
 
-        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('checkout-modal'); };
+        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('checkout-modal'); };
 
         window.openCheckoutModal = function() {
             if (window.totalItems === 0) return alert("Your cart is empty!");
@@ -392,7 +485,7 @@
             let result = window.validateAndSyncCart(window.cart);
             if(result.changed) {
                 window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
-                saveCart(); updateCartUI();
+                saveCart();
                 if(result.removed.length > 0) {
                     alert("Cart updated: Some items are no longer available and were removed.");
                     if(window.totalItems === 0) return;
@@ -407,7 +500,9 @@
             
             document.getElementById('cart-notes').value = "";
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
-            window.updateDynamicFields(); document.getElementById('checkout-modal').classList.add('active');
+            
+            window.setOrderType(window.currentOrderType);
+            document.getElementById('checkout-modal').classList.add('active');
         };
 
         window.modifyCartItem = function(item, delta) {
@@ -415,25 +510,40 @@
             if (window.cart[realItemName]) {
                 window.cart[realItemName].qty += delta; window.totalAmount += (window.cart[realItemName].price * delta); window.totalItems += delta;
                 if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
-                saveCart(); updateCartUI();
+                saveCart();
                 if (window.totalItems === 0) closeModal('checkout-modal'); else window.openCheckoutModal(); 
             }
         };
 
+        window.setOrderType = function(type) {
+            window.currentOrderType = type;
+            document.getElementById('type-dinein').classList.remove('selected');
+            document.getElementById('type-takeaway').classList.remove('selected');
+            document.getElementById('type-delivery').classList.remove('selected');
+            document.getElementById('type-' + type.toLowerCase().replace('-', '')).classList.add('selected');
+            window.updateDynamicFields();
+        };
+
+        window.setDineInTable = function(num, btn) {
+            window.currentDineInTable = num;
+            let siblings = btn.parentNode.children;
+            for(let s of siblings) s.classList.remove('selected');
+            btn.classList.add('selected');
+        };
+
         window.updateDynamicFields = function() {
-            const type = document.getElementById('order-type').value;
+            const type = window.currentOrderType;
             document.getElementById('field-delivery').style.display = type === 'Delivery' ? 'block' : 'none';
             document.getElementById('field-dinein').style.display = type === 'Dine-in' ? 'block' : 'none';
             document.getElementById('field-takeaway').style.display = type === 'Takeaway' ? 'block' : 'none';
         };
 
         window.proceedToPayment = function() {
-            const type = document.getElementById('order-type').value; let details = "";
-            
+            const type = window.currentOrderType; let details = "";
             const notes = document.getElementById('cart-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
             if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Address required."); return; } } 
-            else if (type === 'Dine-in') { details = document.getElementById('dinein-table').value; if (!details) { alert("Table required."); return; } details = "Table " + details; } 
+            else if (type === 'Dine-in') { if (!window.currentDineInTable) { alert("Please select a table number."); return; } details = "Table " + window.currentDineInTable; } 
             else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup: ${time} min`; }
 
             window.currentOrderInfo = { type, details, notes };
@@ -463,18 +573,15 @@
             localStorage.setItem('ila_last_order', JSON.stringify(window.cart));
             localStorage.setItem('ila_last_amount', window.totalAmount);
             localStorage.setItem('ila_last_order_type', info.type); 
-            if (info.type === 'Delivery') {
-                localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
-            }
+            if (info.type === 'Delivery') { localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim()); }
 
             let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
-            
             if (info.notes) { message += `Notes: ${info.notes}\n`; }
             message += `\n`;
             
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
             message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
-            setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
+            setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
         };
 
         updateCartUI(); window.updateDynamicFields();
