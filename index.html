@@ -31,14 +31,13 @@
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
-        /* MINIMAL FOOTER */
-        .contact-footer { margin-top: 40px; padding-top: 30px; border-top: 1px solid rgba(255, 255, 255, 0.2); text-align: center; }
-        .footer-brand { font-size: 1.1rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 18px; opacity: 0.9; }
-        .footer-links { display: flex; flex-direction: column; gap: 12px; font-size: 0.95rem; font-weight: 500; opacity: 0.8; }
-        .contact-link { color: var(--brand-text); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s; display: inline-block; padding-bottom: 2px; }
-        .contact-link:active { border-color: var(--brand-text); }
+        /* MINIMAL HORIZONTAL FOOTER */
+        .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.2); width: 100%; text-align: center; }
+        .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; font-weight: 500; opacity: 0.85; }
+        .contact-link { color: var(--brand-text); text-decoration: none; }
+        .footer-divider { opacity: 0.4; font-size: 0.9rem; }
 
-        /* FLOATING CART (Safe Area Protected) */
+        /* FLOATING CART */
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; cursor: pointer;}
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; flex-grow: 1;}
@@ -129,10 +128,11 @@
         </section>
 
         <div class="contact-footer">
-            <div class="footer-brand">ILA</div>
             <div class="footer-links">
                 <a href="https://wa.me/918882946526" class="contact-link" target="_blank">WhatsApp: +91 88829 46526</a>
+                <span class="footer-divider">•</span>
                 <a href="tel:+919027809069" class="contact-link">Call: +91 90278 09069</a>
+                <span class="footer-divider">•</span>
                 <a href="https://instagram.com/ila_cafe" class="contact-link" target="_blank">Instagram: @ila_cafe</a>
             </div>
         </div>
