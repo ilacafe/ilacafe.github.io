@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>ILA | Smart POS</title>
+    <title>ILA | POS</title>
     <link rel="apple-touch-icon" href="/icon.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     
@@ -17,75 +17,72 @@
         header { text-align: center; margin-bottom: 20px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
-        .dashboard-bar { background-color: rgba(0, 0, 0, 0.15); padding: 15px 20px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 35px; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); }
+        .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1; transition: opacity 0.2s; }
         .dash-stat:active { opacity: 0.5; }
-        .dash-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.7; margin-bottom: 4px; font-weight: 700; }
-        .dash-value { font-size: 1.2rem; font-weight: 700; }
-        .dash-divider { width: 1px; height: 35px; background-color: rgba(255, 255, 255, 0.2); }
+        .dash-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 2px; font-weight: bold; }
+        .dash-value { font-size: 1.1rem; font-weight: 700; }
+        .dash-divider { width: 1px; height: 25px; background-color: rgba(255, 255, 255, 0.2); }
 
-        h2 { font-weight: 700; font-size: 1.8rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 30px; border-bottom: 1px solid rgba(255, 255, 255, 0.3); padding-bottom: 10px; }
+        h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; }
         .price-group { display: flex; align-items: center; gap: 10px; }
         
-        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 50%; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
+        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
-        .add-btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: transparent; }
-        .sold-out-badge { font-size: 0.65rem; color: #e57373; border: 1px solid #e57373; padding: 2px 6px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+        .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
+        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.7; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); padding-bottom: 5px; }
+        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
-        #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; }
+        #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; }
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; cursor: pointer; }
-        .cart-total { font-weight: 700; font-size: 1.2rem; }
-        .cart-clear { font-size: 0.8rem; text-decoration: underline; opacity: 0.8; }
-        .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: 2px solid var(--brand-bg); padding: 10px 20px; border-radius: 20px; font-weight: 700; font-size: 1rem; font-family: 'Quicksand', sans-serif; cursor: pointer; }
+        .cart-total { font-weight: 700; font-size: 1.1rem; }
+        .cart-clear { font-size: 0.8rem; opacity: 0.7; }
+        .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .modal-content { background-color: var(--brand-bg); border: 2px solid var(--brand-text); padding: 30px 20px; border-radius: 20px; text-align: center; width: 85%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto; }
-        .modal-content h3 { margin-top: 0; font-size: 1.4rem; margin-bottom: 10px; }
-        .remark-input, .sweetness-select { width: 90%; padding: 12px; margin: 10px auto; border-radius: 10px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
+        .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
+        .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
+        .remark-input, .sweetness-select { width: 90%; padding: 12px; margin: 10px auto; border-radius: 6px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
         .sweetness-group { text-align: left; width: 90%; margin: 15px auto; display: none; }
         
-        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0 15px 0; }
-        .table-btn { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); padding: 15px 0; border-radius: 10px; font-weight: 700; font-size: 1.2rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
-        .table-btn.occupied { background-color: rgba(0, 0, 0, 0.3); border-color: rgba(0, 0, 0, 0.5); }
-        .takeaway-btn { background-color: var(--brand-text); color: var(--brand-bg); border: none; padding: 15px 0; border-radius: 10px; font-weight: 700; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px; }
+        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; }
+        .table-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        .table-btn.occupied { background-color: #ffffff; color: #8c7255; border: none;}
+        .takeaway-btn { background-color: transparent; color: white; border: 1px dashed white; padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px; text-transform: uppercase; }
 
-        .modal-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 15px; margin-bottom: 15px; }
-        .btn { padding: 12px 20px; border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; }
-        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); border: none; }
-        .btn-secondary { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); }
-        .btn-success { background-color: #2e7d32; color: white; border: none; }
-        .btn-danger { background-color: #c62828; color: white; border: none; }
-        .btn-warning { background-color: #f57f17; color: white; border: none; width: 100%; margin-top: 10px;}
-        .btn-whatsapp { background-color: #ffffff; color: #8c7255; border: none; width: 90%; margin: 5px auto; display: block; }
+        .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 15px; }
+        .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; text-transform: uppercase; letter-spacing: 1px; border: none;}
+        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
+        .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
+        .btn-dark { background-color: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); }
         
-        .mini-btn { background-color: transparent; border: 1px solid #8c7255; color: #8c7255; border-radius: 6px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: bold; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
-        .mini-btn:active { background-color: #8c7255; color: white; }
+        .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
+        .mini-btn:active { background-color: white; color: var(--brand-bg); }
 
-        .close-modal { background: transparent; color: var(--brand-text); border: none; text-decoration: underline; cursor: pointer; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; opacity: 0.8; margin-top: 10px; }
+        .close-modal { background: transparent; color: rgba(255,255,255,0.6); border: none; text-decoration: underline; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 10px; }
 
-        .active-bill-item { background-color: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); }
-        .bill-receipt { background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
-        .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
-        .bill-grand-total { font-size: 1.3rem; font-weight: 700; text-align: right; margin-top: 10px; color: #000; }
-        .item-remove-x { color: #e57373; font-weight: bold; font-size: 1.2rem; cursor: pointer; padding: 5px 12px 5px 0; }
+        .active-bill-item { border-bottom: 1px solid rgba(255,255,255,0.2); padding: 15px 5px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .bill-receipt { background-color: transparent; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
+        .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px; }
+        .bill-receipt-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0;}
+        .bill-grand-total { font-size: 1.2rem; font-weight: bold; text-align: right; margin-top: 10px; border-top: 1px solid white; padding-top: 10px;}
+        .item-remove-x { color: rgba(255,255,255,0.5); font-weight: normal; font-size: 1.2rem; cursor: pointer; padding: 5px 12px 5px 0; }
         
-        #qr-image { width: 200px; height: 200px; margin: 15px auto; border-radius: 10px; border: 5px solid white; background-color: white; display: block; object-fit: contain; }
+        #qr-image { width: 150px; height: 150px; margin: 15px auto; border-radius: 8px; display: block; background: white; padding: 5px; }
 
-        .ledger-box { background-color: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px; border: 1px solid rgba(255,255,255,0.2); }
-        .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.2); padding: 8px 0; font-size: 0.9rem; }
+        .ledger-box { border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px; }
+        .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding: 8px 0; font-size: 0.85rem; }
         .ledger-item:last-child { border-bottom: none; }
-        .ledger-income { color: #81c784; font-weight: bold; }
-        .ledger-upi { color: #4fc3f7; font-weight: bold; }
-        .ledger-out { color: #e57373; font-weight: bold; }
-        .ledger-meta { font-size: 0.75rem; opacity: 0.7; display: block; }
+        .ledger-income { color: white; font-weight: bold; }
+        .ledger-out { color: rgba(255,255,255,0.6); }
+        .ledger-meta { font-size: 0.75rem; opacity: 0.5; display: block; margin-top: 2px;}
     </style>
 </head>
 <body>
@@ -93,7 +90,7 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo">
-            <div id="offline-indicator" style="display:none; background:#e57373; color:white; padding:5px; border-radius:10px; font-size:0.8rem; font-weight:bold; margin-top:10px;">⚠️ OFFLINE MODE</div>
+            <div id="offline-indicator" style="display:none; background:transparent; border: 1px solid white; color:white; padding:5px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
         </header>
 
         <div class="dashboard-bar">
@@ -103,47 +100,45 @@
             <div class="dash-divider"></div>
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">History</span><span class="dash-value">View</span></div>
+            <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">Logs</span><span class="dash-value">View</span></div>
         </div>
 
         <div id="live-menu-container">
-            <p style="text-align: center; opacity: 0.8; margin-top: 50px;">Loading Live POS Menu...</p>
+            <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
         </div>
     </div>
 
     <div id="cart-banner">
-        <div class="cart-info" onclick="openReviewCartModal()"><span class="cart-total" id="cart-total-text">₹0 (0 items)</span><span class="cart-clear">Tap to edit or clear</span></div>
+        <div class="cart-info" onclick="openReviewCartModal()"><span class="cart-total" id="cart-total-text">₹0</span><span class="cart-clear">View Items</span></div>
         <button class="checkout-btn" onclick="openTableModal()">Send Order</button>
     </div>
 
     <div id="review-cart-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Review Cart</h3>
+            <h3>Cart</h3>
             <div id="review-cart-list" class="bill-receipt" style="max-height: 250px; overflow-y: auto; margin-top: 15px;"></div>
-            <div class="modal-buttons"><button class="btn btn-danger" onclick="clearCart()">Clear All</button></div>
-            <button class="close-modal" onclick="closeModal('review-cart-modal')">Done Editing</button>
+            <div class="modal-buttons"><button class="btn btn-secondary" onclick="clearCart()">Empty</button></div>
+            <button class="close-modal" onclick="closeModal('review-cart-modal')">Done</button>
         </div>
     </div>
 
     <div id="remark-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3 id="remark-item-title">Item Name</h3>
+            <h3 id="remark-item-title">Item</h3>
             <div id="sweetness-group" class="sweetness-group">
-                <label>Sweetness Level</label>
+                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Sweetness</label>
                 <select id="sweetness-select" class="sweetness-select">
-                    <option value="Medium sweet" selected>Medium (Default)</option>
-                    <option value="No sweetness">No sweetness</option>
-                    <option value="Less sweet">Less sweet</option>
-                    <option value="Less than medium sweet">Less than medium</option>
-                    <option value="More than medium sweet">More than medium</option>
-                    <option value="Very sweet">Very sweet</option>
+                    <option value="Medium sweet" selected>Medium</option>
+                    <option value="No sweetness">None</option>
+                    <option value="Less sweet">Less</option>
+                    <option value="Very sweet">Extra</option>
                 </select>
             </div>
-            <p style="margin-top:10px;">Special requests</p>
-            <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
+            <p style="margin-top:10px; text-align: left; width: 90%; margin-left: auto; margin-right: auto; opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Notes</p>
+            <input type="text" id="remark-input" class="remark-input" placeholder="Optional...">
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
-                <button class="btn btn-primary" onclick="confirmAddItem(true)">Add Item</button>
+                <button class="btn btn-primary" onclick="confirmAddItem(true)">Add</button>
             </div>
             <button class="close-modal" onclick="closeModal('remark-modal')">Cancel</button>
         </div>
@@ -151,24 +146,24 @@
 
     <div id="table-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Select Table</h3>
+            <h3>Table Select</h3>
             <div class="table-grid" id="sender-table-grid"></div>
-            <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway / Counter</button><br>
+            <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway</button><br>
             <button class="close-modal" onclick="closeModal('table-modal')">Cancel</button>
         </div>
     </div>
 
     <div id="active-bills-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Active Bills</h3>
-            <div id="active-bills-list" style="margin-top: 15px;"></div>
+            <h3>Open Tables</h3>
+            <div id="active-bills-list" style="margin-top: 15px; max-height: 300px; overflow-y: auto;"></div>
             <button class="close-modal" onclick="closeModal('active-bills-modal')" style="margin-top: 20px;">Close</button>
         </div>
     </div>
 
     <div id="past-bills-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Past Bills History</h3>
+            <h3>History</h3>
             <div id="past-bills-list" class="ledger-box" style="max-height: 300px; margin-top: 15px;"></div>
             <button class="close-modal" onclick="closeModal('past-bills-modal')" style="margin-top: 20px;">Close</button>
         </div>
@@ -177,65 +172,90 @@
     <div id="view-past-bill-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="past-bill-title">Receipt</h3>
-            <p id="past-bill-date" style="font-size: 0.8rem; margin-top: -5px; margin-bottom: 10px; opacity: 0.8;"></p>
+            <p id="past-bill-date" style="font-size: 0.8rem; margin-top: -10px; margin-bottom: 15px; opacity: 0.6;"></p>
             <div id="past-bill-receipt" class="bill-receipt"></div>
-            <input type="tel" id="past-bill-phone" class="remark-input" placeholder="Customer WhatsApp No." maxlength="10">
-            <button class="btn btn-whatsapp" onclick="sendPastBillWhatsApp()">Send Receipt</button>
+            <input type="tel" id="past-bill-phone" class="remark-input" placeholder="Phone No." maxlength="10">
+            <button class="btn btn-secondary" style="width: 100%; margin-top: 5px;" onclick="sendPastBillWhatsApp()">Send Receipt</button>
             <button class="close-modal" onclick="closeModal('view-past-bill-modal')" style="margin-top: 20px;">Close</button>
         </div>
     </div>
 
     <div id="checkout-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3 id="checkout-title">Table Bill</h3>
-            <p style="font-size: 0.8rem; opacity: 0.7; margin-top: -10px;">Tap ✖ to remove an item</p>
-            <div id="checkout-receipt" class="bill-receipt"></div>
-            <input type="tel" id="checkout-phone" class="remark-input" placeholder="Customer WhatsApp No." maxlength="10">
-            <button class="btn btn-whatsapp" onclick="sendWhatsAppBill()">Send Bill with UPI Link</button>
-            <div style="height: 1px; background-color: rgba(255,255,255,0.2); margin: 20px 0;"></div>
+            <h3 id="checkout-title">Bill</h3>
+            <div id="checkout-receipt" class="bill-receipt" style="max-height: 35vh; overflow-y: auto;"></div>
+            
+            <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="10">
+            <button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px;" onclick="sendWhatsAppBill()">Send Pay Link</button>
+            
             <div class="modal-buttons">
-                <button class="btn btn-primary" onclick="payWithUPI()">Show UPI QR</button>
-                <button class="btn btn-success" onclick="payWithCash()">Log Cash</button>
+                <button class="btn btn-dark" onclick="openSplitBill()">Split</button>
+                <button class="btn btn-primary" onclick="payWithUPI(null)">UPI</button>
+                <button class="btn btn-primary" onclick="payWithCash(null)">Cash</button>
             </div>
             <button class="close-modal" onclick="closeModal('checkout-modal')">Close</button>
         </div>
     </div>
 
+    <div id="split-bill-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Split Bill</h3>
+            <div style="font-size: 1rem; margin-bottom: 5px; opacity: 0.8;">Total: ₹<span id="split-total">0</span></div>
+            <div style="font-size: 1.4rem; font-weight: bold; margin-bottom: 15px;">Due: ₹<span id="split-remaining">0</span></div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; justify-content: center;">
+                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(2)">/ 2</button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(3)">/ 3</button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(4)">/ 4</button>
+            </div>
+
+            <p style="text-align: left; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; margin-bottom: 0; opacity: 0.7; width: 90%; margin-left: auto; margin-right: auto;">Collect Now (₹)</p>
+            <input type="number" id="partial-pay-amount" class="remark-input" placeholder="0">
+
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn btn-primary" onclick="processSplit('upi')">UPI</button>
+                <button class="btn btn-primary" onclick="processSplit('cash')">Cash</button>
+            </div>
+            <button class="close-modal" onclick="closeSplitBill()">Cancel</button>
+        </div>
+    </div>
+
     <div id="upi-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Scan to Pay</h3>
-            <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">Amount due: ₹0</p>
-            <img id="qr-image" src="" alt="UPI QR Code">
-            <div class="modal-buttons"><button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Log UPI Payment</button></div>
-            <button class="close-modal" onclick="closeModal('upi-modal')">Cancel / Back</button>
+            <h3>Scan</h3>
+            <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">₹0</p>
+            <img id="qr-image" src="" alt="QR">
+            <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Confirm Payment</button></div>
+            <button class="close-modal" onclick="closeModal('upi-modal')">Cancel</button>
         </div>
     </div>
 
     <div id="cash-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Sales & Ledger</h3>
-            <div style="display: flex; justify-content: space-around; margin-bottom: 20px; font-size: 1.1rem; font-weight: bold;">
-                <div>Cash Drawer<br>₹<span id="modal-cash-display">0</span></div>
-                <div>UPI Total<br>₹<span id="modal-upi-display">0</span></div>
+            <h3>Ledger</h3>
+            <div style="display: flex; justify-content: space-around; margin-bottom: 20px; font-size: 1rem; font-weight: bold;">
+                <div>Drawer<br><span style="font-size: 1.2rem;">₹<span id="modal-cash-display">0</span></span></div>
+                <div>UPI<br><span style="font-size: 1.2rem;">₹<span id="modal-upi-display">0</span></span></div>
             </div>
             <div class="modal-buttons" style="margin-bottom: 15px;">
-                <button class="btn btn-danger" onclick="openTransactionModal('expense')">Add Expense</button>
-                <button class="btn btn-secondary" onclick="openTransactionModal('withdrawal')">Withdrawal</button>
+                <button class="btn btn-secondary" onclick="openTransactionModal('expense')">Expense</button>
+                <button class="btn btn-secondary" onclick="openTransactionModal('withdrawal')">Withdraw</button>
             </div>
-            <button class="btn btn-warning" onclick="promptEOD()">End of Day Report</button>
-            <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Transaction Log</h4>
+            <button class="btn btn-dark" style="width: 100%;" onclick="promptEOD()">End of Day</button>
+            
+            <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; font-size: 0.8rem; letter-spacing: 1px; opacity: 0.7;">LOGS</h4>
             <div id="ledger-list" class="ledger-box"></div>
-            <button class="close-modal" onclick="closeModal('cash-modal')" style="margin-top: 15px;">Close Ledger</button>
+            <button class="close-modal" onclick="closeModal('cash-modal')" style="margin-top: 15px;">Close</button>
         </div>
     </div>
 
     <div id="transaction-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3 id="transaction-title">New Transaction</h3>
+            <h3 id="transaction-title">Transaction</h3>
             <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
-            <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason (e.g. Bought milk)">
-            <input type="password" id="transaction-pin" class="remark-input" placeholder="4-Digit Staff PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
-            <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Log Transaction</button></div>
+            <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason">
+            <input type="password" id="transaction-pin" class="remark-input" placeholder="PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
+            <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
             <button class="close-modal" onclick="closeTransactionModal()">Cancel</button>
         </div>
     </div>
@@ -253,9 +273,9 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        const CAFE_WEBSITE_LINK = "https://ilacafe.github.io"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "918882946526"; 
-        const CAFE_WEBSITE_LINK = "https://your-github-username.github.io"; 
         
         window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
         window.cart = {}; window.totalAmount = 0; window.totalItems = 0;
@@ -267,6 +287,7 @@
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
+        window.pendingUPIAmount = 0;
 
         updateDashboards();
 
@@ -304,21 +325,9 @@
         });
 
         db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
-        
-        db.ref('settings/categoryOrder').on('value', snap => { 
-            liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); 
-            if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder);
-        });
-
-        db.ref('settings/itemOrder').on('value', snap => { 
-            window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder));
-            if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder);
-        });
-
-        db.ref('menu').on('value', snap => { 
-            currentMenuData = snap.val() || {}; localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData));
-            renderPOSMenu(currentMenuData, liveCategoryOrder);
-        });
+        db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
+        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); renderPOSMenu(currentMenuData, liveCategoryOrder); });
 
         function renderPOSMenu(menuData, categoryOrder) {
             const container = document.getElementById('live-menu-container');
@@ -348,23 +357,23 @@
                     if (item.inStock) {
                         catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group">₹${item.price || 0} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price || 0}, ${item.requiresSweetness || false})">+</button></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.6;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Sold Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>-</button></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>-</button></div></div>`;
                     }
                 });
 
                 if (sizedItems.length > 0) {
-                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>`;
+                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
                     sizedItems.forEach(item => {
                         let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
                         let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let regHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
-                        let lrgHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
 
                         if (item.inStock) {
-                            if(item.priceReg) regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`; else regHTML = '-';
-                            if(item.priceLrg) lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`; else lrgHTML = '-';
+                            if(item.priceReg) regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`;
+                            if(item.priceLrg) lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`;
                         }
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.6;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
                     });
                 }
                 catHTML += `</section>`;
@@ -372,7 +381,6 @@
             });
         }
 
-        // --- CART LOGIC ---
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
@@ -388,18 +396,10 @@
 
         window.confirmAddItem = function(useRemark) {
             let finalName = window.pendingItemName.replace(/&quot;/g, '"'); let modifications = [];
-            if (window.isBeveragePending) {
-                const sweetValue = document.getElementById('sweetness-select').value;
-                if (sweetValue !== "") modifications.push(sweetValue);
-            }
-            if (useRemark) {
-                let remarkText = document.getElementById('remark-input').value.trim();
-                remarkText = remarkText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                if (remarkText !== "") modifications.push(remarkText);
-            }
+            if (window.isBeveragePending) { const sweetValue = document.getElementById('sweetness-select').value; if (sweetValue !== "") modifications.push(sweetValue); }
+            if (useRemark) { let remarkText = document.getElementById('remark-input').value.trim(); remarkText = remarkText.replace(/</g, "&lt;").replace(/>/g, "&gt;"); if (remarkText !== "") modifications.push(remarkText); }
             if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
-            if (window.cart[finalName]) window.cart[finalName].qty += 1;
-            else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
+            if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
             updateCartUI(); closeModal('remark-modal');
         };
@@ -408,17 +408,17 @@
 
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
-            if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount} (${window.totalItems} items)`; banner.classList.add('visible'); } 
+            if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
             else { banner.classList.remove('visible'); }
         }
 
         window.openReviewCartModal = function() {
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
-            if (window.totalItems === 0) { list.innerHTML = "<p style='text-align:center;'>Cart is empty.</p>"; } 
+            if (window.totalItems === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.5;'>Empty</p>"; } 
             else {
                 for (let item in window.cart) {
                     const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:20px; text-align:center; color:#000;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                    list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
                 }
             }
             document.getElementById('review-cart-modal').classList.add('active');
@@ -434,8 +434,8 @@
             }
         };
 
-        // --- KITCHEN ROUTING ---
         window.openTableModal = function() {
+            if (window.totalItems === 0) return alert("Cart is empty!");
             const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
             for (let i = 1; i <= 10; i++) {
                 const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
@@ -445,26 +445,26 @@
         };
 
         window.sendOrder = function(tableID) {
-            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0 };
+            if (window.totalItems === 0) return alert("Cart is empty!");
+            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0 };
             for (let item in window.cart) {
                 if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
                 else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
             }
             window.activeTables[tableID].total += window.totalAmount;
             saveMemory();
-            let message = tableID === 'Takeaway' ? `NEW TAKEAWAY ORDER\n\n` : `NEW DINE-IN ORDER - Table: ${tableID}\n\n`;
+            let message = tableID === 'Takeaway' ? `ORDER: TAKEAWAY\n\n` : `ORDER: TABLE ${tableID}\n\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item} \n`; }
             closeModal('table-modal'); window.clearCart();
             setTimeout(() => { window.location.href = `https://wa.me/?text=${encodeURIComponent(message)}`; }, 300);
         };
 
-        // --- ACTIVE TABLES & CHECKOUT ---
         window.openActiveBills = function() {
             const list = document.getElementById('active-bills-list'); list.innerHTML = "";
-            if (Object.keys(window.activeTables).length === 0) { list.innerHTML = "<p>No active tables right now.</p>"; } 
+            if (Object.keys(window.activeTables).length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No active tables.</p>"; } 
             else {
                 for (let table in window.activeTables) {
-                    list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${table}')"><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span><span>₹${window.activeTables[table].total} ➔</span></div>`;
+                    list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${table}')"><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span><span>₹${window.activeTables[table].total}</span></div>`;
                 }
             }
             document.getElementById('active-bills-modal').classList.add('active');
@@ -472,15 +472,22 @@
 
         window.openCheckout = function(tableID) {
             window.checkoutTableID = tableID; const tableData = window.activeTables[tableID];
-            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway Bill' : `Table ${tableID} Bill`;
+            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
             document.getElementById('checkout-phone').value = ""; 
             
+            let total = tableData.total; let paid = tableData.paid || 0; let remaining = total - paid;
             let receiptHTML = "";
             for (let item in tableData.items) { 
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span>${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
+                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">X</span> ${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
             }
-            receiptHTML += `<div class="bill-grand-total">Total: ₹${tableData.total}</div>`;
+            
+            receiptHTML += `<div class="bill-grand-total">Total: ₹${total}</div>`;
+            if (paid > 0) {
+                receiptHTML += `<div style="text-align: right; opacity: 0.8; font-size: 0.9rem; margin-top: 5px;">Paid: ₹${paid}</div>`;
+                receiptHTML += `<div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`;
+            }
+
             document.getElementById('checkout-receipt').innerHTML = receiptHTML;
             closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
@@ -489,10 +496,89 @@
             let realItemName = itemName.replace(/&quot;/g, '"');
             const tableData = window.activeTables[tableID];
             if(tableData && tableData.items[realItemName]) {
-                tableData.total -= tableData.items[realItemName].price; tableData.items[realItemName].qty -= 1;
+                tableData.total -= tableData.items[realItemName].price; 
+                tableData.items[realItemName].qty -= 1;
                 if(tableData.items[realItemName].qty <= 0) delete tableData.items[realItemName];
-                if(Object.keys(tableData.items).length === 0) { delete window.activeTables[tableID]; saveMemory(); closeModal('checkout-modal'); alert("Table cleared."); return; }
+                
+                let paid = tableData.paid || 0;
+                if(Object.keys(tableData.items).length === 0) { 
+                    delete window.activeTables[tableID]; saveMemory(); closeModal('checkout-modal'); return; 
+                }
+                if(paid >= tableData.total && paid > 0) {
+                     savePastBill(tableID, tableData); delete window.activeTables[tableID]; saveMemory(); closeModal('checkout-modal'); return;
+                }
                 saveMemory(); window.openCheckout(tableID); 
+            }
+        };
+
+        window.openSplitBill = function() {
+            const tableData = window.activeTables[window.checkoutTableID];
+            let remaining = tableData.total - (tableData.paid || 0);
+            document.getElementById('split-total').innerText = tableData.total;
+            document.getElementById('split-remaining').innerText = remaining;
+            document.getElementById('partial-pay-amount').value = remaining;
+            closeModal('checkout-modal'); document.getElementById('split-bill-modal').classList.add('active');
+        };
+
+        window.closeSplitBill = function() { closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
+        window.calculateSplit = function(ways) {
+            const tableData = window.activeTables[window.checkoutTableID];
+            let remaining = tableData.total - (tableData.paid || 0);
+            document.getElementById('partial-pay-amount').value = Math.ceil(remaining / ways);
+        };
+
+        window.processSplit = function(method) {
+            let amount = parseFloat(document.getElementById('partial-pay-amount').value);
+            let tableData = window.activeTables[window.checkoutTableID];
+            let remaining = tableData.total - (tableData.paid || 0);
+            if (isNaN(amount) || amount <= 0) return;
+            if (amount > remaining) amount = remaining; 
+            if (method === 'upi') window.payWithUPI(amount); else window.payWithCash(amount);
+        };
+
+        window.payWithCash = function(customAmount = null) {
+            const tableData = window.activeTables[window.checkoutTableID];
+            let remaining = tableData.total - (tableData.paid || 0);
+            let amountToPay = customAmount !== null ? customAmount : remaining;
+            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (Cash)' : `Table ${window.checkoutTableID} (Cash)`;
+            
+            addLedgerEntry('cash_income', amountToPay, reason);
+            tableData.paid = (tableData.paid || 0) + amountToPay;
+            
+            if (tableData.paid >= tableData.total) {
+                savePastBill(window.checkoutTableID, tableData); delete window.activeTables[window.checkoutTableID]; saveMemory(); 
+                closeModal('checkout-modal'); closeModal('split-bill-modal');
+            } else {
+                saveMemory(); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
+            }
+        };
+
+        window.payWithUPI = function(customAmount = null) {
+            const tableData = window.activeTables[window.checkoutTableID];
+            let remaining = tableData.total - (tableData.paid || 0);
+            let amountToPay = customAmount !== null ? customAmount : remaining;
+            
+            window.pendingUPIAmount = amountToPay;
+            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amountToPay}&cu=INR`;
+            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
+            document.getElementById('upi-amount-text').innerText = `₹${amountToPay}`;
+            
+            closeModal('checkout-modal'); closeModal('split-bill-modal'); document.getElementById('upi-modal').classList.add('active');
+        };
+
+        window.confirmUPIPayment = function() {
+            let amountToPay = window.pendingUPIAmount;
+            const tableData = window.activeTables[window.checkoutTableID];
+            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (UPI)' : `Table ${window.checkoutTableID} (UPI)`;
+            
+            addLedgerEntry('upi_income', amountToPay, reason); 
+            tableData.paid = (tableData.paid || 0) + amountToPay;
+
+            if (tableData.paid >= tableData.total) {
+                savePastBill(window.checkoutTableID, tableData); delete window.activeTables[window.checkoutTableID]; saveMemory(); 
+                closeModal('upi-modal'); 
+            } else {
+                saveMemory(); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
             }
         };
 
@@ -511,25 +597,25 @@
 
         function renderLedger() {
             const list = document.getElementById('ledger-list'); list.innerHTML = "";
-            if (window.salesLedger.length === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No transactions yet.</p>"; return; }
+            if (window.salesLedger.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; return; }
             window.salesLedger.forEach(entry => {
                 let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
-                if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = '[CASH] '; } 
-                else if (entry.type === 'upi_income') { colorClass = 'ledger-upi'; sign = '+'; typeTag = '[UPI] '; }
-                list.innerHTML += `<div class="ledger-item"><div><span class="ledger-reason" style="font-weight:700;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${entry.amount}</div></div>`;
+                if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'CASH: '; } 
+                else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
+                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${entry.amount}</div></div>`;
             });
         }
 
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list'); list.innerHTML = "";
-            if (window.pastBills.length === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No past bills yet.</p>"; } 
-            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: 700;">${bill.table === 'Takeaway' ? 'Takeaway' : 'Table ' + bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total} ➔</span></div>`; }); }
+            if (window.pastBills.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; } 
+            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table === 'Takeaway' ? 'Takeaway' : 'Table ' + bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
             document.getElementById('past-bills-modal').classList.add('active');
         };
 
         window.viewPastBill = function(id) {
             const bill = window.pastBills.find(b => b.id === id); if (!bill) return; window.currentPastBillID = id;
-            document.getElementById('past-bill-title').innerText = bill.table === 'Takeaway' ? 'Takeaway Receipt' : `Table ${bill.table} Receipt`;
+            document.getElementById('past-bill-title').innerText = bill.table === 'Takeaway' ? 'Takeaway' : `Table ${bill.table}`;
             document.getElementById('past-bill-date').innerText = bill.date;
             let receiptHTML = ""; for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
@@ -538,60 +624,47 @@
         };
 
         window.sendPastBillWhatsApp = function() {
-            const phone = document.getElementById('past-bill-phone').value.trim(); if (phone.length < 10) { alert("Invalid WhatsApp number."); return; }
+            const phone = document.getElementById('past-bill-phone').value.trim(); if (phone.length < 10) return;
             const bill = window.pastBills.find(b => b.id === window.currentPastBillID); let billStr = `ILA\n\n`;
             for (let item in bill.items) { billStr += `${bill.items[item].qty}x ${item} - ₹${bill.items[item].qty * bill.items[item].price}\n`; }
-            billStr += `\nTotal Paid: ₹${bill.total}\n\nThank you for your visit.`; window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
+            billStr += `\nPaid: ₹${bill.total}`; window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
         window.sendWhatsAppBill = function() {
-            const phone = document.getElementById('checkout-phone').value.trim(); if (phone.length < 10) { alert("Invalid WhatsApp number."); return; }
+            const phone = document.getElementById('checkout-phone').value.trim(); if (phone.length < 10) return;
             const tableData = window.activeTables[window.checkoutTableID]; let billStr = `ILA\n\n`;
             for (let item in tableData.items) { billStr += `${tableData.items[item].qty}x ${item} - ₹${tableData.items[item].qty * tableData.items[item].price}\n`; }
-            billStr += `\nTotal Due: ₹${tableData.total}\n\nTap link below to Pay via UPI:\n${CAFE_WEBSITE_LINK}/pay.html?am=${tableData.total}\n\nThank you for your visit.`;
+            
+            const remaining = tableData.total - (tableData.paid || 0);
+            billStr += `\nTotal: ₹${tableData.total}\n`;
+            if(tableData.paid > 0) billStr += `Paid: ₹${tableData.paid}\nDue: ₹${remaining}\n\n`;
+            else billStr += `\n`;
+
+            billStr += `Pay via UPI:\n${CAFE_WEBSITE_LINK}/pay.html?am=${remaining}`;
             window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
-        window.payWithCash = function() {
-            const amount = window.activeTables[window.checkoutTableID].total; const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
-            savePastBill(window.checkoutTableID, window.activeTables[window.checkoutTableID]); addLedgerEntry('cash_income', amount, reason);
-            delete window.activeTables[window.checkoutTableID]; saveMemory(); closeModal('checkout-modal'); alert(`₹${amount} logged to Cash.`);
-        };
-
-        window.payWithUPI = function() {
-            const amount = window.activeTables[window.checkoutTableID].total; const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amount}&cu=INR`;
-            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
-            document.getElementById('upi-amount-text').innerText = `Amount due: ₹${amount}`;
-            closeModal('checkout-modal'); document.getElementById('upi-modal').classList.add('active');
-        };
-
-        window.confirmUPIPayment = function() {
-            const amount = window.activeTables[window.checkoutTableID].total; const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
-            savePastBill(window.checkoutTableID, window.activeTables[window.checkoutTableID]); addLedgerEntry('upi_income', amount, reason); 
-            delete window.activeTables[window.checkoutTableID]; saveMemory(); closeModal('upi-modal'); alert(`UPI Logged.`);
-        };
-
         window.openCashManagement = function() { renderLedger(); document.getElementById('cash-modal').classList.add('active'); };
-        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Add Expense' : 'Cash Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
+        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
         window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
 
         window.confirmTransaction = function() {
             const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
             if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
-            const staffName = window.staffPins[pinStr]; if (!staffName) { alert("Invalid PIN."); return; }
-            if (amount > window.cashDrawer && !confirm(`Warning: Only ₹${window.cashDrawer} in drawer. Continue?`)) return;
-            addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (By: ${staffName})`);
+            const staffName = window.staffPins[pinStr]; if (!staffName) return;
+            if (amount > window.cashDrawer && !confirm(`Only ₹${window.cashDrawer} in drawer. Continue?`)) return;
+            addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (${staffName})`);
             window.closeTransactionModal();
         };
 
         window.promptEOD = function() {
-            const pinStr = prompt("Enter PIN to close register:"); if (!pinStr) return;
-            const staffName = window.staffPins[pinStr]; if (!staffName) { alert("Invalid PIN."); return; }
-            if (Object.keys(window.activeTables).length > 0) { if(!confirm("Tables are still open! End day anyway?")) return; }
-            let report = `ILA - End of Day\nClosed By: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI Total: ₹${window.upiTotal}\nClosing Cash: ₹${window.cashDrawer}\n\nEXPENSES:\n`;
+            const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
+            const staffName = window.staffPins[pinStr]; if (!staffName) return;
+            if (Object.keys(window.activeTables).length > 0) { if(!confirm("Tables open. End day?")) return; }
+            let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${window.upiTotal}\nCash: ₹${window.cashDrawer}\n\nEXPENSES:\n`;
             let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
-            if (!exp) report += `No expenses.\n`;
-            if (confirm("Send Report and reset for tomorrow?")) {
+            if (!exp) report += `None.\n`;
+            if (confirm("Send Report?")) {
                 window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; saveMemory(); closeModal('cash-modal');
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
