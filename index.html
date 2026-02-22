@@ -24,7 +24,6 @@
         .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; }
         .price-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; height: 32px; }
         
-        /* NEW: Inline Controls UI */
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
@@ -36,8 +35,8 @@
 
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
-        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .coffee-header { display: grid; grid-template-columns: 1.5fr auto auto; gap: 10px; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
+        .coffee-row { display: grid; grid-template-columns: 1.5fr auto auto; gap: 10px; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 32px;}
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
@@ -56,16 +55,16 @@
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
         .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
         
-        .remark-input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
+        .remark-input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
+        .remark-input::placeholder { color: rgba(255,255,255,0.4); }
         
-        /* NEW: Choice Grids */
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         .type-row { display: flex; gap: 8px; margin-top: 8px; }
         .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1;}
         .choice-btn.selected { background: white; color: var(--brand-bg); border-color: white;}
         
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
-        .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; transition: all 0.2s;}
         .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
 
         .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
@@ -178,7 +177,7 @@
                     </div>
                     <div id="field-takeaway" style="display: none; text-align: center; padding: 10px 0;">
                         <div style="font-weight: bold; font-size: 1rem;">Pickup: <span id="time-display">30</span> min</div>
-                        <input type="range" id="takeaway-time" min="10" max="90" step="5" value="30" oninput="document.getElementById('time-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.2); height: 2px; margin-top: 10px; outline: none;">
+                        <input type="range" id="takeaway-time" min="10" max="90" step="5" value="30" oninput="document.getElementById('time-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); border-radius: 2px; height: 2px; margin-top: 10px; outline: none;">
                     </div>
                 </div>
             </div>
@@ -202,8 +201,8 @@
             <button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" id="pay-upi-btn">Pay via UPI</button>
             <img id="payment-qr" src="" alt="QR" style="width: 150px; height: 150px; margin: 0 auto 15px auto; border-radius: 8px; display: block; background: white; padding: 5px;">
             
-            <div id="payment-instruction" style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; color: #ffcc00;">
-                Please complete your payment above to send your order.
+            <div id="payment-instruction" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 15px;">
+                Complete payment above to send order
             </div>
 
             <button class="btn btn-secondary" id="confirm-order-btn" style="width: 100%; display: none;" onclick="window.sendCustomerOrder()">I Have Paid - Send Order</button>
@@ -237,7 +236,6 @@
         window.lastAddress = localStorage.getItem('ila_last_address') || "";
         window.currentOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
 
-        // Init Customer Table Grid
         const tableGrid = document.getElementById('customer-table-grid');
         for(let i=1; i<=10; i++) { tableGrid.innerHTML += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
         
@@ -266,10 +264,9 @@
             const banner = document.getElementById('cart-banner');
             if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
             else { banner.classList.remove('visible'); }
-            window.renderInlineControls(); // Instantly update the menu numbers
+            window.renderInlineControls(); 
         }
 
-        // NEW: Calculate sum of variations for base item
         window.getCartQty = function(baseName) {
             let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
             for (let key in window.cart) {
@@ -278,7 +275,6 @@
             return qty;
         };
 
-        // NEW: Render the inline UI buttons without reloading the whole page
         window.renderInlineControls = function() {
             const containers = document.querySelectorAll('.inline-container');
             containers.forEach(container => {
@@ -295,7 +291,6 @@
             });
         };
 
-        // NEW: Decrement directly from menu
         window.decrementInline = function(safeName) {
             let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
             let targetKey = null;
@@ -378,7 +373,7 @@
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
             });
-            window.renderInlineControls(); // Mount UI instantly
+            window.renderInlineControls(); 
         }
 
         window.validateAndSyncCart = function(cartObj) {
@@ -435,11 +430,10 @@
             window.pendingItemName = itemName; window.pendingItemPrice = price; 
             document.getElementById('remark-item-title').innerText = finalName; 
             
-            // Reset grid
             window.currentSweetness = "Medium sweet";
             const btns = document.querySelectorAll('#remark-modal .choice-grid .choice-btn');
             btns.forEach(b => b.classList.remove('selected'));
-            btns[0].classList.add('selected'); // Medium
+            btns[0].classList.add('selected');
 
             document.getElementById('remark-modal').classList.add('active');
         };
@@ -476,7 +470,7 @@
             document.getElementById('cart-notes').value = "";
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             
-            window.setOrderType(window.currentOrderType); // Mount grid visually
+            window.setOrderType(window.currentOrderType);
             document.getElementById('checkout-modal').classList.add('active');
         };
 
