@@ -37,6 +37,7 @@
         .btn-success { background-color: #81c784; color: white; }
         .btn-danger { background-color: #e57373; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-edit { background-color: #ffffff; color: #8c7255; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
+        .btn-move { background-color: rgba(255,255,255,0.2); color: white; padding: 8px 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; border: none; cursor: pointer;}
         
         .btn-toggle { background-color: #81c784; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-toggle.sold-out { background-color: #ffb74d; color: #333; }
@@ -75,6 +76,14 @@
             <h2>Master Switch</h2>
             <p style="font-size: 0.9rem; opacity: 0.8; margin-top: -10px; margin-bottom: 15px;">Turning this off will instantly block customers from ordering on the QR Menu.</p>
             <button id="master-status-btn" class="btn" onclick="toggleCafeStatus()">Loading Status...</button>
+        </div>
+
+        <div class="admin-card">
+            <h2>Menu Section Order</h2>
+            <p style="font-size: 0.85rem; opacity: 0.8; margin-top: -10px; margin-bottom: 15px;">Arrange the order in which categories appear on the menu.</p>
+            <div id="category-order-container">
+                <p style="opacity: 0.7; font-size: 0.9rem;">Loading sections...</p>
+            </div>
         </div>
 
         <div class="admin-card">
@@ -154,7 +163,10 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // System State
         let isCafeOpen = true;
+        let currentMenuData = {};
+        let currentCategoryOrder = [];
 
         // ==========================================
         // MASTER CAFE STATUS
@@ -180,6 +192,134 @@
                 db.ref('settings/isOpen').set(newState);
             }
         };
+
+        // ==========================================
+        // CATEGORY ORDERING LOGIC
+        // ==========================================
+        
+        // Listen for Order Array changes
+        db.ref('settings/categoryOrder').on('value', (snapshot) => {
+            currentCategoryOrder = snapshot.val() || [];
+            renderAllViews();
+        });
+
+        // Listen for actual Menu changes
+        db.ref('menu').on('value', (snapshot) => {
+            currentMenuData = snapshot.val() || {};
+            
+            // Auto-detect any new categories that aren't in the sorting list yet
+            let categoriesInMenu = Object.keys(currentMenuData);
+            let requiresSave = false;
+
+            categoriesInMenu.forEach(cat => {
+                if (!currentCategoryOrder.includes(cat)) {
+                    currentCategoryOrder.push(cat);
+                    requiresSave = true;
+                }
+            });
+
+            // If a new category was detected, push the updated list to Firebase
+            if (requiresSave) {
+                db.ref('settings/categoryOrder').set(currentCategoryOrder);
+            }
+
+            renderAllViews();
+        });
+
+        // Reusable sorter function
+        function getSortedCategories() {
+            let activeCats = Object.keys(currentMenuData);
+            return currentCategoryOrder.filter(cat => activeCats.includes(cat));
+        }
+
+        window.moveCategory = function(index, direction) {
+            let cats = getSortedCategories();
+            let targetIndex = index + direction;
+            
+            if (targetIndex < 0 || targetIndex >= cats.length) return; // Out of bounds
+            
+            // Swap logic
+            let temp = cats[index];
+            cats[index] = cats[targetIndex];
+            cats[targetIndex] = temp;
+            
+            // Ensure any empty strings/errors aren't saved, then push to cloud
+            let cleanCats = cats.filter(c => c);
+            db.ref('settings/categoryOrder').set(cleanCats);
+        };
+
+        // Render both the Sorter Block and the Live Editor Block
+        function renderAllViews() {
+            let sortedCats = getSortedCategories();
+            
+            // 1. Render Category Sorter Block
+            let sorterContainer = document.getElementById('category-order-container');
+            if (sortedCats.length === 0) {
+                sorterContainer.innerHTML = "<p style='opacity: 0.7; font-size: 0.9rem;'>No categories found.</p>";
+            } else {
+                let sorterHTML = "";
+                sortedCats.forEach((cat, index) => {
+                    let upDisabled = index === 0 ? 'opacity:0.3; pointer-events:none;' : '';
+                    let downDisabled = index === sortedCats.length - 1 ? 'opacity:0.3; pointer-events:none;' : '';
+                    
+                    sorterHTML += `
+                        <div class="list-item">
+                            <strong style="font-size: 1.1rem; text-transform: uppercase;">${cat}</strong>
+                            <div style="display:flex; gap: 8px;">
+                                <button class="btn-move" style="${upDisabled}" onclick="moveCategory(${index}, -1)">↑ Up</button>
+                                <button class="btn-move" style="${downDisabled}" onclick="moveCategory(${index}, 1)">↓ Down</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                sorterContainer.innerHTML = sorterHTML;
+            }
+
+            // 2. Render Live Menu Editor Block (Using the sorted array)
+            let menuContainer = document.getElementById('live-menu-container');
+            if (Object.keys(currentMenuData).length === 0) {
+                menuContainer.innerHTML = "<div class='admin-card'><p style='text-align: center; margin: 0;'>No items in menu yet.</p></div>";
+                return;
+            }
+
+            let menuHTML = "";
+            sortedCats.forEach(category => {
+                menuHTML += `<div class="category-block"><div class="category-title">${category}</div>`;
+                
+                for (let itemName in currentMenuData[category]) {
+                    const item = currentMenuData[category][itemName];
+                    const safeCategory = category.replace(/'/g, "\\'");
+                    const safeName = itemName.replace(/'/g, "\\'");
+                    const safeVisibility = item.visibility ? item.visibility : 'both';
+                    
+                    const stockLabel = item.inStock ? "In Stock" : "Sold Out";
+                    const stockBadgeClass = item.inStock ? "badge-live" : "badge-out";
+                    const toggleBtnText = item.inStock ? "Mark Sold Out" : "Mark In Stock";
+                    const toggleBtnClass = item.inStock ? "btn-toggle sold-out" : "btn-toggle";
+                    const sweetLabel = item.requiresSweetness ? " | <i>+Sweetness Opt.</i>" : "";
+                    
+                    let visLabel = "Both Apps";
+                    if(item.visibility === "pos") visLabel = "POS Only";
+                    if(item.visibility === "customer") visLabel = "Customer App Only";
+
+                    menuHTML += `
+                        <div class="list-item" style="${!item.inStock ? 'opacity: 0.6;' : ''}">
+                            <div class="item-details">
+                                <div class="item-name">${itemName} <span class="badge ${stockBadgeClass}">${stockLabel}</span></div>
+                                <div class="item-meta">₹${item.price} <span class="badge badge-vis">${visLabel}</span> ${sweetLabel}</div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-edit" onclick="editItem('${safeCategory}', '${safeName}', ${item.price}, '${safeVisibility}', ${item.requiresSweetness})">Edit</button>
+                                <button class="${toggleBtnClass}" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${toggleBtnText}</button>
+                                <button class="btn-danger" onclick="deleteItem('${safeCategory}', '${safeName}')">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                }
+                menuHTML += `</div>`;
+            });
+            menuContainer.innerHTML = menuHTML;
+        }
 
         // ==========================================
         // STAFF PIN MANAGEMENT
@@ -240,13 +380,11 @@
                 return;
             }
 
-            // Using .update() here so we don't accidentally overwrite the inStock status if it already exists
             db.ref('menu/' + category + '/' + name).update({
                 price: price,
                 requiresSweetness: requiresSweetness,
                 visibility: visibility 
             }).then(() => {
-                // If it's a completely new item, make sure inStock is set to true by default
                 db.ref('menu/' + category + '/' + name + '/inStock').once('value').then(snapshot => {
                     if(!snapshot.exists()) {
                         db.ref('menu/' + category + '/' + name + '/inStock').set(true);
@@ -262,7 +400,6 @@
             });
         };
 
-        // Populate the form with existing data to easily edit it
         window.editItem = function(category, name, price, visibility, requiresSweetness) {
             document.getElementById('add-category').value = category;
             document.getElementById('add-name').value = name;
@@ -270,10 +407,7 @@
             document.getElementById('add-visibility').value = visibility || "both";
             document.getElementById('add-sweetness').checked = requiresSweetness;
             
-            // Scroll up to the form smoothly
             document.getElementById('menu-form-section').scrollIntoView({ behavior: 'smooth' });
-            
-            // Focus on the price so they know they are ready to edit
             document.getElementById('add-price').focus();
         };
 
@@ -287,55 +421,6 @@
             }
         };
 
-        // Render Live Menu
-        db.ref('menu').on('value', (snapshot) => {
-            const menuData = snapshot.val();
-            const container = document.getElementById('live-menu-container');
-            container.innerHTML = "";
-
-            if (!menuData) {
-                container.innerHTML = "<div class='admin-card'><p style='text-align: center; margin: 0;'>No items in menu yet.</p></div>";
-                return;
-            }
-
-            for (let category in menuData) {
-                let categoryHTML = `<div class="category-block"><div class="category-title">${category}</div>`;
-                
-                for (let itemName in menuData[category]) {
-                    const item = menuData[category][itemName];
-                    const safeCategory = category.replace(/'/g, "\\'");
-                    const safeName = itemName.replace(/'/g, "\\'");
-                    const safeVisibility = item.visibility ? item.visibility : 'both';
-                    
-                    const stockLabel = item.inStock ? "In Stock" : "Sold Out";
-                    const stockBadgeClass = item.inStock ? "badge-live" : "badge-out";
-                    const toggleBtnText = item.inStock ? "Mark Sold Out" : "Mark In Stock";
-                    const toggleBtnClass = item.inStock ? "btn-toggle sold-out" : "btn-toggle";
-                    const sweetLabel = item.requiresSweetness ? " | <i>+Sweetness Opt.</i>" : "";
-                    
-                    // Visibility Badge
-                    let visLabel = "Both Apps";
-                    if(item.visibility === "pos") visLabel = "POS Only";
-                    if(item.visibility === "customer") visLabel = "Customer App Only";
-
-                    categoryHTML += `
-                        <div class="list-item" style="${!item.inStock ? 'opacity: 0.6;' : ''}">
-                            <div class="item-details">
-                                <div class="item-name">${itemName} <span class="badge ${stockBadgeClass}">${stockLabel}</span></div>
-                                <div class="item-meta">₹${item.price} <span class="badge badge-vis">${visLabel}</span> ${sweetLabel}</div>
-                            </div>
-                            <div class="item-actions">
-                                <button class="btn-edit" onclick="editItem('${safeCategory}', '${safeName}', ${item.price}, '${safeVisibility}', ${item.requiresSweetness})">Edit</button>
-                                <button class="${toggleBtnClass}" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${toggleBtnText}</button>
-                                <button class="btn-danger" onclick="deleteItem('${safeCategory}', '${safeName}')">Delete</button>
-                            </div>
-                        </div>
-                    `;
-                }
-                categoryHTML += `</div>`;
-                container.innerHTML += categoryHTML;
-            }
-        });
     </script>
 </body>
 </html>
