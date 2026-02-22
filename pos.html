@@ -6,6 +6,10 @@
     <title>ILA | Smart POS</title>
     <link rel="apple-touch-icon" href="/icon.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
     <style>
         :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
@@ -28,23 +32,10 @@
         .price-group { display: flex; align-items: center; gap: 10px; }
         
         /* MINIMAL ADD BUTTON */
-        .add-btn { 
-            background-color: transparent; 
-            color: var(--brand-text); 
-            border: 1px solid rgba(255, 255, 255, 0.4); 
-            border-radius: 50%; 
-            width: 32px; 
-            height: 32px; 
-            font-size: 1.4rem; 
-            font-weight: 400; 
-            cursor: pointer; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            transition: all 0.2s; 
-            padding: 0;
-        }
+        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 50%; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
+        .add-btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: transparent; }
+        .sold-out-badge { font-size: 0.65rem; color: #e57373; border: 1px solid #e57373; padding: 2px 6px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.7; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
@@ -80,24 +71,7 @@
         .btn-warning { background-color: #f57f17; color: white; border: none; width: 100%; margin-top: 10px;}
         .btn-whatsapp { background-color: #ffffff; color: #8c7255; border: none; width: 90%; margin: 5px auto; display: block; }
         
-        /* INCREASED SIZE FOR IPAD TAPPING */
-        .mini-btn { 
-            background-color: transparent; 
-            border: 1px solid #8c7255; 
-            color: #8c7255; 
-            border-radius: 6px; 
-            width: 32px; 
-            height: 32px; 
-            font-size: 1.4rem; 
-            font-weight: bold; 
-            cursor: pointer; 
-            margin: 0 5px; 
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            transition: all 0.2s;
-        }
+        .mini-btn { background-color: transparent; border: 1px solid #8c7255; color: #8c7255; border-radius: 6px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: bold; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: #8c7255; color: white; }
 
         .close-modal { background: transparent; color: var(--brand-text); border: none; text-decoration: underline; cursor: pointer; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; opacity: 0.8; margin-top: 10px; }
@@ -106,8 +80,6 @@
         .bill-receipt { background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
         .bill-grand-total { font-size: 1.3rem; font-weight: 700; text-align: right; margin-top: 10px; color: #000; }
-        
-        /* INCREASED PADDING SO IT'S EASIER TO TAP */
         .item-remove-x { color: #e57373; font-weight: bold; font-size: 1.2rem; cursor: pointer; padding: 5px 12px 5px 0; }
         
         #qr-image { width: 200px; height: 200px; margin: 15px auto; border-radius: 10px; border: 5px solid white; background-color: white; display: block; object-fit: contain; }
@@ -125,7 +97,10 @@
 <body>
 
     <div class="container">
-        <header><img src="logo.png" alt="ILA Logo" class="logo"></header>
+        <header>
+            <img src="logo.png" alt="ILA Logo" class="logo">
+            <div id="offline-indicator" style="display:none; background:#e57373; color:white; padding:5px; border-radius:10px; font-size:0.8rem; font-weight:bold; margin-top:10px;">⚠️ OFFLINE MODE</div>
+        </header>
 
         <div class="dashboard-bar">
             <div class="dash-stat" onclick="openActiveBills()">
@@ -145,54 +120,9 @@
             </div>
         </div>
 
-        <section>
-            <h2>Pizza</h2>
-            <div class="menu-row"><span class="item-name">Margherita</span><div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Margherita Pizza', 400)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Marc’s Fav</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Marc’s Fav Pizza', 500)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Fire Vodka</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Fire Vodka Pizza', 500)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Quattro Formaggi</span><div class="price-group">₹600 <button class="add-btn" onclick="promptRemark('Quattro Formaggi Pizza', 600)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Al Funghi</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Al Funghi Pizza', 500)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Pesto Burrata</span><div class="price-group">₹750 <button class="add-btn" onclick="promptRemark('Pesto Burrata Pizza', 750)">+</button></div></div>
-        </section>
-
-        <section>
-            <h2>Sides</h2>
-            <div class="menu-row"><span class="item-name">Garlic Bread</span><div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Garlic Bread', 400)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Caprese Sandwich</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Caprese Sandwich', 500)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Burrata Sandwich</span><div class="price-group">₹700 <button class="add-btn" onclick="promptRemark('Burrata Sandwich', 700)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Stuffed Garlic Bread</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Stuffed Garlic Bread', 500)">+</button></div></div>
-        </section>
-
-        <section>
-            <h2>Dessert</h2>
-            <div class="menu-row"><span class="item-name">Banana Bread</span><div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Banana Bread', 200)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Carrot Cake</span><div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Carrot Cake', 200)">+</button></div></div>
-        </section>
-
-        <section>
-            <h2>Coffee</h2>
-            <div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>
-            <div class="coffee-row"><span>Espresso</span><div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Espresso (Regular)', 150)">+</button></div><div class="coffee-price">-</div></div>
-            <div class="coffee-row"><span>Americano</span><div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Americano (Regular)', 150)">+</button></div><div class="coffee-price">₹220 <button class="add-btn" onclick="promptRemark('Americano (Large)', 220)">+</button></div></div>
-            <div class="coffee-row"><span>Iced Americano</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Americano (Reg)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Americano (Lrg)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Latte</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Latte (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Latte (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Cappuccino</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cappuccino (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cappuccino (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Macchiato</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Macchiato (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Macchiato (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Cortado</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cortado (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cortado (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Flat White</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Flat White (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Flat White (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Iced Coffee</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Coffee (Regular)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Coffee (Large)', 300, true)">+</button></div></div>
-        </section>
-
-        <section>
-            <h2>Beverages</h2>
-            <div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>
-            <div class="coffee-row"><span>Matcha Latte</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Matcha Latte (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Matcha Latte (Lrg)', 350, true)">+</button></div></div>
-            <div class="coffee-row"><span>Iced Matcha Latte</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Lrg)', 350, true)">+</button></div></div>
-            <div class="coffee-row"><span>Saffron Milk</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Saffron Milk (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Saffron Milk (Lrg)', 350, true)">+</button></div></div>
-            <div class="coffee-row"><span>Rose Milk</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Rose Milk (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Rose Milk (Lrg)', 350, true)">+</button></div></div>
-            <div class="coffee-row"><span>Rose & Fennel Cooler</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Reg)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Lrg)', 300, true)">+</button></div></div>
-            <div class="coffee-row"><span>Saffron & Tulsi Sharbat</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Reg)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Lrg)', 300, true)">+</button></div></div>
-        </section>
+        <div id="live-menu-container">
+            <p style="text-align: center; opacity: 0.8; margin-top: 50px;">Loading Live POS Menu...</p>
+        </div>
     </div>
 
     <div id="cart-banner">
@@ -347,15 +277,30 @@
 
     <script>
         // ==========================================
-        // ⚠️ CAFE SETTINGS & PINS ⚠️
+        // FIREBASE CLOUD CONNECTION
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
+            authDomain: "ila-cafe.firebaseapp.com",
+            databaseURL: "https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "ila-cafe",
+            storageBucket: "ila-cafe.firebasestorage.app",
+            messagingSenderId: "473595092965",
+            appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // ==========================================
+        // ⚠️ CAFE SETTINGS ⚠️
         // ==========================================
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
-        const OWNER_WHATSAPP = "919999016712"; 
-        const CAFE_WEBSITE_LINK = "https://ilacafe.github.io"; 
+        const OWNER_WHATSAPP = "918882946526"; 
+        const CAFE_WEBSITE_LINK = "https://your-github-username.github.io"; // Update this if you use the Pay Link feature
         
-        const STAFF_PINS = {
-            "3579": "Sona", "7342": "Karishma", "4789": "Pinky", "1359": "Anjali"
-        };
+        // --- Staff PINs (Dynamically fetched or Loaded from Cache) ---
+        window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
         
         // --- System Memory ---
         window.cart = {}; window.totalAmount = 0; window.totalItems = 0;
@@ -387,46 +332,174 @@
             document.getElementById('modal-upi-display').innerText = window.upiTotal;
         }
 
-        // --- Ledger & Past Bills System ---
-        function addLedgerEntry(type, amount, reason) {
-            const date = new Date();
-            const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            window.salesLedger.unshift({ date: timeString, type: type, amount: amount, reason: reason }); 
-            if (type === 'cash_income') window.cashDrawer += amount;
-            else if (type === 'upi_income') window.upiTotal += amount;
-            else window.cashDrawer -= amount; 
-            saveMemory();
-        }
+        // ==========================================
+        // REAL-TIME CLOUD LISTENERS & OFFLINE FAILSAFE
+        // ==========================================
+        
+        // Connectivity check
+        db.ref('.info/connected').on('value', function(snap) {
+            if (snap.val() === true) {
+                document.getElementById('offline-indicator').style.display = 'none';
+            } else {
+                document.getElementById('offline-indicator').style.display = 'block';
+                // If offline, attempt to render from cache immediately
+                let cachedMenu = JSON.parse(localStorage.getItem('ila_cached_menu'));
+                let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
+                if(cachedMenu) renderPOSMenu(cachedMenu, cachedOrder || []);
+            }
+        });
 
-        function savePastBill(tableID, tableData) {
-            const bill = {
-                id: Date.now(),
-                table: tableID,
-                date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(),
-                items: JSON.parse(JSON.stringify(tableData.items)), 
-                total: tableData.total
-            };
-            window.pastBills.unshift(bill);
-            if(window.pastBills.length > 50) window.pastBills.pop(); 
-            saveMemory();
-        }
+        // Sync Staff
+        db.ref('staff').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if(data) {
+                window.staffPins = data;
+                localStorage.setItem('ila_cached_staff', JSON.stringify(data));
+            }
+        });
 
-        function renderLedger() {
-            const list = document.getElementById('ledger-list'); list.innerHTML = "";
-            if (window.salesLedger.length === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No transactions yet.</p>"; return; }
-            window.salesLedger.forEach(entry => {
-                let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
-                if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = '[CASH] '; } 
-                else if (entry.type === 'upi_income') { colorClass = 'ledger-upi'; sign = '+'; typeTag = '[UPI] '; }
-                list.innerHTML += `<div class="ledger-item"><div><span class="ledger-reason" style="font-weight:700;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${entry.amount}</div></div>`;
+        // Sync Sorting Order
+        let liveCategoryOrder = [];
+        db.ref('settings/categoryOrder').on('value', (snapshot) => {
+            liveCategoryOrder = snapshot.val() || [];
+            localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder));
+        });
+
+        // Sync Menu
+        db.ref('menu').on('value', (snapshot) => {
+            const menuData = snapshot.val();
+            if(menuData) {
+                localStorage.setItem('ila_cached_menu', JSON.stringify(menuData));
+                renderPOSMenu(menuData, liveCategoryOrder);
+            }
+        });
+
+        // Master Rendering Engine (Similar to Customer App, but shows POS items)
+        function renderPOSMenu(menuData, categoryOrder) {
+            const container = document.getElementById('live-menu-container');
+            if (!menuData) return;
+
+            container.innerHTML = "";
+
+            let activeCats = Object.keys(menuData);
+            let sortedCats = categoryOrder.filter(cat => activeCats.includes(cat));
+            activeCats.forEach(cat => {
+                if(!sortedCats.includes(cat)) sortedCats.push(cat);
+            });
+
+            sortedCats.forEach(category => {
+                let standardItems = [];
+                let sizedItems = {};
+                let hasVisibleItems = false;
+
+                // Group Data
+                for (let itemName in menuData[category]) {
+                    const item = menuData[category][itemName];
+                    
+                    // DIFFERENT FROM CUSTOMER APP: Hide "Customer App Only" items
+                    if (item.visibility === 'customer') continue; 
+                    
+                    hasVisibleItems = true;
+                    item.originalName = itemName; 
+
+                    const regMatch = itemName.match(/(.*)\s\((Regular|Reg)\)$/i);
+                    const lrgMatch = itemName.match(/(.*)\s\((Large|Lrg)\)$/i);
+
+                    if (regMatch) {
+                        let base = regMatch[1];
+                        if (!sizedItems[base]) sizedItems[base] = { regular: null, large: null };
+                        sizedItems[base].regular = item;
+                    } else if (lrgMatch) {
+                        let base = lrgMatch[1];
+                        if (!sizedItems[base]) sizedItems[base] = { regular: null, large: null };
+                        sizedItems[base].large = item;
+                    } else {
+                        standardItems.push(item);
+                    }
+                }
+
+                if (!hasVisibleItems) return;
+
+                let catHTML = `<section><h2>${category}</h2>`;
+
+                // Standard Items
+                standardItems.forEach(item => {
+                    const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    if (item.inStock) {
+                        catHTML += `
+                        <div class="menu-row">
+                            <span class="item-name">${item.originalName}</span>
+                            <div class="price-group">₹${item.price} 
+                                <button class="add-btn" onclick="promptRemark('${safeName}', ${item.price}, ${item.requiresSweetness})">+</button>
+                            </div>
+                        </div>`;
+                    } else {
+                        catHTML += `
+                        <div class="menu-row" style="opacity: 0.6;">
+                            <span class="item-name">${item.originalName} <span class="sold-out-badge">Sold Out</span></span>
+                            <div class="price-group">₹${item.price} <button class="add-btn" disabled>-</button></div>
+                        </div>`;
+                    }
+                });
+
+                // Sized Items (3 Columns)
+                if (Object.keys(sizedItems).length > 0) {
+                    catHTML += `
+                    <div class="coffee-header">
+                        <div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div>
+                    </div>`;
+
+                    for (let baseName in sizedItems) {
+                        let reg = sizedItems[baseName].regular;
+                        let lrg = sizedItems[baseName].large;
+
+                        let regHTML = '-';
+                        if (reg) {
+                            let safeName = reg.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                            if (reg.inStock) {
+                                regHTML = `₹${reg.price} <button class="add-btn" onclick="promptRemark('${safeName}', ${reg.price}, ${reg.requiresSweetness})">+</button>`;
+                            } else {
+                                regHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                            }
+                        }
+
+                        let lrgHTML = '-';
+                        if (lrg) {
+                            let safeName = lrg.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                            if (lrg.inStock) {
+                                lrgHTML = `₹${lrg.price} <button class="add-btn" onclick="promptRemark('${safeName}', ${lrg.price}, ${lrg.requiresSweetness})">+</button>`;
+                            } else {
+                                lrgHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                            }
+                        }
+
+                        let isOut = (!reg || !reg.inStock) && (!lrg || !lrg.inStock);
+
+                        catHTML += `
+                        <div class="coffee-row" style="${isOut ? 'opacity: 0.6;' : ''}">
+                            <span>${baseName}</span>
+                            <div class="coffee-price">${regHTML}</div>
+                            <div class="coffee-price">${lrgHTML}</div>
+                        </div>`;
+                    }
+                }
+
+                catHTML += `</section>`;
+                container.innerHTML += catHTML;
             });
         }
+
+
+        // ==========================================
+        // CART & UTILITIES LOGIC (From original POS)
+        // ==========================================
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
-            document.getElementById('remark-item-title').innerText = itemName; document.getElementById('remark-input').value = ""; 
+            document.getElementById('remark-item-title').innerText = itemName.replace(/&quot;/g, '"'); 
+            document.getElementById('remark-input').value = ""; 
             const sweetGroup = document.getElementById('sweetness-group');
             if (requiresSweetness) { sweetGroup.style.display = 'block'; document.getElementById('sweetness-select').value = "Medium sweet"; } 
             else { sweetGroup.style.display = 'none'; }
@@ -435,13 +508,15 @@
         };
 
         window.confirmAddItem = function(useRemark) {
-            let finalName = window.pendingItemName; let modifications = [];
+            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
+            let modifications = [];
             if (window.isBeveragePending) {
                 const sweetValue = document.getElementById('sweetness-select').value;
                 if (sweetValue !== "") modifications.push(sweetValue);
             }
             if (useRemark) {
-                const remarkText = document.getElementById('remark-input').value.trim();
+                let remarkText = document.getElementById('remark-input').value.trim();
+                remarkText = remarkText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 if (remarkText !== "") modifications.push(remarkText);
             }
             if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
@@ -459,14 +534,13 @@
             else { banner.classList.remove('visible'); }
         }
 
-        // --- EDIT CURRENT CART ---
         window.openReviewCartModal = function() {
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
             if (window.totalItems === 0) {
                 list.innerHTML = "<p style='text-align:center;'>Cart is empty.</p>";
             } else {
                 for (let item in window.cart) {
-                    const safeItemName = item.replace(/'/g, "\\'");
+                    const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     list.innerHTML += `<div class="bill-receipt-row">
                         <span style="flex:1;">${item}</span>
                         <span style="display:flex; align-items:center;">
@@ -481,11 +555,12 @@
         };
 
         window.modifyCartItem = function(item, delta) {
-            if (window.cart[item]) {
-                window.cart[item].qty += delta;
-                window.totalAmount += (window.cart[item].price * delta);
+            let realItemName = item.replace(/&quot;/g, '"');
+            if (window.cart[realItemName]) {
+                window.cart[realItemName].qty += delta;
+                window.totalAmount += (window.cart[realItemName].price * delta);
                 window.totalItems += delta;
-                if (window.cart[item].qty <= 0) delete window.cart[item];
+                if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
                 updateCartUI();
                 if (window.totalItems === 0) closeModal('review-cart-modal');
                 else openReviewCartModal();
@@ -535,7 +610,7 @@
             
             let receiptHTML = "";
             for (let item in tableData.items) { 
-                const safeItemName = item.replace(/'/g, "\\'");
+                const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 receiptHTML += `<div class="bill-receipt-row">
                     <span>
                         <span class="item-remove-x" onclick="removeTableItem('${tableID}', '${safeItemName}')">✖</span>
@@ -549,15 +624,15 @@
             closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
 
-        // --- EDIT ACTIVE TABLE ERRORS ---
         window.removeTableItem = function(tableID, itemName) {
+            let realItemName = itemName.replace(/&quot;/g, '"');
             const tableData = window.activeTables[tableID];
-            if(tableData && tableData.items[itemName]) {
-                tableData.total -= tableData.items[itemName].price;
-                tableData.items[itemName].qty -= 1;
+            if(tableData && tableData.items[realItemName]) {
+                tableData.total -= tableData.items[realItemName].price;
+                tableData.items[realItemName].qty -= 1;
                 
-                if(tableData.items[itemName].qty <= 0) {
-                    delete tableData.items[itemName];
+                if(tableData.items[realItemName].qty <= 0) {
+                    delete tableData.items[realItemName];
                 }
                 
                 if(Object.keys(tableData.items).length === 0) {
@@ -568,11 +643,45 @@
                     return;
                 }
                 saveMemory();
-                openCheckout(tableID); // Refresh view
+                openCheckout(tableID); 
             }
         };
 
-        // --- PAST BILLS ---
+        // --- PAST BILLS & LEDGER ---
+        function addLedgerEntry(type, amount, reason) {
+            const date = new Date();
+            const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            window.salesLedger.unshift({ date: timeString, type: type, amount: amount, reason: reason }); 
+            if (type === 'cash_income') window.cashDrawer += amount;
+            else if (type === 'upi_income') window.upiTotal += amount;
+            else window.cashDrawer -= amount; 
+            saveMemory();
+        }
+
+        function savePastBill(tableID, tableData) {
+            const bill = {
+                id: Date.now(),
+                table: tableID,
+                date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(),
+                items: JSON.parse(JSON.stringify(tableData.items)), 
+                total: tableData.total
+            };
+            window.pastBills.unshift(bill);
+            if(window.pastBills.length > 50) window.pastBills.pop(); 
+            saveMemory();
+        }
+
+        function renderLedger() {
+            const list = document.getElementById('ledger-list'); list.innerHTML = "";
+            if (window.salesLedger.length === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No transactions yet.</p>"; return; }
+            window.salesLedger.forEach(entry => {
+                let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
+                if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = '[CASH] '; } 
+                else if (entry.type === 'upi_income') { colorClass = 'ledger-upi'; sign = '+'; typeTag = '[UPI] '; }
+                list.innerHTML += `<div class="ledger-item"><div><span class="ledger-reason" style="font-weight:700;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${entry.amount}</div></div>`;
+            });
+        }
+
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list'); list.innerHTML = "";
             if (window.pastBills.length === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No past bills yet.</p>"; } 
@@ -650,7 +759,7 @@
             closeModal('upi-modal'); alert(`UPI Payment Logged. Table cleared.`);
         };
 
-        // --- CASH MANAGEMENT & EOD ---
+        // --- CASH MANAGEMENT & EOD (Using Cloud PINs) ---
         window.openCashManagement = function() { renderLedger(); document.getElementById('cash-modal').classList.add('active'); };
 
         window.openTransactionModal = function(type) {
@@ -667,10 +776,14 @@
             const amount = parseFloat(document.getElementById('transaction-amount').value);
             const reasonStr = document.getElementById('transaction-reason').value.trim();
             const pinStr = document.getElementById('transaction-pin').value.trim();
+            
             if (isNaN(amount) || amount <= 0) { alert("Please enter a valid amount."); return; }
             if (reasonStr === "") { alert("Please enter a reason."); return; }
-            const staffName = STAFF_PINS[pinStr];
+            
+            // Check dynamic Staff PINs
+            const staffName = window.staffPins[pinStr];
             if (!staffName) { alert("Invalid PIN. Transaction denied."); return; }
+            
             if (amount > window.cashDrawer && !confirm(`Warning: Only ₹${window.cashDrawer} in drawer. Continue?`)) return;
             const finalReason = `${reasonStr} (By: ${staffName})`;
             addLedgerEntry(window.currentTransactionType, amount, finalReason);
@@ -680,8 +793,11 @@
         window.promptEOD = function() {
             const pinStr = prompt("Enter your 4-digit PIN to close the register for today:");
             if (!pinStr) return;
-            const staffName = STAFF_PINS[pinStr];
+            
+            // Check dynamic Staff PINs
+            const staffName = window.staffPins[pinStr];
             if (!staffName) { alert("Invalid PIN. Access Denied."); return; }
+            
             if (Object.keys(window.activeTables).length > 0) { if(!confirm("There are still active tables open! Are you sure you want to end the day?")) return; }
 
             let report = `ILA - End of Day Report\nClosed By: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\n`;
