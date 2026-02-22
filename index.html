@@ -37,7 +37,7 @@
         .contact-link { color: var(--brand-text); text-decoration: none; }
         .footer-divider { opacity: 0.4; font-size: 0.9rem; }
 
-        /* FLOATING CART */
+        /* FLOATING CART (Safe Area Protected) */
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; cursor: pointer;}
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; flex-grow: 1;}
@@ -68,6 +68,12 @@
 
         .bill-receipt { background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px; text-align: left; font-size: 0.95rem; }
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 8px; }
+
+        /* SLIDER STYLING */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; margin: 15px 0; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: rgba(255, 255, 255, 0.4); border-radius: 3px; }
+        input[type=range]::-webkit-slider-thumb { height: 22px; width: 22px; border-radius: 50%; background: #ffffff; cursor: pointer; -webkit-appearance: none; margin-top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
@@ -177,6 +183,42 @@
             <div id="review-cart-list" class="bill-receipt" style="max-height: 200px; overflow-y: auto;"></div>
             <div style="font-weight: bold; font-size: 1.3rem; margin: 15px 0;">Total: ₹<span id="modal-checkout-total">0</span></div>
 
+            <div style="text-align: left; margin-top: 15px;">
+                <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
+                <select id="order-type" class="sweetness-select" style="margin-top: 5px;" onchange="updateDynamicFields()">
+                    <option value="Delivery" selected>Delivery (To your location)</option>
+                    <option value="Dine-in">Dine-in (At the Cafe)</option>
+                    <option value="Takeaway">Takeaway (Pick up)</option>
+                </select>
+                
+                <div id="dynamic-fields" style="margin-top: 10px;">
+                    <div id="field-delivery" style="display: block;">
+                        <textarea id="delivery-address" class="remark-input" placeholder="Enter Full Delivery Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
+                    </div>
+
+                    <div id="field-dinein" style="display: none;">
+                        <select id="dinein-table" class="sweetness-select" style="margin-top: 0;">
+                            <option value="" disabled selected>Select Your Table</option>
+                            <option value="1">Table 1</option>
+                            <option value="2">Table 2</option>
+                            <option value="3">Table 3</option>
+                            <option value="4">Table 4</option>
+                            <option value="5">Table 5</option>
+                            <option value="6">Table 6</option>
+                            <option value="7">Table 7</option>
+                            <option value="8">Table 8</option>
+                            <option value="9">Table 9</option>
+                            <option value="10">Table 10</option>
+                        </select>
+                    </div>
+
+                    <div id="field-takeaway" style="display: none; text-align: center; padding: 10px 0;">
+                        <div style="font-weight: bold; font-size: 1.1rem;">Pickup in: <span id="time-display">30</span> minutes</div>
+                        <input type="range" id="takeaway-time" min="10" max="90" step="5" value="30" oninput="document.getElementById('time-display').innerText = this.value">
+                    </div>
+                </div>
+            </div>
+
             <div class="modal-buttons" style="margin-top: 20px;">
                 <button class="btn btn-secondary" style="border-color: #e57373; color: #e57373; flex: 0.5;" onclick="clearCart()">Empty</button>
                 <button class="btn btn-primary" style="flex: 1.5; font-size: 1.2rem;" onclick="proceedToPayment()">Proceed to Pay</button>
@@ -220,9 +262,11 @@
         window.pendingItemName = ""; 
         window.pendingItemPrice = 0; 
         window.isBeveragePending = false; 
+        window.currentOrderInfo = null;
 
         // Initial UI Load
         updateCartUI();
+        updateDynamicFields();
 
         function saveCart() {
             localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart));
@@ -299,6 +343,10 @@
                 </div>`;
             }
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
+            
+            // Ensure proper fields are showing
+            updateDynamicFields();
+            
             document.getElementById('checkout-modal').classList.add('active');
         };
 
@@ -315,8 +363,40 @@
             }
         };
 
-        // --- STEP 1: PROCEED TO PAYMENT ---
+        // --- SMART DYNAMIC FIELDS FOR CHECKOUT ---
+        window.updateDynamicFields = function() {
+            const type = document.getElementById('order-type').value;
+            document.getElementById('field-delivery').style.display = type === 'Delivery' ? 'block' : 'none';
+            document.getElementById('field-dinein').style.display = type === 'Dine-in' ? 'block' : 'none';
+            document.getElementById('field-takeaway').style.display = type === 'Takeaway' ? 'block' : 'none';
+        };
+
+        // --- STEP 1: VALIDATE AND PROCEED ---
         window.proceedToPayment = function() {
+            const type = document.getElementById('order-type').value;
+            let details = "";
+
+            if (type === 'Delivery') {
+                details = document.getElementById('delivery-address').value.trim();
+                if (details.length < 5) {
+                    alert("Please enter your full delivery address.");
+                    return;
+                }
+            } else if (type === 'Dine-in') {
+                details = document.getElementById('dinein-table').value;
+                if (!details) {
+                    alert("Please select your Table number.");
+                    return;
+                }
+                details = "Table " + details;
+            } else if (type === 'Takeaway') {
+                const time = document.getElementById('takeaway-time').value;
+                details = `Pickup in ${time} minutes`;
+            }
+
+            // Save for dispatch
+            window.currentOrderInfo = { type, details };
+
             closeModal('checkout-modal');
             
             document.getElementById('payment-amount').innerText = window.totalAmount;
@@ -329,14 +409,18 @@
 
         // --- STEP 2: DISPATCH TO WHATSAPP ---
         window.sendCustomerOrder = function() {
-            let message = `NEW CUSTOMER ORDER\n\n`;
+            const info = window.currentOrderInfo;
+            let message = `NEW ${info.type.toUpperCase()} ORDER\n\n`;
             
+            message += `Info: ${info.details}\n\n`;
+            
+            message += `ORDER DETAILS:\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
             
             message += `\nTotal: ₹${window.totalAmount}\n`;
             message += `Payment Status: Customer paying via UPI.`;
 
-            // Clear Cart Data so they don't accidentally order twice
+            // Clear Cart Data
             window.cart = {}; window.totalAmount = 0; window.totalItems = 0; 
             saveCart(); updateCartUI();
             
