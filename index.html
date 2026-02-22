@@ -21,12 +21,12 @@
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
-        /* UPDATED: Rigid vertical alignment for perfect formatting */
+        /* NEW: Perfect rigid alignment for rows */
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; padding-right: 10px; line-height: 1.3;}
-        .price-group { display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; }
-        .price-text { width: 55px; text-align: right; margin-right: 15px; font-size: 1.05rem; opacity: 0.9;}
-        .inline-container { width: 88px; display: flex; justify-content: flex-end; height: 32px;}
+        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; padding-right: 10px; line-height: 1.2; }
+        .price-group { display: flex; align-items: center; justify-content: flex-end; height: 32px; }
+        .price-text { width: 45px; text-align: right; margin-right: 15px; font-size: 1rem; opacity: 0.9; }
+        .inline-container { width: 88px; display: flex; justify-content: flex-end; }
 
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
@@ -351,11 +351,10 @@
                     if (item.inStock) {
                         catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group"><span class="price-text">₹${item.price || 0}</span><div id="ctrl-${safeName}" class="inline-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group"><span class="price-text">₹${item.price || 0}</span><div class="inline-container"><button class="add-btn" disabled>+</button></div></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group"><span class="price-text">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
                     }
                 });
 
-                // FIX: Sized items perfectly aligned underneath main item name
                 if (sizedItems.length > 0) {
                     sizedItems.forEach(item => {
                         let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
@@ -363,17 +362,26 @@
 
                         if (item.inStock) {
                             catHTML += `<div style="margin-bottom: 15px;">`;
-                            catHTML += `<div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 10px;">${item.originalName}</div>`;
+                            catHTML += `<div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 8px;">${item.originalName}</div>`;
                             
                             if (item.priceReg) {
-                                catHTML += `<div class="menu-row" style="margin-bottom: 12px; padding-left: 15px;"><span class="item-name" style="font-size: 0.85rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">Regular</span><div class="price-group"><span class="price-text">₹${item.priceReg}</span><div id="ctrl-${safeNameReg}" class="inline-container" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
+                                catHTML += `<div class="menu-row" style="margin-bottom: 8px; margin-top: 0; padding-left: 15px; border-left: 1px solid rgba(255,255,255,0.2);">
+                                    <span class="item-name" style="font-size: 0.95rem; opacity: 0.8;">Regular</span>
+                                    <div class="price-group"><span class="price-text">₹${item.priceReg}</span><div class="inline-container" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div></div>
+                                </div>`;
                             }
                             if (item.priceLrg) {
-                                catHTML += `<div class="menu-row" style="margin-bottom: 5px; padding-left: 15px;"><span class="item-name" style="font-size: 0.85rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">Large</span><div class="price-group"><span class="price-text">₹${item.priceLrg}</span><div id="ctrl-${safeNameLrg}" class="inline-container" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
+                                catHTML += `<div class="menu-row" style="margin-bottom: 0; margin-top: 0; padding-left: 15px; border-left: 1px solid rgba(255,255,255,0.2);">
+                                    <span class="item-name" style="font-size: 0.95rem; opacity: 0.8;">Large</span>
+                                    <div class="price-group"><span class="price-text">₹${item.priceLrg}</span><div class="inline-container" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div></div>
+                                </div>`;
                             }
                             catHTML += `</div>`;
                         } else {
-                            catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group"><span class="price-text">-</span><div class="inline-container"><button class="add-btn" disabled>+</button></div></div></div>`;
+                            catHTML += `<div class="menu-row" style="opacity: 0.4;">
+                                <span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span>
+                                <div class="price-group"><span class="price-text">-</span><button class="add-btn" disabled>+</button></div>
+                            </div>`;
                         }
                     });
                 }
