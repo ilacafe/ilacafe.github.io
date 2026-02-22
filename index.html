@@ -21,23 +21,28 @@
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
-        /* NEW: Perfect rigid alignment for rows */
+        /* RESTORED & FIXED: Single Line Rigid Grid */
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; padding-right: 10px; line-height: 1.2; }
-        .price-group { display: flex; align-items: center; justify-content: flex-end; height: 32px; }
-        .price-text { width: 45px; text-align: right; margin-right: 15px; font-size: 1rem; opacity: 0.9; }
-        .inline-container { width: 88px; display: flex; justify-content: flex-end; }
+        .item-name { flex-grow: 1; padding-right: 10px; line-height: 1.2; }
+        .price-group { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+        
+        .price-fixed { width: 42px; text-align: right; font-size: 1rem; opacity: 0.9; }
+        .inline-container { width: 72px; display: flex; justify-content: flex-end; }
 
-        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
+        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 30px; height: 30px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; line-height: 1; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
 
-        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 32px; width: 100%; overflow: hidden; }
-        .qty-btn { background: transparent; color: white; border: none; width: 32px; height: 100%; font-size: 1.4rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
+        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 30px; width: 72px; box-sizing: border-box; }
+        .qty-btn { background: transparent; color: white; border: none; width: 24px; height: 100%; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; line-height: 1; }
         .qty-btn:active { background: white; color: var(--brand-bg); }
-        .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
+        .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1rem; }
 
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+
+        .coffee-header { display: grid; grid-template-columns: 1fr max-content max-content; gap: 8px; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
+        .coffee-row { display: grid; grid-template-columns: 1fr max-content max-content; gap: 8px; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
         .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.85rem; opacity: 0.7; }
@@ -349,40 +354,26 @@
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
-                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group"><span class="price-text">₹${item.price || 0}</span><div id="ctrl-${safeName}" class="inline-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group"><span class="price-fixed">₹${item.price || 0}</span><div id="ctrl-${safeName}" class="inline-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group"><span class="price-text">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group"><span class="price-fixed">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
                     }
                 });
 
                 if (sizedItems.length > 0) {
+                    // Restored single-line header
+                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right; padding-right: 15px;">Reg</div><div style="text-align: right; padding-right: 15px;">Lrg</div></div>`;
                     sizedItems.forEach(item => {
                         let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
                         let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
 
                         if (item.inStock) {
-                            catHTML += `<div style="margin-bottom: 15px;">`;
-                            catHTML += `<div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 8px;">${item.originalName}</div>`;
-                            
-                            if (item.priceReg) {
-                                catHTML += `<div class="menu-row" style="margin-bottom: 8px; margin-top: 0; padding-left: 15px; border-left: 1px solid rgba(255,255,255,0.2);">
-                                    <span class="item-name" style="font-size: 0.95rem; opacity: 0.8;">Regular</span>
-                                    <div class="price-group"><span class="price-text">₹${item.priceReg}</span><div class="inline-container" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div></div>
-                                </div>`;
-                            }
-                            if (item.priceLrg) {
-                                catHTML += `<div class="menu-row" style="margin-bottom: 0; margin-top: 0; padding-left: 15px; border-left: 1px solid rgba(255,255,255,0.2);">
-                                    <span class="item-name" style="font-size: 0.95rem; opacity: 0.8;">Large</span>
-                                    <div class="price-group"><span class="price-text">₹${item.priceLrg}</span><div class="inline-container" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div></div>
-                                </div>`;
-                            }
-                            catHTML += `</div>`;
-                        } else {
-                            catHTML += `<div class="menu-row" style="opacity: 0.4;">
-                                <span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span>
-                                <div class="price-group"><span class="price-text">-</span><button class="add-btn" disabled>+</button></div>
-                            </div>`;
+                            if(item.priceReg) regHTML = `<div class="coffee-price"><span class="price-fixed">₹${item.priceReg}</span><div class="inline-container" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div></div>`; else regHTML = '-';
+                            if(item.priceLrg) lrgHTML = `<div class="coffee-price"><span class="price-fixed">₹${item.priceLrg}</span><div class="inline-container" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div></div>`; else lrgHTML = '-';
                         }
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
                     });
                 }
                 catHTML += `</section>`;
