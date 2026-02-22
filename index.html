@@ -17,31 +17,26 @@
         header { text-align: center; margin-bottom: 20px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
-        /* TYPOGRAPHY & MENUS */
         h2 { font-weight: 700; font-size: 1.8rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 30px; border-bottom: 1px solid rgba(255, 255, 255, 0.3); padding-bottom: 10px; }
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; }
         .price-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
         
-        /* MINIMAL ADD BUTTON */
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 50%; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.3; cursor: not-allowed; background-color: transparent; color: var(--brand-text); border-color: transparent; }
 
         .sold-out-badge { font-size: 0.65rem; color: #e57373; border: 1px solid #e57373; padding: 2px 6px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
-        /* 3-COLUMN COFFEE/BEVERAGE LAYOUT */
         .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.7; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
-        /* MINIMAL HORIZONTAL FOOTER */
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.2); width: 100%; text-align: center; }
         .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; font-weight: 500; opacity: 0.85; }
         .contact-link { color: var(--brand-text); text-decoration: none; }
         .footer-divider { opacity: 0.4; font-size: 0.9rem; }
 
-        /* FLOATING CART */
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; cursor: pointer;}
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; flex-grow: 1;}
@@ -49,7 +44,6 @@
         .cart-clear { font-size: 0.8rem; text-decoration: underline; opacity: 0.8; margin-top: 2px; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: 2px solid var(--brand-bg); padding: 12px 25px; border-radius: 30px; font-weight: 700; font-size: 1rem; font-family: 'Quicksand', sans-serif; cursor: pointer; }
 
-        /* MODALS & OVERLAYS */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .modal-content { background-color: var(--brand-bg); border: 2px solid var(--brand-text); padding: 30px 20px; border-radius: 20px; text-align: center; width: 85%; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto; }
@@ -77,7 +71,6 @@
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: rgba(255, 255, 255, 0.4); border-radius: 3px; }
         input[type=range]::-webkit-slider-thumb { height: 22px; width: 22px; border-radius: 50%; background: #ffffff; cursor: pointer; -webkit-appearance: none; margin-top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
 
-        /* CAFE CLOSED OVERLAY */
         #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 3000; text-align: center; padding: 20px; box-sizing: border-box; }
         #closed-screen h1 { font-size: 2.5rem; margin-bottom: 10px; }
         #closed-screen p { font-size: 1.2rem; opacity: 0.9; }
@@ -147,7 +140,6 @@
     <div id="checkout-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Your Order</h3>
-            
             <div id="review-cart-list" class="bill-receipt" style="max-height: 200px; overflow-y: auto;"></div>
             <div style="font-weight: bold; font-size: 1.3rem; margin: 15px 0;">Total: ₹<span id="modal-checkout-total">0</span></div>
 
@@ -200,9 +192,7 @@
             </div>
 
             <button class="btn btn-primary" style="width: 100%; font-size: 1.1rem; padding: 12px; margin-bottom: 15px;" id="pay-upi-btn">Step 1: Pay via UPI App</button>
-            
             <img id="payment-qr" src="" alt="UPI QR Code" style="width: 160px; height: 160px; margin: 0 auto 15px auto; border-radius: 10px; border: 5px solid white; background-color: white; display: block; object-fit: contain;">
-            
             <button class="btn btn-success" style="width: 100%; font-size: 1.2rem; padding: 15px;" onclick="window.sendCustomerOrder()">Step 2: Send Order</button>
             
             <button class="close-modal" onclick="closeModal('payment-modal')" style="margin-top: 15px;">Cancel</button>
@@ -210,9 +200,6 @@
     </div>
 
     <script>
-        // ==========================================
-        // FIREBASE CLOUD CONNECTION
-        // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
             authDomain: "ila-cafe.firebaseapp.com",
@@ -222,13 +209,9 @@
             messagingSenderId: "473595092965",
             appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
         };
-
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // ==========================================
-        // CAFE SETTINGS
-        // ==========================================
         const OWNER_WHATSAPP = "918882946526"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         
@@ -243,6 +226,7 @@
 
         let currentMenuData = {};
         let currentCategoryOrder = [];
+        window.currentItemOrder = {};
 
         function saveCart() {
             localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart));
@@ -250,38 +234,30 @@
             localStorage.setItem('ila_customer_items', window.totalItems);
         }
 
-        function closeModal(id) { 
-            document.getElementById(id).classList.remove('active'); 
-        }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
             if (window.totalItems > 0) { 
                 document.getElementById('cart-total-text').innerText = `₹${window.totalAmount} (${window.totalItems} items)`; 
                 banner.classList.add('visible'); 
-            } else { 
-                banner.classList.remove('visible'); 
-            }
+            } else { banner.classList.remove('visible'); }
         }
 
-        // ==========================================
-        // REAL-TIME CLOUD LISTENERS
-        // ==========================================
-        
         db.ref('settings/isOpen').on('value', (snapshot) => {
             const isOpen = snapshot.val();
             const lockScreen = document.getElementById('closed-screen');
-            if (isOpen === false) {
-                lockScreen.style.display = "flex";
-                document.body.style.overflow = "hidden";
-            } else {
-                lockScreen.style.display = "none";
-                document.body.style.overflow = "auto";
-            }
+            if (isOpen === false) { lockScreen.style.display = "flex"; document.body.style.overflow = "hidden"; } 
+            else { lockScreen.style.display = "none"; document.body.style.overflow = "auto"; }
         });
 
         db.ref('settings/categoryOrder').on('value', (snapshot) => {
             currentCategoryOrder = snapshot.val() || [];
+            renderCustomerMenu();
+        });
+
+        db.ref('settings/itemOrder').on('value', (snapshot) => {
+            window.currentItemOrder = snapshot.val() || {};
             renderCustomerMenu();
         });
 
@@ -292,46 +268,29 @@
 
         function renderCustomerMenu() {
             const container = document.getElementById('live-menu-container');
-            if (Object.keys(currentMenuData).length === 0) {
-                container.innerHTML = "<p style='text-align: center;'>Menu is updating...</p>";
-                return;
-            }
-
+            if (Object.keys(currentMenuData).length === 0) { container.innerHTML = "<p style='text-align: center;'>Menu is updating...</p>"; return; }
             container.innerHTML = "";
 
             let activeCats = Object.keys(currentMenuData);
             let sortedCats = currentCategoryOrder.filter(cat => activeCats.includes(cat));
-            activeCats.forEach(cat => {
-                if(!sortedCats.includes(cat)) sortedCats.push(cat);
-            });
+            activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
 
             sortedCats.forEach(category => {
                 let standardItems = [];
-                let sizedItems = {};
+                let sizedItems = [];
                 let hasVisibleItems = false;
 
-                for (let itemName in currentMenuData[category]) {
-                    const item = currentMenuData[category][itemName];
-                    if (item.visibility === 'pos') continue; 
-                    
+                let itemsInOrder = window.currentItemOrder && window.currentItemOrder[category] ? window.currentItemOrder[category] : Object.keys(currentMenuData[category] || {});
+                
+                itemsInOrder.forEach(itemName => {
+                    const item = currentMenuData[category] ? currentMenuData[category][itemName] : null;
+                    if (!item || item.visibility === 'pos') return; 
                     hasVisibleItems = true;
                     item.originalName = itemName; 
 
-                    const regMatch = itemName.match(/(.*)\s\((Regular|Reg)\)$/i);
-                    const lrgMatch = itemName.match(/(.*)\s\((Large|Lrg)\)$/i);
-
-                    if (regMatch) {
-                        let base = regMatch[1];
-                        if (!sizedItems[base]) sizedItems[base] = { regular: null, large: null };
-                        sizedItems[base].regular = item;
-                    } else if (lrgMatch) {
-                        let base = lrgMatch[1];
-                        if (!sizedItems[base]) sizedItems[base] = { regular: null, large: null };
-                        sizedItems[base].large = item;
-                    } else {
-                        standardItems.push(item);
-                    }
-                }
+                    if (item.hasSizes) { sizedItems.push(item); } 
+                    else { standardItems.push(item); }
+                });
 
                 if (!hasVisibleItems) return;
 
@@ -340,98 +299,56 @@
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
-                        catHTML += `
-                        <div class="menu-row">
-                            <span class="item-name">${item.originalName}</span>
-                            <div class="price-group">₹${item.price} 
-                                <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price}, ${item.requiresSweetness})">+</button>
-                            </div>
-                        </div>`;
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group">₹${item.price || 0} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price || 0}, ${item.requiresSweetness || false})">+</button></div></div>`;
                     } else {
-                        catHTML += `
-                        <div class="menu-row" style="opacity: 0.6;">
-                            <span class="item-name">${item.originalName} <span class="sold-out-badge">Sold Out</span></span>
-                            <div class="price-group">₹${item.price} <button class="add-btn" disabled>-</button></div>
-                        </div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.6;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Sold Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>-</button></div></div>`;
                     }
                 });
 
-                if (Object.keys(sizedItems).length > 0) {
-                    catHTML += `
-                    <div class="coffee-header">
-                        <div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div>
-                    </div>`;
+                if (sizedItems.length > 0) {
+                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>`;
 
-                    for (let baseName in sizedItems) {
-                        let reg = sizedItems[baseName].regular;
-                        let lrg = sizedItems[baseName].large;
+                    sizedItems.forEach(item => {
+                        let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
-                        let regHTML = '-';
-                        if (reg) {
-                            let safeName = reg.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                            if (reg.inStock) {
-                                regHTML = `₹${reg.price} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${reg.price}, ${reg.requiresSweetness})">+</button>`;
+                        let regHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                        let lrgHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+
+                        if (item.inStock) {
+                            if(item.priceReg) {
+                                regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`;
                             } else {
-                                regHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                                regHTML = '-';
+                            }
+                            if(item.priceLrg) {
+                                lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`;
+                            } else {
+                                lrgHTML = '-';
                             }
                         }
 
-                        let lrgHTML = '-';
-                        if (lrg) {
-                            let safeName = lrg.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                            if (lrg.inStock) {
-                                lrgHTML = `₹${lrg.price} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${lrg.price}, ${lrg.requiresSweetness})">+</button>`;
-                            } else {
-                                lrgHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
-                            }
-                        }
-
-                        let isOut = (!reg || !reg.inStock) && (!lrg || !lrg.inStock);
-
-                        catHTML += `
-                        <div class="coffee-row" style="${isOut ? 'opacity: 0.6;' : ''}">
-                            <span>${baseName}</span>
-                            <div class="coffee-price">${regHTML}</div>
-                            <div class="coffee-price">${lrgHTML}</div>
-                        </div>`;
-                    }
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.6;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
+                    });
                 }
-
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
             });
         }
 
-        // ==========================================
-        // CART LOGIC
-        // ==========================================
-
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
-            window.pendingItemName = itemName; 
-            window.pendingItemPrice = price; 
-            window.isBeveragePending = requiresSweetness;
-            
+            window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
             document.getElementById('remark-item-title').innerText = itemName.replace(/&quot;/g, '"'); 
             document.getElementById('remark-input').value = ""; 
-            
             const sweetGroup = document.getElementById('sweetness-group');
-            if (requiresSweetness) { 
-                sweetGroup.style.display = 'block'; 
-                document.getElementById('sweetness-select').value = "Medium sweet"; 
-            } else { 
-                sweetGroup.style.display = 'none'; 
-            }
-            
+            if (requiresSweetness) { sweetGroup.style.display = 'block'; document.getElementById('sweetness-select').value = "Medium sweet"; } 
+            else { sweetGroup.style.display = 'none'; }
             document.getElementById('remark-modal').classList.add('active');
-            if (!requiresSweetness) {
-                setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
-            }
+            if (!requiresSweetness) setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
         };
 
         window.confirmAddItem = function(useRemark) {
-            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            let modifications = [];
-            
+            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); let modifications = [];
             if (window.isBeveragePending) {
                 const sweetValue = document.getElementById('sweetness-select').value;
                 if (sweetValue !== "") modifications.push(sweetValue);
@@ -443,72 +360,33 @@
             }
             if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
             
-            if (window.cart[finalName]) {
-                window.cart[finalName].qty += 1;
-            } else {
-                window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
-            }
+            if (window.cart[finalName]) window.cart[finalName].qty += 1;
+            else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             
-            window.totalAmount += window.pendingItemPrice; 
-            window.totalItems += 1;
-            
-            saveCart(); 
-            updateCartUI(); 
-            closeModal('remark-modal');
+            window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
+            saveCart(); updateCartUI(); closeModal('remark-modal');
         };
 
-        window.clearCart = function() { 
-            window.cart = {}; 
-            window.totalAmount = 0; 
-            window.totalItems = 0; 
-            saveCart(); 
-            updateCartUI(); 
-            closeModal('checkout-modal'); 
-        };
+        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('checkout-modal'); };
 
         window.openCheckoutModal = function() {
             if (window.totalItems === 0) return;
-
-            const list = document.getElementById('review-cart-list'); 
-            list.innerHTML = "";
+            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
             for (let item in window.cart) {
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                list.innerHTML += `<div class="bill-receipt-row">
-                    <span style="flex:1;">${item}</span>
-                    <span style="display:flex; align-items:center;">
-                        <button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button>
-                        <span style="width:20px; text-align:center; color:#000; font-weight: bold;">${window.cart[item].qty}</span>
-                        <button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button>
-                    </span>
-                </div>`;
+                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:20px; text-align:center; color:#000; font-weight: bold;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
-            
-            window.updateDynamicFields();
-            
-            document.getElementById('checkout-modal').classList.add('active');
+            window.updateDynamicFields(); document.getElementById('checkout-modal').classList.add('active');
         };
 
         window.modifyCartItem = function(item, delta) {
             let realItemName = item.replace(/&quot;/g, '"');
-            
             if (window.cart[realItemName]) {
-                window.cart[realItemName].qty += delta;
-                window.totalAmount += (window.cart[realItemName].price * delta);
-                window.totalItems += delta;
-                
-                if (window.cart[realItemName].qty <= 0) {
-                    delete window.cart[realItemName];
-                }
-                
-                saveCart(); 
-                updateCartUI();
-                
-                if (window.totalItems === 0) {
-                    closeModal('checkout-modal');
-                } else {
-                    window.openCheckoutModal(); 
-                }
+                window.cart[realItemName].qty += delta; window.totalAmount += (window.cart[realItemName].price * delta); window.totalItems += delta;
+                if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
+                saveCart(); updateCartUI();
+                if (window.totalItems === 0) closeModal('checkout-modal'); else window.openCheckoutModal(); 
             }
         };
 
@@ -520,67 +398,28 @@
         };
 
         window.proceedToPayment = function() {
-            const type = document.getElementById('order-type').value;
-            let details = "";
-
-            if (type === 'Delivery') {
-                details = document.getElementById('delivery-address').value.trim();
-                if (details.length < 5) {
-                    alert("Please enter your full delivery address.");
-                    return;
-                }
-            } else if (type === 'Dine-in') {
-                details = document.getElementById('dinein-table').value;
-                if (!details) {
-                    alert("Please select your Table number.");
-                    return;
-                }
-                details = "Table " + details;
-            } else if (type === 'Takeaway') {
-                const time = document.getElementById('takeaway-time').value;
-                details = `Pickup in ${time} minutes`;
-            }
+            const type = document.getElementById('order-type').value; let details = "";
+            if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Please enter your full delivery address."); return; } } 
+            else if (type === 'Dine-in') { details = document.getElementById('dinein-table').value; if (!details) { alert("Please select your Table number."); return; } details = "Table " + details; } 
+            else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup in ${time} minutes`; }
 
             window.currentOrderInfo = { type, details };
-
             closeModal('checkout-modal');
-            
             document.getElementById('payment-amount').innerText = window.totalAmount;
             const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${window.totalAmount}&cu=INR`;
             document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
             document.getElementById('pay-upi-btn').onclick = () => { window.location.href = upiString; };
-            
             document.getElementById('payment-modal').classList.add('active');
         };
 
         window.sendCustomerOrder = function() {
-            const info = window.currentOrderInfo;
-            let message = `NEW ${info.type.toUpperCase()} ORDER\n\n`;
-            
-            message += `Info: ${info.details}\n\n`;
-            
-            message += `ORDER DETAILS:\n`;
-            for (let item in window.cart) { 
-                message += `${window.cart[item].qty}x ${item}\n`; 
-            }
-            
-            message += `\nTotal: ₹${window.totalAmount}\n`;
-            message += `Payment Status: Customer paying via UPI.`;
-
-            setTimeout(() => { 
-                window.cart = {}; 
-                window.totalAmount = 0; 
-                window.totalItems = 0; 
-                saveCart(); 
-                updateCartUI();
-                closeModal('payment-modal');
-                window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; 
-            }, 100);
+            const info = window.currentOrderInfo; let message = `NEW ${info.type.toUpperCase()} ORDER\n\nInfo: ${info.details}\n\nORDER DETAILS:\n`;
+            for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
+            message += `\nTotal: ₹${window.totalAmount}\nPayment Status: Customer paying via UPI.`;
+            setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
         };
 
-        // --- SAFE INITIALIZATION ---
-        updateCartUI();
-        window.updateDynamicFields();
+        updateCartUI(); window.updateDynamicFields();
     </script>
 </body>
 </html>
