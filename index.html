@@ -144,7 +144,7 @@
         </div>
     </div>
 
-    <div id="cart-banner" onclick="openCheckoutModal()">
+    <div id="cart-banner" onclick="window.openCheckoutModal()">
         <div class="cart-info">
             <span class="cart-total" id="cart-total-text">₹0</span>
             <span class="cart-clear">View Order & Checkout</span>
@@ -169,8 +169,8 @@
             <p style="margin-top:15px; text-align: left; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Special requests</p>
             <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
             <div class="modal-buttons">
-                <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
-                <button class="btn btn-primary" onclick="confirmAddItem(true)">Add Item</button>
+                <button class="btn btn-secondary" onclick="window.confirmAddItem(false)">Skip</button>
+                <button class="btn btn-primary" onclick="window.confirmAddItem(true)">Add Item</button>
             </div>
             <button class="close-modal" onclick="closeModal('remark-modal')">Cancel</button>
         </div>
@@ -185,7 +185,7 @@
 
             <div style="text-align: left; margin-top: 15px;">
                 <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
-                <select id="order-type" class="sweetness-select" style="margin-top: 5px;" onchange="updateDynamicFields()">
+                <select id="order-type" class="sweetness-select" style="margin-top: 5px;" onchange="window.updateDynamicFields()">
                     <option value="Delivery" selected>Delivery (To your location)</option>
                     <option value="Dine-in">Dine-in (At the Cafe)</option>
                     <option value="Takeaway">Takeaway (Pick up)</option>
@@ -220,8 +220,8 @@
             </div>
 
             <div class="modal-buttons" style="margin-top: 20px;">
-                <button class="btn btn-secondary" style="border-color: #e57373; color: #e57373; flex: 0.5;" onclick="clearCart()">Empty</button>
-                <button class="btn btn-primary" style="flex: 1.5; font-size: 1.2rem;" onclick="proceedToPayment()">Proceed to Pay</button>
+                <button class="btn btn-secondary" style="border-color: #e57373; color: #e57373; flex: 0.5;" onclick="window.clearCart()">Empty</button>
+                <button class="btn btn-primary" style="flex: 1.5; font-size: 1.2rem;" onclick="window.proceedToPayment()">Proceed to Pay</button>
             </div>
             <button class="close-modal" onclick="closeModal('checkout-modal')">Go Back to Menu</button>
         </div>
@@ -241,7 +241,7 @@
             
             <img id="payment-qr" src="" alt="UPI QR Code" style="width: 160px; height: 160px; margin: 0 auto 15px auto; border-radius: 10px; border: 5px solid white; background-color: white; display: block; object-fit: contain;">
             
-            <button class="btn btn-success" style="width: 100%; font-size: 1.2rem; padding: 15px;" onclick="sendCustomerOrder()">Step 2: Send Order</button>
+            <button class="btn btn-success" style="width: 100%; font-size: 1.2rem; padding: 15px;" onclick="window.sendCustomerOrder()">Step 2: Send Order</button>
             
             <button class="close-modal" onclick="closeModal('payment-modal')" style="margin-top: 15px;">Cancel</button>
         </div>
@@ -264,58 +264,15 @@
         window.isBeveragePending = false; 
         window.currentOrderInfo = null;
 
-        // Initial UI Load
-        updateCartUI();
-        updateDynamicFields();
-
         function saveCart() {
             localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart));
             localStorage.setItem('ila_customer_amount', window.totalAmount);
             localStorage.setItem('ila_customer_items', window.totalItems);
         }
 
-        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-
-        window.promptRemark = function(itemName, price, requiresSweetness = false) {
-            window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
-            document.getElementById('remark-item-title').innerText = itemName; document.getElementById('remark-input').value = ""; 
-            
-            const sweetGroup = document.getElementById('sweetness-group');
-            if (requiresSweetness) { 
-                sweetGroup.style.display = 'block'; document.getElementById('sweetness-select').value = "Medium sweet"; 
-            } else { 
-                sweetGroup.style.display = 'none'; 
-            }
-            
-            document.getElementById('remark-modal').classList.add('active');
-            if (!requiresSweetness) setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
-        };
-
-        window.confirmAddItem = function(useRemark) {
-            let finalName = window.pendingItemName; let modifications = [];
-            
-            if (window.isBeveragePending) {
-                const sweetValue = document.getElementById('sweetness-select').value;
-                if (sweetValue !== "") modifications.push(sweetValue);
-            }
-            if (useRemark) {
-                const remarkText = document.getElementById('remark-input').value.trim();
-                if (remarkText !== "") modifications.push(remarkText);
-            }
-            if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
-            
-            if (window.cart[finalName]) window.cart[finalName].qty += 1;
-            else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
-            
-            window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
-            
-            saveCart(); updateCartUI(); closeModal('remark-modal');
-        };
-
-        window.clearCart = function() { 
-            window.cart = {}; window.totalAmount = 0; window.totalItems = 0; 
-            saveCart(); updateCartUI(); closeModal('checkout-modal'); 
-        };
+        function closeModal(id) { 
+            document.getElementById(id).classList.remove('active'); 
+        }
 
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
@@ -327,43 +284,115 @@
             }
         }
 
+        window.promptRemark = function(itemName, price, requiresSweetness = false) {
+            window.pendingItemName = itemName; 
+            window.pendingItemPrice = price; 
+            window.isBeveragePending = requiresSweetness;
+            
+            document.getElementById('remark-item-title').innerText = itemName; 
+            document.getElementById('remark-input').value = ""; 
+            
+            const sweetGroup = document.getElementById('sweetness-group');
+            if (requiresSweetness) { 
+                sweetGroup.style.display = 'block'; 
+                document.getElementById('sweetness-select').value = "Medium sweet"; 
+            } else { 
+                sweetGroup.style.display = 'none'; 
+            }
+            
+            document.getElementById('remark-modal').classList.add('active');
+            if (!requiresSweetness) {
+                setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
+            }
+        };
+
+        window.confirmAddItem = function(useRemark) {
+            let finalName = window.pendingItemName; 
+            let modifications = [];
+            
+            if (window.isBeveragePending) {
+                const sweetValue = document.getElementById('sweetness-select').value;
+                if (sweetValue !== "") modifications.push(sweetValue);
+            }
+            if (useRemark) {
+                // Bug fix #2: Strip HTML tags (< >) out of user text to prevent cart breakage
+                let remarkText = document.getElementById('remark-input').value.trim();
+                remarkText = remarkText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                if (remarkText !== "") modifications.push(remarkText);
+            }
+            if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
+            
+            if (window.cart[finalName]) {
+                window.cart[finalName].qty += 1;
+            } else {
+                window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
+            }
+            
+            window.totalAmount += window.pendingItemPrice; 
+            window.totalItems += 1;
+            
+            saveCart(); 
+            updateCartUI(); 
+            closeModal('remark-modal');
+        };
+
+        window.clearCart = function() { 
+            window.cart = {}; 
+            window.totalAmount = 0; 
+            window.totalItems = 0; 
+            saveCart(); 
+            updateCartUI(); 
+            closeModal('checkout-modal'); 
+        };
+
         window.openCheckoutModal = function() {
             if (window.totalItems === 0) return;
 
-            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
+            const list = document.getElementById('review-cart-list'); 
+            list.innerHTML = "";
             for (let item in window.cart) {
-                const safeItemName = item.replace(/'/g, "\\'");
+                // Bug fix #1: Escape both single and double quotes so HTML attribute doesn't break
+                const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 list.innerHTML += `<div class="bill-receipt-row">
                     <span style="flex:1;">${item}</span>
                     <span style="display:flex; align-items:center;">
-                        <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', -1)">-</button>
+                        <button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button>
                         <span style="width:20px; text-align:center; color:#000; font-weight: bold;">${window.cart[item].qty}</span>
-                        <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', 1)">+</button>
+                        <button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button>
                     </span>
                 </div>`;
             }
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             
-            // Ensure proper fields are showing
-            updateDynamicFields();
+            window.updateDynamicFields();
             
             document.getElementById('checkout-modal').classList.add('active');
         };
 
         window.modifyCartItem = function(item, delta) {
-            if (window.cart[item]) {
-                window.cart[item].qty += delta;
-                window.totalAmount += (window.cart[item].price * delta);
+            // Reverse the double quote mapping so JavaScript can find the exact item in the dictionary
+            let realItemName = item.replace(/&quot;/g, '"');
+            
+            if (window.cart[realItemName]) {
+                window.cart[realItemName].qty += delta;
+                window.totalAmount += (window.cart[realItemName].price * delta);
                 window.totalItems += delta;
-                if (window.cart[item].qty <= 0) delete window.cart[item];
-                saveCart(); updateCartUI();
                 
-                if (window.totalItems === 0) closeModal('checkout-modal');
-                else openCheckoutModal(); 
+                if (window.cart[realItemName].qty <= 0) {
+                    delete window.cart[realItemName];
+                }
+                
+                saveCart(); 
+                updateCartUI();
+                
+                if (window.totalItems === 0) {
+                    closeModal('checkout-modal');
+                } else {
+                    window.openCheckoutModal(); 
+                }
             }
         };
 
-        // --- SMART DYNAMIC FIELDS FOR CHECKOUT ---
         window.updateDynamicFields = function() {
             const type = document.getElementById('order-type').value;
             document.getElementById('field-delivery').style.display = type === 'Delivery' ? 'block' : 'none';
@@ -371,7 +400,6 @@
             document.getElementById('field-takeaway').style.display = type === 'Takeaway' ? 'block' : 'none';
         };
 
-        // --- STEP 1: VALIDATE AND PROCEED ---
         window.proceedToPayment = function() {
             const type = document.getElementById('order-type').value;
             let details = "";
@@ -394,7 +422,6 @@
                 details = `Pickup in ${time} minutes`;
             }
 
-            // Save for dispatch
             window.currentOrderInfo = { type, details };
 
             closeModal('checkout-modal');
@@ -407,7 +434,6 @@
             document.getElementById('payment-modal').classList.add('active');
         };
 
-        // --- STEP 2: DISPATCH TO WHATSAPP ---
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo;
             let message = `NEW ${info.type.toUpperCase()} ORDER\n\n`;
@@ -415,22 +441,28 @@
             message += `Info: ${info.details}\n\n`;
             
             message += `ORDER DETAILS:\n`;
-            for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
+            for (let item in window.cart) { 
+                message += `${window.cart[item].qty}x ${item}\n`; 
+            }
             
             message += `\nTotal: ₹${window.totalAmount}\n`;
             message += `Payment Status: Customer paying via UPI.`;
 
-            // Clear Cart Data
-            window.cart = {}; window.totalAmount = 0; window.totalItems = 0; 
-            saveCart(); updateCartUI();
-            
-            closeModal('payment-modal');
-
-            // Fire WhatsApp Link
+            // Bug fix #3: Wait to clear cart until exact moment WhatsApp link triggers 
             setTimeout(() => { 
+                window.cart = {}; 
+                window.totalAmount = 0; 
+                window.totalItems = 0; 
+                saveCart(); 
+                updateCartUI();
+                closeModal('payment-modal');
                 window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; 
-            }, 300);
+            }, 100);
         };
+
+        // --- SAFE INITIALIZATION ---
+        updateCartUI();
+        window.updateDynamicFields();
     </script>
 </body>
 </html>
