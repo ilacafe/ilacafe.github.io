@@ -59,7 +59,7 @@
         .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: white; color: var(--brand-bg); }
 
-        .close-modal { background: transparent; color: rgba(255,255,255,0.6); border: none; text-decoration: underline; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 15px; }
+        .close-modal { background: transparent; color: rgba(255,255,255,0.8); border: none; font-weight: bold; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 20px; letter-spacing: 1px; padding: 10px;}
 
         .bill-receipt { background-color: transparent; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 15px; border-radius: 8px; text-align: left; font-size: 0.95rem; }
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 10px; }
@@ -121,7 +121,7 @@
                 <button class="btn btn-secondary" onclick="window.confirmAddItem(false)">Skip</button>
                 <button class="btn btn-primary" onclick="window.confirmAddItem(true)">Add</button>
             </div>
-            <button class="close-modal" onclick="closeModal('remark-modal')">Cancel</button>
+            <button class="close-modal" onclick="closeModal('remark-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -163,7 +163,7 @@
                 <button class="btn btn-secondary" onclick="window.clearCart()">Empty</button>
                 <button class="btn btn-primary" onclick="window.proceedToPayment()">Pay</button>
             </div>
-            <button class="close-modal" onclick="closeModal('checkout-modal')">Back to Menu</button>
+            <button class="close-modal" onclick="closeModal('checkout-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -177,7 +177,7 @@
             <button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" id="pay-upi-btn">Pay via UPI</button>
             <img id="payment-qr" src="" alt="QR" style="width: 150px; height: 150px; margin: 0 auto 15px auto; border-radius: 8px; display: block; background: white; padding: 5px;">
             <button class="btn btn-secondary" style="width: 100%;" onclick="window.sendCustomerOrder()">Confirm Order</button>
-            <button class="close-modal" onclick="closeModal('payment-modal')">Cancel</button>
+            <button class="close-modal" onclick="closeModal('payment-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -259,8 +259,8 @@
                     sizedItems.forEach(item => {
                         let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
                         let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let regHTML = `<span class="sold-out-badge" style="margin:0;">-</span>`;
-                        let lrgHTML = `<span class="sold-out-badge" style="margin:0;">-</span>`;
+                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
 
                         if (item.inStock) {
                             if(item.priceReg) regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`; else regHTML = '-';
@@ -301,7 +301,7 @@
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
             for (let item in window.cart) {
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             window.updateDynamicFields(); document.getElementById('checkout-modal').classList.add('active');
