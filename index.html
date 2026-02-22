@@ -68,6 +68,10 @@
         .bill-receipt-row:last-child { margin-bottom: 0; border-bottom: none; padding-bottom: 0;}
 
         #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 3000; text-align: center; padding: 20px; box-sizing: border-box; }
+        
+        /* New style for the usual order box to keep it clean */
+        .usual-box { border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 15px; cursor: pointer; text-align: center; transition: background-color 0.2s; margin-bottom: 25px; }
+        .usual-box:active { background-color: rgba(255, 255, 255, 0.1); }
     </style>
 </head>
 <body>
@@ -82,6 +86,13 @@
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo" onclick="this.style.transform = `rotate(${this.rotation = (this.rotation || 0) + 360}deg)`">
         </header>
+
+        <div id="usual-order-container" style="display: none;">
+            <div class="usual-box" onclick="window.loadUsualOrder()">
+                <div style="font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Reorder Your Usual</div>
+                <div id="usual-order-desc" style="font-size: 0.9rem; opacity: 0.7;"></div>
+            </div>
+        </div>
 
         <div id="live-menu-container">
             <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
@@ -209,6 +220,21 @@
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
         
+        // Load the saved "Usual" data and previous delivery address
+        window.lastOrder = JSON.parse(localStorage.getItem('ila_last_order')) || null;
+        window.lastAmount = parseFloat(localStorage.getItem('ila_last_amount')) || 0;
+        window.lastAddress = localStorage.getItem('ila_last_address') || "";
+
+        if (window.lastAddress) {
+            document.getElementById('delivery-address').value = window.lastAddress;
+        }
+
+        if (window.lastOrder && Object.keys(window.lastOrder).length > 0) {
+            document.getElementById('usual-order-container').style.display = 'block';
+            let desc = Object.keys(window.lastOrder).map(k => `${window.lastOrder[k].qty}x ${k}`).join(', ');
+            document.getElementById('usual-order-desc').innerText = `${desc} — ₹${window.lastAmount}`;
+        }
+        
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; window.currentOrderInfo = null;
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
 
@@ -281,6 +307,15 @@
                 container.innerHTML += catHTML;
             });
         }
+
+        window.loadUsualOrder = function() {
+            window.cart = JSON.parse(JSON.stringify(window.lastOrder)); 
+            window.totalAmount = window.lastAmount;
+            window.totalItems = Object.values(window.cart).reduce((sum, item) => sum + item.qty, 0);
+            saveCart();
+            updateCartUI();
+            window.openCheckoutModal();
+        };
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
@@ -360,7 +395,16 @@
         };
 
         window.sendCustomerOrder = function() {
-            const info = window.currentOrderInfo; let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n\n`;
+            const info = window.currentOrderInfo; 
+            
+            // Save the last order details to memory
+            localStorage.setItem('ila_last_order', JSON.stringify(window.cart));
+            localStorage.setItem('ila_last_amount', window.totalAmount);
+            if (info.type === 'Delivery') {
+                localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
+            }
+
+            let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
             message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
             setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
