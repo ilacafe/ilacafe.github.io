@@ -28,7 +28,12 @@
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.3; cursor: not-allowed; background-color: transparent; color: var(--brand-text); border-color: transparent; }
 
-        .sold-out-badge { font-size: 0.7rem; color: #e57373; border: 1px solid #e57373; padding: 2px 6px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+        .sold-out-badge { font-size: 0.65rem; color: #e57373; border: 1px solid #e57373; padding: 2px 6px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+
+        /* 3-COLUMN COFFEE/BEVERAGE LAYOUT */
+        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.7; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); padding-bottom: 5px; }
+        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
         /* MINIMAL HORIZONTAL FOOTER */
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.2); width: 100%; text-align: center; }
@@ -162,15 +167,9 @@
                     <div id="field-dinein" style="display: none;">
                         <select id="dinein-table" class="sweetness-select" style="margin-top: 0;">
                             <option value="" disabled selected>Select Your Table</option>
-                            <option value="1">Table 1</option>
-                            <option value="2">Table 2</option>
-                            <option value="3">Table 3</option>
-                            <option value="4">Table 4</option>
-                            <option value="5">Table 5</option>
-                            <option value="6">Table 6</option>
-                            <option value="7">Table 7</option>
-                            <option value="8">Table 8</option>
-                            <option value="9">Table 9</option>
+                            <option value="1">Table 1</option><option value="2">Table 2</option><option value="3">Table 3</option>
+                            <option value="4">Table 4</option><option value="5">Table 5</option><option value="6">Table 6</option>
+                            <option value="7">Table 7</option><option value="8">Table 8</option><option value="9">Table 9</option>
                             <option value="10">Table 10</option>
                         </select>
                     </div>
@@ -263,23 +262,21 @@
         }
 
         // ==========================================
-        // REAL-TIME CLOUD LISTENERS
+        // REAL-TIME CLOUD LISTENERS & UI PARSER
         // ==========================================
         
-        // 1. Listen for Master "Cafe Open" Switch
         db.ref('settings/isOpen').on('value', (snapshot) => {
             const isOpen = snapshot.val();
             const lockScreen = document.getElementById('closed-screen');
             if (isOpen === false) {
                 lockScreen.style.display = "flex";
-                document.body.style.overflow = "hidden"; // Prevent scrolling
+                document.body.style.overflow = "hidden";
             } else {
                 lockScreen.style.display = "none";
                 document.body.style.overflow = "auto";
             }
         });
 
-        // 2. Fetch and Render Live Menu
         db.ref('menu').on('value', (snapshot) => {
             const menuData = snapshot.val();
             const container = document.getElementById('live-menu-container');
@@ -291,46 +288,104 @@
             }
 
             for (let category in menuData) {
-                let catHTML = `<section><h2>${category}</h2>`;
+                let standardItems = [];
+                let sizedItems = {};
                 let hasVisibleItems = false;
 
+                // 1. Group Data
                 for (let itemName in menuData[category]) {
                     const item = menuData[category][itemName];
-                    
-                    // Skip if this item is marked "POS Only"
                     if (item.visibility === 'pos') continue;
                     
                     hasVisibleItems = true;
-                    
-                    // Escape quotes so HTML buttons don't break
-                    const safeName = itemName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    
+                    item.originalName = itemName; // Store name for cart adding
+
+                    // Regex to check if item ends in (Regular), (Reg), (Large), (Lrg)
+                    const regMatch = itemName.match(/(.*)\s\((Regular|Reg)\)$/i);
+                    const lrgMatch = itemName.match(/(.*)\s\((Large|Lrg)\)$/i);
+
+                    if (regMatch) {
+                        let base = regMatch[1];
+                        if (!sizedItems[base]) sizedItems[base] = { regular: null, large: null };
+                        sizedItems[base].regular = item;
+                    } else if (lrgMatch) {
+                        let base = lrgMatch[1];
+                        if (!sizedItems[base]) sizedItems[base] = { regular: null, large: null };
+                        sizedItems[base].large = item;
+                    } else {
+                        standardItems.push(item);
+                    }
+                }
+
+                if (!hasVisibleItems) continue;
+
+                // 2. Render UI
+                let catHTML = `<section><h2>${category}</h2>`;
+
+                // Render Standard Items (Like Pizzas)
+                standardItems.forEach(item => {
+                    const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
                         catHTML += `
                         <div class="menu-row">
-                            <span class="item-name">${itemName}</span>
+                            <span class="item-name">${item.originalName}</span>
                             <div class="price-group">₹${item.price} 
                                 <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price}, ${item.requiresSweetness})">+</button>
                             </div>
                         </div>`;
                     } else {
-                        // RENDER AS SOLD OUT
                         catHTML += `
                         <div class="menu-row" style="opacity: 0.6;">
-                            <span class="item-name">${itemName} <span class="sold-out-badge">Sold Out</span></span>
-                            <div class="price-group">₹${item.price} 
-                                <button class="add-btn" disabled>-</button>
-                            </div>
+                            <span class="item-name">${item.originalName} <span class="sold-out-badge">Sold Out</span></span>
+                            <div class="price-group">₹${item.price} <button class="add-btn" disabled>-</button></div>
+                        </div>`;
+                    }
+                });
+
+                // Render Sized Items (Like Coffees - 3 Column Layout)
+                if (Object.keys(sizedItems).length > 0) {
+                    catHTML += `
+                    <div class="coffee-header">
+                        <div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div>
+                    </div>`;
+
+                    for (let baseName in sizedItems) {
+                        let reg = sizedItems[baseName].regular;
+                        let lrg = sizedItems[baseName].large;
+
+                        let regHTML = '-';
+                        if (reg) {
+                            let safeName = reg.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                            if (reg.inStock) {
+                                regHTML = `₹${reg.price} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${reg.price}, ${reg.requiresSweetness})">+</button>`;
+                            } else {
+                                regHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                            }
+                        }
+
+                        let lrgHTML = '-';
+                        if (lrg) {
+                            let safeName = lrg.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                            if (lrg.inStock) {
+                                lrgHTML = `₹${lrg.price} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${lrg.price}, ${lrg.requiresSweetness})">+</button>`;
+                            } else {
+                                lrgHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                            }
+                        }
+
+                        let isOut = (!reg || !reg.inStock) && (!lrg || !lrg.inStock);
+
+                        catHTML += `
+                        <div class="coffee-row" style="${isOut ? 'opacity: 0.6;' : ''}">
+                            <span>${baseName}</span>
+                            <div class="coffee-price">${regHTML}</div>
+                            <div class="coffee-price">${lrgHTML}</div>
                         </div>`;
                     }
                 }
-                
+
                 catHTML += `</section>`;
-                
-                // Only render the category heading if there's actually an item to show inside it
-                if(hasVisibleItems) {
-                    container.innerHTML += catHTML;
-                }
+                container.innerHTML += catHTML;
             }
         });
 
@@ -361,7 +416,6 @@
         };
 
         window.confirmAddItem = function(useRemark) {
-            // Un-escape the quotes before saving to cart dictionary
             let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
             let modifications = [];
             
