@@ -241,6 +241,9 @@
         window.isBeveragePending = false; 
         window.currentOrderInfo = null;
 
+        let currentMenuData = {};
+        let currentCategoryOrder = [];
+
         function saveCart() {
             localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart));
             localStorage.setItem('ila_customer_amount', window.totalAmount);
@@ -262,7 +265,7 @@
         }
 
         // ==========================================
-        // REAL-TIME CLOUD LISTENERS & UI PARSER
+        // REAL-TIME CLOUD LISTENERS
         // ==========================================
         
         db.ref('settings/isOpen').on('value', (snapshot) => {
@@ -277,30 +280,43 @@
             }
         });
 
-        db.ref('menu').on('value', (snapshot) => {
-            const menuData = snapshot.val();
-            const container = document.getElementById('live-menu-container');
-            container.innerHTML = "";
+        db.ref('settings/categoryOrder').on('value', (snapshot) => {
+            currentCategoryOrder = snapshot.val() || [];
+            renderCustomerMenu();
+        });
 
-            if (!menuData) {
+        db.ref('menu').on('value', (snapshot) => {
+            currentMenuData = snapshot.val() || {};
+            renderCustomerMenu();
+        });
+
+        function renderCustomerMenu() {
+            const container = document.getElementById('live-menu-container');
+            if (Object.keys(currentMenuData).length === 0) {
                 container.innerHTML = "<p style='text-align: center;'>Menu is updating...</p>";
                 return;
             }
 
-            for (let category in menuData) {
+            container.innerHTML = "";
+
+            let activeCats = Object.keys(currentMenuData);
+            let sortedCats = currentCategoryOrder.filter(cat => activeCats.includes(cat));
+            activeCats.forEach(cat => {
+                if(!sortedCats.includes(cat)) sortedCats.push(cat);
+            });
+
+            sortedCats.forEach(category => {
                 let standardItems = [];
                 let sizedItems = {};
                 let hasVisibleItems = false;
 
-                // 1. Group Data
-                for (let itemName in menuData[category]) {
-                    const item = menuData[category][itemName];
-                    if (item.visibility === 'pos') continue;
+                for (let itemName in currentMenuData[category]) {
+                    const item = currentMenuData[category][itemName];
+                    if (item.visibility === 'pos') continue; 
                     
                     hasVisibleItems = true;
-                    item.originalName = itemName; // Store name for cart adding
+                    item.originalName = itemName; 
 
-                    // Regex to check if item ends in (Regular), (Reg), (Large), (Lrg)
                     const regMatch = itemName.match(/(.*)\s\((Regular|Reg)\)$/i);
                     const lrgMatch = itemName.match(/(.*)\s\((Large|Lrg)\)$/i);
 
@@ -317,12 +333,10 @@
                     }
                 }
 
-                if (!hasVisibleItems) continue;
+                if (!hasVisibleItems) return;
 
-                // 2. Render UI
                 let catHTML = `<section><h2>${category}</h2>`;
 
-                // Render Standard Items (Like Pizzas)
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
@@ -342,7 +356,6 @@
                     }
                 });
 
-                // Render Sized Items (Like Coffees - 3 Column Layout)
                 if (Object.keys(sizedItems).length > 0) {
                     catHTML += `
                     <div class="coffee-header">
@@ -386,8 +399,8 @@
 
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
-            }
-        });
+            });
+        }
 
         // ==========================================
         // CART LOGIC
