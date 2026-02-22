@@ -6,6 +6,10 @@
     <title>ILA | Order Menu</title>
     <link rel="apple-touch-icon" href="/icon.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
     <style>
         :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
@@ -16,20 +20,15 @@
         /* TYPOGRAPHY & MENUS */
         h2 { font-weight: 700; font-size: 1.8rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 30px; border-bottom: 1px solid rgba(255, 255, 255, 0.3); padding-bottom: 10px; }
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .item-name { flex-grow: 1; }
-        .price-group { display: flex; align-items: center; gap: 10px; }
+        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; }
+        .price-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
         
         /* MINIMAL ADD BUTTON */
-        .add-btn { 
-            background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); 
-            border-radius: 50%; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; 
-            cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0;
-        }
+        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 50%; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
+        .add-btn:disabled { opacity: 0.3; cursor: not-allowed; background-color: transparent; color: var(--brand-text); border-color: transparent; }
 
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.7; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); padding-bottom: 5px; }
-        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+        .sold-out-badge { font-size: 0.7rem; color: #e57373; border: 1px solid #e57373; padding: 2px 6px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         /* MINIMAL HORIZONTAL FOOTER */
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.2); width: 100%; text-align: center; }
@@ -37,7 +36,7 @@
         .contact-link { color: var(--brand-text); text-decoration: none; }
         .footer-divider { opacity: 0.4; font-size: 0.9rem; }
 
-        /* FLOATING CART (Safe Area Protected) */
+        /* FLOATING CART */
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; cursor: pointer;}
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; flex-grow: 1;}
@@ -45,7 +44,7 @@
         .cart-clear { font-size: 0.8rem; text-decoration: underline; opacity: 0.8; margin-top: 2px; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: 2px solid var(--brand-bg); padding: 12px 25px; border-radius: 30px; font-weight: 700; font-size: 1rem; font-family: 'Quicksand', sans-serif; cursor: pointer; }
 
-        /* MODALS */
+        /* MODALS & OVERLAYS */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .modal-content { background-color: var(--brand-bg); border: 2px solid var(--brand-text); padding: 30px 20px; border-radius: 20px; text-align: center; width: 85%; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto; }
@@ -60,7 +59,6 @@
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); }
         .btn-success { background-color: #2e7d32; color: white; border: none; }
         
-        /* CART EDIT BUTTONS */
         .mini-btn { background-color: transparent; border: 1px solid #8c7255; color: #8c7255; border-radius: 6px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: bold; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: #8c7255; color: white; }
 
@@ -69,14 +67,24 @@
         .bill-receipt { background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px; text-align: left; font-size: 0.95rem; }
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 8px; }
 
-        /* SLIDER STYLING */
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; margin: 15px 0; }
         input[type=range]:focus { outline: none; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: rgba(255, 255, 255, 0.4); border-radius: 3px; }
         input[type=range]::-webkit-slider-thumb { height: 22px; width: 22px; border-radius: 50%; background: #ffffff; cursor: pointer; -webkit-appearance: none; margin-top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+
+        /* CAFE CLOSED OVERLAY */
+        #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 3000; text-align: center; padding: 20px; box-sizing: border-box; }
+        #closed-screen h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        #closed-screen p { font-size: 1.2rem; opacity: 0.9; }
     </style>
 </head>
 <body>
+
+    <div id="closed-screen">
+        <img src="logo.png" alt="ILA Logo" style="max-width: 250px; margin-bottom: 20px;">
+        <h1>We are closed</h1>
+        <p>The kitchen is currently closed. Please check back during our normal operating hours!</p>
+    </div>
 
     <div class="container">
         <header>
@@ -84,54 +92,9 @@
             <p style="font-size: 1.1rem; opacity: 0.9; margin-top: 10px;">Tap + to add items to your order</p>
         </header>
 
-        <section>
-            <h2>Pizza</h2>
-            <div class="menu-row"><span class="item-name">Margherita</span><div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Margherita Pizza', 400)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Marc’s Fav</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Marc’s Fav Pizza', 500)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Fire Vodka</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Fire Vodka Pizza', 500)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Quattro Formaggi</span><div class="price-group">₹600 <button class="add-btn" onclick="promptRemark('Quattro Formaggi Pizza', 600)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Al Funghi</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Al Funghi Pizza', 500)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Pesto Burrata</span><div class="price-group">₹750 <button class="add-btn" onclick="promptRemark('Pesto Burrata Pizza', 750)">+</button></div></div>
-        </section>
-
-        <section>
-            <h2>Sides</h2>
-            <div class="menu-row"><span class="item-name">Garlic Bread</span><div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Garlic Bread', 400)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Caprese Sandwich</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Caprese Sandwich', 500)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Burrata Sandwich</span><div class="price-group">₹700 <button class="add-btn" onclick="promptRemark('Burrata Sandwich', 700)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Stuffed Garlic Bread</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Stuffed Garlic Bread', 500)">+</button></div></div>
-        </section>
-
-        <section>
-            <h2>Dessert</h2>
-            <div class="menu-row"><span class="item-name">Banana Bread</span><div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Banana Bread', 200)">+</button></div></div>
-            <div class="menu-row"><span class="item-name">Carrot Cake</span><div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Carrot Cake', 200)">+</button></div></div>
-        </section>
-
-        <section>
-            <h2>Coffee</h2>
-            <div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>
-            <div class="coffee-row"><span>Espresso</span><div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Espresso (Regular)', 150)">+</button></div><div class="coffee-price">-</div></div>
-            <div class="coffee-row"><span>Americano</span><div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Americano (Regular)', 150)">+</button></div><div class="coffee-price">₹220 <button class="add-btn" onclick="promptRemark('Americano (Large)', 220)">+</button></div></div>
-            <div class="coffee-row"><span>Iced Americano</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Americano (Reg)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Americano (Lrg)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Latte</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Latte (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Latte (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Cappuccino</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cappuccino (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cappuccino (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Macchiato</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Macchiato (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Macchiato (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Cortado</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cortado (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cortado (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Flat White</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Flat White (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Flat White (Large)', 300)">+</button></div></div>
-            <div class="coffee-row"><span>Iced Coffee</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Coffee (Regular)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Coffee (Large)', 300, true)">+</button></div></div>
-        </section>
-
-        <section>
-            <h2>Beverages</h2>
-            <div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>
-            <div class="coffee-row"><span>Matcha Latte</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Matcha Latte (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Matcha Latte (Lrg)', 350, true)">+</button></div></div>
-            <div class="coffee-row"><span>Iced Matcha Latte</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Lrg)', 350, true)">+</button></div></div>
-            <div class="coffee-row"><span>Saffron Milk</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Saffron Milk (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Saffron Milk (Lrg)', 350, true)">+</button></div></div>
-            <div class="coffee-row"><span>Rose Milk</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Rose Milk (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Rose Milk (Lrg)', 350, true)">+</button></div></div>
-            <div class="coffee-row"><span>Rose & Fennel Cooler</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Reg)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Lrg)', 300, true)">+</button></div></div>
-            <div class="coffee-row"><span>Saffron & Tulsi Sharbat</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Reg)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Lrg)', 300, true)">+</button></div></div>
-        </section>
+        <div id="live-menu-container">
+            <p style="text-align: center; opacity: 0.8; margin-top: 50px;">Loading Live Menu...</p>
+        </div>
 
         <div class="contact-footer">
             <div class="footer-links">
@@ -249,12 +212,27 @@
 
     <script>
         // ==========================================
+        // FIREBASE CLOUD CONNECTION
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
+            authDomain: "ila-cafe.firebaseapp.com",
+            databaseURL: "https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "ila-cafe",
+            storageBucket: "ila-cafe.firebasestorage.app",
+            messagingSenderId: "473595092965",
+            appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // ==========================================
         // CAFE SETTINGS
         // ==========================================
         const OWNER_WHATSAPP = "918882946526"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         
-        // --- Smart Customer Cart Memory ---
         window.cart = JSON.parse(localStorage.getItem('ila_customer_cart')) || {}; 
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
@@ -284,12 +262,88 @@
             }
         }
 
+        // ==========================================
+        // REAL-TIME CLOUD LISTENERS
+        // ==========================================
+        
+        // 1. Listen for Master "Cafe Open" Switch
+        db.ref('settings/isOpen').on('value', (snapshot) => {
+            const isOpen = snapshot.val();
+            const lockScreen = document.getElementById('closed-screen');
+            if (isOpen === false) {
+                lockScreen.style.display = "flex";
+                document.body.style.overflow = "hidden"; // Prevent scrolling
+            } else {
+                lockScreen.style.display = "none";
+                document.body.style.overflow = "auto";
+            }
+        });
+
+        // 2. Fetch and Render Live Menu
+        db.ref('menu').on('value', (snapshot) => {
+            const menuData = snapshot.val();
+            const container = document.getElementById('live-menu-container');
+            container.innerHTML = "";
+
+            if (!menuData) {
+                container.innerHTML = "<p style='text-align: center;'>Menu is updating...</p>";
+                return;
+            }
+
+            for (let category in menuData) {
+                let catHTML = `<section><h2>${category}</h2>`;
+                let hasVisibleItems = false;
+
+                for (let itemName in menuData[category]) {
+                    const item = menuData[category][itemName];
+                    
+                    // Skip if this item is marked "POS Only"
+                    if (item.visibility === 'pos') continue;
+                    
+                    hasVisibleItems = true;
+                    
+                    // Escape quotes so HTML buttons don't break
+                    const safeName = itemName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    
+                    if (item.inStock) {
+                        catHTML += `
+                        <div class="menu-row">
+                            <span class="item-name">${itemName}</span>
+                            <div class="price-group">₹${item.price} 
+                                <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price}, ${item.requiresSweetness})">+</button>
+                            </div>
+                        </div>`;
+                    } else {
+                        // RENDER AS SOLD OUT
+                        catHTML += `
+                        <div class="menu-row" style="opacity: 0.6;">
+                            <span class="item-name">${itemName} <span class="sold-out-badge">Sold Out</span></span>
+                            <div class="price-group">₹${item.price} 
+                                <button class="add-btn" disabled>-</button>
+                            </div>
+                        </div>`;
+                    }
+                }
+                
+                catHTML += `</section>`;
+                
+                // Only render the category heading if there's actually an item to show inside it
+                if(hasVisibleItems) {
+                    container.innerHTML += catHTML;
+                }
+            }
+        });
+
+        // ==========================================
+        // CART LOGIC
+        // ==========================================
+
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             window.pendingItemName = itemName; 
             window.pendingItemPrice = price; 
             window.isBeveragePending = requiresSweetness;
             
-            document.getElementById('remark-item-title').innerText = itemName; 
+            document.getElementById('remark-item-title').innerText = itemName.replace(/&quot;/g, '"'); 
             document.getElementById('remark-input').value = ""; 
             
             const sweetGroup = document.getElementById('sweetness-group');
@@ -307,7 +361,8 @@
         };
 
         window.confirmAddItem = function(useRemark) {
-            let finalName = window.pendingItemName; 
+            // Un-escape the quotes before saving to cart dictionary
+            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
             let modifications = [];
             
             if (window.isBeveragePending) {
@@ -315,7 +370,6 @@
                 if (sweetValue !== "") modifications.push(sweetValue);
             }
             if (useRemark) {
-                // Bug fix #2: Strip HTML tags (< >) out of user text to prevent cart breakage
                 let remarkText = document.getElementById('remark-input').value.trim();
                 remarkText = remarkText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 if (remarkText !== "") modifications.push(remarkText);
@@ -351,7 +405,6 @@
             const list = document.getElementById('review-cart-list'); 
             list.innerHTML = "";
             for (let item in window.cart) {
-                // Bug fix #1: Escape both single and double quotes so HTML attribute doesn't break
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 list.innerHTML += `<div class="bill-receipt-row">
                     <span style="flex:1;">${item}</span>
@@ -370,7 +423,6 @@
         };
 
         window.modifyCartItem = function(item, delta) {
-            // Reverse the double quote mapping so JavaScript can find the exact item in the dictionary
             let realItemName = item.replace(/&quot;/g, '"');
             
             if (window.cart[realItemName]) {
@@ -448,7 +500,6 @@
             message += `\nTotal: ₹${window.totalAmount}\n`;
             message += `Payment Status: Customer paying via UPI.`;
 
-            // Bug fix #3: Wait to clear cart until exact moment WhatsApp link triggers 
             setTimeout(() => { 
                 window.cart = {}; 
                 window.totalAmount = 0; 
