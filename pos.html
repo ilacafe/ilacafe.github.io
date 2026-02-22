@@ -66,7 +66,7 @@
         .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: white; color: var(--brand-bg); }
 
-        .close-modal { background: transparent; color: rgba(255,255,255,0.6); border: none; text-decoration: underline; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 10px; }
+        .close-modal { background: transparent; color: rgba(255,255,255,0.8); border: none; font-weight: bold; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 20px; letter-spacing: 1px; padding: 10px;}
 
         .active-bill-item { border-bottom: 1px solid rgba(255,255,255,0.2); padding: 15px 5px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .bill-receipt { background-color: transparent; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
@@ -118,7 +118,7 @@
             <h3>Cart</h3>
             <div id="review-cart-list" class="bill-receipt" style="max-height: 250px; overflow-y: auto; margin-top: 15px;"></div>
             <div class="modal-buttons"><button class="btn btn-secondary" onclick="clearCart()">Empty</button></div>
-            <button class="close-modal" onclick="closeModal('review-cart-modal')">Done</button>
+            <button class="close-modal" onclick="closeModal('review-cart-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -140,7 +140,7 @@
                 <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
                 <button class="btn btn-primary" onclick="confirmAddItem(true)">Add</button>
             </div>
-            <button class="close-modal" onclick="closeModal('remark-modal')">Cancel</button>
+            <button class="close-modal" onclick="closeModal('remark-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -149,7 +149,7 @@
             <h3>Table Select</h3>
             <div class="table-grid" id="sender-table-grid"></div>
             <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway</button><br>
-            <button class="close-modal" onclick="closeModal('table-modal')">Cancel</button>
+            <button class="close-modal" onclick="closeModal('table-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -157,7 +157,7 @@
         <div class="modal-content">
             <h3>Open Tables</h3>
             <div id="active-bills-list" style="margin-top: 15px; max-height: 300px; overflow-y: auto;"></div>
-            <button class="close-modal" onclick="closeModal('active-bills-modal')" style="margin-top: 20px;">Close</button>
+            <button class="close-modal" onclick="closeModal('active-bills-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -165,7 +165,7 @@
         <div class="modal-content">
             <h3>History</h3>
             <div id="past-bills-list" class="ledger-box" style="max-height: 300px; margin-top: 15px;"></div>
-            <button class="close-modal" onclick="closeModal('past-bills-modal')" style="margin-top: 20px;">Close</button>
+            <button class="close-modal" onclick="closeModal('past-bills-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -176,7 +176,7 @@
             <div id="past-bill-receipt" class="bill-receipt"></div>
             <input type="tel" id="past-bill-phone" class="remark-input" placeholder="Phone No." maxlength="10">
             <button class="btn btn-secondary" style="width: 100%; margin-top: 5px;" onclick="sendPastBillWhatsApp()">Send Receipt</button>
-            <button class="close-modal" onclick="closeModal('view-past-bill-modal')" style="margin-top: 20px;">Close</button>
+            <button class="close-modal" onclick="closeModal('view-past-bill-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -193,7 +193,7 @@
                 <button class="btn btn-primary" onclick="payWithUPI(null)">UPI</button>
                 <button class="btn btn-primary" onclick="payWithCash(null)">Cash</button>
             </div>
-            <button class="close-modal" onclick="closeModal('checkout-modal')">Close</button>
+            <button class="close-modal" onclick="closeModal('checkout-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -216,7 +216,7 @@
                 <button class="btn btn-primary" onclick="processSplit('upi')">UPI</button>
                 <button class="btn btn-primary" onclick="processSplit('cash')">Cash</button>
             </div>
-            <button class="close-modal" onclick="closeSplitBill()">Cancel</button>
+            <button class="close-modal" onclick="closeSplitBill()">✖ CANCEL</button>
         </div>
     </div>
 
@@ -226,7 +226,7 @@
             <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">₹0</p>
             <img id="qr-image" src="" alt="QR">
             <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Confirm Payment</button></div>
-            <button class="close-modal" onclick="closeModal('upi-modal')">Cancel</button>
+            <button class="close-modal" onclick="closeModal('upi-modal')">✖ CANCEL</button>
         </div>
     </div>
 
@@ -245,7 +245,7 @@
             
             <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; font-size: 0.8rem; letter-spacing: 1px; opacity: 0.7;">LOGS</h4>
             <div id="ledger-list" class="ledger-box"></div>
-            <button class="close-modal" onclick="closeModal('cash-modal')" style="margin-top: 15px;">Close</button>
+            <button class="close-modal" onclick="closeModal('cash-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -256,7 +256,7 @@
             <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason">
             <input type="password" id="transaction-pin" class="remark-input" placeholder="PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
             <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
-            <button class="close-modal" onclick="closeTransactionModal()">Cancel</button>
+            <button class="close-modal" onclick="closeTransactionModal()">✖ CANCEL</button>
         </div>
     </div>
 
@@ -278,27 +278,46 @@
         const OWNER_WHATSAPP = "918882946526"; 
         
         window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
-        window.cart = {}; window.totalAmount = 0; window.totalItems = 0;
-        window.activeTables = JSON.parse(localStorage.getItem('ila_active_tables')) || {};
-        window.cashDrawer = parseFloat(localStorage.getItem('ila_cash_drawer')) || 0;
-        window.upiTotal = parseFloat(localStorage.getItem('ila_upi_total')) || 0;
-        window.salesLedger = JSON.parse(localStorage.getItem('ila_sales_ledger')) || [];
-        window.pastBills = JSON.parse(localStorage.getItem('ila_past_bills')) || [];
+        
+        // Cart remains strictly local so staff don't overwrite each other while typing
+        window.cart = JSON.parse(localStorage.getItem('ila_pos_cart')) || {}; 
+        window.totalAmount = parseFloat(localStorage.getItem('ila_pos_amount')) || 0;
+        window.totalItems = parseInt(localStorage.getItem('ila_pos_items')) || 0;
+        
+        // Cloud Shared Variables
+        window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
+        window.salesLedger = []; window.pastBills = [];
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
         window.pendingUPIAmount = 0;
 
-        updateDashboards();
-
-        function saveMemory() {
-            localStorage.setItem('ila_active_tables', JSON.stringify(window.activeTables));
-            localStorage.setItem('ila_cash_drawer', window.cashDrawer);
-            localStorage.setItem('ila_upi_total', window.upiTotal);
-            localStorage.setItem('ila_sales_ledger', JSON.stringify(window.salesLedger));
-            localStorage.setItem('ila_past_bills', JSON.stringify(window.pastBills));
-            updateDashboards();
+        function saveLocalCart() {
+            localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
+            localStorage.setItem('ila_pos_amount', window.totalAmount);
+            localStorage.setItem('ila_pos_items', window.totalItems);
+            updateCartUI();
         }
+
+        // --- NEW CLOUD SYNC ENGINE ---
+        function syncToCloud() {
+            db.ref('pos').update({
+                activeTables: window.activeTables,
+                cashDrawer: window.cashDrawer,
+                upiTotal: window.upiTotal,
+                salesLedger: window.salesLedger,
+                pastBills: window.pastBills
+            });
+        }
+
+        db.ref('pos/activeTables').on('value', snap => { 
+            window.activeTables = snap.val() || {}; 
+            updateDashboards(); refreshActiveModals();
+        });
+        db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = snap.val() || 0; updateDashboards(); });
+        db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = snap.val() || 0; updateDashboards(); });
+        db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
+        db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
 
         function updateDashboards() {
             document.getElementById('cash-display').innerText = `₹${window.cashDrawer}`;
@@ -308,9 +327,13 @@
             document.getElementById('modal-upi-display').innerText = window.upiTotal;
         }
 
-        let currentMenuData = {};
-        let liveCategoryOrder = [];
-        window.currentItemOrder = {};
+        function refreshActiveModals() {
+            if(document.getElementById('active-bills-modal').classList.contains('active')) openActiveBills();
+            if(document.getElementById('checkout-modal').classList.contains('active') && window.checkoutTableID) renderCheckoutReceipt(window.checkoutTableID);
+            if(document.getElementById('table-modal').classList.contains('active')) openTableModal();
+        }
+
+        let currentMenuData = {}; let liveCategoryOrder = []; window.currentItemOrder = {};
 
         db.ref('.info/connected').on('value', function(snap) {
             if (snap.val() === true) {
@@ -401,10 +424,10 @@
             if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
             if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
-            updateCartUI(); closeModal('remark-modal');
+            saveLocalCart(); closeModal('remark-modal');
         };
 
-        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; updateCartUI(); closeModal('review-cart-modal'); };
+        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveLocalCart(); closeModal('review-cart-modal'); };
 
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
@@ -429,7 +452,7 @@
             if (window.cart[realItemName]) {
                 window.cart[realItemName].qty += delta; window.totalAmount += (window.cart[realItemName].price * delta); window.totalItems += delta;
                 if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
-                updateCartUI();
+                saveLocalCart();
                 if (window.totalItems === 0) closeModal('review-cart-modal'); else window.openReviewCartModal();
             }
         };
@@ -452,7 +475,8 @@
                 else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
             }
             window.activeTables[tableID].total += window.totalAmount;
-            saveMemory();
+            syncToCloud();
+            
             let message = tableID === 'Takeaway' ? `ORDER: TAKEAWAY\n\n` : `ORDER: TABLE ${tableID}\n\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item} \n`; }
             closeModal('table-modal'); window.clearCart();
@@ -470,25 +494,28 @@
             document.getElementById('active-bills-modal').classList.add('active');
         };
 
-        window.openCheckout = function(tableID) {
-            window.checkoutTableID = tableID; const tableData = window.activeTables[tableID];
-            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
-            document.getElementById('checkout-phone').value = ""; 
-            
+        function renderCheckoutReceipt(tableID) {
+            const tableData = window.activeTables[tableID];
+            if(!tableData) return; 
             let total = tableData.total; let paid = tableData.paid || 0; let remaining = total - paid;
             let receiptHTML = "";
             for (let item in tableData.items) { 
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">X</span> ${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
+                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
             }
-            
             receiptHTML += `<div class="bill-grand-total">Total: ₹${total}</div>`;
             if (paid > 0) {
                 receiptHTML += `<div style="text-align: right; opacity: 0.8; font-size: 0.9rem; margin-top: 5px;">Paid: ₹${paid}</div>`;
                 receiptHTML += `<div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`;
             }
-
             document.getElementById('checkout-receipt').innerHTML = receiptHTML;
+            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
+        }
+
+        window.openCheckout = function(tableID) {
+            window.checkoutTableID = tableID; 
+            document.getElementById('checkout-phone').value = ""; 
+            renderCheckoutReceipt(tableID);
             closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
 
@@ -502,12 +529,12 @@
                 
                 let paid = tableData.paid || 0;
                 if(Object.keys(tableData.items).length === 0) { 
-                    delete window.activeTables[tableID]; saveMemory(); closeModal('checkout-modal'); return; 
+                    delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return; 
                 }
                 if(paid >= tableData.total && paid > 0) {
-                     savePastBill(tableID, tableData); delete window.activeTables[tableID]; saveMemory(); closeModal('checkout-modal'); return;
+                     savePastBill(tableID, tableData); delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return;
                 }
-                saveMemory(); window.openCheckout(tableID); 
+                syncToCloud();
             }
         };
 
@@ -546,10 +573,10 @@
             tableData.paid = (tableData.paid || 0) + amountToPay;
             
             if (tableData.paid >= tableData.total) {
-                savePastBill(window.checkoutTableID, tableData); delete window.activeTables[window.checkoutTableID]; saveMemory(); 
+                savePastBill(window.checkoutTableID, tableData); delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
                 closeModal('checkout-modal'); closeModal('split-bill-modal');
             } else {
-                saveMemory(); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
+                syncToCloud(); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
             }
         };
 
@@ -575,10 +602,10 @@
             tableData.paid = (tableData.paid || 0) + amountToPay;
 
             if (tableData.paid >= tableData.total) {
-                savePastBill(window.checkoutTableID, tableData); delete window.activeTables[window.checkoutTableID]; saveMemory(); 
+                savePastBill(window.checkoutTableID, tableData); delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
                 closeModal('upi-modal'); 
             } else {
-                saveMemory(); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
+                syncToCloud(); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
             }
         };
 
@@ -586,13 +613,11 @@
             const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             window.salesLedger.unshift({ date: timeString, type: type, amount: amount, reason: reason }); 
             if (type === 'cash_income') window.cashDrawer += amount; else if (type === 'upi_income') window.upiTotal += amount; else window.cashDrawer -= amount; 
-            saveMemory();
         }
 
         function savePastBill(tableID, tableData) {
             const bill = { id: Date.now(), table: tableID, date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), items: JSON.parse(JSON.stringify(tableData.items)), total: tableData.total };
             window.pastBills.unshift(bill); if(window.pastBills.length > 50) window.pastBills.pop(); 
-            saveMemory();
         }
 
         function renderLedger() {
@@ -654,7 +679,7 @@
             const staffName = window.staffPins[pinStr]; if (!staffName) return;
             if (amount > window.cashDrawer && !confirm(`Only ₹${window.cashDrawer} in drawer. Continue?`)) return;
             addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (${staffName})`);
-            window.closeTransactionModal();
+            syncToCloud(); window.closeTransactionModal();
         };
 
         window.promptEOD = function() {
@@ -665,10 +690,11 @@
             let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
             if (!exp) report += `None.\n`;
             if (confirm("Send Report?")) {
-                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; saveMemory(); closeModal('cash-modal');
+                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; syncToCloud(); closeModal('cash-modal');
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
         };
+        updateCartUI();
     </script>
 </body>
 </html>
