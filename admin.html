@@ -310,6 +310,28 @@
         window.toggleStock = function(cat, name, status) { db.ref('menu/' + cat + '/' + name + '/inStock').set(!status); };
         window.deleteItem = function(cat, name) { if (confirm(`Delete ${name}?`)) db.ref('menu/' + cat + '/' + name).remove(); };
         
+        // --- STAFF PIN LISTENER (RESTORED) ---
+        db.ref('staff').on('value', (snapshot) => {
+            const staffData = snapshot.val();
+            const container = document.getElementById('staff-list-container');
+            container.innerHTML = "";
+
+            if (!staffData) {
+                container.innerHTML = "<p style='opacity: 0.5; font-size: 0.9rem;'>No staff PINs registered.</p>";
+                return;
+            }
+
+            for (let pin in staffData) {
+                const name = staffData[pin];
+                container.innerHTML += `
+                    <div class="list-item">
+                        <div><strong>${name}</strong> <span style="opacity: 0.6; margin-left: 10px; font-size: 0.9rem;">PIN: ${pin}</span></div>
+                        <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${pin}', '${name}')">X</button>
+                    </div>
+                `;
+            }
+        });
+
         window.addStaff = function() {
             const name = document.getElementById('staff-name').value.trim(); const pin = document.getElementById('staff-pin').value.trim();
             if(!name || pin.length !== 4) return;
