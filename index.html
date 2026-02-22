@@ -21,12 +21,12 @@
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
-        /* FIX: Rigid alignment for standard items */
+        /* UPDATED: Rigid vertical alignment for perfect formatting */
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; padding-right: 10px; }
-        .price-group { display: flex; align-items: center; justify-content: flex-end; height: 32px; }
-        .price-text { width: 50px; text-align: right; margin-right: 12px; }
-        .inline-container { width: 88px; display: flex; justify-content: flex-end; }
+        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; padding-right: 10px; line-height: 1.3;}
+        .price-group { display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; }
+        .price-text { width: 55px; text-align: right; margin-right: 15px; font-size: 1.05rem; opacity: 0.9;}
+        .inline-container { width: 88px; display: flex; justify-content: flex-end; height: 32px;}
 
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
@@ -38,11 +38,6 @@
         .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
 
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
-
-        /* FIX: Graceful wrapping and proportional grid for Sized items */
-        .coffee-header { display: grid; grid-template-columns: 2fr 1.2fr 1.2fr; gap: 5px; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
-        .coffee-row { display: grid; grid-template-columns: 2fr 1.2fr 1.2fr; gap: 5px; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .coffee-price { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
         .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.85rem; opacity: 0.7; }
@@ -356,23 +351,30 @@
                     if (item.inStock) {
                         catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group"><span class="price-text">₹${item.price || 0}</span><div id="ctrl-${safeName}" class="inline-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group"><span class="price-text">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group"><span class="price-text">₹${item.price || 0}</span><div class="inline-container"><button class="add-btn" disabled>+</button></div></div></div>`;
                     }
                 });
 
+                // FIX: Sized items perfectly aligned underneath main item name
                 if (sizedItems.length > 0) {
-                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
                     sizedItems.forEach(item => {
                         let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
                         let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
-                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
 
                         if (item.inStock) {
-                            if(item.priceReg) regHTML = `<div class="coffee-price"><span>₹${item.priceReg}</span><div class="inline-container" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div></div>`; else regHTML = '-';
-                            if(item.priceLrg) lrgHTML = `<div class="coffee-price"><span>₹${item.priceLrg}</span><div class="inline-container" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div></div>`; else lrgHTML = '-';
+                            catHTML += `<div style="margin-bottom: 15px;">`;
+                            catHTML += `<div style="font-size: 1.1rem; font-weight: 500; margin-bottom: 10px;">${item.originalName}</div>`;
+                            
+                            if (item.priceReg) {
+                                catHTML += `<div class="menu-row" style="margin-bottom: 12px; padding-left: 15px;"><span class="item-name" style="font-size: 0.85rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">Regular</span><div class="price-group"><span class="price-text">₹${item.priceReg}</span><div id="ctrl-${safeNameReg}" class="inline-container" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
+                            }
+                            if (item.priceLrg) {
+                                catHTML += `<div class="menu-row" style="margin-bottom: 5px; padding-left: 15px;"><span class="item-name" style="font-size: 0.85rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">Large</span><div class="price-group"><span class="price-text">₹${item.priceLrg}</span><div id="ctrl-${safeNameLrg}" class="inline-container" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
+                            }
+                            catHTML += `</div>`;
+                        } else {
+                            catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group"><span class="price-text">-</span><div class="inline-container"><button class="add-btn" disabled>+</button></div></div></div>`;
                         }
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
                     });
                 }
                 catHTML += `</section>`;
