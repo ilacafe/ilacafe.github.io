@@ -25,6 +25,8 @@
         .dash-divider { width: 1px; height: 25px; background-color: rgba(255, 255, 255, 0.2); }
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
+        
+        /* ORIGINAL UNTOUCHED MENU LAYOUT */
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; }
         .price-group { display: flex; align-items: center; gap: 10px; }
@@ -49,12 +51,20 @@
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
         .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
-        .remark-input, .sweetness-select { width: 90%; padding: 12px; margin: 10px auto; border-radius: 6px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
+        
+        .remark-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
+        .remark-input::placeholder { color: rgba(255,255,255,0.4); }
+        
+        /* NEW SWEETNESS GRID CSS */
+        .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+        .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1;}
+        .choice-btn.selected { background: white; color: var(--brand-bg); border-color: white;}
         
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; }
         .table-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         .table-btn.occupied { background-color: #ffffff; color: #8c7255; border: none;}
-        .takeaway-btn { background-color: transparent; color: white; border: 1px dashed white; padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px; text-transform: uppercase; }
+        .takeaway-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px; text-transform: uppercase; transition: all 0.2s;}
+        .takeaway-btn:active { background: white; color: var(--brand-bg); }
 
         .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 15px; }
         .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; text-transform: uppercase; letter-spacing: 1px; border: none;}
@@ -124,14 +134,14 @@
     <div id="remark-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="remark-item-title">Item</h3>
-            <div style="text-align: left; width: 90%; margin: 15px auto;">
+            <div style="text-align: left; width: 100%; margin: 15px auto;">
                 <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Sweetness</label>
-                <select id="sweetness-select" class="sweetness-select">
-                    <option value="Medium sweet" selected>Medium</option>
-                    <option value="No sweetness">None</option>
-                    <option value="Less sweet">Less</option>
-                    <option value="Very sweet">Extra</option>
-                </select>
+                <div class="choice-grid" id="pos-sweetness-grid">
+                    <button class="choice-btn selected" onclick="window.selectSweetness('Medium sweet', this)">Medium</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('No sweetness', this)">None</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('Less sweet', this)">Less</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('Very sweet', this)">Extra</button>
+                </div>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="closeModal('remark-modal')">Cancel</button>
@@ -287,6 +297,7 @@
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
         window.pendingUPIAmount = 0;
+        window.currentSweetness = "Medium sweet";
 
         function saveLocalCart() {
             localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
@@ -403,6 +414,13 @@
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
+        window.selectSweetness = function(val, btn) {
+            window.currentSweetness = val;
+            let siblings = btn.parentNode.children;
+            for(let s of siblings) s.classList.remove('selected');
+            btn.classList.add('selected');
+        };
+
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             let finalName = itemName.replace(/&quot;/g, '"');
             
@@ -420,14 +438,19 @@
 
             window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
             document.getElementById('remark-item-title').innerText = finalName; 
-            document.getElementById('sweetness-select').value = "Medium sweet"; 
+            
+            // Reset Sweetness UI
+            window.currentSweetness = "Medium sweet";
+            const btns = document.querySelectorAll('#pos-sweetness-grid .choice-btn');
+            btns.forEach(b => b.classList.remove('selected'));
+            if(btns.length > 0) btns[0].classList.add('selected');
+
             document.getElementById('remark-modal').classList.add('active');
         };
 
         window.confirmAddItem = function() {
             let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            const sweetValue = document.getElementById('sweetness-select').value; 
-            if (sweetValue !== "") finalName += ` (${sweetValue})`;
+            if (window.currentSweetness !== "") finalName += ` (${window.currentSweetness})`;
             
             if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
