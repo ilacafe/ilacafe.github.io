@@ -248,7 +248,7 @@
                             <div class="item-actions">
                                 <button class="btn-action" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0})">Edit</button>
                                 <button class="btn-action" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${item.inStock ? "Hide" : "Show"}</button>
-                                <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="deleteItem('${safeCategory}', '${safeName}')">X</button>
+                                <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="deleteItem('${safeCategory}', '${safeName}')">✖</button>
                             </div>
                         </div>`;
                 });
@@ -310,7 +310,6 @@
         window.toggleStock = function(cat, name, status) { db.ref('menu/' + cat + '/' + name + '/inStock').set(!status); };
         window.deleteItem = function(cat, name) { if (confirm(`Delete ${name}?`)) db.ref('menu/' + cat + '/' + name).remove(); };
         
-        // --- STAFF PIN LISTENER (RESTORED) ---
         db.ref('staff').on('value', (snapshot) => {
             const staffData = snapshot.val();
             const container = document.getElementById('staff-list-container');
@@ -326,7 +325,7 @@
                 container.innerHTML += `
                     <div class="list-item">
                         <div><strong>${name}</strong> <span style="opacity: 0.6; margin-left: 10px; font-size: 0.9rem;">PIN: ${pin}</span></div>
-                        <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${pin}', '${name}')">X</button>
+                        <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${pin}', '${name}')">✖</button>
                     </div>
                 `;
             }
