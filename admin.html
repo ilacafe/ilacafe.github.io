@@ -20,8 +20,16 @@
         
         h2 { font-size: 1.4rem; letter-spacing: 1px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;}
         
-        .admin-card { background-color: rgba(0, 0, 0, 0.2); border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .admin-card { background-color: rgba(0, 0, 0, 0.2); border-radius: 15px; padding: 25px; margin-bottom: 20px; border: 1px solid rgba(255, 255, 255, 0.1); }
         
+        /* COLLAPSIBLE SECTIONS */
+        details { background-color: rgba(0,0,0,0.2); border-radius: 15px; margin-bottom: 15px; padding: 10px 20px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s ease; }
+        summary { font-size: 1.2rem; font-weight: bold; text-transform: uppercase; cursor: pointer; padding: 10px 0; outline: none; list-style: none; letter-spacing: 1px;}
+        summary::-webkit-details-marker { display: none; }
+        summary::after { content: '+'; float: right; font-size: 1.5rem; line-height: 1; }
+        details[open] summary::after { content: '-'; }
+        details > div { padding-top: 15px; border-top: 1px dashed rgba(255,255,255,0.2); margin-top: 5px; }
+
         .form-group { margin-bottom: 15px; }
         .row-group { display: flex; gap: 10px; width: 100%; }
         label { display: block; font-size: 0.85rem; text-transform: uppercase; font-weight: bold; opacity: 0.9; margin-bottom: 5px; }
@@ -35,9 +43,7 @@
         .btn-danger { background-color: #e57373; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-edit { background-color: #ffffff; color: #8c7255; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-move { background-color: rgba(255,255,255,0.2); color: white; padding: 8px 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; border: none; cursor: pointer;}
-        
         .btn-move-item { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; border-radius: 6px; cursor: pointer; padding: 5px 10px; font-size: 0.8rem; line-height: 1; transition: all 0.2s;}
-        
         .btn-toggle { background-color: #81c784; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-toggle.sold-out { background-color: #ffb74d; color: #333; }
 
@@ -66,74 +72,85 @@
             <img src="logo.png" alt="ILA Logo" class="logo">
         </header>
 
-        <div class="admin-card" style="text-align: center;">
-            <h2>Master Switch</h2>
+        <div class="admin-card" style="text-align: center; padding: 15px 25px;">
+            <p style="font-size: 0.9rem; opacity: 0.8; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; margin-top: 0;">Master Switch</p>
             <button id="master-status-btn" class="btn" onclick="toggleCafeStatus()">Loading...</button>
         </div>
 
-        <div class="admin-card">
-            <h2>Menu Section Order</h2>
-            <div id="category-order-container"><p style="opacity: 0.7; font-size: 0.9rem;">Loading...</p></div>
-        </div>
-
-        <div class="admin-card">
-            <h2>Staff PIN Management</h2>
-            <div class="row-group" style="margin-bottom: 15px;">
-                <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="staff-name" placeholder="Staff Name" required></div>
-                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="staff-pin" placeholder="4-Digit PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric" required></div>
+        <details>
+            <summary>Staff Management</summary>
+            <div>
+                <div class="row-group" style="margin-bottom: 15px;">
+                    <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="staff-name" placeholder="Staff Name" required></div>
+                    <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="staff-pin" placeholder="PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric" required></div>
+                </div>
+                <button class="btn btn-primary" onclick="addStaff()">Add / Update Staff</button>
+                <div id="staff-list-container" style="margin-top: 20px;"></div>
             </div>
-            <button class="btn btn-primary" onclick="addStaff()">Add / Update Staff</button>
-            <div id="staff-list-container" style="margin-top: 20px;"></div>
-        </div>
+        </details>
 
-        <div class="admin-card" id="menu-form-section">
-            <h2>Manage Menu Items</h2>
-            <div class="form-group"><label>Category (e.g., Pizza, Coffee)</label><input type="text" id="add-category" placeholder="Type category name..." required></div>
-            <div class="form-group"><label>Item Name</label><input type="text" id="add-name" placeholder="e.g., Margherita" required></div>
+        <details>
+            <summary>Category Order</summary>
+            <div>
+                <p style="font-size: 0.85rem; opacity: 0.8; margin-top: 0;">Arrange the order in which categories appear on the menu.</p>
+                <div id="category-order-container"><p style="opacity: 0.7; font-size: 0.9rem;">Loading...</p></div>
+            </div>
+        </details>
+
+        <details id="add-item-details">
+            <summary>Add / Edit Item</summary>
+            <div id="menu-form-section">
+                <div class="form-group"><label>Category (e.g., Pizza, Coffee)</label><input type="text" id="add-category" placeholder="Type category name..." required></div>
+                <div class="form-group"><label>Item Name</label><input type="text" id="add-name" placeholder="e.g., Margherita" required></div>
+                
+                <div class="form-group checkbox-group" style="border: 1px solid rgba(255,255,255,0.2); padding: 10px; border-radius: 8px;">
+                    <input type="checkbox" id="add-has-sizes" style="width: 20px; height: 20px;" onchange="toggleSizeInputs()">
+                    <label style="margin: 0; text-transform: none; font-size: 1rem;">Item has <b>Regular & Large</b> sizes?</label>
+                </div>
+
+                <div class="row-group" id="single-price-group" style="display: flex;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Price (₹)</label>
+                        <input type="number" id="add-price" placeholder="e.g., 400">
+                    </div>
+                </div>
+
+                <div class="row-group" id="multi-price-group" style="display: none;">
+                    <div class="form-group" style="flex: 1;">
+                        <label>Regular Price (₹)</label>
+                        <input type="number" id="add-price-reg" placeholder="e.g., 200">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>Large Price (₹)</label>
+                        <input type="number" id="add-price-lrg" placeholder="e.g., 300">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Platform Visibility</label>
+                    <select id="add-visibility">
+                        <option value="both" selected>Both Apps</option>
+                        <option value="pos">POS Only</option>
+                        <option value="customer">Customer App Only</option>
+                    </select>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="add-sweetness" style="width: 20px; height: 20px;">
+                    <label style="margin: 0; text-transform: none;">Requires Sweetness Level? (For Beverages)</label>
+                </div>
+
+                <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
+            </div>
+        </details>
+
+        <div class="admin-card" style="border: none; background: transparent; padding: 0; margin-top: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;">
+                <h2 style="margin: 0; border: none; padding: 0;">Live Menu</h2>
+                <button class="btn btn-success" style="width: auto; padding: 6px 12px; font-size: 0.8rem;" onclick="autoFixSizes()">🪄 Clean Up Drink Sizes</button>
+            </div>
             
-            <div class="form-group checkbox-group" style="border: 1px solid rgba(255,255,255,0.2); padding: 10px; border-radius: 8px;">
-                <input type="checkbox" id="add-has-sizes" style="width: 20px; height: 20px;" onchange="toggleSizeInputs()">
-                <label style="margin: 0; text-transform: none; font-size: 1rem;">Item has <b>Regular & Large</b> sizes?</label>
-            </div>
-
-            <div class="row-group" id="single-price-group" style="display: flex;">
-                <div class="form-group" style="flex: 1;">
-                    <label>Price (₹)</label>
-                    <input type="number" id="add-price" placeholder="e.g., 400">
-                </div>
-            </div>
-
-            <div class="row-group" id="multi-price-group" style="display: none;">
-                <div class="form-group" style="flex: 1;">
-                    <label>Regular Price (₹)</label>
-                    <input type="number" id="add-price-reg" placeholder="e.g., 200">
-                </div>
-                <div class="form-group" style="flex: 1;">
-                    <label>Large Price (₹)</label>
-                    <input type="number" id="add-price-lrg" placeholder="e.g., 300">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Platform Visibility</label>
-                <select id="add-visibility">
-                    <option value="both" selected>Both Apps</option>
-                    <option value="pos">POS Only</option>
-                    <option value="customer">Customer App Only</option>
-                </select>
-            </div>
-
-            <div class="form-group checkbox-group">
-                <input type="checkbox" id="add-sweetness" style="width: 20px; height: 20px;">
-                <label style="margin: 0; text-transform: none;">Requires Sweetness Level? (For Beverages)</label>
-            </div>
-
-            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save / Update Item</button>
-        </div>
-
-        <div class="admin-card" style="border: none; background: transparent; padding: 0;">
-            <h2 style="text-align: center; border: none;">Live Menu Editor</h2>
-            <div id="live-menu-container"><p style="text-align: center; opacity: 0.7;">Loading database...</p></div>
+            <div id="live-menu-container"><p style="text-align: center; opacity: 0.7; margin-top: 20px;">Loading database...</p></div>
         </div>
 
     </div>
@@ -160,9 +177,7 @@
             else { btn.innerText = "CAFE IS CLOSED"; btn.className = "btn status-closed"; }
         });
 
-        window.toggleCafeStatus = function() {
-            db.ref('settings/isOpen').set(!isCafeOpen);
-        };
+        window.toggleCafeStatus = function() { db.ref('settings/isOpen').set(!isCafeOpen); };
 
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderAllViews(); });
         db.ref('settings/itemOrder').on('value', snap => { currentItemOrder = snap.val() || {}; renderAllViews(); });
@@ -242,7 +257,6 @@
                     const toggleBtnClass = item.inStock ? "btn-toggle sold-out" : "btn-toggle";
                     const sweetLabel = item.requiresSweetness ? " | <i>+Sweetness Opt.</i>" : "";
                     
-                    // Display sizes if applicable
                     let priceDisplay = item.hasSizes ? `₹${item.priceReg} (Reg) / ₹${item.priceLrg} (Lrg)` : `₹${item.price}`;
                     let visLabel = item.visibility === "pos" ? "POS Only" : (item.visibility === "customer" ? "Customer App Only" : "Both Apps");
 
@@ -267,6 +281,67 @@
             });
             menuContainer.innerHTML = menuHTML;
         }
+
+        // ==========================================
+        // MAGIC FIX BUTTON (Merges Sizes)
+        // ==========================================
+        window.autoFixSizes = function() {
+            if(!confirm("This will automatically find and merge all your '(Reg)' and '(Lrg)' drinks into clean, single items. Continue?")) return;
+
+            db.ref('menu').once('value').then(snap => {
+                const menu = snap.val();
+                if(!menu) return;
+
+                for(let cat in menu) {
+                    let items = menu[cat];
+                    let toDelete = [];
+                    let newItems = {};
+
+                    for(let itemName in items) {
+                        let item = items[itemName];
+                        // Look for our old naming conventions
+                        let regMatch = itemName.match(/(.*)\s\((Regular|Reg)\)$/i);
+                        let lrgMatch = itemName.match(/(.*)\s\((Large|Lrg)\)$/i);
+
+                        if(regMatch || lrgMatch) {
+                            let base = regMatch ? regMatch[1] : lrgMatch[1];
+                            
+                            if(!newItems[base]) {
+                                newItems[base] = {
+                                    hasSizes: true,
+                                    inStock: true,
+                                    requiresSweetness: item.requiresSweetness || false,
+                                    visibility: item.visibility || 'both'
+                                };
+                            }
+                            
+                            // Map the prices
+                            if(regMatch) newItems[base].priceReg = item.price || item.priceReg;
+                            if(lrgMatch) newItems[base].priceLrg = item.price || item.priceLrg;
+                            
+                            newItems[base].price = newItems[base].priceReg || 0; // Fallback
+
+                            toDelete.push(itemName);
+                        }
+                    }
+
+                    // Upload merged items
+                    for(let base in newItems) {
+                        db.ref(`menu/${cat}/${base}`).set(newItems[base]);
+                    }
+                    // Delete the old messy items
+                    toDelete.forEach(oldName => {
+                        db.ref(`menu/${cat}/${oldName}`).remove();
+                    });
+                }
+
+                // Reset the item sorting array so it generates fresh
+                db.ref('settings/itemOrder').remove();
+
+                alert("Cleanup complete! Refreshing dashboard...");
+                setTimeout(() => location.reload(), 1000);
+            });
+        };
 
         window.toggleSizeInputs = function() {
             if(document.getElementById('add-has-sizes').checked) {
@@ -311,6 +386,7 @@
         };
 
         window.editItem = function(category, name, price, visibility, requiresSweetness, hasSizes, priceReg, priceLrg) {
+            document.getElementById('add-item-details').open = true; // Open the folder automatically
             document.getElementById('add-category').value = category;
             document.getElementById('add-name').value = name;
             document.getElementById('add-visibility').value = visibility || "both";
@@ -324,7 +400,7 @@
             } else {
                 document.getElementById('add-price').value = price;
             }
-            document.getElementById('menu-form-section').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('add-item-details').scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
 
         window.toggleStock = function(cat, name, status) { db.ref('menu/' + cat + '/' + name + '/inStock').set(!status); };
