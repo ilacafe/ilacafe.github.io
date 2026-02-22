@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>ILA | Menu</title>
+    <title>ILA | Order Menu</title>
     <link rel="apple-touch-icon" href="/icon.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -21,20 +21,9 @@
         
         /* MINIMAL ADD BUTTON */
         .add-btn { 
-            background-color: transparent; 
-            color: var(--brand-text); 
-            border: 1px solid rgba(255, 255, 255, 0.4); 
-            border-radius: 50%; 
-            width: 32px; 
-            height: 32px; 
-            font-size: 1.4rem; 
-            font-weight: 400; 
-            cursor: pointer; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            transition: all 0.2s; 
-            padding: 0;
+            background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); 
+            border-radius: 50%; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0;
         }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
 
@@ -42,10 +31,10 @@
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
-        /* FLOATING CART (With iPad/iPhone Safe Area padding) */
-        #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; }
+        /* FLOATING CART (Safe Area Protected) */
+        #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; cursor: pointer;}
         #cart-banner.visible { transform: translateY(0); }
-        .cart-info { display: flex; flex-direction: column; cursor: pointer; flex-grow: 1;}
+        .cart-info { display: flex; flex-direction: column; flex-grow: 1;}
         .cart-total { font-weight: 700; font-size: 1.2rem; }
         .cart-clear { font-size: 0.8rem; text-decoration: underline; opacity: 0.8; margin-top: 2px; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: 2px solid var(--brand-bg); padding: 12px 25px; border-radius: 30px; font-weight: 700; font-size: 1rem; font-family: 'Quicksand', sans-serif; cursor: pointer; }
@@ -53,17 +42,14 @@
         /* MODALS */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .modal-content { background-color: var(--brand-bg); border: 2px solid var(--brand-text); padding: 30px 20px; border-radius: 20px; text-align: center; width: 85%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto; }
+        .modal-content { background-color: var(--brand-bg); border: 2px solid var(--brand-text); padding: 30px 20px; border-radius: 20px; text-align: center; width: 85%; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto; }
         .modal-content h3 { margin-top: 0; font-size: 1.4rem; margin-bottom: 10px; }
-        .remark-input, .sweetness-select { width: 90%; padding: 12px; margin: 10px auto; border-radius: 10px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
-        .sweetness-group { text-align: left; width: 90%; margin: 15px auto; display: none; }
         
-        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0 15px 0; }
-        .table-btn { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); padding: 15px 0; border-radius: 10px; font-weight: 700; font-size: 1.2rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
-        .takeaway-btn { background-color: var(--brand-text); color: var(--brand-bg); border: none; padding: 15px 0; border-radius: 10px; font-weight: 700; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px; }
-
-        .modal-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 15px; margin-bottom: 15px; }
-        .btn { padding: 12px 20px; border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; }
+        .remark-input, .sweetness-select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
+        .sweetness-group { text-align: left; width: 100%; margin: 15px 0; display: none; }
+        
+        .modal-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 15px; margin-bottom: 5px; }
+        .btn { padding: 14px 20px; border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; }
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); border: none; }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); }
         .btn-success { background-color: #2e7d32; color: white; border: none; }
@@ -72,10 +58,14 @@
         .mini-btn { background-color: transparent; border: 1px solid #8c7255; color: #8c7255; border-radius: 6px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: bold; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: #8c7255; color: white; }
 
-        .close-modal { background: transparent; color: var(--brand-text); border: none; text-decoration: underline; cursor: pointer; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; opacity: 0.8; margin-top: 10px; }
+        .close-modal { background: transparent; color: var(--brand-text); border: none; text-decoration: underline; cursor: pointer; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; opacity: 0.8; margin-top: 15px; }
 
-        .bill-receipt { background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
-        .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
+        .bill-receipt { background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px; text-align: left; font-size: 0.95rem; }
+        .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 8px; }
+        
+        /* CONTACT FORM */
+        .contact-section { text-align: left; margin-top: 20px; }
+        .contact-label { font-size: 0.8rem; text-transform: uppercase; font-weight: 700; opacity: 0.9; letter-spacing: 1px; }
     </style>
 </head>
 <body>
@@ -136,31 +126,19 @@
         </section>
     </div>
 
-    <div id="cart-banner">
-        <div class="cart-info" onclick="openReviewCartModal()">
+    <div id="cart-banner" onclick="openCheckoutModal()">
+        <div class="cart-info">
             <span class="cart-total" id="cart-total-text">₹0</span>
-            <span class="cart-clear">Tap to Review & Edit Order</span>
+            <span class="cart-clear">View Order & Checkout</span>
         </div>
-        <button class="checkout-btn" onclick="openTableModal()">Place Order</button>
-    </div>
-
-    <div id="review-cart-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h3>Your Order</h3>
-            <div id="review-cart-list" class="bill-receipt" style="max-height: 250px; overflow-y: auto; margin-top: 15px;"></div>
-            
-            <div class="modal-buttons">
-                <button class="btn btn-secondary" style="border-color: #e57373; color: #e57373;" onclick="clearCart()">Empty Cart</button>
-                <button class="btn btn-primary" onclick="closeModal('review-cart-modal')">Done Editing</button>
-            </div>
-        </div>
+        <button class="checkout-btn">→</button>
     </div>
 
     <div id="remark-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="remark-item-title">Item Name</h3>
             <div id="sweetness-group" class="sweetness-group">
-                <label>Sweetness Level</label>
+                <label class="contact-label" style="color: white;">Sweetness Level</label>
                 <select id="sweetness-select" class="sweetness-select">
                     <option value="Medium sweet" selected>Medium (Default)</option>
                     <option value="No sweetness">No sweetness</option>
@@ -170,7 +148,7 @@
                     <option value="Very sweet">Very sweet</option>
                 </select>
             </div>
-            <p style="margin-top:10px;">Special requests for the chef/barista</p>
+            <p style="margin-top:15px; text-align: left; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Special requests</p>
             <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
@@ -180,65 +158,91 @@
         </div>
     </div>
 
-    <div id="table-modal" class="modal-overlay">
+    <div id="checkout-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Where are you sitting?</h3>
-            <p style="font-size: 0.9rem; opacity: 0.8; margin-top: -5px;">Select your table to place the order.</p>
-            <div class="table-grid" id="sender-table-grid"></div>
-            <button class="takeaway-btn" onclick="openTakeawayPayment()">Delivery / Takeaway</button>
-            <br>
-            <button class="close-modal" onclick="closeModal('table-modal')">Go Back</button>
+            <h3>Checkout</h3>
+            
+            <div id="review-cart-list" class="bill-receipt" style="max-height: 180px; overflow-y: auto;"></div>
+            <div style="font-weight: bold; font-size: 1.2rem; margin: 10px 0;">Total: ₹<span id="modal-checkout-total">0</span></div>
+            
+            <div class="contact-section">
+                <label class="contact-label">Your Details</label>
+                <input type="text" id="customer-name" class="remark-input" placeholder="Name" required>
+                <input type="tel" id="customer-phone" class="remark-input" placeholder="WhatsApp Number" maxlength="10" required>
+                
+                <label class="contact-label" style="display: block; margin-top: 10px;">Order Type</label>
+                <select id="order-type" class="sweetness-select" onchange="toggleAddress()">
+                    <option value="Dine-in">Dine-in (At the Cafe)</option>
+                    <option value="Takeaway">Takeaway (Pick up)</option>
+                    <option value="Delivery">Delivery (To your location)</option>
+                </select>
+                
+                <textarea id="customer-notes" class="remark-input" placeholder="Table number (if seated) or special notes..." style="height: 60px; resize: none; margin-top: 8px;"></textarea>
+            </div>
+
+            <div class="modal-buttons" style="margin-top: 20px;">
+                <button class="btn btn-secondary" style="border-color: #e57373; color: #e57373; flex: 0.5;" onclick="clearCart()">Empty</button>
+                <button class="btn btn-primary" style="flex: 1.5; font-size: 1.2rem;" onclick="proceedToPayment()">Proceed to Payment</button>
+            </div>
+            <button class="close-modal" onclick="closeModal('checkout-modal')">Go Back to Menu</button>
         </div>
     </div>
 
-    <div id="takeaway-payment-modal" class="modal-overlay">
+    <div id="payment-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Delivery / Takeaway Checkout</h3>
-            <p style="font-size: 0.9rem; opacity: 0.8; margin-top: -5px; margin-bottom: 20px;">Please complete your payment via UPI to place this order.</p>
+            <h3 style="margin-bottom: 5px;">Secure Payment</h3>
+            <p style="font-size: 0.95rem; opacity: 0.9; margin-top: 0; margin-bottom: 15px;">Please complete your payment via UPI to finalize your order.</p>
             
-            <div style="font-size: 1.4rem; font-weight: 700; margin-bottom: 20px;">
-                Amount Due: ₹<span id="takeaway-amount-text">0</span>
+            <div style="background-color: rgba(0,0,0,0.2); padding: 15px; border-radius: 15px; margin-bottom: 20px;">
+                <div style="font-size: 1rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px;">Amount Due</div>
+                <div style="font-size: 1.8rem; font-weight: 700;">₹<span id="payment-amount">0</span></div>
             </div>
 
-            <div class="modal-buttons" style="flex-direction: column; gap: 15px;">
-                <button class="btn btn-primary" style="width: 100%; font-size: 1.1rem; padding: 15px;" onclick="openCustomerUPI()">Step 1: Pay via UPI App</button>
-                <button class="btn btn-success" style="width: 100%; font-size: 1.1rem; padding: 15px;" onclick="sendOrder('Delivery / Takeaway')">Step 2: Send Order to Cafe</button>
-            </div>
+            <button class="btn btn-primary" style="width: 100%; font-size: 1.1rem; padding: 12px; margin-bottom: 15px;" id="pay-upi-btn">Step 1: Pay via UPI App</button>
             
-            <button class="close-modal" onclick="closeModal('takeaway-payment-modal')" style="margin-top: 15px;">Go Back</button>
+            <img id="payment-qr" src="" alt="UPI QR Code" style="width: 160px; height: 160px; margin: 0 auto 15px auto; border-radius: 10px; border: 5px solid white; background-color: white; display: block; object-fit: contain;">
+            
+            <button class="btn btn-success" style="width: 100%; font-size: 1.2rem; padding: 15px;" onclick="sendCustomerOrder()">Step 2: Send Order to Cafe</button>
+            
+            <button class="close-modal" onclick="closeModal('payment-modal')" style="margin-top: 15px;">Cancel</button>
         </div>
     </div>
 
     <script>
         // ==========================================
-        // ⚠️ CAFE SETTINGS ⚠️
+        // CAFE SETTINGS
         // ==========================================
         const OWNER_WHATSAPP = "919999016712"; 
-        const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; // Used for Customer UPI Redirect
+        const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         
-        // --- System Memory ---
-        // For the customer app, we don't save to localStorage, so it resets every time they refresh.
-        window.cart = {}; 
-        window.totalAmount = 0; 
-        window.totalItems = 0;
+        // --- Smart Customer Cart Memory ---
+        window.cart = JSON.parse(localStorage.getItem('ila_customer_cart')) || {}; 
+        window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
+        window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
+        
         window.pendingItemName = ""; 
         window.pendingItemPrice = 0; 
         window.isBeveragePending = false; 
+        window.customerDetails = {};
+
+        // Initial UI Load
+        updateCartUI();
+
+        function saveCart() {
+            localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart));
+            localStorage.setItem('ila_customer_amount', window.totalAmount);
+            localStorage.setItem('ila_customer_items', window.totalItems);
+        }
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
-            window.pendingItemName = itemName; 
-            window.pendingItemPrice = price; 
-            window.isBeveragePending = requiresSweetness;
-            
-            document.getElementById('remark-item-title').innerText = itemName; 
-            document.getElementById('remark-input').value = ""; 
+            window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
+            document.getElementById('remark-item-title').innerText = itemName; document.getElementById('remark-input').value = ""; 
             
             const sweetGroup = document.getElementById('sweetness-group');
             if (requiresSweetness) { 
-                sweetGroup.style.display = 'block'; 
-                document.getElementById('sweetness-select').value = "Medium sweet"; 
+                sweetGroup.style.display = 'block'; document.getElementById('sweetness-select').value = "Medium sweet"; 
             } else { 
                 sweetGroup.style.display = 'none'; 
             }
@@ -248,8 +252,7 @@
         };
 
         window.confirmAddItem = function(useRemark) {
-            let finalName = window.pendingItemName; 
-            let modifications = [];
+            let finalName = window.pendingItemName; let modifications = [];
             
             if (window.isBeveragePending) {
                 const sweetValue = document.getElementById('sweetness-select').value;
@@ -259,25 +262,19 @@
                 const remarkText = document.getElementById('remark-input').value.trim();
                 if (remarkText !== "") modifications.push(remarkText);
             }
-            
             if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
             
             if (window.cart[finalName]) window.cart[finalName].qty += 1;
             else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             
-            window.totalAmount += window.pendingItemPrice; 
-            window.totalItems += 1;
+            window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
             
-            updateCartUI(); 
-            closeModal('remark-modal');
+            saveCart(); updateCartUI(); closeModal('remark-modal');
         };
 
         window.clearCart = function() { 
-            window.cart = {}; 
-            window.totalAmount = 0; 
-            window.totalItems = 0; 
-            updateCartUI(); 
-            closeModal('review-cart-modal'); 
+            window.cart = {}; window.totalAmount = 0; window.totalItems = 0; 
+            saveCart(); updateCartUI(); closeModal('checkout-modal'); 
         };
 
         function updateCartUI() {
@@ -290,25 +287,35 @@
             }
         }
 
-        // --- EDIT CURRENT CART ---
-        window.openReviewCartModal = function() {
-            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
-            if (window.totalItems === 0) {
-                list.innerHTML = "<p style='text-align:center;'>Your cart is empty.</p>";
+        window.toggleAddress = function() {
+            const type = document.getElementById('order-type').value;
+            const noteBox = document.getElementById('customer-notes');
+            if (type === 'Delivery') {
+                noteBox.placeholder = "Full Delivery Address (Required)";
+            } else if (type === 'Takeaway') {
+                noteBox.placeholder = "Estimated pick-up time or special notes...";
             } else {
-                for (let item in window.cart) {
-                    const safeItemName = item.replace(/'/g, "\\'");
-                    list.innerHTML += `<div class="bill-receipt-row">
-                        <span style="flex:1;">${item}</span>
-                        <span style="display:flex; align-items:center;">
-                            <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', -1)">-</button>
-                            <span style="width:20px; text-align:center; color:#000;">${window.cart[item].qty}</span>
-                            <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', 1)">+</button>
-                        </span>
-                    </div>`;
-                }
+                noteBox.placeholder = "Table number (if seated) or special notes...";
             }
-            document.getElementById('review-cart-modal').classList.add('active');
+        };
+
+        window.openCheckoutModal = function() {
+            if (window.totalItems === 0) return;
+
+            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
+            for (let item in window.cart) {
+                const safeItemName = item.replace(/'/g, "\\'");
+                list.innerHTML += `<div class="bill-receipt-row">
+                    <span style="flex:1;">${item}</span>
+                    <span style="display:flex; align-items:center;">
+                        <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', -1)">-</button>
+                        <span style="width:20px; text-align:center; color:#000; font-weight: bold;">${window.cart[item].qty}</span>
+                        <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', 1)">+</button>
+                    </span>
+                </div>`;
+            }
+            document.getElementById('modal-checkout-total').innerText = window.totalAmount;
+            document.getElementById('checkout-modal').classList.add('active');
         };
 
         window.modifyCartItem = function(item, delta) {
@@ -317,52 +324,68 @@
                 window.totalAmount += (window.cart[item].price * delta);
                 window.totalItems += delta;
                 if (window.cart[item].qty <= 0) delete window.cart[item];
-                updateCartUI();
-                if (window.totalItems === 0) closeModal('review-cart-modal');
-                else openReviewCartModal();
+                saveCart(); updateCartUI();
+                
+                if (window.totalItems === 0) closeModal('checkout-modal');
+                else openCheckoutModal(); 
             }
         };
 
-        // --- CUSTOMER SENDING ORDER ---
-        window.openTableModal = function() {
-            const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
-            for (let i = 1; i <= 10; i++) {
-                // For the customer side, we don't know what's occupied, so all are available
-                grid.innerHTML += `<button class="table-btn" onclick="sendOrder('Table ${i}')">${i}</button>`;
+        // --- STEP 1: VALIDATE AND PROCEED TO PAYMENT ---
+        window.proceedToPayment = function() {
+            const name = document.getElementById('customer-name').value.trim();
+            const phone = document.getElementById('customer-phone').value.trim();
+            const type = document.getElementById('order-type').value;
+            const notes = document.getElementById('customer-notes').value.trim();
+
+            if(!name || !phone) {
+                alert("Please enter your name and WhatsApp number.");
+                return;
             }
-            document.getElementById('table-modal').classList.add('active');
-        };
+            if(type === 'Delivery' && notes.length < 5) {
+                alert("Please enter your full delivery address in the notes section.");
+                return;
+            }
 
-        // --- DELIVERY / TAKEAWAY UPI WORKFLOW ---
-        window.openTakeawayPayment = function() {
-            closeModal('table-modal');
-            document.getElementById('takeaway-amount-text').innerText = window.totalAmount;
-            document.getElementById('takeaway-payment-modal').classList.add('active');
-        };
+            // Save details to temporary memory
+            window.customerDetails = { name, phone, type, notes };
 
-        window.openCustomerUPI = function() {
+            closeModal('checkout-modal');
+            
+            // Setup Payment Screen
+            document.getElementById('payment-amount').innerText = window.totalAmount;
             const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${window.totalAmount}&cu=INR`;
-            // Attempt to open the UPI app directly on the customer's phone
-            window.location.href = upiString;
+            document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
+            document.getElementById('pay-upi-btn').onclick = () => { window.location.href = upiString; };
+            
+            document.getElementById('payment-modal').classList.add('active');
         };
 
-        window.sendOrder = function(orderType) {
-            let message = `NEW ${orderType.toUpperCase()} ORDER\n\n`;
-            
-            // Add a special payment note if it is a takeaway/delivery order
-            if(orderType === 'Delivery / Takeaway') {
-                message += `💳 Status: UPI Payment Initiated\n\n`;
-            }
+        // --- STEP 2: FINALIZE AND DISPATCH TO WHATSAPP ---
+        window.sendCustomerOrder = function() {
+            const { name, phone, type, notes } = window.customerDetails;
 
-            for (let item in window.cart) { 
-                message += `${window.cart[item].qty}x ${item}\n`; 
-            }
-            message += `\nEstimated Total: ₹${window.totalAmount}`;
+            let message = `NEW ${type.toUpperCase()} ORDER\n\n`;
+            message += `Name: ${name}\n`;
+            message += `Phone: ${phone}\n`;
+            if (notes) message += `Notes/Location: ${notes}\n`;
             
-            // Adding a small delay so iOS registers the tap properly before opening WhatsApp link
+            message += `\nORDER DETAILS:\n`;
+            for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
+            
+            message += `\nTotal: ₹${window.totalAmount}\n`;
+            message += `Payment: Customer initiated UPI payment.\n`;
+
+            // Clear Cart Data so they don't accidentally order twice
+            window.cart = {}; window.totalAmount = 0; window.totalItems = 0; 
+            saveCart(); updateCartUI();
+            
+            closeModal('payment-modal');
+
+            // Fire WhatsApp Link
             setTimeout(() => { 
                 window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; 
-            }, 100);
+            }, 300);
         };
     </script>
 </body>
