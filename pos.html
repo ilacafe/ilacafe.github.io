@@ -29,16 +29,23 @@
         /* ORIGINAL UNTOUCHED MENU LAYOUT */
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; }
-        .price-group { display: flex; align-items: center; gap: 10px; }
+        
+        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
+        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        
+        /* PRICE SWAP LOGIC CSS */
+        .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
         
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
-        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
-        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 32px; box-sizing: border-box; }
+        .qty-btn { background: transparent; color: white; border: none; width: 26px; height: 100%; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; line-height: 1; }
+        .qty-btn:active { background: white; color: var(--brand-bg); }
+        .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
+
+        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; }
         #cart-banner.visible { transform: translateY(0); }
@@ -55,7 +62,7 @@
         .remark-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); }
         
-        /* NEW SWEETNESS GRID CSS */
+        /* NEW MODAL GRIDS CSS */
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1;}
         .choice-btn.selected { background: white; color: var(--brand-bg); border-color: white;}
@@ -386,9 +393,9 @@
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
-                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group">₹${item.price || 0} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price || 0}, ${item.requiresSweetness || false})">+</button></div></div>`;
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>-</button></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
                     }
                 });
 
@@ -401,8 +408,8 @@
                         let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
 
                         if (item.inStock) {
-                            if(item.priceReg) regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`;
-                            if(item.priceLrg) lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`;
+                            if(item.priceReg) regHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '<div style="width:100%; text-align:right;">-</div>';
+                            if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
                         }
                         catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
                     });
@@ -410,9 +417,50 @@
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
             });
+            window.renderInlineControls();
         }
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        /* NEW: PRICE SWAP ENGINE */
+        window.getCartQty = function(baseName) {
+            let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; }
+            }
+            return qty;
+        };
+
+        window.renderInlineControls = function() {
+            const containers = document.querySelectorAll('.swap-container');
+            containers.forEach(container => {
+                let safeName = container.getAttribute('data-item');
+                let price = container.getAttribute('data-price');
+                let reqSweet = container.getAttribute('data-sweet') === 'true';
+                let qty = window.getCartQty(safeName);
+
+                if (qty > 0) {
+                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
+                } else {
+                    container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
+                }
+            });
+        };
+
+        window.decrementInline = function(safeName) {
+            let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            let targetKey = null;
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; }
+            }
+            if (targetKey) {
+                window.cart[targetKey].qty -= 1; window.totalAmount -= window.cart[targetKey].price; window.totalItems -= 1;
+                if (window.cart[targetKey].qty <= 0) delete window.cart[targetKey];
+                saveLocalCart(); 
+                if (window.totalItems === 0) closeModal('review-cart-modal'); 
+                else if (document.getElementById('review-cart-modal').classList.contains('active')) window.openReviewCartModal();
+            }
+        };
 
         window.selectSweetness = function(val, btn) {
             window.currentSweetness = val;
@@ -463,6 +511,7 @@
             const banner = document.getElementById('cart-banner');
             if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
             else { banner.classList.remove('visible'); }
+            if (window.renderInlineControls) window.renderInlineControls();
         }
 
         window.openReviewCartModal = function() {
