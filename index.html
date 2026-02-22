@@ -22,17 +22,23 @@
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; }
-        .price-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+        .price-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; height: 32px; }
         
+        /* NEW: Inline Controls UI */
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
+
+        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 32px; overflow: hidden; }
+        .qty-btn { background: transparent; color: white; border: none; width: 32px; height: 100%; font-size: 1.4rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
+        .qty-btn:active { background: white; color: var(--brand-bg); }
+        .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
 
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; height: 32px;}
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
         .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.85rem; opacity: 0.7; }
@@ -50,8 +56,18 @@
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
         .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
         
-        .remark-input, .sweetness-select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
+        .remark-input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
         
+        /* NEW: Choice Grids */
+        .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+        .type-row { display: flex; gap: 8px; margin-top: 8px; }
+        .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1;}
+        .choice-btn.selected { background: white; color: var(--brand-bg); border-color: white;}
+        
+        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
+        .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
+
         .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
         .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; border: none; text-transform: uppercase; letter-spacing: 1px;}
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
@@ -118,12 +134,12 @@
             <h3 id="remark-item-title">Item</h3>
             <div style="text-align: left; width: 100%; margin: 15px 0;">
                 <label style="color: white; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Sweetness</label>
-                <select id="sweetness-select" class="sweetness-select">
-                    <option value="Medium sweet" selected>Medium</option>
-                    <option value="No sweetness">None</option>
-                    <option value="Less sweet">Less</option>
-                    <option value="Very sweet">Extra</option>
-                </select>
+                <div class="choice-grid">
+                    <button class="choice-btn selected" onclick="window.selectSweetness('Medium sweet', this)">Medium</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('No sweetness', this)">None</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('Less sweet', this)">Less</button>
+                    <button class="choice-btn" onclick="window.selectSweetness('Very sweet', this)">Extra</button>
+                </div>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="closeModal('remark-modal')">Cancel</button>
@@ -146,24 +162,19 @@
                 </div>
 
                 <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
-                <select id="order-type" class="sweetness-select" style="margin-top: 5px;" onchange="window.updateDynamicFields()">
-                    <option value="Dine-in">Dine-in</option>
-                    <option value="Takeaway">Takeaway</option>
-                    <option value="Delivery">Delivery</option>
-                </select>
+                <div class="type-row">
+                    <button class="choice-btn selected" id="type-dinein" onclick="window.setOrderType('Dine-in')">Dine-in</button>
+                    <button class="choice-btn" id="type-takeaway" onclick="window.setOrderType('Takeaway')">Takeaway</button>
+                    <button class="choice-btn" id="type-delivery" onclick="window.setOrderType('Delivery')">Delivery</button>
+                </div>
                 
-                <div id="dynamic-fields" style="margin-top: 10px;">
+                <div id="dynamic-fields" style="margin-top: 15px;">
                     <div id="field-dinein" style="display: block;">
-                        <select id="dinein-table" class="sweetness-select" style="margin-top: 0;">
-                            <option value="" disabled selected>Table No.</option>
-                            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-                            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-                            <option value="7">7</option><option value="8">8</option><option value="9">9</option>
-                            <option value="10">10</option>
-                        </select>
+                        <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Table Number</label>
+                        <div class="table-grid" id="customer-table-grid"></div>
                     </div>
                     <div id="field-delivery" style="display: none;">
-                        <textarea id="delivery-address" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
+                        <textarea id="delivery-address" class="remark-input" placeholder="Delivery Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
                     </div>
                     <div id="field-takeaway" style="display: none; text-align: center; padding: 10px 0;">
                         <div style="font-weight: bold; font-size: 1rem;">Pickup: <span id="time-display">30</span> min</div>
@@ -221,13 +232,15 @@
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
         
-        // Load saved data including order type
         window.lastOrder = JSON.parse(localStorage.getItem('ila_last_order')) || null;
         window.lastAmount = parseFloat(localStorage.getItem('ila_last_amount')) || 0;
         window.lastAddress = localStorage.getItem('ila_last_address') || "";
-        window.lastOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
+        window.currentOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
 
-        document.getElementById('order-type').value = window.lastOrderType;
+        // Init Customer Table Grid
+        const tableGrid = document.getElementById('customer-table-grid');
+        for(let i=1; i<=10; i++) { tableGrid.innerHTML += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
+        
         if (window.lastAddress) document.getElementById('delivery-address').value = window.lastAddress;
 
         if (window.lastOrder && Object.keys(window.lastOrder).length > 0) {
@@ -237,16 +250,66 @@
         }
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.currentOrderInfo = null;
+        window.currentSweetness = "Medium sweet"; window.currentDineInTable = "";
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
-        window.flatMenu = {}; // Holds live price and stock data for validation
+        window.flatMenu = {}; 
 
-        function saveCart() { localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); localStorage.setItem('ila_customer_amount', window.totalAmount); localStorage.setItem('ila_customer_items', window.totalItems); }
+        function saveCart() { 
+            localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); 
+            localStorage.setItem('ila_customer_amount', window.totalAmount); 
+            localStorage.setItem('ila_customer_items', window.totalItems); 
+            updateCartUI(); 
+        }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
             if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
             else { banner.classList.remove('visible'); }
+            window.renderInlineControls(); // Instantly update the menu numbers
         }
+
+        // NEW: Calculate sum of variations for base item
+        window.getCartQty = function(baseName) {
+            let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; }
+            }
+            return qty;
+        };
+
+        // NEW: Render the inline UI buttons without reloading the whole page
+        window.renderInlineControls = function() {
+            const containers = document.querySelectorAll('.inline-container');
+            containers.forEach(container => {
+                let safeName = container.getAttribute('data-item');
+                let price = container.getAttribute('data-price');
+                let reqSweet = container.getAttribute('data-sweet') === 'true';
+                let qty = window.getCartQty(safeName);
+                
+                if (qty > 0) {
+                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
+                } else {
+                    container.innerHTML = `<button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
+                }
+            });
+        };
+
+        // NEW: Decrement directly from menu
+        window.decrementInline = function(safeName) {
+            let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            let targetKey = null;
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; }
+            }
+            if (targetKey) {
+                window.cart[targetKey].qty -= 1; window.totalAmount -= window.cart[targetKey].price; window.totalItems -= 1;
+                if (window.cart[targetKey].qty <= 0) delete window.cart[targetKey];
+                saveCart();
+                if (window.totalItems === 0) closeModal('checkout-modal'); 
+                else if (document.getElementById('checkout-modal').classList.contains('active')) window.openCheckoutModal();
+            }
+        };
 
         db.ref('settings/isOpen').on('value', snap => {
             const isOpen = snap.val(); const lockScreen = document.getElementById('closed-screen');
@@ -291,7 +354,7 @@
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
-                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group">₹${item.price || 0} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price || 0}, ${item.requiresSweetness || false})">+</button></div></div>`;
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group">₹${item.price || 0} <div id="ctrl-${safeName}" class="inline-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div></div>`;
                     } else {
                         catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>+</button></div></div>`;
                     }
@@ -306,8 +369,8 @@
                         let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
 
                         if (item.inStock) {
-                            if(item.priceReg) regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`; else regHTML = '-';
-                            if(item.priceLrg) lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`; else lrgHTML = '-';
+                            if(item.priceReg) regHTML = `₹${item.priceReg} <div class="inline-container" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '-';
+                            if(item.priceLrg) lrgHTML = `₹${item.priceLrg} <div class="inline-container" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '-';
                         }
                         catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
                     });
@@ -315,6 +378,7 @@
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
             });
+            window.renderInlineControls(); // Mount UI instantly
         }
 
         window.validateAndSyncCart = function(cartObj) {
@@ -347,49 +411,48 @@
             }
             
             window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
-            saveCart(); updateCartUI();
-            
-            document.getElementById('order-type').value = window.lastOrderType;
+            saveCart(); window.setOrderType(window.lastOrderType || 'Dine-in');
             window.openCheckoutModal();
         };
 
-        // UPDATED: 1-Tap Bypass Logic
+        window.selectSweetness = function(val, btn) {
+            window.currentSweetness = val;
+            let siblings = btn.parentNode.children;
+            for(let s of siblings) s.classList.remove('selected');
+            btn.classList.add('selected');
+        };
+
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             let finalName = itemName.replace(/&quot;/g, '"');
-            
-            // If it doesn't need sweetness, instantly drop it in the cart and return
             if (!requiresSweetness) {
                 if (window.cart[finalName]) window.cart[finalName].qty += 1; 
                 else window.cart[finalName] = { price: price, qty: 1 };
-                
-                window.totalAmount += price; 
-                window.totalItems += 1;
-                
-                // Add a tiny vibration if the phone supports it
+                window.totalAmount += price; window.totalItems += 1;
                 if (navigator.vibrate) navigator.vibrate(50);
-                
-                saveCart(); updateCartUI();
-                return;
+                saveCart(); return;
             }
 
-            // Otherwise, open the sweetness modal
             window.pendingItemName = itemName; window.pendingItemPrice = price; 
             document.getElementById('remark-item-title').innerText = finalName; 
-            document.getElementById('sweetness-select').value = "Medium sweet"; 
+            
+            // Reset grid
+            window.currentSweetness = "Medium sweet";
+            const btns = document.querySelectorAll('#remark-modal .choice-grid .choice-btn');
+            btns.forEach(b => b.classList.remove('selected'));
+            btns[0].classList.add('selected'); // Medium
+
             document.getElementById('remark-modal').classList.add('active');
         };
 
         window.confirmAddItem = function() {
             let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            const sweetValue = document.getElementById('sweetness-select').value; 
-            if (sweetValue !== "") finalName += ` (${sweetValue})`;
-            
+            if (window.currentSweetness !== "") finalName += ` (${window.currentSweetness})`;
             if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
-            saveCart(); updateCartUI(); closeModal('remark-modal');
+            saveCart(); closeModal('remark-modal');
         };
 
-        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('checkout-modal'); };
+        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('checkout-modal'); };
 
         window.openCheckoutModal = function() {
             if (window.totalItems === 0) return alert("Your cart is empty!");
@@ -397,7 +460,7 @@
             let result = window.validateAndSyncCart(window.cart);
             if(result.changed) {
                 window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
-                saveCart(); updateCartUI();
+                saveCart();
                 if(result.removed.length > 0) {
                     alert("Cart updated: Some items are no longer available and were removed.");
                     if(window.totalItems === 0) return;
@@ -410,10 +473,11 @@
                 list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
             
-            // Clear the notes box each time they open checkout so it's fresh
             document.getElementById('cart-notes').value = "";
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
-            window.updateDynamicFields(); document.getElementById('checkout-modal').classList.add('active');
+            
+            window.setOrderType(window.currentOrderType); // Mount grid visually
+            document.getElementById('checkout-modal').classList.add('active');
         };
 
         window.modifyCartItem = function(item, delta) {
@@ -421,26 +485,40 @@
             if (window.cart[realItemName]) {
                 window.cart[realItemName].qty += delta; window.totalAmount += (window.cart[realItemName].price * delta); window.totalItems += delta;
                 if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
-                saveCart(); updateCartUI();
+                saveCart();
                 if (window.totalItems === 0) closeModal('checkout-modal'); else window.openCheckoutModal(); 
             }
         };
 
+        window.setOrderType = function(type) {
+            window.currentOrderType = type;
+            document.getElementById('type-dinein').classList.remove('selected');
+            document.getElementById('type-takeaway').classList.remove('selected');
+            document.getElementById('type-delivery').classList.remove('selected');
+            document.getElementById('type-' + type.toLowerCase().replace('-', '')).classList.add('selected');
+            window.updateDynamicFields();
+        };
+
+        window.setDineInTable = function(num, btn) {
+            window.currentDineInTable = num;
+            let siblings = btn.parentNode.children;
+            for(let s of siblings) s.classList.remove('selected');
+            btn.classList.add('selected');
+        };
+
         window.updateDynamicFields = function() {
-            const type = document.getElementById('order-type').value;
+            const type = window.currentOrderType;
             document.getElementById('field-delivery').style.display = type === 'Delivery' ? 'block' : 'none';
             document.getElementById('field-dinein').style.display = type === 'Dine-in' ? 'block' : 'none';
             document.getElementById('field-takeaway').style.display = type === 'Takeaway' ? 'block' : 'none';
         };
 
         window.proceedToPayment = function() {
-            const type = document.getElementById('order-type').value; let details = "";
-            
-            // Grab the global order notes from the new text box
+            const type = window.currentOrderType; let details = "";
             const notes = document.getElementById('cart-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
             if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Address required."); return; } } 
-            else if (type === 'Dine-in') { details = document.getElementById('dinein-table').value; if (!details) { alert("Table required."); return; } details = "Table " + details; } 
+            else if (type === 'Dine-in') { if (!window.currentDineInTable) { alert("Please select a table number."); return; } details = "Table " + window.currentDineInTable; } 
             else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup: ${time} min`; }
 
             window.currentOrderInfo = { type, details, notes };
@@ -470,19 +548,15 @@
             localStorage.setItem('ila_last_order', JSON.stringify(window.cart));
             localStorage.setItem('ila_last_amount', window.totalAmount);
             localStorage.setItem('ila_last_order_type', info.type); 
-            if (info.type === 'Delivery') {
-                localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
-            }
+            if (info.type === 'Delivery') { localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim()); }
 
             let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
-            
-            // Add the special requests note to the WhatsApp message if they typed one
             if (info.notes) { message += `Notes: ${info.notes}\n`; }
             message += `\n`;
             
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
             message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
-            setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
+            setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
         };
 
         updateCartUI(); window.updateDynamicFields();
