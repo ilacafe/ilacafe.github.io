@@ -36,7 +36,6 @@
         .btn-edit { background-color: #ffffff; color: #8c7255; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; font-weight: bold; cursor: pointer; border: none;}
         .btn-move { background-color: rgba(255,255,255,0.2); color: white; padding: 8px 12px; border-radius: 8px; font-size: 1rem; font-weight: bold; border: none; cursor: pointer;}
         
-        /* The Up/Down buttons for individual items */
         .btn-move-item { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 6px; cursor: pointer; padding: 6px 12px; font-size: 0.9rem; line-height: 1; transition: all 0.2s;}
         .btn-move-item:active { background: rgba(255,255,255,0.4); }
         
@@ -91,6 +90,8 @@
 
         <div class="admin-card" id="menu-form-section">
             <h2>Add / Edit Item</h2>
+            <p style="font-size: 0.8rem; opacity: 0.7; margin-top: -10px; margin-bottom: 15px;">Note: Changing the Category or Name will create a new item.</p>
+            
             <div class="form-group"><label>Category (e.g., Pizza, Coffee)</label><input type="text" id="add-category" placeholder="Type category name..." required></div>
             <div class="form-group"><label>Item Name</label><input type="text" id="add-name" placeholder="e.g., Margherita" required></div>
             
@@ -131,7 +132,7 @@
                 <label style="margin: 0; text-transform: none;">Requires Sweetness Level? (For Beverages)</label>
             </div>
 
-            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
+            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save / Update Item</button>
         </div>
 
         <div class="admin-card" style="border: none; background: transparent; padding: 0; margin-top: 30px;">
@@ -142,6 +143,9 @@
     </div>
 
     <script>
+        // ==========================================
+        // FIREBASE CLOUD CONNECTION
+        // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
             authDomain: "ila-cafe.firebaseapp.com",
@@ -154,8 +158,14 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
+        let isCafeOpen = true; 
+        let currentMenuData = {}; 
+        let currentCategoryOrder = []; 
+        let currentItemOrder = {};
 
+        // ==========================================
+        // MASTER CAFE STATUS
+        // ==========================================
         db.ref('settings/isOpen').on('value', (snapshot) => {
             isCafeOpen = snapshot.val() === null ? true : snapshot.val(); 
             const btn = document.getElementById('master-status-btn');
@@ -165,6 +175,9 @@
 
         window.toggleCafeStatus = function() { db.ref('settings/isOpen').set(!isCafeOpen); };
 
+        // ==========================================
+        // FETCHING DATA & SYNCING ARRAYS
+        // ==========================================
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderAllViews(); });
         db.ref('settings/itemOrder').on('value', snap => { currentItemOrder = snap.val() || {}; renderAllViews(); });
 
@@ -173,14 +186,20 @@
             let requiresCategorySave = false; let requiresItemSave = false;
             let categoriesInMenu = Object.keys(currentMenuData);
 
+            // Auto-sync category list
             categoriesInMenu.forEach(cat => {
                 if (!currentCategoryOrder.includes(cat)) { currentCategoryOrder.push(cat); requiresCategorySave = true; }
             });
 
+            // Auto-sync item list (so arrows work properly)
             categoriesInMenu.forEach(cat => {
                 if (!currentItemOrder[cat]) { currentItemOrder[cat] = []; requiresItemSave = true; }
                 let itemsInCat = Object.keys(currentMenuData[cat]);
-                itemsInCat.forEach(itemName => { if (!currentItemOrder[cat].includes(itemName)) { currentItemOrder[cat].push(itemName); requiresItemSave = true; } });
+                
+                itemsInCat.forEach(itemName => { 
+                    if (!currentItemOrder[cat].includes(itemName)) { currentItemOrder[cat].push(itemName); requiresItemSave = true; } 
+                });
+                
                 let cleanOrder = currentItemOrder[cat].filter(itemName => itemsInCat.includes(itemName));
                 if (cleanOrder.length !== currentItemOrder[cat].length) { currentItemOrder[cat] = cleanOrder; requiresItemSave = true; }
             });
@@ -190,25 +209,44 @@
             renderAllViews();
         });
 
+        // ==========================================
+        // SORTING LOGIC (THE UP/DOWN ARROWS)
+        // ==========================================
         function getSortedCategories() { return currentCategoryOrder.filter(cat => Object.keys(currentMenuData).includes(cat)); }
 
         window.moveCategory = function(index, direction) {
-            let cats = getSortedCategories(); let targetIndex = index + direction;
+            let cats = getSortedCategories(); 
+            let targetIndex = index + direction;
             if (targetIndex < 0 || targetIndex >= cats.length) return; 
-            let temp = cats[index]; cats[index] = cats[targetIndex]; cats[targetIndex] = temp;
-            db.ref('settings/categoryOrder').set(cats.filter(c => c));
+            
+            let temp = cats[index]; 
+            cats[index] = cats[targetIndex]; 
+            cats[targetIndex] = temp;
+            
+            db.ref('settings/categoryOrder').set(cats);
         };
 
         window.moveItem = function(category, index, direction) {
-            let arr = currentItemOrder[category]; if (!arr) return;
-            let targetIndex = index + direction; if (targetIndex < 0 || targetIndex >= arr.length) return;
-            let temp = arr[index]; arr[index] = arr[targetIndex]; arr[targetIndex] = temp;
-            db.ref('settings/itemOrder/' + category).set(arr);
+            let itemsInOrder = currentItemOrder[category] || Object.keys(currentMenuData[category] || {});
+            let validItems = itemsInOrder.filter(item => currentMenuData[category] && currentMenuData[category][item]);
+            
+            let targetIndex = index + direction; 
+            if (targetIndex < 0 || targetIndex >= validItems.length) return;
+            
+            let temp = validItems[index]; 
+            validItems[index] = validItems[targetIndex]; 
+            validItems[targetIndex] = temp;
+            
+            db.ref('settings/itemOrder/' + category).set(validItems);
         };
 
+        // ==========================================
+        // MASTER RENDERER (Builds the UI)
+        // ==========================================
         function renderAllViews() {
             let sortedCats = getSortedCategories();
             
+            // 1. Render Category Sorter
             let sorterContainer = document.getElementById('category-order-container');
             if (sortedCats.length === 0) sorterContainer.innerHTML = "<p>No categories.</p>";
             else {
@@ -221,12 +259,14 @@
                 sorterContainer.innerHTML = sorterHTML;
             }
 
+            // 2. Render Live Menu Items
             let menuContainer = document.getElementById('live-menu-container');
             if (Object.keys(currentMenuData).length === 0) { menuContainer.innerHTML = "<div class='admin-card'><p>No items.</p></div>"; return; }
 
             let menuHTML = "";
             sortedCats.forEach(category => {
                 menuHTML += `<div class="category-block"><div class="category-title">${category}</div>`;
+                
                 let itemsInOrder = currentItemOrder[category] || [];
                 let validItems = itemsInOrder.filter(item => currentMenuData[category][item]);
 
@@ -268,6 +308,9 @@
             menuContainer.innerHTML = menuHTML;
         }
 
+        // ==========================================
+        // FORM & SAVING LOGIC
+        // ==========================================
         window.toggleSizeInputs = function() {
             if(document.getElementById('add-has-sizes').checked) {
                 document.getElementById('single-price-group').style.display = 'none';
@@ -287,27 +330,44 @@
 
             if (!category || !name) { alert("Please fill in Category and Name."); return; }
 
-            let updateData = { requiresSweetness, visibility, hasSizes };
+            // Build the exact data to push to Firebase
+            let updateData = { 
+                requiresSweetness: requiresSweetness, 
+                visibility: visibility, 
+                hasSizes: hasSizes 
+            };
 
             if(hasSizes) {
                 const pReg = parseFloat(document.getElementById('add-price-reg').value);
                 const pLrg = parseFloat(document.getElementById('add-price-lrg').value);
                 if(isNaN(pReg) || isNaN(pLrg)) { alert("Enter both Regular and Large prices."); return; }
-                updateData.priceReg = pReg; updateData.priceLrg = pLrg; updateData.price = pReg; 
+                updateData.priceReg = pReg; 
+                updateData.priceLrg = pLrg; 
+                updateData.price = pReg; // Fallback
             } else {
                 const price = parseFloat(document.getElementById('add-price').value);
                 if(isNaN(price)) { alert("Enter a price."); return; }
-                updateData.price = price; updateData.priceReg = null; updateData.priceLrg = null;
+                updateData.price = price; 
+                updateData.priceReg = null; 
+                updateData.priceLrg = null;
             }
 
             db.ref('menu/' + category + '/' + name).update(updateData).then(() => {
+                // Ensure it gets marked In Stock if it's brand new
                 db.ref('menu/' + category + '/' + name + '/inStock').once('value').then(snap => {
                     if(!snap.exists()) db.ref('menu/' + category + '/' + name + '/inStock').set(true);
                 });
-                document.getElementById('add-name').value = ""; document.getElementById('add-price').value = "";
-                document.getElementById('add-price-reg').value = ""; document.getElementById('add-price-lrg').value = "";
+                
+                // Show Success Alert
+                alert(`✅ Saved: ${name}`);
+
+                // Clear the form
+                document.getElementById('add-name').value = ""; 
+                document.getElementById('add-price').value = "";
+                document.getElementById('add-price-reg').value = ""; 
+                document.getElementById('add-price-lrg').value = "";
                 document.getElementById('add-name').focus();
-            });
+            }).catch(e => alert("Error: " + e));
         };
 
         window.editItem = function(category, name, price, visibility, requiresSweetness, hasSizes, priceReg, priceLrg) {
@@ -330,12 +390,44 @@
         window.toggleStock = function(cat, name, status) { db.ref('menu/' + cat + '/' + name + '/inStock').set(!status); };
         window.deleteItem = function(cat, name) { if (confirm(`Delete ${name}?`)) db.ref('menu/' + cat + '/' + name).remove(); };
         
+        // ==========================================
+        // STAFF PIN LOGIC
+        // ==========================================
         window.addStaff = function() {
-            const name = document.getElementById('staff-name').value.trim(); const pin = document.getElementById('staff-pin').value.trim();
-            if(!name || pin.length !== 4) return;
-            db.ref('staff/' + pin).set(name).then(() => { document.getElementById('staff-name').value = ""; document.getElementById('staff-pin').value = ""; });
+            const name = document.getElementById('staff-name').value.trim(); 
+            const pin = document.getElementById('staff-pin').value.trim();
+            if(!name || pin.length !== 4) { alert("Please enter Name and a 4-Digit PIN."); return; }
+            
+            db.ref('staff/' + pin).set(name).then(() => { 
+                document.getElementById('staff-name').value = ""; 
+                document.getElementById('staff-pin').value = ""; 
+            });
         };
-        window.removeStaff = function(pin, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); };
+        
+        window.removeStaff = function(pin, name) { 
+            if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); 
+        };
+
+        db.ref('staff').on('value', (snapshot) => {
+            const staffData = snapshot.val();
+            const container = document.getElementById('staff-list-container');
+            container.innerHTML = "";
+
+            if (!staffData) {
+                container.innerHTML = "<p style='opacity: 0.7; font-size: 0.9rem;'>No staff PINs registered yet.</p>";
+                return;
+            }
+
+            for (let pin in staffData) {
+                const name = staffData[pin];
+                container.innerHTML += `
+                    <div class="list-item">
+                        <div><strong style="font-size: 1.1rem;">${name}</strong> <span style="opacity: 0.7; margin-left: 10px;">PIN: ${pin}</span></div>
+                        <button class="btn-danger" onclick="removeStaff('${pin}', '${name}')">Remove</button>
+                    </div>
+                `;
+            }
+        });
     </script>
 </body>
 </html>
