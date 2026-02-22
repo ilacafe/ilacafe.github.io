@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>ILA | Order Menu</title>
+    <title>ILA | Order</title>
     <link rel="apple-touch-icon" href="/icon.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     
@@ -17,90 +17,80 @@
         header { text-align: center; margin-bottom: 20px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
-        h2 { font-weight: 700; font-size: 1.8rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 30px; border-bottom: 1px solid rgba(255, 255, 255, 0.3); padding-bottom: 10px; }
+        h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; }
         .price-group { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
         
-        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 50%; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
+        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
-        .add-btn:disabled { opacity: 0.3; cursor: not-allowed; background-color: transparent; color: var(--brand-text); border-color: transparent; }
+        .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
 
-        .sold-out-badge { font-size: 0.65rem; color: #e57373; border: 1px solid #e57373; padding: 2px 6px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.7; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); padding-bottom: 5px; }
+        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
-        .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.2); width: 100%; text-align: center; }
-        .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; font-weight: 500; opacity: 0.85; }
+        .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
+        .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.85rem; opacity: 0.7; }
         .contact-link { color: var(--brand-text); text-decoration: none; }
-        .footer-divider { opacity: 0.4; font-size: 0.9rem; }
 
-        #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; cursor: pointer;}
+        #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; cursor: pointer;}
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; flex-grow: 1;}
-        .cart-total { font-weight: 700; font-size: 1.2rem; }
-        .cart-clear { font-size: 0.8rem; text-decoration: underline; opacity: 0.8; margin-top: 2px; }
-        .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: 2px solid var(--brand-bg); padding: 12px 25px; border-radius: 30px; font-weight: 700; font-size: 1rem; font-family: 'Quicksand', sans-serif; cursor: pointer; }
+        .cart-total { font-weight: 700; font-size: 1.1rem; }
+        .cart-clear { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+        .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .modal-content { background-color: var(--brand-bg); border: 2px solid var(--brand-text); padding: 30px 20px; border-radius: 20px; text-align: center; width: 85%; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto; }
-        .modal-content h3 { margin-top: 0; font-size: 1.4rem; margin-bottom: 10px; }
+        .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
+        .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
         
-        .remark-input, .sweetness-select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
+        .remark-input, .sweetness-select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
         .sweetness-group { text-align: left; width: 100%; margin: 15px 0; display: none; }
         
-        .modal-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 15px; margin-bottom: 5px; }
-        .btn { padding: 14px 20px; border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; }
-        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); border: none; }
-        .btn-secondary { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); }
-        .btn-success { background-color: #2e7d32; color: white; border: none; }
+        .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; border: none; text-transform: uppercase; letter-spacing: 1px;}
+        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
+        .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
         
-        .mini-btn { background-color: transparent; border: 1px solid #8c7255; color: #8c7255; border-radius: 6px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: bold; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
-        .mini-btn:active { background-color: #8c7255; color: white; }
+        .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
+        .mini-btn:active { background-color: white; color: var(--brand-bg); }
 
-        .close-modal { background: transparent; color: var(--brand-text); border: none; text-decoration: underline; cursor: pointer; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; opacity: 0.8; margin-top: 15px; }
+        .close-modal { background: transparent; color: rgba(255,255,255,0.6); border: none; text-decoration: underline; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 15px; }
 
-        .bill-receipt { background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px; text-align: left; font-size: 0.95rem; }
-        .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed #ccc; padding-bottom: 8px; }
-
-        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; margin: 15px 0; }
-        input[type=range]:focus { outline: none; }
-        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: rgba(255, 255, 255, 0.4); border-radius: 3px; }
-        input[type=range]::-webkit-slider-thumb { height: 22px; width: 22px; border-radius: 50%; background: #ffffff; cursor: pointer; -webkit-appearance: none; margin-top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .bill-receipt { background-color: transparent; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 15px; border-radius: 8px; text-align: left; font-size: 0.95rem; }
+        .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 10px; }
+        .bill-receipt-row:last-child { margin-bottom: 0; border-bottom: none; padding-bottom: 0;}
 
         #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 3000; text-align: center; padding: 20px; box-sizing: border-box; }
-        #closed-screen h1 { font-size: 2.5rem; margin-bottom: 10px; }
-        #closed-screen p { font-size: 1.2rem; opacity: 0.9; }
     </style>
 </head>
 <body>
 
     <div id="closed-screen">
-        <img src="logo.png" alt="ILA Logo" style="max-width: 250px; margin-bottom: 20px;">
-        <h1>We are closed</h1>
-        <p>The kitchen is currently closed. Please check back during our normal operating hours!</p>
+        <img src="logo.png" alt="ILA Logo" style="max-width: 200px; margin-bottom: 20px;">
+        <h1 style="text-transform: uppercase; font-size: 1.5rem; letter-spacing: 2px;">Closed</h1>
+        <p style="opacity: 0.7; font-size: 1rem;">We are currently not accepting orders.</p>
     </div>
 
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo">
-            <p style="font-size: 1.1rem; opacity: 0.9; margin-top: 10px;">Tap + to add items to your order</p>
+            <p style="font-size: 0.9rem; opacity: 0.6; text-transform: uppercase; letter-spacing: 1px;">Order Menu</p>
         </header>
 
         <div id="live-menu-container">
-            <p style="text-align: center; opacity: 0.8; margin-top: 50px;">Loading Live Menu...</p>
+            <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
         </div>
 
         <div class="contact-footer">
             <div class="footer-links">
-                <a href="https://wa.me/918882946526" class="contact-link" target="_blank">WhatsApp: +91 88829 46526</a>
-                <span class="footer-divider">•</span>
-                <a href="tel:+919027809069" class="contact-link">Call: +91 90278 09069</a>
-                <span class="footer-divider">•</span>
-                <a href="https://instagram.com/ila_cafe" class="contact-link" target="_blank">Instagram: @ila_cafe</a>
+                <a href="https://wa.me/918882946526" class="contact-link" target="_blank">+91 88829 46526</a>
+                <span class="footer-divider">|</span>
+                <a href="https://instagram.com/ila_cafe" class="contact-link" target="_blank">@ila_cafe</a>
             </div>
         </div>
     </div>
@@ -108,30 +98,28 @@
     <div id="cart-banner" onclick="window.openCheckoutModal()">
         <div class="cart-info">
             <span class="cart-total" id="cart-total-text">₹0</span>
-            <span class="cart-clear">View Order & Checkout</span>
+            <span class="cart-clear">View Order</span>
         </div>
-        <button class="checkout-btn">→</button>
+        <button class="checkout-btn">Checkout</button>
     </div>
 
     <div id="remark-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3 id="remark-item-title">Item Name</h3>
+            <h3 id="remark-item-title">Item</h3>
             <div id="sweetness-group" class="sweetness-group">
-                <label style="color: white; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Sweetness Level</label>
+                <label style="color: white; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Sweetness</label>
                 <select id="sweetness-select" class="sweetness-select">
-                    <option value="Medium sweet" selected>Medium (Default)</option>
-                    <option value="No sweetness">No sweetness</option>
-                    <option value="Less sweet">Less sweet</option>
-                    <option value="Less than medium sweet">Less than medium</option>
-                    <option value="More than medium sweet">More than medium</option>
-                    <option value="Very sweet">Very sweet</option>
+                    <option value="Medium sweet" selected>Medium</option>
+                    <option value="No sweetness">None</option>
+                    <option value="Less sweet">Less</option>
+                    <option value="Very sweet">Extra</option>
                 </select>
             </div>
-            <p style="margin-top:15px; text-align: left; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Special requests</p>
-            <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
+            <p style="margin-top:15px; text-align: left; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Notes</p>
+            <input type="text" id="remark-input" class="remark-input" placeholder="Optional requests...">
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="window.confirmAddItem(false)">Skip</button>
-                <button class="btn btn-primary" onclick="window.confirmAddItem(true)">Add Item</button>
+                <button class="btn btn-primary" onclick="window.confirmAddItem(true)">Add</button>
             </div>
             <button class="close-modal" onclick="closeModal('remark-modal')">Cancel</button>
         </div>
@@ -139,63 +127,57 @@
 
     <div id="checkout-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Your Order</h3>
+            <h3>Cart</h3>
             <div id="review-cart-list" class="bill-receipt" style="max-height: 200px; overflow-y: auto;"></div>
-            <div style="font-weight: bold; font-size: 1.3rem; margin: 15px 0;">Total: ₹<span id="modal-checkout-total">0</span></div>
+            <div style="font-weight: bold; font-size: 1.3rem; margin: 15px 0; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">Total: ₹<span id="modal-checkout-total">0</span></div>
 
             <div style="text-align: left; margin-top: 15px;">
                 <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
                 <select id="order-type" class="sweetness-select" style="margin-top: 5px;" onchange="window.updateDynamicFields()">
-                    <option value="Delivery" selected>Delivery (To your location)</option>
-                    <option value="Dine-in">Dine-in (At the Cafe)</option>
-                    <option value="Takeaway">Takeaway (Pick up)</option>
+                    <option value="Dine-in" selected>Dine-in</option>
+                    <option value="Takeaway">Takeaway</option>
+                    <option value="Delivery">Delivery</option>
                 </select>
                 
                 <div id="dynamic-fields" style="margin-top: 10px;">
-                    <div id="field-delivery" style="display: block;">
-                        <textarea id="delivery-address" class="remark-input" placeholder="Enter Full Delivery Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
-                    </div>
-
-                    <div id="field-dinein" style="display: none;">
+                    <div id="field-dinein" style="display: block;">
                         <select id="dinein-table" class="sweetness-select" style="margin-top: 0;">
-                            <option value="" disabled selected>Select Your Table</option>
-                            <option value="1">Table 1</option><option value="2">Table 2</option><option value="3">Table 3</option>
-                            <option value="4">Table 4</option><option value="5">Table 5</option><option value="6">Table 6</option>
-                            <option value="7">Table 7</option><option value="8">Table 8</option><option value="9">Table 9</option>
-                            <option value="10">Table 10</option>
+                            <option value="" disabled selected>Table No.</option>
+                            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                            <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+                            <option value="10">10</option>
                         </select>
                     </div>
-
+                    <div id="field-delivery" style="display: none;">
+                        <textarea id="delivery-address" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
+                    </div>
                     <div id="field-takeaway" style="display: none; text-align: center; padding: 10px 0;">
-                        <div style="font-weight: bold; font-size: 1.1rem;">Pickup in: <span id="time-display">30</span> minutes</div>
-                        <input type="range" id="takeaway-time" min="10" max="90" step="5" value="30" oninput="document.getElementById('time-display').innerText = this.value">
+                        <div style="font-weight: bold; font-size: 1rem;">Pickup: <span id="time-display">30</span> min</div>
+                        <input type="range" id="takeaway-time" min="10" max="90" step="5" value="30" oninput="document.getElementById('time-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.2); height: 2px; margin-top: 10px; outline: none;">
                     </div>
                 </div>
             </div>
 
             <div class="modal-buttons" style="margin-top: 20px;">
-                <button class="btn btn-secondary" style="border-color: #e57373; color: #e57373; flex: 0.5;" onclick="window.clearCart()">Empty</button>
-                <button class="btn btn-primary" style="flex: 1.5; font-size: 1.2rem;" onclick="window.proceedToPayment()">Proceed to Pay</button>
+                <button class="btn btn-secondary" onclick="window.clearCart()">Empty</button>
+                <button class="btn btn-primary" onclick="window.proceedToPayment()">Pay</button>
             </div>
-            <button class="close-modal" onclick="closeModal('checkout-modal')">Go Back to Menu</button>
+            <button class="close-modal" onclick="closeModal('checkout-modal')">Back to Menu</button>
         </div>
     </div>
 
     <div id="payment-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3 style="margin-bottom: 5px;">Secure Checkout</h3>
-            <p style="font-size: 0.95rem; opacity: 0.9; margin-top: 0; margin-bottom: 15px;">Complete your payment securely via UPI to send your order to the kitchen.</p>
-            
-            <div style="background-color: rgba(0,0,0,0.2); padding: 15px; border-radius: 15px; margin-bottom: 20px;">
-                <div style="font-size: 1rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px;">Amount Due</div>
+            <h3>Checkout</h3>
+            <div style="border: 1px solid rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <div style="font-size: 0.8rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">Amount Due</div>
                 <div style="font-size: 1.8rem; font-weight: 700;">₹<span id="payment-amount">0</span></div>
             </div>
-
-            <button class="btn btn-primary" style="width: 100%; font-size: 1.1rem; padding: 12px; margin-bottom: 15px;" id="pay-upi-btn">Step 1: Pay via UPI App</button>
-            <img id="payment-qr" src="" alt="UPI QR Code" style="width: 160px; height: 160px; margin: 0 auto 15px auto; border-radius: 10px; border: 5px solid white; background-color: white; display: block; object-fit: contain;">
-            <button class="btn btn-success" style="width: 100%; font-size: 1.2rem; padding: 15px;" onclick="window.sendCustomerOrder()">Step 2: Send Order</button>
-            
-            <button class="close-modal" onclick="closeModal('payment-modal')" style="margin-top: 15px;">Cancel</button>
+            <button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" id="pay-upi-btn">Pay via UPI</button>
+            <img id="payment-qr" src="" alt="QR" style="width: 150px; height: 150px; margin: 0 auto 15px auto; border-radius: 8px; display: block; background: white; padding: 5px;">
+            <button class="btn btn-secondary" style="width: 100%;" onclick="window.sendCustomerOrder()">Confirm Order</button>
+            <button class="close-modal" onclick="closeModal('payment-modal')">Cancel</button>
         </div>
     </div>
 
@@ -219,56 +201,30 @@
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
         
-        window.pendingItemName = ""; 
-        window.pendingItemPrice = 0; 
-        window.isBeveragePending = false; 
-        window.currentOrderInfo = null;
+        window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; window.currentOrderInfo = null;
+        let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
 
-        let currentMenuData = {};
-        let currentCategoryOrder = [];
-        window.currentItemOrder = {};
-
-        function saveCart() {
-            localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart));
-            localStorage.setItem('ila_customer_amount', window.totalAmount);
-            localStorage.setItem('ila_customer_items', window.totalItems);
-        }
-
+        function saveCart() { localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); localStorage.setItem('ila_customer_amount', window.totalAmount); localStorage.setItem('ila_customer_items', window.totalItems); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
-            if (window.totalItems > 0) { 
-                document.getElementById('cart-total-text').innerText = `₹${window.totalAmount} (${window.totalItems} items)`; 
-                banner.classList.add('visible'); 
-            } else { banner.classList.remove('visible'); }
+            if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
+            else { banner.classList.remove('visible'); }
         }
 
-        db.ref('settings/isOpen').on('value', (snapshot) => {
-            const isOpen = snapshot.val();
-            const lockScreen = document.getElementById('closed-screen');
+        db.ref('settings/isOpen').on('value', snap => {
+            const isOpen = snap.val(); const lockScreen = document.getElementById('closed-screen');
             if (isOpen === false) { lockScreen.style.display = "flex"; document.body.style.overflow = "hidden"; } 
             else { lockScreen.style.display = "none"; document.body.style.overflow = "auto"; }
         });
 
-        db.ref('settings/categoryOrder').on('value', (snapshot) => {
-            currentCategoryOrder = snapshot.val() || [];
-            renderCustomerMenu();
-        });
-
-        db.ref('settings/itemOrder').on('value', (snapshot) => {
-            window.currentItemOrder = snapshot.val() || {};
-            renderCustomerMenu();
-        });
-
-        db.ref('menu').on('value', (snapshot) => {
-            currentMenuData = snapshot.val() || {};
-            renderCustomerMenu();
-        });
+        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderCustomerMenu(); });
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; renderCustomerMenu(); });
+        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; renderCustomerMenu(); });
 
         function renderCustomerMenu() {
             const container = document.getElementById('live-menu-container');
-            if (Object.keys(currentMenuData).length === 0) { container.innerHTML = "<p style='text-align: center;'>Menu is updating...</p>"; return; }
+            if (Object.keys(currentMenuData).length === 0) { container.innerHTML = "<p style='text-align: center; opacity:0.5;'>Menu updating...</p>"; return; }
             container.innerHTML = "";
 
             let activeCats = Object.keys(currentMenuData);
@@ -276,24 +232,17 @@
             activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
 
             sortedCats.forEach(category => {
-                let standardItems = [];
-                let sizedItems = [];
-                let hasVisibleItems = false;
-
-                let itemsInOrder = window.currentItemOrder && window.currentItemOrder[category] ? window.currentItemOrder[category] : Object.keys(currentMenuData[category] || {});
+                let standardItems = []; let sizedItems = []; let hasVisibleItems = false;
+                let itemsInOrder = window.currentItemOrder[category] || Object.keys(currentMenuData[category] || {});
                 
                 itemsInOrder.forEach(itemName => {
                     const item = currentMenuData[category] ? currentMenuData[category][itemName] : null;
                     if (!item || item.visibility === 'pos') return; 
-                    hasVisibleItems = true;
-                    item.originalName = itemName; 
-
-                    if (item.hasSizes) { sizedItems.push(item); } 
-                    else { standardItems.push(item); }
+                    hasVisibleItems = true; item.originalName = itemName; 
+                    if (item.hasSizes) { sizedItems.push(item); } else { standardItems.push(item); }
                 });
 
                 if (!hasVisibleItems) return;
-
                 let catHTML = `<section><h2>${category}</h2>`;
 
                 standardItems.forEach(item => {
@@ -301,34 +250,23 @@
                     if (item.inStock) {
                         catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group">₹${item.price || 0} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price || 0}, ${item.requiresSweetness || false})">+</button></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.6;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Sold Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>-</button></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>+</button></div></div>`;
                     }
                 });
 
                 if (sizedItems.length > 0) {
-                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>`;
-
+                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
                     sizedItems.forEach(item => {
                         let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
                         let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-
-                        let regHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
-                        let lrgHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                        let regHTML = `<span class="sold-out-badge" style="margin:0;">-</span>`;
+                        let lrgHTML = `<span class="sold-out-badge" style="margin:0;">-</span>`;
 
                         if (item.inStock) {
-                            if(item.priceReg) {
-                                regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`;
-                            } else {
-                                regHTML = '-';
-                            }
-                            if(item.priceLrg) {
-                                lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`;
-                            } else {
-                                lrgHTML = '-';
-                            }
+                            if(item.priceReg) regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`; else regHTML = '-';
+                            if(item.priceLrg) lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`; else lrgHTML = '-';
                         }
-
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.6;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
                     });
                 }
                 catHTML += `</section>`;
@@ -341,28 +279,17 @@
             document.getElementById('remark-item-title').innerText = itemName.replace(/&quot;/g, '"'); 
             document.getElementById('remark-input').value = ""; 
             const sweetGroup = document.getElementById('sweetness-group');
-            if (requiresSweetness) { sweetGroup.style.display = 'block'; document.getElementById('sweetness-select').value = "Medium sweet"; } 
-            else { sweetGroup.style.display = 'none'; }
+            if (requiresSweetness) { sweetGroup.style.display = 'block'; document.getElementById('sweetness-select').value = "Medium sweet"; } else { sweetGroup.style.display = 'none'; }
             document.getElementById('remark-modal').classList.add('active');
             if (!requiresSweetness) setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
         };
 
         window.confirmAddItem = function(useRemark) {
             let finalName = window.pendingItemName.replace(/&quot;/g, '"'); let modifications = [];
-            if (window.isBeveragePending) {
-                const sweetValue = document.getElementById('sweetness-select').value;
-                if (sweetValue !== "") modifications.push(sweetValue);
-            }
-            if (useRemark) {
-                let remarkText = document.getElementById('remark-input').value.trim();
-                remarkText = remarkText.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                if (remarkText !== "") modifications.push(remarkText);
-            }
+            if (window.isBeveragePending) { const sweetValue = document.getElementById('sweetness-select').value; if (sweetValue !== "") modifications.push(sweetValue); }
+            if (useRemark) { let remarkText = document.getElementById('remark-input').value.trim(); remarkText = remarkText.replace(/</g, "&lt;").replace(/>/g, "&gt;"); if (remarkText !== "") modifications.push(remarkText); }
             if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
-            
-            if (window.cart[finalName]) window.cart[finalName].qty += 1;
-            else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
-            
+            if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
             saveCart(); updateCartUI(); closeModal('remark-modal');
         };
@@ -370,11 +297,11 @@
         window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('checkout-modal'); };
 
         window.openCheckoutModal = function() {
-            if (window.totalItems === 0) return;
+            if (window.totalItems === 0) return alert("Your cart is empty!");
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
             for (let item in window.cart) {
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:20px; text-align:center; color:#000; font-weight: bold;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             window.updateDynamicFields(); document.getElementById('checkout-modal').classList.add('active');
@@ -399,9 +326,9 @@
 
         window.proceedToPayment = function() {
             const type = document.getElementById('order-type').value; let details = "";
-            if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Please enter your full delivery address."); return; } } 
-            else if (type === 'Dine-in') { details = document.getElementById('dinein-table').value; if (!details) { alert("Please select your Table number."); return; } details = "Table " + details; } 
-            else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup in ${time} minutes`; }
+            if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Address required."); return; } } 
+            else if (type === 'Dine-in') { details = document.getElementById('dinein-table').value; if (!details) { alert("Table required."); return; } details = "Table " + details; } 
+            else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup: ${time} min`; }
 
             window.currentOrderInfo = { type, details };
             closeModal('checkout-modal');
@@ -413,9 +340,9 @@
         };
 
         window.sendCustomerOrder = function() {
-            const info = window.currentOrderInfo; let message = `NEW ${info.type.toUpperCase()} ORDER\n\nInfo: ${info.details}\n\nORDER DETAILS:\n`;
+            const info = window.currentOrderInfo; let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
-            message += `\nTotal: ₹${window.totalAmount}\nPayment Status: Customer paying via UPI.`;
+            message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
             setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
         };
 
