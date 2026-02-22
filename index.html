@@ -69,7 +69,6 @@
 
         #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 3000; text-align: center; padding: 20px; box-sizing: border-box; }
         
-        /* New style for the usual order box to keep it clean */
         .usual-box { border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 15px; cursor: pointer; text-align: center; transition: background-color 0.2s; margin-bottom: 25px; }
         .usual-box:active { background-color: rgba(255, 255, 255, 0.1); }
     </style>
@@ -146,7 +145,7 @@
             <div style="text-align: left; margin-top: 15px;">
                 <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
                 <select id="order-type" class="sweetness-select" style="margin-top: 5px;" onchange="window.updateDynamicFields()">
-                    <option value="Dine-in" selected>Dine-in</option>
+                    <option value="Dine-in">Dine-in</option>
                     <option value="Takeaway">Takeaway</option>
                     <option value="Delivery">Delivery</option>
                 </select>
@@ -220,14 +219,14 @@
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
         
-        // Load the saved "Usual" data and previous delivery address
+        // Load saved data including order type
         window.lastOrder = JSON.parse(localStorage.getItem('ila_last_order')) || null;
         window.lastAmount = parseFloat(localStorage.getItem('ila_last_amount')) || 0;
         window.lastAddress = localStorage.getItem('ila_last_address') || "";
+        window.lastOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
 
-        if (window.lastAddress) {
-            document.getElementById('delivery-address').value = window.lastAddress;
-        }
+        document.getElementById('order-type').value = window.lastOrderType;
+        if (window.lastAddress) document.getElementById('delivery-address').value = window.lastAddress;
 
         if (window.lastOrder && Object.keys(window.lastOrder).length > 0) {
             document.getElementById('usual-order-container').style.display = 'block';
@@ -237,6 +236,7 @@
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; window.currentOrderInfo = null;
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
+        window.flatMenu = {}; // Holds live price and stock data for validation
 
         function saveCart() { localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); localStorage.setItem('ila_customer_amount', window.totalAmount); localStorage.setItem('ila_customer_items', window.totalItems); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
@@ -259,7 +259,7 @@
         function renderCustomerMenu() {
             const container = document.getElementById('live-menu-container');
             if (Object.keys(currentMenuData).length === 0) { container.innerHTML = "<p style='text-align: center; opacity:0.5;'>Menu updating...</p>"; return; }
-            container.innerHTML = "";
+            container.innerHTML = ""; window.flatMenu = {};
 
             let activeCats = Object.keys(currentMenuData);
             let sortedCats = currentCategoryOrder.filter(cat => activeCats.includes(cat));
@@ -273,7 +273,14 @@
                     const item = currentMenuData[category] ? currentMenuData[category][itemName] : null;
                     if (!item || item.visibility === 'pos') return; 
                     hasVisibleItems = true; item.originalName = itemName; 
-                    if (item.hasSizes) { sizedItems.push(item); } else { standardItems.push(item); }
+                    if (item.hasSizes) { 
+                        sizedItems.push(item);
+                        window.flatMenu[itemName + " (Regular)"] = { price: item.priceReg, inStock: item.inStock };
+                        window.flatMenu[itemName + " (Large)"] = { price: item.priceLrg, inStock: item.inStock };
+                    } else { 
+                        standardItems.push(item); 
+                        window.flatMenu[itemName] = { price: item.price, inStock: item.inStock };
+                    }
                 });
 
                 if (!hasVisibleItems) return;
@@ -308,12 +315,41 @@
             });
         }
 
+        // --- THE VALIDATION ENGINE ---
+        window.validateAndSyncCart = function(cartObj) {
+            let validCart = {}; let newTotal = 0; let newCount = 0; let changed = false; let removed = [];
+            // Sort keys by length so we match the base name precisely before modifications (e.g. 'Latte (Regular)' vs 'Latte')
+            let menuKeys = Object.keys(window.flatMenu).sort((a,b) => b.length - a.length);
+
+            for(let cartKey in cartObj) {
+                let matchedMenuKey = menuKeys.find(key => cartKey.startsWith(key));
+                let liveData = window.flatMenu[matchedMenuKey];
+
+                if(liveData && liveData.inStock) {
+                    if(cartObj[cartKey].price !== liveData.price) changed = true; // Price updated
+                    validCart[cartKey] = { price: liveData.price, qty: cartObj[cartKey].qty };
+                    newTotal += (liveData.price * cartObj[cartKey].qty);
+                    newCount += cartObj[cartKey].qty;
+                } else {
+                    changed = true; removed.push(cartKey); // Out of stock or deleted
+                }
+            }
+            return { cart: validCart, total: newTotal, count: newCount, changed: changed, removed: removed };
+        };
+
         window.loadUsualOrder = function() {
-            window.cart = JSON.parse(JSON.stringify(window.lastOrder)); 
-            window.totalAmount = window.lastAmount;
-            window.totalItems = Object.values(window.cart).reduce((sum, item) => sum + item.qty, 0);
-            saveCart();
-            updateCartUI();
+            if(Object.keys(window.flatMenu).length === 0) return alert("Menu syncing, please try again in a second.");
+            let result = window.validateAndSyncCart(window.lastOrder);
+            
+            if(result.removed.length > 0) {
+                alert("Sorry, some items in your usual order are currently out of stock:\n- " + result.removed.join("\n- "));
+                if(result.count === 0) return; 
+            }
+            
+            window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
+            saveCart(); updateCartUI();
+            
+            document.getElementById('order-type').value = window.lastOrderType;
             window.openCheckoutModal();
         };
 
@@ -341,6 +377,18 @@
 
         window.openCheckoutModal = function() {
             if (window.totalItems === 0) return alert("Your cart is empty!");
+            
+            // Validate the cart silently before displaying
+            let result = window.validateAndSyncCart(window.cart);
+            if(result.changed) {
+                window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
+                saveCart(); updateCartUI();
+                if(result.removed.length > 0) {
+                    alert("Cart updated: Some items are no longer available and were removed.");
+                    if(window.totalItems === 0) return;
+                }
+            }
+
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
             for (let item in window.cart) {
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
@@ -397,9 +445,10 @@
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo; 
             
-            // Save the last order details to memory
+            // Save data to memory
             localStorage.setItem('ila_last_order', JSON.stringify(window.cart));
             localStorage.setItem('ila_last_amount', window.totalAmount);
+            localStorage.setItem('ila_last_order_type', info.type); // Remember Dine-in/Takeaway/Delivery
             if (info.type === 'Delivery') {
                 localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
             }
