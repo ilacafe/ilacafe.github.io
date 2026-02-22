@@ -13,11 +13,10 @@
     <style>
         :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
-        .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px 20px 20px 20px; }
+        .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
         header { text-align: center; margin-bottom: 20px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
-        /* DASHBOARD BAR */
         .dashboard-bar { background-color: rgba(0, 0, 0, 0.15); padding: 15px 20px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 35px; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1; transition: opacity 0.2s; }
         .dash-stat:active { opacity: 0.5; }
@@ -25,13 +24,11 @@
         .dash-value { font-size: 1.2rem; font-weight: 700; }
         .dash-divider { width: 1px; height: 35px; background-color: rgba(255, 255, 255, 0.2); }
 
-        /* TYPOGRAPHY & MENUS */
         h2 { font-weight: 700; font-size: 1.8rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 30px; border-bottom: 1px solid rgba(255, 255, 255, 0.3); padding-bottom: 10px; }
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; }
         .price-group { display: flex; align-items: center; gap: 10px; }
         
-        /* MINIMAL ADD BUTTON */
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 50%; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: transparent; }
@@ -41,7 +38,6 @@
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
-        /* FLOATING CART (Fixed for iPad Safe Area) */
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; }
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; cursor: pointer; }
@@ -49,7 +45,6 @@
         .cart-clear { font-size: 0.8rem; text-decoration: underline; opacity: 0.8; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: 2px solid var(--brand-bg); padding: 10px 20px; border-radius: 20px; font-weight: 700; font-size: 1rem; font-family: 'Quicksand', sans-serif; cursor: pointer; }
 
-        /* MODALS */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .modal-content { background-color: var(--brand-bg); border: 2px solid var(--brand-text); padding: 30px 20px; border-radius: 20px; text-align: center; width: 85%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto; }
@@ -84,7 +79,6 @@
         
         #qr-image { width: 200px; height: 200px; margin: 15px auto; border-radius: 10px; border: 5px solid white; background-color: white; display: block; object-fit: contain; }
 
-        /* LEDGER */
         .ledger-box { background-color: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px; border: 1px solid rgba(255,255,255,0.2); }
         .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.2); padding: 8px 0; font-size: 0.9rem; }
         .ledger-item:last-child { border-bottom: none; }
@@ -103,21 +97,13 @@
         </header>
 
         <div class="dashboard-bar">
-            <div class="dash-stat" onclick="openActiveBills()">
-                <span class="dash-label">Bills</span><span class="dash-value" id="active-bills-count">0</span>
-            </div>
+            <div class="dash-stat" onclick="openActiveBills()"><span class="dash-label">Bills</span><span class="dash-value" id="active-bills-count">0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="openCashManagement()">
-                <span class="dash-label">Cash</span><span class="dash-value" id="cash-display">₹0</span>
-            </div>
+            <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">Cash</span><span class="dash-value" id="cash-display">₹0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="openCashManagement()">
-                <span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span>
-            </div>
+            <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="openPastBills()">
-                <span class="dash-label">History</span><span class="dash-value">View</span>
-            </div>
+            <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">History</span><span class="dash-value">View</span></div>
         </div>
 
         <div id="live-menu-container">
@@ -126,10 +112,7 @@
     </div>
 
     <div id="cart-banner">
-        <div class="cart-info" onclick="openReviewCartModal()">
-            <span class="cart-total" id="cart-total-text">₹0 (0 items)</span>
-            <span class="cart-clear">Tap to edit or clear</span>
-        </div>
+        <div class="cart-info" onclick="openReviewCartModal()"><span class="cart-total" id="cart-total-text">₹0 (0 items)</span><span class="cart-clear">Tap to edit or clear</span></div>
         <button class="checkout-btn" onclick="openTableModal()">Send Order</button>
     </div>
 
@@ -137,10 +120,7 @@
         <div class="modal-content">
             <h3>Review Cart</h3>
             <div id="review-cart-list" class="bill-receipt" style="max-height: 250px; overflow-y: auto; margin-top: 15px;"></div>
-            
-            <div class="modal-buttons">
-                <button class="btn btn-danger" onclick="clearCart()">Clear All</button>
-            </div>
+            <div class="modal-buttons"><button class="btn btn-danger" onclick="clearCart()">Clear All</button></div>
             <button class="close-modal" onclick="closeModal('review-cart-modal')">Done Editing</button>
         </div>
     </div>
@@ -173,8 +153,7 @@
         <div class="modal-content">
             <h3>Select Table</h3>
             <div class="table-grid" id="sender-table-grid"></div>
-            <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway / Counter</button>
-            <br>
+            <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway / Counter</button><br>
             <button class="close-modal" onclick="closeModal('table-modal')">Cancel</button>
         </div>
     </div>
@@ -183,7 +162,7 @@
         <div class="modal-content">
             <h3>Active Bills</h3>
             <div id="active-bills-list" style="margin-top: 15px;"></div>
-            <button class="close-modal" onclick="closeModal('active-bills-modal')" style="margin-top: 20px;">Close Dashboard</button>
+            <button class="close-modal" onclick="closeModal('active-bills-modal')" style="margin-top: 20px;">Close</button>
         </div>
     </div>
 
@@ -200,10 +179,8 @@
             <h3 id="past-bill-title">Receipt</h3>
             <p id="past-bill-date" style="font-size: 0.8rem; margin-top: -5px; margin-bottom: 10px; opacity: 0.8;"></p>
             <div id="past-bill-receipt" class="bill-receipt"></div>
-            
             <input type="tel" id="past-bill-phone" class="remark-input" placeholder="Customer WhatsApp No." maxlength="10">
             <button class="btn btn-whatsapp" onclick="sendPastBillWhatsApp()">Send Receipt</button>
-            
             <button class="close-modal" onclick="closeModal('view-past-bill-modal')" style="margin-top: 20px;">Close</button>
         </div>
     </div>
@@ -213,12 +190,9 @@
             <h3 id="checkout-title">Table Bill</h3>
             <p style="font-size: 0.8rem; opacity: 0.7; margin-top: -10px;">Tap ✖ to remove an item</p>
             <div id="checkout-receipt" class="bill-receipt"></div>
-            
             <input type="tel" id="checkout-phone" class="remark-input" placeholder="Customer WhatsApp No." maxlength="10">
             <button class="btn btn-whatsapp" onclick="sendWhatsAppBill()">Send Bill with UPI Link</button>
-            
             <div style="height: 1px; background-color: rgba(255,255,255,0.2); margin: 20px 0;"></div>
-            
             <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="payWithUPI()">Show UPI QR</button>
                 <button class="btn btn-success" onclick="payWithCash()">Log Cash</button>
@@ -232,9 +206,7 @@
             <h3>Scan to Pay</h3>
             <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">Amount due: ₹0</p>
             <img id="qr-image" src="" alt="UPI QR Code">
-            <div class="modal-buttons">
-                <button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Log UPI Payment</button>
-            </div>
+            <div class="modal-buttons"><button class="btn btn-success" style="width: 100%;" onclick="confirmUPIPayment()">Log UPI Payment</button></div>
             <button class="close-modal" onclick="closeModal('upi-modal')">Cancel / Back</button>
         </div>
     </div>
@@ -246,17 +218,13 @@
                 <div>Cash Drawer<br>₹<span id="modal-cash-display">0</span></div>
                 <div>UPI Total<br>₹<span id="modal-upi-display">0</span></div>
             </div>
-            
             <div class="modal-buttons" style="margin-bottom: 15px;">
                 <button class="btn btn-danger" onclick="openTransactionModal('expense')">Add Expense</button>
                 <button class="btn btn-secondary" onclick="openTransactionModal('withdrawal')">Withdrawal</button>
             </div>
-            
             <button class="btn btn-warning" onclick="promptEOD()">End of Day Report</button>
-            
             <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Transaction Log</h4>
             <div id="ledger-list" class="ledger-box"></div>
-            
             <button class="close-modal" onclick="closeModal('cash-modal')" style="margin-top: 15px;">Close Ledger</button>
         </div>
     </div>
@@ -267,18 +235,12 @@
             <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
             <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason (e.g. Bought milk)">
             <input type="password" id="transaction-pin" class="remark-input" placeholder="4-Digit Staff PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
-            
-            <div class="modal-buttons">
-                <button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Log Transaction</button>
-            </div>
+            <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Log Transaction</button></div>
             <button class="close-modal" onclick="closeTransactionModal()">Cancel</button>
         </div>
     </div>
 
     <script>
-        // ==========================================
-        // FIREBASE CLOUD CONNECTION
-        // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
             authDomain: "ila-cafe.firebaseapp.com",
@@ -288,21 +250,14 @@
             messagingSenderId: "473595092965",
             appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
         };
-
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // ==========================================
-        // ⚠️ CAFE SETTINGS ⚠️
-        // ==========================================
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "918882946526"; 
-        const CAFE_WEBSITE_LINK = "https://your-github-username.github.io"; // Update this if you use the Pay Link feature
+        const CAFE_WEBSITE_LINK = "https://your-github-username.github.io"; 
         
-        // --- Staff PINs (Dynamically fetched or Loaded from Cache) ---
         window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
-        
-        // --- System Memory ---
         window.cart = {}; window.totalAmount = 0; window.totalItems = 0;
         window.activeTables = JSON.parse(localStorage.getItem('ila_active_tables')) || {};
         window.cashDrawer = parseFloat(localStorage.getItem('ila_cash_drawer')) || 0;
@@ -332,168 +287,92 @@
             document.getElementById('modal-upi-display').innerText = window.upiTotal;
         }
 
-        // ==========================================
-        // REAL-TIME CLOUD LISTENERS & OFFLINE FAILSAFE
-        // ==========================================
-        
-        // Connectivity check
+        let currentMenuData = {};
+        let liveCategoryOrder = [];
+        window.currentItemOrder = {};
+
         db.ref('.info/connected').on('value', function(snap) {
             if (snap.val() === true) {
                 document.getElementById('offline-indicator').style.display = 'none';
             } else {
                 document.getElementById('offline-indicator').style.display = 'block';
-                // If offline, attempt to render from cache immediately
                 let cachedMenu = JSON.parse(localStorage.getItem('ila_cached_menu'));
                 let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
+                window.currentItemOrder = JSON.parse(localStorage.getItem('ila_cached_item_order')) || {};
                 if(cachedMenu) renderPOSMenu(cachedMenu, cachedOrder || []);
             }
         });
 
-        // Sync Staff
-        db.ref('staff').on('value', (snapshot) => {
-            const data = snapshot.val();
-            if(data) {
-                window.staffPins = data;
-                localStorage.setItem('ila_cached_staff', JSON.stringify(data));
-            }
+        db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
+        
+        db.ref('settings/categoryOrder').on('value', snap => { 
+            liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); 
+            if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder);
         });
 
-        // Sync Sorting Order
-        let liveCategoryOrder = [];
-        db.ref('settings/categoryOrder').on('value', (snapshot) => {
-            liveCategoryOrder = snapshot.val() || [];
-            localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder));
+        db.ref('settings/itemOrder').on('value', snap => { 
+            window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder));
+            if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder);
         });
 
-        // Sync Menu
-        db.ref('menu').on('value', (snapshot) => {
-            const menuData = snapshot.val();
-            if(menuData) {
-                localStorage.setItem('ila_cached_menu', JSON.stringify(menuData));
-                renderPOSMenu(menuData, liveCategoryOrder);
-            }
+        db.ref('menu').on('value', snap => { 
+            currentMenuData = snap.val() || {}; localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData));
+            renderPOSMenu(currentMenuData, liveCategoryOrder);
         });
 
-        // Master Rendering Engine (Similar to Customer App, but shows POS items)
         function renderPOSMenu(menuData, categoryOrder) {
             const container = document.getElementById('live-menu-container');
             if (!menuData) return;
-
             container.innerHTML = "";
 
             let activeCats = Object.keys(menuData);
             let sortedCats = categoryOrder.filter(cat => activeCats.includes(cat));
-            activeCats.forEach(cat => {
-                if(!sortedCats.includes(cat)) sortedCats.push(cat);
-            });
+            activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
 
             sortedCats.forEach(category => {
-                let standardItems = [];
-                let sizedItems = {};
-                let hasVisibleItems = false;
-
-                // Group Data
-                for (let itemName in menuData[category]) {
-                    const item = menuData[category][itemName];
-                    
-                    // DIFFERENT FROM CUSTOMER APP: Hide "Customer App Only" items
-                    if (item.visibility === 'customer') continue; 
-                    
-                    hasVisibleItems = true;
-                    item.originalName = itemName; 
-
-                    const regMatch = itemName.match(/(.*)\s\((Regular|Reg)\)$/i);
-                    const lrgMatch = itemName.match(/(.*)\s\((Large|Lrg)\)$/i);
-
-                    if (regMatch) {
-                        let base = regMatch[1];
-                        if (!sizedItems[base]) sizedItems[base] = { regular: null, large: null };
-                        sizedItems[base].regular = item;
-                    } else if (lrgMatch) {
-                        let base = lrgMatch[1];
-                        if (!sizedItems[base]) sizedItems[base] = { regular: null, large: null };
-                        sizedItems[base].large = item;
-                    } else {
-                        standardItems.push(item);
-                    }
-                }
+                let standardItems = []; let sizedItems = []; let hasVisibleItems = false;
+                let itemsInOrder = window.currentItemOrder && window.currentItemOrder[category] ? window.currentItemOrder[category] : Object.keys(menuData[category]);
+                
+                itemsInOrder.forEach(itemName => {
+                    const item = menuData[category] ? menuData[category][itemName] : null;
+                    if (!item || item.visibility === 'customer') return; 
+                    hasVisibleItems = true; item.originalName = itemName; 
+                    if (item.hasSizes) { sizedItems.push(item); } else { standardItems.push(item); }
+                });
 
                 if (!hasVisibleItems) return;
-
                 let catHTML = `<section><h2>${category}</h2>`;
 
-                // Standard Items
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
-                        catHTML += `
-                        <div class="menu-row">
-                            <span class="item-name">${item.originalName}</span>
-                            <div class="price-group">₹${item.price} 
-                                <button class="add-btn" onclick="promptRemark('${safeName}', ${item.price}, ${item.requiresSweetness})">+</button>
-                            </div>
-                        </div>`;
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="price-group">₹${item.price || 0} <button class="add-btn" onclick="window.promptRemark('${safeName}', ${item.price || 0}, ${item.requiresSweetness || false})">+</button></div></div>`;
                     } else {
-                        catHTML += `
-                        <div class="menu-row" style="opacity: 0.6;">
-                            <span class="item-name">${item.originalName} <span class="sold-out-badge">Sold Out</span></span>
-                            <div class="price-group">₹${item.price} <button class="add-btn" disabled>-</button></div>
-                        </div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.6;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Sold Out</span></span><div class="price-group">₹${item.price || 0} <button class="add-btn" disabled>-</button></div></div>`;
                     }
                 });
 
-                // Sized Items (3 Columns)
-                if (Object.keys(sizedItems).length > 0) {
-                    catHTML += `
-                    <div class="coffee-header">
-                        <div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div>
-                    </div>`;
+                if (sizedItems.length > 0) {
+                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>`;
+                    sizedItems.forEach(item => {
+                        let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let regHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
+                        let lrgHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
 
-                    for (let baseName in sizedItems) {
-                        let reg = sizedItems[baseName].regular;
-                        let lrg = sizedItems[baseName].large;
-
-                        let regHTML = '-';
-                        if (reg) {
-                            let safeName = reg.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                            if (reg.inStock) {
-                                regHTML = `₹${reg.price} <button class="add-btn" onclick="promptRemark('${safeName}', ${reg.price}, ${reg.requiresSweetness})">+</button>`;
-                            } else {
-                                regHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
-                            }
+                        if (item.inStock) {
+                            if(item.priceReg) regHTML = `₹${item.priceReg} <button class="add-btn" onclick="window.promptRemark('${safeNameReg}', ${item.priceReg}, ${item.requiresSweetness || false})">+</button>`; else regHTML = '-';
+                            if(item.priceLrg) lrgHTML = `₹${item.priceLrg} <button class="add-btn" onclick="window.promptRemark('${safeNameLrg}', ${item.priceLrg}, ${item.requiresSweetness || false})">+</button>`; else lrgHTML = '-';
                         }
-
-                        let lrgHTML = '-';
-                        if (lrg) {
-                            let safeName = lrg.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                            if (lrg.inStock) {
-                                lrgHTML = `₹${lrg.price} <button class="add-btn" onclick="promptRemark('${safeName}', ${lrg.price}, ${lrg.requiresSweetness})">+</button>`;
-                            } else {
-                                lrgHTML = `<span class="sold-out-badge" style="margin:0;">Out</span>`;
-                            }
-                        }
-
-                        let isOut = (!reg || !reg.inStock) && (!lrg || !lrg.inStock);
-
-                        catHTML += `
-                        <div class="coffee-row" style="${isOut ? 'opacity: 0.6;' : ''}">
-                            <span>${baseName}</span>
-                            <div class="coffee-price">${regHTML}</div>
-                            <div class="coffee-price">${lrgHTML}</div>
-                        </div>`;
-                    }
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.6;' : ''}"><span>${item.originalName}</span><div class="coffee-price">${regHTML}</div><div class="coffee-price">${lrgHTML}</div></div>`;
+                    });
                 }
-
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
             });
         }
 
-
-        // ==========================================
-        // CART & UTILITIES LOGIC (From original POS)
-        // ==========================================
-
+        // --- CART LOGIC ---
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
@@ -508,8 +387,7 @@
         };
 
         window.confirmAddItem = function(useRemark) {
-            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            let modifications = [];
+            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); let modifications = [];
             if (window.isBeveragePending) {
                 const sweetValue = document.getElementById('sweetness-select').value;
                 if (sweetValue !== "") modifications.push(sweetValue);
@@ -536,19 +414,11 @@
 
         window.openReviewCartModal = function() {
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
-            if (window.totalItems === 0) {
-                list.innerHTML = "<p style='text-align:center;'>Cart is empty.</p>";
-            } else {
+            if (window.totalItems === 0) { list.innerHTML = "<p style='text-align:center;'>Cart is empty.</p>"; } 
+            else {
                 for (let item in window.cart) {
                     const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    list.innerHTML += `<div class="bill-receipt-row">
-                        <span style="flex:1;">${item}</span>
-                        <span style="display:flex; align-items:center;">
-                            <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', -1)">-</button>
-                            <span style="width:20px; text-align:center; color:#000;">${window.cart[item].qty}</span>
-                            <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', 1)">+</button>
-                        </span>
-                    </div>`;
+                    list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:20px; text-align:center; color:#000;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
                 }
             }
             document.getElementById('review-cart-modal').classList.add('active');
@@ -557,13 +427,10 @@
         window.modifyCartItem = function(item, delta) {
             let realItemName = item.replace(/&quot;/g, '"');
             if (window.cart[realItemName]) {
-                window.cart[realItemName].qty += delta;
-                window.totalAmount += (window.cart[realItemName].price * delta);
-                window.totalItems += delta;
+                window.cart[realItemName].qty += delta; window.totalAmount += (window.cart[realItemName].price * delta); window.totalItems += delta;
                 if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
                 updateCartUI();
-                if (window.totalItems === 0) closeModal('review-cart-modal');
-                else openReviewCartModal();
+                if (window.totalItems === 0) closeModal('review-cart-modal'); else window.openReviewCartModal();
             }
         };
 
@@ -572,7 +439,7 @@
             const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
             for (let i = 1; i <= 10; i++) {
                 const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
-                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="sendOrder('${i}')">${i}</button>`;
+                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="window.sendOrder('${i}')">${i}</button>`;
             }
             document.getElementById('table-modal').classList.add('active');
         };
@@ -587,7 +454,7 @@
             saveMemory();
             let message = tableID === 'Takeaway' ? `NEW TAKEAWAY ORDER\n\n` : `NEW DINE-IN ORDER - Table: ${tableID}\n\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item} \n`; }
-            closeModal('table-modal'); clearCart();
+            closeModal('table-modal'); window.clearCart();
             setTimeout(() => { window.location.href = `https://wa.me/?text=${encodeURIComponent(message)}`; }, 300);
         };
 
@@ -597,7 +464,7 @@
             if (Object.keys(window.activeTables).length === 0) { list.innerHTML = "<p>No active tables right now.</p>"; } 
             else {
                 for (let table in window.activeTables) {
-                    list.innerHTML += `<div class="active-bill-item" onclick="openCheckout('${table}')"><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span><span>₹${window.activeTables[table].total} ➔</span></div>`;
+                    list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${table}')"><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span><span>₹${window.activeTables[table].total} ➔</span></div>`;
                 }
             }
             document.getElementById('active-bills-modal').classList.add('active');
@@ -611,13 +478,7 @@
             let receiptHTML = "";
             for (let item in tableData.items) { 
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                receiptHTML += `<div class="bill-receipt-row">
-                    <span>
-                        <span class="item-remove-x" onclick="removeTableItem('${tableID}', '${safeItemName}')">✖</span>
-                        ${tableData.items[item].qty}x ${item}
-                    </span>
-                    <span>₹${tableData.items[item].qty * tableData.items[item].price}</span>
-                </div>`; 
+                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span>${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
             }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${tableData.total}</div>`;
             document.getElementById('checkout-receipt').innerHTML = receiptHTML;
@@ -628,46 +489,23 @@
             let realItemName = itemName.replace(/&quot;/g, '"');
             const tableData = window.activeTables[tableID];
             if(tableData && tableData.items[realItemName]) {
-                tableData.total -= tableData.items[realItemName].price;
-                tableData.items[realItemName].qty -= 1;
-                
-                if(tableData.items[realItemName].qty <= 0) {
-                    delete tableData.items[realItemName];
-                }
-                
-                if(Object.keys(tableData.items).length === 0) {
-                    delete window.activeTables[tableID];
-                    saveMemory();
-                    closeModal('checkout-modal');
-                    alert("All items removed. Table cleared.");
-                    return;
-                }
-                saveMemory();
-                openCheckout(tableID); 
+                tableData.total -= tableData.items[realItemName].price; tableData.items[realItemName].qty -= 1;
+                if(tableData.items[realItemName].qty <= 0) delete tableData.items[realItemName];
+                if(Object.keys(tableData.items).length === 0) { delete window.activeTables[tableID]; saveMemory(); closeModal('checkout-modal'); alert("Table cleared."); return; }
+                saveMemory(); window.openCheckout(tableID); 
             }
         };
 
-        // --- PAST BILLS & LEDGER ---
         function addLedgerEntry(type, amount, reason) {
-            const date = new Date();
-            const timeString = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             window.salesLedger.unshift({ date: timeString, type: type, amount: amount, reason: reason }); 
-            if (type === 'cash_income') window.cashDrawer += amount;
-            else if (type === 'upi_income') window.upiTotal += amount;
-            else window.cashDrawer -= amount; 
+            if (type === 'cash_income') window.cashDrawer += amount; else if (type === 'upi_income') window.upiTotal += amount; else window.cashDrawer -= amount; 
             saveMemory();
         }
 
         function savePastBill(tableID, tableData) {
-            const bill = {
-                id: Date.now(),
-                table: tableID,
-                date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(),
-                items: JSON.parse(JSON.stringify(tableData.items)), 
-                total: tableData.total
-            };
-            window.pastBills.unshift(bill);
-            if(window.pastBills.length > 50) window.pastBills.pop(); 
+            const bill = { id: Date.now(), table: tableID, date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), items: JSON.parse(JSON.stringify(tableData.items)), total: tableData.total };
+            window.pastBills.unshift(bill); if(window.pastBills.length > 50) window.pastBills.pop(); 
             saveMemory();
         }
 
@@ -685,137 +523,76 @@
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list'); list.innerHTML = "";
             if (window.pastBills.length === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.7;'>No past bills yet.</p>"; } 
-            else {
-                window.pastBills.forEach(bill => {
-                    list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="viewPastBill(${bill.id})">
-                        <div><span style="font-weight: 700;">${bill.table === 'Takeaway' ? 'Takeaway' : 'Table ' + bill.table}</span><span class="ledger-meta">${bill.date}</span></div>
-                        <span>₹${bill.total} ➔</span></div>`;
-                });
-            }
+            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: 700;">${bill.table === 'Takeaway' ? 'Takeaway' : 'Table ' + bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total} ➔</span></div>`; }); }
             document.getElementById('past-bills-modal').classList.add('active');
         };
 
         window.viewPastBill = function(id) {
-            const bill = window.pastBills.find(b => b.id === id);
-            if (!bill) return;
-            window.currentPastBillID = id;
+            const bill = window.pastBills.find(b => b.id === id); if (!bill) return; window.currentPastBillID = id;
             document.getElementById('past-bill-title').innerText = bill.table === 'Takeaway' ? 'Takeaway Receipt' : `Table ${bill.table} Receipt`;
             document.getElementById('past-bill-date').innerText = bill.date;
-            
-            let receiptHTML = "";
-            for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
+            let receiptHTML = ""; for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
-            document.getElementById('past-bill-receipt').innerHTML = receiptHTML;
-            document.getElementById('past-bill-phone').value = "";
+            document.getElementById('past-bill-receipt').innerHTML = receiptHTML; document.getElementById('past-bill-phone').value = "";
             closeModal('past-bills-modal'); document.getElementById('view-past-bill-modal').classList.add('active');
         };
 
         window.sendPastBillWhatsApp = function() {
-            const phone = document.getElementById('past-bill-phone').value.trim();
-            if (phone.length < 10) { alert("Please enter a valid 10-digit WhatsApp number."); return; }
-            const bill = window.pastBills.find(b => b.id === window.currentPastBillID);
-            let billStr = `ILA\n\n`;
+            const phone = document.getElementById('past-bill-phone').value.trim(); if (phone.length < 10) { alert("Invalid WhatsApp number."); return; }
+            const bill = window.pastBills.find(b => b.id === window.currentPastBillID); let billStr = `ILA\n\n`;
             for (let item in bill.items) { billStr += `${bill.items[item].qty}x ${item} - ₹${bill.items[item].qty * bill.items[item].price}\n`; }
-            billStr += `\nTotal Paid: ₹${bill.total}\n\nThank you for your visit.`;
-            window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
+            billStr += `\nTotal Paid: ₹${bill.total}\n\nThank you for your visit.`; window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
-        // --- PAYMENT ROUTING ---
         window.sendWhatsAppBill = function() {
-            const phone = document.getElementById('checkout-phone').value.trim();
-            if (phone.length < 10) { alert("Please enter a valid 10-digit WhatsApp number to send the bill."); return; }
-            const tableData = window.activeTables[window.checkoutTableID];
-            let billStr = `ILA\n\n`;
+            const phone = document.getElementById('checkout-phone').value.trim(); if (phone.length < 10) { alert("Invalid WhatsApp number."); return; }
+            const tableData = window.activeTables[window.checkoutTableID]; let billStr = `ILA\n\n`;
             for (let item in tableData.items) { billStr += `${tableData.items[item].qty}x ${item} - ₹${tableData.items[item].qty * tableData.items[item].price}\n`; }
-            billStr += `\nTotal Due: ₹${tableData.total}\n\n`;
-            const paymentLink = `${CAFE_WEBSITE_LINK}/pay.html?am=${tableData.total}`;
-            billStr += `Tap link below to Pay via UPI:\n${paymentLink}\n\nThank you for your visit.`;
+            billStr += `\nTotal Due: ₹${tableData.total}\n\nTap link below to Pay via UPI:\n${CAFE_WEBSITE_LINK}/pay.html?am=${tableData.total}\n\nThank you for your visit.`;
             window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
         window.payWithCash = function() {
-            const amount = window.activeTables[window.checkoutTableID].total;
-            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
-            savePastBill(window.checkoutTableID, window.activeTables[window.checkoutTableID]); 
-            addLedgerEntry('cash_income', amount, reason);
-            delete window.activeTables[window.checkoutTableID]; saveMemory();
-            closeModal('checkout-modal'); alert(`Table cleared! ₹${amount} logged to Cash Drawer.`);
+            const amount = window.activeTables[window.checkoutTableID].total; const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
+            savePastBill(window.checkoutTableID, window.activeTables[window.checkoutTableID]); addLedgerEntry('cash_income', amount, reason);
+            delete window.activeTables[window.checkoutTableID]; saveMemory(); closeModal('checkout-modal'); alert(`₹${amount} logged to Cash.`);
         };
 
         window.payWithUPI = function() {
-            const amount = window.activeTables[window.checkoutTableID].total;
-            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amount}&cu=INR`;
+            const amount = window.activeTables[window.checkoutTableID].total; const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amount}&cu=INR`;
             document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
             document.getElementById('upi-amount-text').innerText = `Amount due: ₹${amount}`;
             closeModal('checkout-modal'); document.getElementById('upi-modal').classList.add('active');
         };
 
         window.confirmUPIPayment = function() {
-            const amount = window.activeTables[window.checkoutTableID].total;
-            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
-            savePastBill(window.checkoutTableID, window.activeTables[window.checkoutTableID]); 
-            addLedgerEntry('upi_income', amount, reason); 
-            delete window.activeTables[window.checkoutTableID]; saveMemory();
-            closeModal('upi-modal'); alert(`UPI Payment Logged. Table cleared.`);
+            const amount = window.activeTables[window.checkoutTableID].total; const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway Sale' : `Table ${window.checkoutTableID} Sale`;
+            savePastBill(window.checkoutTableID, window.activeTables[window.checkoutTableID]); addLedgerEntry('upi_income', amount, reason); 
+            delete window.activeTables[window.checkoutTableID]; saveMemory(); closeModal('upi-modal'); alert(`UPI Logged.`);
         };
 
-        // --- CASH MANAGEMENT & EOD (Using Cloud PINs) ---
         window.openCashManagement = function() { renderLedger(); document.getElementById('cash-modal').classList.add('active'); };
-
-        window.openTransactionModal = function(type) {
-            window.currentTransactionType = type;
-            document.getElementById('transaction-title').innerText = type === 'expense' ? 'Add Expense' : 'Cash Withdrawal';
-            document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = "";
-            closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active');
-            setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100);
-        };
-
-        window.closeTransactionModal = function() { closeModal('transaction-modal'); openCashManagement(); };
+        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Add Expense' : 'Cash Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
+        window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
 
         window.confirmTransaction = function() {
-            const amount = parseFloat(document.getElementById('transaction-amount').value);
-            const reasonStr = document.getElementById('transaction-reason').value.trim();
-            const pinStr = document.getElementById('transaction-pin').value.trim();
-            
-            if (isNaN(amount) || amount <= 0) { alert("Please enter a valid amount."); return; }
-            if (reasonStr === "") { alert("Please enter a reason."); return; }
-            
-            // Check dynamic Staff PINs
-            const staffName = window.staffPins[pinStr];
-            if (!staffName) { alert("Invalid PIN. Transaction denied."); return; }
-            
+            const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
+            if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
+            const staffName = window.staffPins[pinStr]; if (!staffName) { alert("Invalid PIN."); return; }
             if (amount > window.cashDrawer && !confirm(`Warning: Only ₹${window.cashDrawer} in drawer. Continue?`)) return;
-            const finalReason = `${reasonStr} (By: ${staffName})`;
-            addLedgerEntry(window.currentTransactionType, amount, finalReason);
-            closeModal('transaction-modal'); openCashManagement(); 
+            addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (By: ${staffName})`);
+            window.closeTransactionModal();
         };
 
         window.promptEOD = function() {
-            const pinStr = prompt("Enter your 4-digit PIN to close the register for today:");
-            if (!pinStr) return;
-            
-            // Check dynamic Staff PINs
-            const staffName = window.staffPins[pinStr];
-            if (!staffName) { alert("Invalid PIN. Access Denied."); return; }
-            
-            if (Object.keys(window.activeTables).length > 0) { if(!confirm("There are still active tables open! Are you sure you want to end the day?")) return; }
-
-            let report = `ILA - End of Day Report\nClosed By: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\n`;
-            report += `UPI Total (Resetting): ₹${window.upiTotal}\n`;
-            report += `Closing Cash Drawer (Carried Forward): ₹${window.cashDrawer}\n\n`;
-            report += `EXPENSES & OUTFLOW:\n`;
-            let expensesFound = false;
-            window.salesLedger.forEach(entry => {
-                if (entry.type !== 'cash_income' && entry.type !== 'upi_income') {
-                    report += `- ₹${entry.amount} | ${entry.reason}\n`;
-                    expensesFound = true;
-                }
-            });
-            if (!expensesFound) report += `No expenses logged today.\n`;
-
-            if (confirm("Send Report to WhatsApp and reset UPI/Tables for tomorrow? (Cash balance will remain in drawer)")) {
-                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; saveMemory();
-                closeModal('cash-modal');
+            const pinStr = prompt("Enter PIN to close register:"); if (!pinStr) return;
+            const staffName = window.staffPins[pinStr]; if (!staffName) { alert("Invalid PIN."); return; }
+            if (Object.keys(window.activeTables).length > 0) { if(!confirm("Tables are still open! End day anyway?")) return; }
+            let report = `ILA - End of Day\nClosed By: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI Total: ₹${window.upiTotal}\nClosing Cash: ₹${window.cashDrawer}\n\nEXPENSES:\n`;
+            let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
+            if (!exp) report += `No expenses.\n`;
+            if (confirm("Send Report and reset for tomorrow?")) {
+                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; saveMemory(); closeModal('cash-modal');
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
         };
