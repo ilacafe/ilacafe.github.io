@@ -21,29 +21,28 @@
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
-        /* EXACT PIXEL MATH FOR PERFECT ALIGNMENT */
-        .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; width: 100%; }
-        .item-name { flex-grow: 1; padding-right: 10px; font-size: 1.1rem; font-weight: 500; line-height: 1.2; word-break: break-word; }
+        /* THE ULTIMATE ALIGNMENT FIX */
+        .menu-row, .coffee-row, .coffee-header { display: grid; grid-template-columns: 1fr 100px 100px; gap: 5px; align-items: center; width: 100%; }
+        .menu-row, .coffee-row { margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .coffee-header { margin-bottom: 8px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
         
-        .variant-col { display: flex; justify-content: flex-end; align-items: center; width: 95px; flex-shrink: 0; }
-        .price-text { width: 35px; text-align: right; margin-right: 5px; font-size: 0.95rem; font-weight: 500; flex-shrink: 0;}
-        .btn-wrap { width: 60px; display: flex; justify-content: flex-end; flex-shrink: 0;}
+        .item-name { padding-right: 5px; line-height: 1.2; word-break: break-word; }
+        
+        .variant-col { display: flex; justify-content: flex-end; align-items: center; width: 100%; }
+        .price-text { width: 35px; text-align: right; margin-right: 8px; font-size: 0.95rem; font-weight: 500; flex-shrink: 0;}
+        .btn-wrap { width: 55px; display: flex; justify-content: flex-end; flex-shrink: 0;}
+
+        .header-col { display: flex; justify-content: flex-end; width: 100%; }
+        .header-text-wrap { width: 55px; text-align: center; } 
 
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 28px; height: 28px; font-size: 1.3rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; line-height: 1;}
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
 
-        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 28px; width: 60px; box-sizing: border-box; }
-        .qty-btn { background: transparent; color: white; border: none; width: 20px; height: 100%; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; line-height: 1;}
+        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 28px; width: 55px; box-sizing: border-box; }
+        .qty-btn { background: transparent; color: white; border: none; width: 18px; height: 100%; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; line-height: 1;}
         .qty-btn:active { background: white; color: var(--brand-bg); }
-        .qty-num { width: 20px; text-align: center; font-weight: bold; font-size: 0.95rem; }
-
-        .coffee-header, .coffee-row { display: grid; grid-template-columns: 1fr 95px 95px; gap: 5px; align-items: center; width: 100%; }
-        .coffee-row { margin-bottom: 15px; }
-        .coffee-header { margin-bottom: 8px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
-        
-        .header-col { width: 95px; display: flex; justify-content: flex-end; }
-        .header-text-wrap { width: 60px; text-align: center; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
+        .qty-num { width: 19px; text-align: center; font-weight: bold; font-size: 0.9rem; }
 
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
@@ -361,8 +360,9 @@
                             <span class="item-name">${item.originalName}</span>
                             <div class="variant-col">
                                 <span class="price-text">₹${item.price || 0}</span>
-                                <div class="inline-container btn-wrap" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div>
+                                <div id="ctrl-${safeName}" class="inline-container btn-wrap" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div>
                             </div>
+                            <div></div>
                         </div>`;
                     } else {
                         catHTML += `<div class="menu-row" style="opacity: 0.4;">
@@ -371,6 +371,7 @@
                                 <span class="price-text">₹${item.price || 0}</span>
                                 <div class="btn-wrap"><button class="add-btn" disabled>+</button></div>
                             </div>
+                            <div></div>
                         </div>`;
                     }
                 });
