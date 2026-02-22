@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>ILA | Cloud Admin</title>
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; padding-bottom: 80px; }
+        .container { width: 90%; max-width: 800px; margin: 0 auto; padding: 20px; }
+        header { text-align: center; margin-bottom: 30px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 20px; }
+        
+        h2 { font-size: 1.4rem; letter-spacing: 1px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;}
+        
+        /* Admin Cards */
+        .admin-card { background-color: rgba(0, 0, 0, 0.2); border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(255, 255, 255, 0.1); }
+        
+        /* Forms */
+        .form-group { margin-bottom: 15px; }
+        .row-group { display: flex; gap: 10px; }
+        label { display: block; font-size: 0.85rem; text-transform: uppercase; font-weight: bold; opacity: 0.9; margin-bottom: 5px; }
+        input[type="text"], input[type="number"], input[type="password"] { width: 100%; padding: 12px; border-radius: 8px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; }
+        .checkbox-group { display: flex; align-items: center; gap: 10px; font-weight: bold; margin-top: 10px; }
+        
+        /* Buttons */
+        .btn { padding: 12px 20px; border-radius: 30px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; transition: opacity 0.2s; }
+        .btn:active { opacity: 0.7; }
+        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
+        .btn-success { background-color: #81c784; color: white; }
+        .btn-danger { background-color: #e57373; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; }
+        
+        .btn-toggle { background-color: #81c784; color: white; padding: 8px 15px; border-radius: 8px; font-size: 0.9rem; width: auto; }
+        .btn-toggle.sold-out { background-color: #ffb74d; color: #333; }
+
+        /* Master Status Button */
+        #master-status-btn { font-size: 1.5rem; padding: 20px; border-radius: 15px; text-transform: uppercase; letter-spacing: 2px; }
+        .status-open { background-color: #81c784; color: white; border: 3px solid #66bb6a; }
+        .status-closed { background-color: #e57373; color: white; border: 3px solid #ef5350; }
+
+        /* Lists */
+        .list-item { display: flex; justify-content: space-between; align-items: center; background-color: rgba(255,255,255,0.1); padding: 12px 15px; border-radius: 8px; margin-bottom: 10px; }
+        
+        /* Menu Specific */
+        .category-block { margin-top: 30px; }
+        .category-title { font-size: 1.3rem; border-bottom: 1px dashed rgba(255,255,255,0.3); padding-bottom: 5px; margin-bottom: 15px; font-weight: bold; text-transform: uppercase;}
+        .item-details { flex-grow: 1; }
+        .item-name { font-weight: bold; font-size: 1.1rem; }
+        .item-meta { font-size: 0.85rem; opacity: 0.8; }
+        .item-actions { display: flex; gap: 10px; }
+
+        .status-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; }
+        .badge-live { background-color: rgba(129, 199, 132, 0.2); color: #81c784; }
+        .badge-out { background-color: rgba(229, 115, 115, 0.2); color: #e57373; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1 style="margin-bottom: 5px;">ILA Cloud Admin</h1>
+            <p style="opacity: 0.8; margin-top: 0;">Master Control Panel</p>
+        </header>
+
+        <div class="admin-card" style="text-align: center;">
+            <h2>Master Switch</h2>
+            <p style="font-size: 0.9rem; opacity: 0.8; margin-top: -10px; margin-bottom: 15px;">Turning this off will instantly block customers from ordering on the QR Menu.</p>
+            <button id="master-status-btn" class="btn" onclick="toggleCafeStatus()">Loading Status...</button>
+        </div>
+
+        <div class="admin-card">
+            <h2>Staff PIN Management</h2>
+            <div class="row-group" style="margin-bottom: 15px;">
+                <div class="form-group" style="flex: 2; margin: 0;">
+                    <input type="text" id="staff-name" placeholder="Staff Name" required>
+                </div>
+                <div class="form-group" style="flex: 1; margin: 0;">
+                    <input type="number" id="staff-pin" placeholder="4-Digit PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric" required>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="addStaff()">Add / Update Staff</button>
+
+            <div id="staff-list-container" style="margin-top: 20px;">
+                </div>
+        </div>
+
+        <div class="admin-card">
+            <h2>Add Menu Item</h2>
+            
+            <div class="form-group">
+                <label>Category (e.g., Pizza, Coffee, Dessert)</label>
+                <input type="text" id="add-category" placeholder="Type category name..." required>
+            </div>
+            
+            <div class="form-group">
+                <label>Item Name</label>
+                <input type="text" id="add-name" placeholder="e.g., Margherita" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Price (₹)</label>
+                <input type="number" id="add-price" placeholder="e.g., 400" required>
+            </div>
+
+            <div class="form-group checkbox-group">
+                <input type="checkbox" id="add-sweetness" style="width: 20px; height: 20px;">
+                <label style="margin: 0; text-transform: none;">Requires Sweetness Level? (For Beverages)</label>
+            </div>
+
+            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save to Live Menu</button>
+        </div>
+
+        <div class="admin-card" style="border: none; background: transparent; padding: 0;">
+            <h2 style="text-align: center; border: none;">Live Menu Editor</h2>
+            <div id="live-menu-container">
+                <p style="text-align: center; opacity: 0.7;">Loading database...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // FIREBASE CLOUD CONNECTION
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
+            authDomain: "ila-cafe.firebaseapp.com",
+            databaseURL: "https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "ila-cafe",
+            storageBucket: "ila-cafe.firebasestorage.app",
+            messagingSenderId: "473595092965",
+            appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // System State
+        let isCafeOpen = true;
+
+        // ==========================================
+        // 1. MASTER CAFE STATUS
+        // ==========================================
+        db.ref('settings/isOpen').on('value', (snapshot) => {
+            const val = snapshot.val();
+            isCafeOpen = val === null ? true : val; // Default to true if not set yet
+            
+            const btn = document.getElementById('master-status-btn');
+            if(isCafeOpen) {
+                btn.innerText = "CAFE IS OPEN";
+                btn.className = "btn status-open";
+            } else {
+                btn.innerText = "CAFE IS CLOSED";
+                btn.className = "btn status-closed";
+            }
+        });
+
+        window.toggleCafeStatus = function() {
+            const newState = !isCafeOpen;
+            const actionText = newState ? "OPEN" : "CLOSE";
+            if(confirm(`Are you sure you want to ${actionText} the Cafe QR Menu?`)) {
+                db.ref('settings/isOpen').set(newState);
+            }
+        };
+
+        // ==========================================
+        // 2. STAFF PIN MANAGEMENT
+        // ==========================================
+        window.addStaff = function() {
+            const name = document.getElementById('staff-name').value.trim();
+            const pin = document.getElementById('staff-pin').value.trim();
+
+            if(!name || pin.length !== 4) {
+                alert("Please enter a valid Name and a 4-Digit PIN.");
+                return;
+            }
+
+            db.ref('staff/' + pin).set(name).then(() => {
+                document.getElementById('staff-name').value = "";
+                document.getElementById('staff-pin').value = "";
+            });
+        };
+
+        window.removeStaff = function(pin, name) {
+            if(confirm(`Remove ${name} from the system? Their PIN will no longer work.`)) {
+                db.ref('staff/' + pin).remove();
+            }
+        };
+
+        db.ref('staff').on('value', (snapshot) => {
+            const staffData = snapshot.val();
+            const container = document.getElementById('staff-list-container');
+            container.innerHTML = "";
+
+            if (!staffData) {
+                container.innerHTML = "<p style='opacity: 0.7; font-size: 0.9rem;'>No staff PINs registered yet.</p>";
+                return;
+            }
+
+            for (let pin in staffData) {
+                const name = staffData[pin];
+                container.innerHTML += `
+                    <div class="list-item">
+                        <div><strong style="font-size: 1.1rem;">${name}</strong> <span style="opacity: 0.7; margin-left: 10px;">PIN: ${pin}</span></div>
+                        <button class="btn-danger" onclick="removeStaff('${pin}', '${name}')">Remove</button>
+                    </div>
+                `;
+            }
+        });
+
+        // ==========================================
+        // 3. MENU MANAGEMENT (ADD, TOGGLE, DELETE)
+        // ==========================================
+        window.addMenuItem = function() {
+            const category = document.getElementById('add-category').value.trim();
+            const name = document.getElementById('add-name').value.trim();
+            const price = parseFloat(document.getElementById('add-price').value);
+            const requiresSweetness = document.getElementById('add-sweetness').checked;
+
+            if (!category || !name || isNaN(price)) {
+                alert("Please fill in Category, Name, and Price.");
+                return;
+            }
+
+            // Save to Firebase (defaults to inStock = true)
+            db.ref('menu/' + category + '/' + name).set({
+                price: price,
+                requiresSweetness: requiresSweetness,
+                inStock: true
+            }).then(() => {
+                document.getElementById('add-name').value = "";
+                document.getElementById('add-price').value = "";
+                document.getElementById('add-sweetness').checked = false;
+                document.getElementById('add-name').focus();
+            }).catch(error => {
+                alert("Error saving: " + error.message);
+            });
+        };
+
+        window.toggleStock = function(category, itemName, currentStatus) {
+            db.ref('menu/' + category + '/' + itemName + '/inStock').set(!currentStatus);
+        };
+
+        window.deleteItem = function(category, itemName) {
+            if (confirm(`Are you sure you want to permanently delete ${itemName}?`)) {
+                db.ref('menu/' + category + '/' + itemName).remove();
+            }
+        };
+
+        // Render Live Menu
+        db.ref('menu').on('value', (snapshot) => {
+            const menuData = snapshot.val();
+            const container = document.getElementById('live-menu-container');
+            container.innerHTML = "";
+
+            if (!menuData) {
+                container.innerHTML = "<div class='admin-card'><p style='text-align: center; margin: 0;'>No items in menu yet. Add one above!</p></div>";
+                return;
+            }
+
+            // Loop through categories
+            for (let category in menuData) {
+                let categoryHTML = `<div class="category-block"><div class="category-title">${category}</div>`;
+                
+                // Loop through items in category
+                for (let itemName in menuData[category]) {
+                    const item = menuData[category][itemName];
+                    const safeCategory = category.replace(/'/g, "\\'");
+                    const safeName = itemName.replace(/'/g, "\\'");
+                    
+                    const stockLabel = item.inStock ? "In Stock" : "Sold Out";
+                    const stockBadgeClass = item.inStock ? "badge-live" : "badge-out";
+                    const toggleBtnText = item.inStock ? "Mark Sold Out" : "Mark In Stock";
+                    const toggleBtnClass = item.inStock ? "btn-toggle sold-out" : "btn-toggle";
+                    const sweetLabel = item.requiresSweetness ? " | <i>+Sweetness Opt.</i>" : "";
+
+                    categoryHTML += `
+                        <div class="list-item" style="${!item.inStock ? 'opacity: 0.6;' : ''}">
+                            <div class="item-details">
+                                <div class="item-name">${itemName} <span class="status-badge ${stockBadgeClass}">${stockLabel}</span></div>
+                                <div class="item-meta">₹${item.price}${sweetLabel}</div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="${toggleBtnClass}" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${toggleBtnText}</button>
+                                <button class="btn-danger" onclick="deleteItem('${safeCategory}', '${safeName}')">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                categoryHTML += `</div>`;
+                container.innerHTML += categoryHTML;
+            }
+        });
+    </script>
+</body>
+</html>
