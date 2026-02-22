@@ -17,7 +17,6 @@
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
         header { text-align: center; margin-bottom: 20px; }
         
-        /* Added smooth transition and removed highlight tap for the logo */
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
@@ -82,7 +81,7 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo" onclick="this.style.transform = `rotate(${this.rotation = (this.rotation || 0) + 360}deg)`">
-            </header>
+        </header>
 
         <div id="live-menu-container">
             <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
@@ -176,9 +175,16 @@
                 <div style="font-size: 0.8rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">Amount Due</div>
                 <div style="font-size: 1.8rem; font-weight: 700;">₹<span id="payment-amount">0</span></div>
             </div>
+            
             <button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" id="pay-upi-btn">Pay via UPI</button>
             <img id="payment-qr" src="" alt="QR" style="width: 150px; height: 150px; margin: 0 auto 15px auto; border-radius: 8px; display: block; background: white; padding: 5px;">
-            <button class="btn btn-secondary" style="width: 100%;" onclick="window.sendCustomerOrder()">Confirm Order</button>
+            
+            <div id="payment-instruction" style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 15px; color: #ffcc00;">
+                Please complete your payment above to send your order.
+            </div>
+
+            <button class="btn btn-secondary" id="confirm-order-btn" style="width: 100%; display: none;" onclick="window.sendCustomerOrder()">I Have Paid - Send Order</button>
+            
             <button class="close-modal" onclick="closeModal('payment-modal')">✖ CLOSE</button>
         </div>
     </div>
@@ -335,9 +341,21 @@
             window.currentOrderInfo = { type, details };
             closeModal('checkout-modal');
             document.getElementById('payment-amount').innerText = window.totalAmount;
+            
             const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${window.totalAmount}&cu=INR`;
             document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
-            document.getElementById('pay-upi-btn').onclick = () => { window.location.href = upiString; };
+            
+            document.getElementById('confirm-order-btn').style.display = 'none';
+            document.getElementById('payment-instruction').style.display = 'block';
+
+            document.getElementById('pay-upi-btn').onclick = () => { 
+                window.location.href = upiString; 
+                setTimeout(() => {
+                    document.getElementById('payment-instruction').style.display = 'none';
+                    document.getElementById('confirm-order-btn').style.display = 'block';
+                }, 1500);
+            };
+            
             document.getElementById('payment-modal').classList.add('active');
         };
 
