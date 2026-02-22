@@ -2,265 +2,80 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ILA Cafe | Order Online</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>ILA | Menu</title>
+    <link rel="apple-touch-icon" href="/icon.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --brand-bg: #8c7255; 
-            --brand-text: #ffffff; 
-        }
+        :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
+        .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
+        header { text-align: center; margin-bottom: 20px; }
+        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
-        body {
-            background-color: var(--brand-bg);
-            color: var(--brand-text);
-            font-family: 'Quicksand', sans-serif;
-            margin: 0;
+        /* TYPOGRAPHY & MENUS */
+        h2 { font-weight: 700; font-size: 1.8rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 30px; border-bottom: 1px solid rgba(255, 255, 255, 0.3); padding-bottom: 10px; }
+        .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .item-name { flex-grow: 1; }
+        .price-group { display: flex; align-items: center; gap: 10px; }
+        
+        /* MINIMAL ADD BUTTON */
+        .add-btn { 
+            background-color: transparent; 
+            color: var(--brand-text); 
+            border: 1px solid rgba(255, 255, 255, 0.4); 
+            border-radius: 50%; 
+            width: 32px; 
+            height: 32px; 
+            font-size: 1.4rem; 
+            font-weight: 400; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            transition: all 0.2s; 
             padding: 0;
-            line-height: 1.6;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding-bottom: 100px;
         }
+        .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
 
-        .container {
-            width: 90%;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 40px 20px 20px 20px;
-        }
+        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.7; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); padding-bottom: 5px; }
+        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .coffee-price { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 
-        header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
+        /* FLOATING CART (With iPad/iPhone Safe Area padding) */
+        #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); transform: translateY(100%); transition: transform 0.3s ease-in-out; z-index: 1000; }
+        #cart-banner.visible { transform: translateY(0); }
+        .cart-info { display: flex; flex-direction: column; cursor: pointer; flex-grow: 1;}
+        .cart-total { font-weight: 700; font-size: 1.2rem; }
+        .cart-clear { font-size: 0.8rem; text-decoration: underline; opacity: 0.8; margin-top: 2px; }
+        .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: 2px solid var(--brand-bg); padding: 12px 25px; border-radius: 30px; font-weight: 700; font-size: 1rem; font-family: 'Quicksand', sans-serif; cursor: pointer; }
 
-        /* --- UPDATED LOGO SIZE --- */
-        .logo {
-            max-width: 350px; /* Increased from 200px to 350px */
-            height: auto;
-            display: block;
-            margin: 0 auto;
-        }
+        /* MODALS */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content { background-color: var(--brand-bg); border: 2px solid var(--brand-text); padding: 30px 20px; border-radius: 20px; text-align: center; width: 85%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto; }
+        .modal-content h3 { margin-top: 0; font-size: 1.4rem; margin-bottom: 10px; }
+        .remark-input, .sweetness-select { width: 90%; padding: 12px; margin: 10px auto; border-radius: 10px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
+        .sweetness-group { text-align: left; width: 90%; margin: 15px auto; display: none; }
+        
+        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0 15px 0; }
+        .table-btn { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); padding: 15px 0; border-radius: 10px; font-weight: 700; font-size: 1.2rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        .takeaway-btn { background-color: var(--brand-text); color: var(--brand-bg); border: none; padding: 15px 0; border-radius: 10px; font-weight: 700; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px; }
 
-        h2 {
-            font-weight: 700;
-            font-size: 1.8rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-align: center;
-            margin-top: 40px;
-            margin-bottom: 30px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-            padding-bottom: 10px;
-        }
+        .modal-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 15px; margin-bottom: 15px; }
+        .btn { padding: 12px 20px; border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; }
+        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); border: none; }
+        .btn-secondary { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text); }
+        .btn-success { background-color: #2e7d32; color: white; border: none; }
+        
+        /* CART EDIT BUTTONS */
+        .mini-btn { background-color: transparent; border: 1px solid #8c7255; color: #8c7255; border-radius: 6px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: bold; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
+        .mini-btn:active { background-color: #8c7255; color: white; }
 
-        .menu-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
-            font-weight: 500;
-        }
+        .close-modal { background: transparent; color: var(--brand-text); border: none; text-decoration: underline; cursor: pointer; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; opacity: 0.8; margin-top: 10px; }
 
-        .item-name {
-            flex-grow: 1;
-        }
-
-        .price-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .add-btn {
-            background-color: var(--brand-text);
-            color: var(--brand-bg);
-            border: none;
-            border-radius: 50%;
-            width: 28px;
-            height: 28px;
-            font-size: 1.2rem;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: opacity 0.2s;
-        }
-
-        .add-btn:active {
-            opacity: 0.5;
-        }
-
-        .coffee-header {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            font-weight: 700;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 15px;
-            opacity: 0.7;
-            border-bottom: 1px dashed rgba(255, 255, 255, 0.3);
-            padding-bottom: 5px;
-        }
-
-        .coffee-row {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            align-items: center;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
-            font-weight: 500;
-        }
-
-        .coffee-price {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 8px;
-        }
-
-        #cart-banner {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background-color: var(--brand-text);
-            color: var(--brand-bg);
-            padding: 15px 20px;
-            box-sizing: border-box;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
-            transform: translateY(100%);
-            transition: transform 0.3s ease-in-out;
-            z-index: 1000;
-        }
-
-        #cart-banner.visible {
-            transform: translateY(0);
-        }
-
-        .cart-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .cart-total {
-            font-weight: 700;
-            font-size: 1.2rem;
-        }
-
-        .cart-clear {
-            font-size: 0.8rem;
-            text-decoration: underline;
-            cursor: pointer;
-            margin-top: 2px;
-            opacity: 0.8;
-        }
-
-        .checkout-btn {
-            background-color: var(--brand-bg);
-            color: var(--brand-text);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-weight: 700;
-            font-size: 1rem;
-            font-family: 'Quicksand', sans-serif;
-            cursor: pointer;
-        }
-
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-        }
-
-        .modal-overlay.active {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .modal-content {
-            background-color: var(--brand-bg);
-            border: 2px solid var(--brand-text);
-            padding: 30px 20px;
-            border-radius: 20px;
-            text-align: center;
-            width: 80%;
-            max-width: 350px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-        }
-
-        .modal-content h3 {
-            margin-top: 0;
-            font-size: 1.4rem;
-            margin-bottom: 10px;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 25px;
-            margin-bottom: 15px;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border-radius: 30px;
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 1rem;
-            cursor: pointer;
-            font-family: 'Quicksand', sans-serif;
-            flex: 1;
-        }
-
-        .btn-primary {
-            background-color: var(--brand-text);
-            color: var(--brand-bg);
-            border: none;
-        }
-
-        .btn-secondary {
-            background-color: transparent;
-            color: var(--brand-text);
-            border: 2px solid var(--brand-text);
-        }
-
-        .close-modal {
-            background: transparent;
-            color: var(--brand-text);
-            border: none;
-            text-decoration: underline;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-family: 'Quicksand', sans-serif;
-            opacity: 0.8;
-        }
-
-        .contact-info {
-            text-align: center;
-            margin-top: 40px;
-            margin-bottom: 20px;
-        }
-        .contact-info p { margin: 10px 0; font-size: 1.1rem; }
-        .contact-info a { color: var(--brand-text); text-decoration: none; transition: opacity 0.3s; }
-        .contact-info a:hover { opacity: 0.7; }
+        .bill-receipt { background-color: rgba(255,255,255,0.9); color: #333; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
+        .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -268,165 +83,287 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo">
+            <p style="font-size: 1.1rem; opacity: 0.9; margin-top: 10px;">Tap + to add items to your order</p>
         </header>
 
         <section>
             <h2>Pizza</h2>
-            <div class="menu-row">
-                <span class="item-name">Margherita</span>
-                <div class="price-group">₹400 <button class="add-btn" onclick="addToCart('Margherita Pizza', 400)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Marc’s Fav</span>
-                <div class="price-group">₹500 <button class="add-btn" onclick="addToCart('Marc’s Fav Pizza', 500)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Fire Vodka</span>
-                <div class="price-group">₹500 <button class="add-btn" onclick="addToCart('Fire Vodka Pizza', 500)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Quattro Formaggi</span>
-                <div class="price-group">₹600 <button class="add-btn" onclick="addToCart('Quattro Formaggi Pizza', 600)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Al Funghi</span>
-                <div class="price-group">₹500 <button class="add-btn" onclick="addToCart('Al Funghi Pizza', 500)">+</button></div>
-            </div>
-            <div class="menu-row">
-                <span class="item-name">Pesto Burrata</span>
-                <div class="price-group">₹750 <button class="add-btn" onclick="addToCart('Pesto Burrata Pizza', 750)">+</button></div>
-            </div>
+            <div class="menu-row"><span class="item-name">Margherita</span><div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Margherita Pizza', 400)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Marc’s Fav</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Marc’s Fav Pizza', 500)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Fire Vodka</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Fire Vodka Pizza', 500)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Quattro Formaggi</span><div class="price-group">₹600 <button class="add-btn" onclick="promptRemark('Quattro Formaggi Pizza', 600)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Al Funghi</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Al Funghi Pizza', 500)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Pesto Burrata</span><div class="price-group">₹750 <button class="add-btn" onclick="promptRemark('Pesto Burrata Pizza', 750)">+</button></div></div>
+        </section>
+
+        <section>
+            <h2>Sides</h2>
+            <div class="menu-row"><span class="item-name">Garlic Bread</span><div class="price-group">₹400 <button class="add-btn" onclick="promptRemark('Garlic Bread', 400)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Caprese Sandwich</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Caprese Sandwich', 500)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Burrata Sandwich</span><div class="price-group">₹700 <button class="add-btn" onclick="promptRemark('Burrata Sandwich', 700)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Stuffed Garlic Bread</span><div class="price-group">₹500 <button class="add-btn" onclick="promptRemark('Stuffed Garlic Bread', 500)">+</button></div></div>
+        </section>
+
+        <section>
+            <h2>Dessert</h2>
+            <div class="menu-row"><span class="item-name">Banana Bread</span><div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Banana Bread', 200)">+</button></div></div>
+            <div class="menu-row"><span class="item-name">Carrot Cake</span><div class="price-group">₹200 <button class="add-btn" onclick="promptRemark('Carrot Cake', 200)">+</button></div></div>
         </section>
 
         <section>
             <h2>Coffee</h2>
-            <div class="coffee-header">
-                <div></div>
-                <div style="text-align: right;">Regular</div>
-                <div style="text-align: right;">Large</div>
-            </div>
-            
-            <div class="coffee-row">
-                <span>Espresso</span>
-                <div class="coffee-price">₹150 <button class="add-btn" onclick="addToCart('Espresso (Regular)', 150)">+</button></div>
-                <div class="coffee-price">-</div>
-            </div>
-            <div class="coffee-row">
-                <span>Americano</span>
-                <div class="coffee-price">₹150 <button class="add-btn" onclick="addToCart('Americano (Regular)', 150)">+</button></div>
-                <div class="coffee-price">₹220 <button class="add-btn" onclick="addToCart('Americano (Large)', 220)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Iced Americano</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="addToCart('Iced Americano (Reg)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="addToCart('Iced Americano (Lrg)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Latte</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="addToCart('Latte (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="addToCart('Latte (Large)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Cappuccino</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="addToCart('Cappuccino (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="addToCart('Cappuccino (Large)', 300)">+</button></div>
-            </div>
-            <div class="coffee-row">
-                <span>Iced Coffee</span>
-                <div class="coffee-price">₹200 <button class="add-btn" onclick="addToCart('Iced Coffee (Regular)', 200)">+</button></div>
-                <div class="coffee-price">₹300 <button class="add-btn" onclick="addToCart('Iced Coffee (Large)', 300)">+</button></div>
-            </div>
+            <div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>
+            <div class="coffee-row"><span>Espresso</span><div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Espresso (Regular)', 150)">+</button></div><div class="coffee-price">-</div></div>
+            <div class="coffee-row"><span>Americano</span><div class="coffee-price">₹150 <button class="add-btn" onclick="promptRemark('Americano (Regular)', 150)">+</button></div><div class="coffee-price">₹220 <button class="add-btn" onclick="promptRemark('Americano (Large)', 220)">+</button></div></div>
+            <div class="coffee-row"><span>Iced Americano</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Americano (Reg)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Americano (Lrg)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Latte</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Latte (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Latte (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Cappuccino</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cappuccino (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cappuccino (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Macchiato</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Macchiato (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Macchiato (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Cortado</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Cortado (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Cortado (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Flat White</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Flat White (Regular)', 200)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Flat White (Large)', 300)">+</button></div></div>
+            <div class="coffee-row"><span>Iced Coffee</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Iced Coffee (Regular)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Iced Coffee (Large)', 300, true)">+</button></div></div>
         </section>
 
-        <section class="contact-info">
-            <p><strong>WhatsApp:</strong> <a href="https://wa.me/918882946526" target="_blank">88829 46526</a></p>
-            <p><strong>Instagram:</strong> <a href="https://www.instagram.com/ila_cafe" target="_blank">@ila_cafe</a></p>
+        <section>
+            <h2>Beverages</h2>
+            <div class="coffee-header"><div></div><div style="text-align: right;">Regular</div><div style="text-align: right;">Large</div></div>
+            <div class="coffee-row"><span>Matcha Latte</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Matcha Latte (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Matcha Latte (Lrg)', 350, true)">+</button></div></div>
+            <div class="coffee-row"><span>Iced Matcha Latte</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Iced Matcha Latte (Lrg)', 350, true)">+</button></div></div>
+            <div class="coffee-row"><span>Saffron Milk</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Saffron Milk (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Saffron Milk (Lrg)', 350, true)">+</button></div></div>
+            <div class="coffee-row"><span>Rose Milk</span><div class="coffee-price">₹250 <button class="add-btn" onclick="promptRemark('Rose Milk (Reg)', 250, true)">+</button></div><div class="coffee-price">₹350 <button class="add-btn" onclick="promptRemark('Rose Milk (Lrg)', 350, true)">+</button></div></div>
+            <div class="coffee-row"><span>Rose & Fennel Cooler</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Reg)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Rose & Fennel Cooler (Lrg)', 300, true)">+</button></div></div>
+            <div class="coffee-row"><span>Saffron & Tulsi Sharbat</span><div class="coffee-price">₹200 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Reg)', 200, true)">+</button></div><div class="coffee-price">₹300 <button class="add-btn" onclick="promptRemark('Saffron Tulsi Sharbat (Lrg)', 300, true)">+</button></div></div>
         </section>
     </div>
 
     <div id="cart-banner">
-        <div class="cart-info">
-            <span class="cart-total" id="cart-total-text">₹0 (0 items)</span>
-            <span class="cart-clear" onclick="clearCart()">Clear Cart</span>
+        <div class="cart-info" onclick="openReviewCartModal()">
+            <span class="cart-total" id="cart-total-text">₹0</span>
+            <span class="cart-clear">Tap to Review & Edit Order</span>
         </div>
-        <button class="checkout-btn" onclick="openModal()">Send Order</button>
+        <button class="checkout-btn" onclick="openTableModal()">Place Order</button>
     </div>
 
-    <div id="order-modal" class="modal-overlay">
+    <div id="review-cart-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Order Type</h3>
-            <p>How would you like to receive your order?</p>
+            <h3>Your Order</h3>
+            <div id="review-cart-list" class="bill-receipt" style="max-height: 250px; overflow-y: auto; margin-top: 15px;"></div>
+            
             <div class="modal-buttons">
-                <button class="btn btn-primary" onclick="processOrder('Delivery')">Delivery</button>
-                <button class="btn btn-secondary" onclick="processOrder('Takeaway')">Takeaway</button>
+                <button class="btn btn-secondary" style="border-color: #e57373; color: #e57373;" onclick="clearCart()">Empty Cart</button>
+                <button class="btn btn-primary" onclick="closeModal('review-cart-modal')">Done Editing</button>
             </div>
-            <button class="close-modal" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+
+    <div id="remark-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="remark-item-title">Item Name</h3>
+            <div id="sweetness-group" class="sweetness-group">
+                <label>Sweetness Level</label>
+                <select id="sweetness-select" class="sweetness-select">
+                    <option value="Medium sweet" selected>Medium (Default)</option>
+                    <option value="No sweetness">No sweetness</option>
+                    <option value="Less sweet">Less sweet</option>
+                    <option value="Less than medium sweet">Less than medium</option>
+                    <option value="More than medium sweet">More than medium</option>
+                    <option value="Very sweet">Very sweet</option>
+                </select>
+            </div>
+            <p style="margin-top:10px;">Special requests for the chef/barista</p>
+            <input type="text" id="remark-input" class="remark-input" placeholder="e.g. Extra spicy, No ice...">
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
+                <button class="btn btn-primary" onclick="confirmAddItem(true)">Add Item</button>
+            </div>
+            <button class="close-modal" onclick="closeModal('remark-modal')">Cancel</button>
+        </div>
+    </div>
+
+    <div id="table-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Where are you sitting?</h3>
+            <p style="font-size: 0.9rem; opacity: 0.8; margin-top: -5px;">Select your table to place the order.</p>
+            <div class="table-grid" id="sender-table-grid"></div>
+            <button class="takeaway-btn" onclick="openTakeawayPayment()">Delivery / Takeaway</button>
+            <br>
+            <button class="close-modal" onclick="closeModal('table-modal')">Go Back</button>
+        </div>
+    </div>
+
+    <div id="takeaway-payment-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Delivery / Takeaway Checkout</h3>
+            <p style="font-size: 0.9rem; opacity: 0.8; margin-top: -5px; margin-bottom: 20px;">Please complete your payment via UPI to place this order.</p>
+            
+            <div style="font-size: 1.4rem; font-weight: 700; margin-bottom: 20px;">
+                Amount Due: ₹<span id="takeaway-amount-text">0</span>
+            </div>
+
+            <div class="modal-buttons" style="flex-direction: column; gap: 15px;">
+                <button class="btn btn-primary" style="width: 100%; font-size: 1.1rem; padding: 15px;" onclick="openCustomerUPI()">Step 1: Pay via UPI App</button>
+                <button class="btn btn-success" style="width: 100%; font-size: 1.1rem; padding: 15px;" onclick="sendOrder('Delivery / Takeaway')">Step 2: Send Order to Cafe</button>
+            </div>
+            
+            <button class="close-modal" onclick="closeModal('takeaway-payment-modal')" style="margin-top: 15px;">Go Back</button>
         </div>
     </div>
 
     <script>
-        window.cart = {};
-        window.totalAmount = 0;
+        // ==========================================
+        // ⚠️ CAFE SETTINGS ⚠️
+        // ==========================================
+        const OWNER_WHATSAPP = "919999016712"; 
+        const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; // Used for Customer UPI Redirect
+        
+        // --- System Memory ---
+        // For the customer app, we don't save to localStorage, so it resets every time they refresh.
+        window.cart = {}; 
+        window.totalAmount = 0; 
         window.totalItems = 0;
+        window.pendingItemName = ""; 
+        window.pendingItemPrice = 0; 
+        window.isBeveragePending = false; 
 
-        window.addToCart = function(itemName, price) {
-            if (window.cart[itemName]) {
-                window.cart[itemName].qty += 1;
-            } else {
-                window.cart[itemName] = { price: price, qty: 1 };
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        window.promptRemark = function(itemName, price, requiresSweetness = false) {
+            window.pendingItemName = itemName; 
+            window.pendingItemPrice = price; 
+            window.isBeveragePending = requiresSweetness;
+            
+            document.getElementById('remark-item-title').innerText = itemName; 
+            document.getElementById('remark-input').value = ""; 
+            
+            const sweetGroup = document.getElementById('sweetness-group');
+            if (requiresSweetness) { 
+                sweetGroup.style.display = 'block'; 
+                document.getElementById('sweetness-select').value = "Medium sweet"; 
+            } else { 
+                sweetGroup.style.display = 'none'; 
             }
             
-            window.totalAmount += price;
+            document.getElementById('remark-modal').classList.add('active');
+            if (!requiresSweetness) setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
+        };
+
+        window.confirmAddItem = function(useRemark) {
+            let finalName = window.pendingItemName; 
+            let modifications = [];
+            
+            if (window.isBeveragePending) {
+                const sweetValue = document.getElementById('sweetness-select').value;
+                if (sweetValue !== "") modifications.push(sweetValue);
+            }
+            if (useRemark) {
+                const remarkText = document.getElementById('remark-input').value.trim();
+                if (remarkText !== "") modifications.push(remarkText);
+            }
+            
+            if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
+            
+            if (window.cart[finalName]) window.cart[finalName].qty += 1;
+            else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
+            
+            window.totalAmount += window.pendingItemPrice; 
             window.totalItems += 1;
-            window.updateCartUI();
+            
+            updateCartUI(); 
+            closeModal('remark-modal');
         };
 
-        window.clearCart = function() {
-            window.cart = {};
-            window.totalAmount = 0;
-            window.totalItems = 0;
-            window.updateCartUI();
+        window.clearCart = function() { 
+            window.cart = {}; 
+            window.totalAmount = 0; 
+            window.totalItems = 0; 
+            updateCartUI(); 
+            closeModal('review-cart-modal'); 
         };
 
-        window.updateCartUI = function() {
+        function updateCartUI() {
             const banner = document.getElementById('cart-banner');
-            const totalText = document.getElementById('cart-total-text');
-            
-            if (window.totalItems > 0) {
-                totalText.innerText = `₹${window.totalAmount} (${window.totalItems} items)`;
-                banner.classList.add('visible');
+            if (window.totalItems > 0) { 
+                document.getElementById('cart-total-text').innerText = `₹${window.totalAmount} (${window.totalItems} items)`; 
+                banner.classList.add('visible'); 
+            } else { 
+                banner.classList.remove('visible'); 
+            }
+        }
+
+        // --- EDIT CURRENT CART ---
+        window.openReviewCartModal = function() {
+            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
+            if (window.totalItems === 0) {
+                list.innerHTML = "<p style='text-align:center;'>Your cart is empty.</p>";
             } else {
-                banner.classList.remove('visible');
+                for (let item in window.cart) {
+                    const safeItemName = item.replace(/'/g, "\\'");
+                    list.innerHTML += `<div class="bill-receipt-row">
+                        <span style="flex:1;">${item}</span>
+                        <span style="display:flex; align-items:center;">
+                            <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', -1)">-</button>
+                            <span style="width:20px; text-align:center; color:#000;">${window.cart[item].qty}</span>
+                            <button class="mini-btn" onclick="modifyCartItem('${safeItemName}', 1)">+</button>
+                        </span>
+                    </div>`;
+                }
+            }
+            document.getElementById('review-cart-modal').classList.add('active');
+        };
+
+        window.modifyCartItem = function(item, delta) {
+            if (window.cart[item]) {
+                window.cart[item].qty += delta;
+                window.totalAmount += (window.cart[item].price * delta);
+                window.totalItems += delta;
+                if (window.cart[item].qty <= 0) delete window.cart[item];
+                updateCartUI();
+                if (window.totalItems === 0) closeModal('review-cart-modal');
+                else openReviewCartModal();
             }
         };
 
-        window.openModal = function() {
-            document.getElementById('order-modal').classList.add('active');
-        };
-
-        window.closeModal = function() {
-            document.getElementById('order-modal').classList.remove('active');
-        };
-
-        window.processOrder = function(orderType) {
-            window.closeModal(); 
-            
-            const cafeNumber = "918882946526"; 
-            let message = `Hello ILA Cafe! I would like to place a *${orderType}* order:\n\n`;
-            
-            for (let item in window.cart) {
-                message += `${window.cart[item].qty}x ${item} - ₹${window.cart[item].price * window.cart[item].qty}\n`;
+        // --- CUSTOMER SENDING ORDER ---
+        window.openTableModal = function() {
+            const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
+            for (let i = 1; i <= 10; i++) {
+                // For the customer side, we don't know what's occupied, so all are available
+                grid.innerHTML += `<button class="table-btn" onclick="sendOrder('Table ${i}')">${i}</button>`;
             }
+            document.getElementById('table-modal').classList.add('active');
+        };
+
+        // --- DELIVERY / TAKEAWAY UPI WORKFLOW ---
+        window.openTakeawayPayment = function() {
+            closeModal('table-modal');
+            document.getElementById('takeaway-amount-text').innerText = window.totalAmount;
+            document.getElementById('takeaway-payment-modal').classList.add('active');
+        };
+
+        window.openCustomerUPI = function() {
+            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${window.totalAmount}&cu=INR`;
+            // Attempt to open the UPI app directly on the customer's phone
+            window.location.href = upiString;
+        };
+
+        window.sendOrder = function(orderType) {
+            let message = `NEW ${orderType.toUpperCase()} ORDER\n\n`;
             
-            message += `\n*Total: ₹${window.totalAmount}*\n\n`;
-            message += "Please let me know how to pay!";
+            // Add a special payment note if it is a takeaway/delivery order
+            if(orderType === 'Delivery / Takeaway') {
+                message += `💳 Status: UPI Payment Initiated\n\n`;
+            }
+
+            for (let item in window.cart) { 
+                message += `${window.cart[item].qty}x ${item}\n`; 
+            }
+            message += `\nEstimated Total: ₹${window.totalAmount}`;
             
-            const encodedMessage = encodeURIComponent(message);
-            const whatsappURL = `https://wa.me/${cafeNumber}?text=${encodedMessage}`;
-            
-            window.location.href = whatsappURL;
+            // Adding a small delay so iOS registers the tap properly before opening WhatsApp link
+            setTimeout(() => { 
+                window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; 
+            }, 100);
         };
     </script>
-
 </body>
 </html>
