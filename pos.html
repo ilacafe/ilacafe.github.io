@@ -278,13 +278,10 @@
         const OWNER_WHATSAPP = "918882946526"; 
         
         window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
-        
-        // Cart remains strictly local so staff don't overwrite each other while typing
         window.cart = JSON.parse(localStorage.getItem('ila_pos_cart')) || {}; 
         window.totalAmount = parseFloat(localStorage.getItem('ila_pos_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_pos_items')) || 0;
         
-        // Cloud Shared Variables
         window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
         window.salesLedger = []; window.pastBills = [];
         
@@ -299,20 +296,19 @@
             updateCartUI();
         }
 
-        // --- NEW CLOUD SYNC ENGINE ---
+        // CRITICAL BUG FIX: Firebase requires 'null' to delete empty nodes via update()
         function syncToCloud() {
             db.ref('pos').update({
-                activeTables: window.activeTables,
-                cashDrawer: window.cashDrawer,
-                upiTotal: window.upiTotal,
-                salesLedger: window.salesLedger,
-                pastBills: window.pastBills
-            });
+                activeTables: Object.keys(window.activeTables).length > 0 ? window.activeTables : null,
+                cashDrawer: window.cashDrawer || 0,
+                upiTotal: window.upiTotal || 0,
+                salesLedger: window.salesLedger.length > 0 ? window.salesLedger : null,
+                pastBills: window.pastBills.length > 0 ? window.pastBills : null
+            }).catch(e => console.error("Cloud Sync Error: ", e));
         }
 
         db.ref('pos/activeTables').on('value', snap => { 
-            window.activeTables = snap.val() || {}; 
-            updateDashboards(); refreshActiveModals();
+            window.activeTables = snap.val() || {}; updateDashboards(); refreshActiveModals();
         });
         db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = snap.val() || 0; updateDashboards(); });
         db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = snap.val() || 0; updateDashboards(); });
@@ -329,7 +325,10 @@
 
         function refreshActiveModals() {
             if(document.getElementById('active-bills-modal').classList.contains('active')) openActiveBills();
-            if(document.getElementById('checkout-modal').classList.contains('active') && window.checkoutTableID) renderCheckoutReceipt(window.checkoutTableID);
+            if(document.getElementById('checkout-modal').classList.contains('active') && window.checkoutTableID) {
+                if(!window.activeTables[window.checkoutTableID]) closeModal('checkout-modal'); 
+                else renderCheckoutReceipt(window.checkoutTableID);
+            }
             if(document.getElementById('table-modal').classList.contains('active')) openTableModal();
         }
 
