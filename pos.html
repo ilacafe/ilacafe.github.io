@@ -50,7 +50,6 @@
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
         .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
         .remark-input, .sweetness-select { width: 90%; padding: 12px; margin: 10px auto; border-radius: 6px; border: none; font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(255, 255, 255, 0.9); color: #333; display: block; box-sizing: border-box; }
-        .sweetness-group { text-align: left; width: 90%; margin: 15px auto; display: none; }
         
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; }
         .table-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
@@ -125,7 +124,7 @@
     <div id="remark-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="remark-item-title">Item</h3>
-            <div id="sweetness-group" class="sweetness-group">
+            <div style="text-align: left; width: 90%; margin: 15px auto;">
                 <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Sweetness</label>
                 <select id="sweetness-select" class="sweetness-select">
                     <option value="Medium sweet" selected>Medium</option>
@@ -134,11 +133,9 @@
                     <option value="Very sweet">Extra</option>
                 </select>
             </div>
-            <p style="margin-top:10px; text-align: left; width: 90%; margin-left: auto; margin-right: auto; opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Notes</p>
-            <input type="text" id="remark-input" class="remark-input" placeholder="Optional...">
             <div class="modal-buttons">
-                <button class="btn btn-secondary" onclick="confirmAddItem(false)">Skip</button>
-                <button class="btn btn-primary" onclick="confirmAddItem(true)">Add</button>
+                <button class="btn btn-secondary" onclick="closeModal('remark-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmAddItem()">Add</button>
             </div>
             <button class="close-modal" onclick="closeModal('remark-modal')">✖ CLOSE</button>
         </div>
@@ -146,7 +143,9 @@
 
     <div id="table-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Table Select</h3>
+            <h3>Send Order</h3>
+            <textarea id="pos-order-notes" class="remark-input" placeholder="Order notes (e.g. To-go cup, extra hot...)" style="height: 50px; resize: none; margin-top: 5px; margin-bottom: 15px;"></textarea>
+            
             <div class="table-grid" id="sender-table-grid"></div>
             <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway</button><br>
             <button class="close-modal" onclick="closeModal('table-modal')">✖ CLOSE</button>
@@ -296,7 +295,6 @@
             updateCartUI();
         }
 
-        // CRITICAL BUG FIX: Firebase requires 'null' to delete empty nodes via update()
         function syncToCloud() {
             db.ref('pos').update({
                 activeTables: Object.keys(window.activeTables).length > 0 ? window.activeTables : null,
@@ -405,22 +403,35 @@
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
+        // UPDATED: 1-Tap Engine Logic
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
+            let finalName = itemName.replace(/&quot;/g, '"');
+            
+            // Bypass modal completely if sweetness isn't required
+            if (!requiresSweetness) {
+                if (window.cart[finalName]) window.cart[finalName].qty += 1; 
+                else window.cart[finalName] = { price: price, qty: 1 };
+                
+                window.totalAmount += price; 
+                window.totalItems += 1;
+                
+                if (navigator.vibrate) navigator.vibrate(50);
+                saveLocalCart();
+                return;
+            }
+
+            // Otherwise, open the specific Sweetness modal
             window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
-            document.getElementById('remark-item-title').innerText = itemName.replace(/&quot;/g, '"'); 
-            document.getElementById('remark-input').value = ""; 
-            const sweetGroup = document.getElementById('sweetness-group');
-            if (requiresSweetness) { sweetGroup.style.display = 'block'; document.getElementById('sweetness-select').value = "Medium sweet"; } 
-            else { sweetGroup.style.display = 'none'; }
+            document.getElementById('remark-item-title').innerText = finalName; 
+            document.getElementById('sweetness-select').value = "Medium sweet"; 
             document.getElementById('remark-modal').classList.add('active');
-            if (!requiresSweetness) setTimeout(() => { document.getElementById('remark-input').focus(); }, 100);
         };
 
-        window.confirmAddItem = function(useRemark) {
-            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); let modifications = [];
-            if (window.isBeveragePending) { const sweetValue = document.getElementById('sweetness-select').value; if (sweetValue !== "") modifications.push(sweetValue); }
-            if (useRemark) { let remarkText = document.getElementById('remark-input').value.trim(); remarkText = remarkText.replace(/</g, "&lt;").replace(/>/g, "&gt;"); if (remarkText !== "") modifications.push(remarkText); }
-            if (modifications.length > 0) finalName += ` (${modifications.join(", ")})`;
+        window.confirmAddItem = function() {
+            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
+            const sweetValue = document.getElementById('sweetness-select').value; 
+            if (sweetValue !== "") finalName += ` (${sweetValue})`;
+            
             if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
             saveLocalCart(); closeModal('remark-modal');
@@ -458,6 +469,10 @@
 
         window.openTableModal = function() {
             if (window.totalItems === 0) return alert("Cart is empty!");
+            
+            // Clear the notes box every time they open it
+            document.getElementById('pos-order-notes').value = "";
+            
             const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
             for (let i = 1; i <= 10; i++) {
                 const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
@@ -466,9 +481,19 @@
             document.getElementById('table-modal').classList.add('active');
         };
 
+        // UPDATED: Now captures notes and appends them to the active ticket
         window.sendOrder = function(tableID) {
             if (window.totalItems === 0) return alert("Cart is empty!");
-            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0 };
+            
+            const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            
+            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
+            
+            if (notes) {
+                if (window.activeTables[tableID].notes) window.activeTables[tableID].notes += " | " + notes;
+                else window.activeTables[tableID].notes = notes;
+            }
+
             for (let item in window.cart) {
                 if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
                 else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
@@ -476,8 +501,12 @@
             window.activeTables[tableID].total += window.totalAmount;
             syncToCloud();
             
-            let message = tableID === 'Takeaway' ? `ORDER: TAKEAWAY\n\n` : `ORDER: TABLE ${tableID}\n\n`;
+            let message = tableID === 'Takeaway' ? `ORDER: TAKEAWAY\n` : `ORDER: TABLE ${tableID}\n`;
+            if (notes) message += `Notes: ${notes}\n`;
+            message += `\n`;
+            
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item} \n`; }
+            
             closeModal('table-modal'); window.clearCart();
             setTimeout(() => { window.location.href = `https://wa.me/?text=${encodeURIComponent(message)}`; }, 300);
         };
@@ -498,6 +527,12 @@
             if(!tableData) return; 
             let total = tableData.total; let paid = tableData.paid || 0; let remaining = total - paid;
             let receiptHTML = "";
+            
+            // Display notes on the active ticket if they exist
+            if (tableData.notes) {
+                receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${tableData.notes}</div>`;
+            }
+
             for (let item in tableData.items) { 
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
@@ -615,7 +650,7 @@
         }
 
         function savePastBill(tableID, tableData) {
-            const bill = { id: Date.now(), table: tableID, date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), items: JSON.parse(JSON.stringify(tableData.items)), total: tableData.total };
+            const bill = { id: Date.now(), table: tableID, date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), items: JSON.parse(JSON.stringify(tableData.items)), total: tableData.total, notes: tableData.notes || "" };
             window.pastBills.unshift(bill); if(window.pastBills.length > 50) window.pastBills.pop(); 
         }
 
@@ -641,7 +676,9 @@
             const bill = window.pastBills.find(b => b.id === id); if (!bill) return; window.currentPastBillID = id;
             document.getElementById('past-bill-title').innerText = bill.table === 'Takeaway' ? 'Takeaway' : `Table ${bill.table}`;
             document.getElementById('past-bill-date').innerText = bill.date;
-            let receiptHTML = ""; for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
+            let receiptHTML = ""; 
+            if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${bill.notes}</div>`;
+            for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
             document.getElementById('past-bill-receipt').innerHTML = receiptHTML; document.getElementById('past-bill-phone').value = "";
             closeModal('past-bills-modal'); document.getElementById('view-past-bill-modal').classList.add('active');
