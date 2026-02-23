@@ -87,7 +87,10 @@
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 10px; }
         .bill-receipt-row:last-child { margin-bottom: 0; border-bottom: none; padding-bottom: 0;}
 
-        #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 3000; text-align: center; padding: 20px; box-sizing: border-box; }
+        /* REDESIGNED PREMIUM CLOSED SCREEN */
+        #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; justify-content: center; align-items: center; z-index: 5000; padding: 20px; box-sizing: border-box; }
+        .closed-card { background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.1); padding: 50px 30px; border-radius: 12px; text-align: center; width: 100%; max-width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: flex; flex-direction: column; align-items: center; }
+        .closed-line { width: 40px; height: 1px; background-color: rgba(255,255,255,0.3); margin: 0 auto 20px auto; }
         
         .usual-box { border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 15px; cursor: pointer; text-align: center; transition: background-color 0.2s; margin-bottom: 25px; }
         .usual-box:active { background-color: rgba(255, 255, 255, 0.1); }
@@ -96,9 +99,12 @@
 <body>
 
     <div id="closed-screen">
-        <img src="logo.png" alt="ILA Logo" style="max-width: 200px; margin-bottom: 20px;">
-        <h1 style="text-transform: uppercase; font-size: 1.5rem; letter-spacing: 2px;">Closed</h1>
-        <p style="opacity: 0.7; font-size: 1rem;">We are currently not accepting orders.</p>
+        <div class="closed-card">
+            <img src="logo.png" alt="ILA Logo" style="max-width: 140px; margin-bottom: 30px; opacity: 0.9;">
+            <h1 style="text-transform: uppercase; font-size: 1.6rem; letter-spacing: 4px; margin: 0 0 15px 0; font-weight: 700;">Closed</h1>
+            <div class="closed-line"></div>
+            <p style="opacity: 0.7; font-size: 0.95rem; margin: 0; letter-spacing: 0.5px; line-height: 1.5;">We are not accepting orders<br>at this time.</p>
+        </div>
     </div>
 
     <div id="system-modal" class="modal-overlay" style="z-index: 5000;">
@@ -240,7 +246,6 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const OWNER_WHATSAPP = "918882946526"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         
         window.cart = JSON.parse(localStorage.getItem('ila_customer_cart')) || {}; 
@@ -268,7 +273,6 @@
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
         window.flatMenu = {}; 
 
-        /* SYSTEM ALERT ENGINE */
         window.showSystemAlert = function(title, msg) {
             document.getElementById('system-modal-title').innerText = title;
             document.getElementById('system-modal-msg').innerHTML = msg.replace(/\n/g, '<br>');
@@ -453,6 +457,7 @@
                 window.totalItems += 1;
                 
                 if (navigator.vibrate) navigator.vibrate(50);
+                
                 saveCart(); 
                 return;
             }
@@ -573,7 +578,6 @@
             document.getElementById('payment-modal').classList.add('active');
         };
 
-        /* REDIRECTS TO NEW WEB QUEUE INSTEAD OF WHATSAPP */
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo; 
             
