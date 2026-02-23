@@ -309,16 +309,15 @@
         window.totalItems = parseInt(localStorage.getItem('ila_pos_items')) || 0;
         
         window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
-        window.salesLedger = []; window.pastBills = []; window.pendingWebOrders = {};
+        window.salesLedger = []; window.pastBills = [];
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
         window.pendingUPIAmount = 0; window.currentPaymentMethod = "UPI"; window.currentSweetness = "Medium sweet";
 
-        // ENGINE UPGRADE: ROUTING MAP FOR KITCHEN DISPLAYS
         window.itemRoutingMap = {};
 
-        // PHASE 3 FIX: Fully activated Web Queue logic
+        // PHASE 3 UPGRADE: Detailed Web Queue View
         window.openWebOrders = function() {
             const list = document.getElementById('web-orders-list'); 
             list.innerHTML = "";
@@ -327,9 +326,18 @@
             } else {
                 for (let id in window.pendingWebOrders) {
                     const o = window.pendingWebOrders[id];
+                    
+                    let itemsHTML = "<div style='margin: 10px 0; font-size: 0.9rem; opacity: 0.8; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.3);'>";
+                    for(let itemName in o.items) {
+                        itemsHTML += `<div style="margin-bottom: 3px;">${o.items[itemName].qty}x ${itemName}</div>`;
+                    }
+                    if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; color:#ffdd99;">Notes: ${o.notes}</div>`;
+                    itemsHTML += "</div>";
+
                     list.innerHTML += `<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left;">
-                        <strong>${o.tableOrAddress}</strong><br>
-                        ₹${o.total}<br>
+                        <strong style="font-size: 1.1rem; text-transform: uppercase;">${o.tableOrAddress}</strong><br>
+                        ${itemsHTML}
+                        <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
                         <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.acceptWebOrder('${id}')">Accept & Send to Kitchen</button>
                     </div>`;
                 }
@@ -337,6 +345,7 @@
             document.getElementById('web-orders-modal').classList.add('active');
         };
 
+        // PHASE 3 UPGRADE: Inject accepted web orders into the POS History
         window.acceptWebOrder = function(id) {
             const order = window.pendingWebOrders[id];
             if (!order) return;
@@ -344,13 +353,25 @@
             // 1. Route to Kitchen
             dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App");
             
-            // 2. Add to Math/Ledger (Phase 2 safe)
+            // 2. Add to Math/Ledger
             addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`);
             
-            // 3. Save to Permanent Enterprise History
-            const now = new Date();
+            // 3. Save to POS Local History (So you can see it in 'Logs')
+            const localBill = { 
+                id: Date.now(), 
+                table: "Web: " + order.tableOrAddress, 
+                date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), 
+                items: JSON.parse(JSON.stringify(order.items)), 
+                total: order.total, 
+                notes: order.notes || "" 
+            };
+            window.pastBills.unshift(localBill);
+            if(window.pastBills.length > 50) window.pastBills.pop();
+            syncToCloud();
+            
+            // 4. Save to Permanent Enterprise History
             const archivePacket = {
-                timestamp: now.toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}),
+                timestamp: new Date().toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}),
                 source: "Web App",
                 orderType: "Delivery/Web",
                 tableOrAddress: order.tableOrAddress,
@@ -358,9 +379,9 @@
                 payment: { method: "UPI", total: order.total },
                 items: order.items
             };
-            db.ref('orders/history/' + now.getTime()).set(archivePacket);
+            db.ref('orders/history/' + Date.now()).set(archivePacket);
             
-            // 4. Remove from Queue & Close
+            // 5. Remove from Queue & Close
             db.ref('orders/pendingWeb/' + id).remove();
             closeModal('web-orders-modal');
         };
@@ -436,14 +457,12 @@
         db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
         db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
 
-        // PHASE 3 FIX: Web order live UI update
         db.ref('orders/pendingWeb').on('value', snap => {
             window.pendingWebOrders = snap.val() || {};
             let count = Object.keys(window.pendingWebOrders).length;
             document.getElementById('web-orders-count').innerText = count;
             document.getElementById('web-orders-count').style.opacity = count > 0 ? "1" : "0.5";
             
-            // Auto refresh modal if open
             if(document.getElementById('web-orders-modal').classList.contains('active')) {
                 window.openWebOrders();
             }
@@ -488,7 +507,6 @@
             currentMenuData = snap.val() || {}; 
             localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
             
-            // ENGINE UPGRADE: BUILD ROUTING MAP
             window.itemRoutingMap = {};
             for(let cat in currentMenuData) {
                 for(let item in currentMenuData[cat]) {
@@ -638,7 +656,6 @@
             document.getElementById('table-modal').classList.add('active');
         };
 
-        // ENGINE UPGRADE: DISPATCH TO KDS
         function dispatchToKitchen(cartObj, destination, notes, source) {
             let baristaItems = {}; let chefItems = {};
             
@@ -666,10 +683,8 @@
             const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
             let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
             
-            // 1. Send silently to Kitchen Displays
             dispatchToKitchen(window.cart, destName, notes, "POS");
 
-            // 2. Save locally for payment checkout later
             if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
             
             if (notes) {
@@ -682,7 +697,6 @@
                 else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
             }
             
-            // PHASE 2 FIX: Ensure table total is parsed safely
             let safeTotal = parseFloat(window.totalAmount) || 0;
             window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + safeTotal;
             syncToCloud();
