@@ -52,7 +52,6 @@
         .cart-clear { font-size: 0.8rem; opacity: 0.7; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        /* PHASE 1 FIX: CHANGED align-items to flex-start and added padding-top so long modals scroll properly */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: flex-start; padding-top: 5vh; box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
@@ -91,11 +90,11 @@
         
         #qr-image { width: 150px; height: 150px; margin: 15px auto; border-radius: 8px; display: block; background: white; padding: 5px; }
 
-        .ledger-box { border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px; }
-        .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding: 8px 0; font-size: 0.85rem; }
+        .ledger-box { border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px; }
+        .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255, 255, 255, 0.1); padding: 8px 0; font-size: 0.85rem; }
         .ledger-item:last-child { border-bottom: none; }
         .ledger-income { color: white; font-weight: bold; }
-        .ledger-out { color: rgba(255,255,255,0.6); }
+        .ledger-out { color: rgba(255, 255, 255, 0.6); }
         .ledger-meta { font-size: 0.75rem; opacity: 0.5; display: block; margin-top: 2px;}
     </style>
 </head>
@@ -317,7 +316,6 @@
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
         window.pendingUPIAmount = 0; window.currentPaymentMethod = "UPI"; window.currentSweetness = "Medium sweet";
 
-        // PHASE 1 FIX: Dummy web opening function so clicking the swapped button doesn't error out.
         window.openWebOrders = function() {
             document.getElementById('web-orders-modal').classList.add('active');
         };
@@ -388,17 +386,17 @@
         db.ref('pos/activeTables').on('value', snap => { 
             window.activeTables = snap.val() || {}; updateDashboards(); refreshActiveModals();
         });
-        db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = snap.val() || 0; updateDashboards(); });
-        db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = snap.val() || 0; updateDashboards(); });
+        db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
+        db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
         db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
         db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
 
         function updateDashboards() {
-            document.getElementById('cash-display').innerText = `₹${window.cashDrawer}`;
-            document.getElementById('upi-display').innerText = `₹${window.upiTotal}`;
+            document.getElementById('cash-display').innerText = `₹${Math.round(window.cashDrawer)}`;
+            document.getElementById('upi-display').innerText = `₹${Math.round(window.upiTotal)}`;
             document.getElementById('active-bills-count').innerText = Object.keys(window.activeTables).length;
-            document.getElementById('modal-cash-display').innerText = window.cashDrawer;
-            document.getElementById('modal-upi-display').innerText = window.upiTotal;
+            document.getElementById('modal-cash-display').innerText = Math.round(window.cashDrawer);
+            document.getElementById('modal-upi-display').innerText = Math.round(window.upiTotal);
         }
 
         function refreshActiveModals() {
@@ -503,7 +501,7 @@
                 if (window.cart[finalName]) window.cart[finalName].qty += 1; 
                 else window.cart[finalName] = { price: price, qty: 1 };
                 
-                window.totalAmount += price; 
+                window.totalAmount += parseFloat(price) || 0; 
                 window.totalItems += 1;
                 
                 if (navigator.vibrate) navigator.vibrate(50);
@@ -527,7 +525,8 @@
             if (window.currentSweetness !== "") finalName += ` (${window.currentSweetness})`;
             
             if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
-            window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
+            window.totalAmount += parseFloat(window.pendingItemPrice) || 0; 
+            window.totalItems += 1;
             saveLocalCart(); closeModal('remark-modal');
         };
 
@@ -548,7 +547,7 @@
         window.modifyCartItem = function(item, delta) {
             let realItemName = item.replace(/&quot;/g, '"');
             if (window.cart[realItemName]) {
-                window.cart[realItemName].qty += delta; window.totalAmount += (window.cart[realItemName].price * delta); window.totalItems += delta;
+                window.cart[realItemName].qty += delta; window.totalAmount += (parseFloat(window.cart[realItemName].price) * delta); window.totalItems += delta;
                 if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
                 saveLocalCart();
                 if (window.totalItems === 0) closeModal('review-cart-modal'); else window.openReviewCartModal();
@@ -584,7 +583,10 @@
                 if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
                 else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
             }
-            window.activeTables[tableID].total += window.totalAmount;
+            
+            // PHASE 2 FIX: Ensure table total is parsed safely
+            let safeTotal = parseFloat(window.totalAmount) || 0;
+            window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + safeTotal;
             syncToCloud();
             
             closeModal('table-modal'); window.clearCart();
@@ -604,7 +606,11 @@
         function renderCheckoutReceipt(tableID) {
             const tableData = window.activeTables[tableID];
             if(!tableData) return; 
-            let total = tableData.total; let paid = tableData.paid || 0; let remaining = total - paid;
+            
+            // PHASE 2 FIX: Safe Parsing for Receipt UI
+            let total = parseFloat(tableData.total) || 0; 
+            let paid = parseFloat(tableData.paid) || 0; 
+            let remaining = total - paid;
             let receiptHTML = "";
             
             if (tableData.notes) {
@@ -635,15 +641,17 @@
             let realItemName = itemName.replace(/&quot;/g, '"');
             const tableData = window.activeTables[tableID];
             if(tableData && tableData.items[realItemName]) {
-                tableData.total -= tableData.items[realItemName].price; 
+                tableData.total = (parseFloat(tableData.total) || 0) - (parseFloat(tableData.items[realItemName].price) || 0); 
                 tableData.items[realItemName].qty -= 1;
                 if(tableData.items[realItemName].qty <= 0) delete tableData.items[realItemName];
                 
-                let paid = tableData.paid || 0;
+                let paid = parseFloat(tableData.paid) || 0;
+                let newTotal = parseFloat(tableData.total) || 0;
+
                 if(Object.keys(tableData.items).length === 0) { 
                     delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return; 
                 }
-                if(paid >= tableData.total && paid > 0) {
+                if(paid >= newTotal && paid > 0) {
                      delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return;
                 }
                 syncToCloud();
@@ -652,40 +660,56 @@
 
         window.openSplitBill = function() {
             const tableData = window.activeTables[window.checkoutTableID];
-            let remaining = tableData.total - (tableData.paid || 0);
-            document.getElementById('split-total').innerText = tableData.total;
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            document.getElementById('split-total').innerText = total;
             document.getElementById('split-remaining').innerText = remaining;
             document.getElementById('partial-pay-amount').value = remaining;
             closeModal('checkout-modal'); document.getElementById('split-bill-modal').classList.add('active');
         };
 
         window.closeSplitBill = function() { closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
+        
         window.calculateSplit = function(ways) {
             const tableData = window.activeTables[window.checkoutTableID];
-            let remaining = tableData.total - (tableData.paid || 0);
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
             document.getElementById('partial-pay-amount').value = Math.ceil(remaining / ways);
         };
 
         window.processSplit = function(method) {
             let amount = parseFloat(document.getElementById('partial-pay-amount').value);
             let tableData = window.activeTables[window.checkoutTableID];
-            let remaining = tableData.total - (tableData.paid || 0);
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            
             if (isNaN(amount) || amount <= 0) return;
             if (amount > remaining) amount = remaining; 
+            
             if (method === 'upi') window.payWithUPI(amount); else window.payWithCash(amount);
         };
 
         window.payWithCash = function(customAmount = null) {
             window.currentPaymentMethod = "Cash";
             const tableData = window.activeTables[window.checkoutTableID];
-            let remaining = tableData.total - (tableData.paid || 0);
-            let amountToPay = customAmount !== null ? customAmount : remaining;
+            
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            
+            // PHASE 2 FIX: Ensure amountToPay is a strict Float
+            let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
+            amountToPay = amountToPay || 0;
+
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (Cash)' : `Table ${window.checkoutTableID} (Cash)`;
             
             addLedgerEntry('cash_income', amountToPay, reason);
-            tableData.paid = (tableData.paid || 0) + amountToPay;
+            tableData.paid = paid + amountToPay;
             
-            if (tableData.paid >= tableData.total) {
+            if (tableData.paid >= total) {
                 delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
                 closeModal('checkout-modal'); closeModal('split-bill-modal');
             } else {
@@ -696,8 +720,14 @@
         window.payWithUPI = function(customAmount = null) {
             window.currentPaymentMethod = "UPI";
             const tableData = window.activeTables[window.checkoutTableID];
-            let remaining = tableData.total - (tableData.paid || 0);
-            let amountToPay = customAmount !== null ? customAmount : remaining;
+            
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+
+            // PHASE 2 FIX: Ensure pendingUPI is a strict Float
+            let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
+            amountToPay = amountToPay || 0;
             
             window.pendingUPIAmount = amountToPay;
             const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amountToPay}&cu=INR`;
@@ -708,14 +738,17 @@
         };
 
         window.confirmUPIPayment = function() {
-            let amountToPay = window.pendingUPIAmount;
+            let amountToPay = parseFloat(window.pendingUPIAmount) || 0;
             const tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+
             const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (UPI)' : `Table ${window.checkoutTableID} (UPI)`;
             
             addLedgerEntry('upi_income', amountToPay, reason); 
-            tableData.paid = (tableData.paid || 0) + amountToPay;
+            tableData.paid = paid + amountToPay;
 
-            if (tableData.paid >= tableData.total) {
+            if (tableData.paid >= total) {
                 delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
                 closeModal('upi-modal'); 
             } else {
@@ -723,10 +756,22 @@
             }
         };
 
+        // PHASE 2 FIX: The Core Ledger Engine
         function addLedgerEntry(type, amount, reason) {
+            const parsedAmount = parseFloat(amount) || 0;
             const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            window.salesLedger.unshift({ date: timeString, type: type, amount: amount, reason: reason }); 
-            if (type === 'cash_income') window.cashDrawer += amount; else if (type === 'upi_income') window.upiTotal += amount; else window.cashDrawer -= amount; 
+            
+            window.salesLedger.unshift({ date: timeString, type: type, amount: parsedAmount, reason: reason }); 
+            
+            if (type === 'cash_income') {
+                window.cashDrawer = (parseFloat(window.cashDrawer) || 0) + parsedAmount;
+            } else if (type === 'upi_income') {
+                window.upiTotal = (parseFloat(window.upiTotal) || 0) + parsedAmount;
+            } else {
+                window.cashDrawer = (parseFloat(window.cashDrawer) || 0) - parsedAmount;
+            }
+            // Trigger instant cloud sync to save the math
+            syncToCloud();
         }
 
         function renderLedger() {
@@ -736,7 +781,10 @@
                 let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
                 if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'CASH: '; } 
                 else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
-                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${entry.amount}</div></div>`;
+                
+                // PHASE 2 FIX: clean decimal display for ledger
+                let safeAmount = parseFloat(entry.amount) || 0;
+                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
             });
         }
 
@@ -771,9 +819,12 @@
             const tableData = window.activeTables[window.checkoutTableID]; let billStr = `ILA\n\n`;
             for (let item in tableData.items) { billStr += `${tableData.items[item].qty}x ${item} - ₹${tableData.items[item].qty * tableData.items[item].price}\n`; }
             
-            const remaining = tableData.total - (tableData.paid || 0);
-            billStr += `\nTotal: ₹${tableData.total}\n`;
-            if(tableData.paid > 0) billStr += `Paid: ₹${tableData.paid}\nDue: ₹${remaining}\n\n`;
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+
+            billStr += `\nTotal: ₹${total}\n`;
+            if(paid > 0) billStr += `Paid: ₹${paid}\nDue: ₹${remaining}\n\n`;
             else billStr += `\n`;
 
             billStr += `Pay via UPI:\n${CAFE_WEBSITE_LINK}/pay.html?am=${remaining}`;
@@ -788,20 +839,27 @@
             const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
             if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
             const staffName = window.staffPins[pinStr]; if (!staffName) return;
-            if (amount > window.cashDrawer && !confirm(`Only ₹${window.cashDrawer} in drawer. Continue?`)) return;
+            
+            let currentCash = parseFloat(window.cashDrawer) || 0;
+            if (amount > currentCash && !confirm(`Only ₹${currentCash} in drawer. Continue?`)) return;
+            
             addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (${staffName})`);
-            syncToCloud(); window.closeTransactionModal();
+            window.closeTransactionModal();
         };
 
         window.promptEOD = function() {
             const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
             const staffName = window.staffPins[pinStr]; if (!staffName) return;
             if (Object.keys(window.activeTables).length > 0) { if(!confirm("Tables open. End day?")) return; }
-            let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${window.upiTotal}\nCash: ₹${window.cashDrawer}\n\nEXPENSES:\n`;
+            
+            let safeUPI = parseFloat(window.upiTotal) || 0;
+            let safeCash = parseFloat(window.cashDrawer) || 0;
+
+            let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${Math.round(safeUPI)}\nCash: ₹${Math.round(safeCash)}\n\nEXPENSES:\n`;
             let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
             if (!exp) report += `None.\n`;
             if (confirm("Send Report?")) {
-                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; syncToCloud(); closeModal('cash-modal');
+                window.activeTables = {}; window.upiTotal = 0; window.cashDrawer = 0; window.salesLedger = []; window.pastBills = []; syncToCloud(); closeModal('cash-modal');
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
         };
