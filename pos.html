@@ -129,9 +129,8 @@
     <div id="web-orders-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Web Orders</h3>
-            <div id="web-orders-list" style="margin-top: 15px; max-height: 300px; overflow-y: auto;">
-                <p style="opacity:0.5;">Web logic will be active in Phase 3.</p>
-            </div>
+            <div id="web-orders-list" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
+                </div>
             <button class="close-modal" onclick="closeModal('web-orders-modal')">✖ CLOSE</button>
         </div>
     </div>
@@ -310,14 +309,60 @@
         window.totalItems = parseInt(localStorage.getItem('ila_pos_items')) || 0;
         
         window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
-        window.salesLedger = []; window.pastBills = [];
+        window.salesLedger = []; window.pastBills = []; window.pendingWebOrders = {};
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
         window.pendingUPIAmount = 0; window.currentPaymentMethod = "UPI"; window.currentSweetness = "Medium sweet";
 
+        // ENGINE UPGRADE: ROUTING MAP FOR KITCHEN DISPLAYS
+        window.itemRoutingMap = {};
+
+        // PHASE 3 FIX: Fully activated Web Queue logic
         window.openWebOrders = function() {
+            const list = document.getElementById('web-orders-list'); 
+            list.innerHTML = "";
+            if (Object.keys(window.pendingWebOrders).length === 0) {
+                list.innerHTML = "<p style='opacity:0.5;'>No pending web orders.</p>";
+            } else {
+                for (let id in window.pendingWebOrders) {
+                    const o = window.pendingWebOrders[id];
+                    list.innerHTML += `<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left;">
+                        <strong>${o.tableOrAddress}</strong><br>
+                        ₹${o.total}<br>
+                        <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.acceptWebOrder('${id}')">Accept & Send to Kitchen</button>
+                    </div>`;
+                }
+            }
             document.getElementById('web-orders-modal').classList.add('active');
+        };
+
+        window.acceptWebOrder = function(id) {
+            const order = window.pendingWebOrders[id];
+            if (!order) return;
+            
+            // 1. Route to Kitchen
+            dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App");
+            
+            // 2. Add to Math/Ledger (Phase 2 safe)
+            addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`);
+            
+            // 3. Save to Permanent Enterprise History
+            const now = new Date();
+            const archivePacket = {
+                timestamp: now.toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}),
+                source: "Web App",
+                orderType: "Delivery/Web",
+                tableOrAddress: order.tableOrAddress,
+                notes: order.notes || "",
+                payment: { method: "UPI", total: order.total },
+                items: order.items
+            };
+            db.ref('orders/history/' + now.getTime()).set(archivePacket);
+            
+            // 4. Remove from Queue & Close
+            db.ref('orders/pendingWeb/' + id).remove();
+            closeModal('web-orders-modal');
         };
 
         function saveLocalCart() {
@@ -391,6 +436,19 @@
         db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
         db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
 
+        // PHASE 3 FIX: Web order live UI update
+        db.ref('orders/pendingWeb').on('value', snap => {
+            window.pendingWebOrders = snap.val() || {};
+            let count = Object.keys(window.pendingWebOrders).length;
+            document.getElementById('web-orders-count').innerText = count;
+            document.getElementById('web-orders-count').style.opacity = count > 0 ? "1" : "0.5";
+            
+            // Auto refresh modal if open
+            if(document.getElementById('web-orders-modal').classList.contains('active')) {
+                window.openWebOrders();
+            }
+        });
+
         function updateDashboards() {
             document.getElementById('cash-display').innerText = `₹${Math.round(window.cashDrawer)}`;
             document.getElementById('upi-display').innerText = `₹${Math.round(window.upiTotal)}`;
@@ -429,6 +487,19 @@
         db.ref('menu').on('value', snap => { 
             currentMenuData = snap.val() || {}; 
             localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
+            
+            // ENGINE UPGRADE: BUILD ROUTING MAP
+            window.itemRoutingMap = {};
+            for(let cat in currentMenuData) {
+                for(let item in currentMenuData[cat]) {
+                    let route = currentMenuData[cat][item].routing || 'barista';
+                    window.itemRoutingMap[item] = route;
+                    if(currentMenuData[cat][item].hasSizes) {
+                        window.itemRoutingMap[item + " (Regular)"] = route;
+                        window.itemRoutingMap[item + " (Large)"] = route;
+                    }
+                }
+            }
             renderPOSMenu(currentMenuData, liveCategoryOrder); 
         });
 
@@ -567,11 +638,38 @@
             document.getElementById('table-modal').classList.add('active');
         };
 
+        // ENGINE UPGRADE: DISPATCH TO KDS
+        function dispatchToKitchen(cartObj, destination, notes, source) {
+            let baristaItems = {}; let chefItems = {};
+            
+            for (let itemName in cartObj) {
+                let baseName = itemName.split(" (Medium")[0].split(" (Less")[0].split(" (No ")[0].split(" (Very")[0];
+                let routing = window.itemRoutingMap[baseName] || 'barista';
+                
+                if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
+                else { baristaItems[itemName] = cartObj[itemName]; }
+            }
+
+            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            if (Object.keys(baristaItems).length > 0) {
+                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr });
+            }
+            if (Object.keys(chefItems).length > 0) {
+                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr });
+            }
+        }
+
         window.sendOrder = function(tableID) {
             if (window.totalItems === 0) return alert("Cart is empty!");
             
             const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
             
+            // 1. Send silently to Kitchen Displays
+            dispatchToKitchen(window.cart, destName, notes, "POS");
+
+            // 2. Save locally for payment checkout later
             if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
             
             if (notes) {
@@ -607,7 +705,6 @@
             const tableData = window.activeTables[tableID];
             if(!tableData) return; 
             
-            // PHASE 2 FIX: Safe Parsing for Receipt UI
             let total = parseFloat(tableData.total) || 0; 
             let paid = parseFloat(tableData.paid) || 0; 
             let remaining = total - paid;
@@ -700,7 +797,6 @@
             let paid = parseFloat(tableData.paid) || 0;
             let remaining = total - paid;
             
-            // PHASE 2 FIX: Ensure amountToPay is a strict Float
             let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
             amountToPay = amountToPay || 0;
 
@@ -725,7 +821,6 @@
             let paid = parseFloat(tableData.paid) || 0;
             let remaining = total - paid;
 
-            // PHASE 2 FIX: Ensure pendingUPI is a strict Float
             let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
             amountToPay = amountToPay || 0;
             
@@ -756,7 +851,6 @@
             }
         };
 
-        // PHASE 2 FIX: The Core Ledger Engine
         function addLedgerEntry(type, amount, reason) {
             const parsedAmount = parseFloat(amount) || 0;
             const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -770,7 +864,6 @@
             } else {
                 window.cashDrawer = (parseFloat(window.cashDrawer) || 0) - parsedAmount;
             }
-            // Trigger instant cloud sync to save the math
             syncToCloud();
         }
 
@@ -782,7 +875,6 @@
                 if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'CASH: '; } 
                 else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
                 
-                // PHASE 2 FIX: clean decimal display for ledger
                 let safeAmount = parseFloat(entry.amount) || 0;
                 list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
             });
