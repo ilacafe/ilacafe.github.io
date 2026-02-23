@@ -89,10 +89,10 @@
         
         #qr-image { width: 150px; height: 150px; margin: 15px auto; border-radius: 8px; display: block; background: white; padding: 5px; }
 
-        .ledger-box { border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px; }
-        .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,0.1); padding: 8px 0; font-size: 0.85rem; }
+        .ledger-box { border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 10px; max-height: 250px; overflow-y: auto; text-align: left; margin-top: 15px; }
+        .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255, 255, 255, 0.1); padding: 8px 0; font-size: 0.85rem; }
         .ledger-income { color: white; font-weight: bold; }
-        .ledger-out { color: rgba(255,255,255,0.6); }
+        .ledger-out { color: rgba(255, 255, 255, 0.6); }
         .ledger-meta { font-size: 0.75rem; opacity: 0.5; display: block; margin-top: 2px;}
     </style>
 </head>
@@ -105,13 +105,13 @@
         </header>
 
         <div class="dashboard-bar">
-            <div class="dash-stat" onclick="window.safeOpenModal('active-bills-modal')"><span class="dash-label">Bills</span><span class="dash-value" id="active-bills-count">0</span></div>
+            <div class="dash-stat" onclick="openActiveBills()"><span class="dash-label">Bills</span><span class="dash-value" id="active-bills-count">0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="window.openWebOrders()"><span class="dash-label">Web</span><span class="dash-value" id="web-orders-count" style="opacity: 0.5;">0</span></div>
+            <div class="dash-stat" onclick="openWebOrders()"><span class="dash-label">Web</span><span class="dash-value" id="web-orders-count" style="opacity: 0.5;">0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="window.safeOpenModal('cash-modal')"><span class="dash-label">Cash</span><span class="dash-value" id="cash-display">₹0</span></div>
+            <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">Cash</span><span class="dash-value" id="cash-display">₹0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="window.safeOpenModal('cash-modal')"><span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span></div>
+            <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span></div>
         </div>
 
         <div id="live-menu-container">
@@ -132,70 +132,11 @@
         </div>
     </div>
 
-    <div id="review-cart-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h3>Cart</h3>
-            <div id="review-cart-list" class="bill-receipt" style="max-height: 250px; overflow-y: auto; margin-top: 15px;"></div>
-            <div class="modal-buttons"><button class="btn btn-secondary" onclick="clearCart()">Empty</button></div>
-            <button class="close-modal" onclick="closeModal('review-cart-modal')">✖ CLOSE</button>
-        </div>
-    </div>
-
-    <div id="remark-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h3 id="remark-item-title">Item</h3>
-            <div style="text-align: left; width: 100%; margin: 15px auto;">
-                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Sweetness</label>
-                <div class="choice-grid" id="pos-sweetness-grid">
-                    <button class="choice-btn selected" onclick="window.selectSweetness('Medium sweet', this)">Medium</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('No sweetness', this)">None</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('Less sweet', this)">Less</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('Very sweet', this)">Extra</button>
-                </div>
-            </div>
-            <div class="modal-buttons">
-                <button class="btn btn-secondary" onclick="closeModal('remark-modal')">Cancel</button>
-                <button class="btn btn-primary" onclick="confirmAddItem()">Add</button>
-            </div>
-            <button class="close-modal" onclick="closeModal('remark-modal')">✖ CLOSE</button>
-        </div>
-    </div>
-
-    <div id="table-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h3>Send Order</h3>
-            <textarea id="pos-order-notes" class="remark-input" placeholder="Order notes (e.g. To-go cup, extra hot...)" style="height: 50px; resize: none; margin-top: 5px; margin-bottom: 15px;"></textarea>
-            
-            <div class="table-grid" id="sender-table-grid"></div>
-            <button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway</button><br>
-            <button class="close-modal" onclick="closeModal('table-modal')">✖ CLOSE</button>
-        </div>
-    </div>
-
     <div id="active-bills-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Open Tables</h3>
+            <h3>Active Tables</h3>
             <div id="active-bills-list" style="margin-top: 15px; max-height: 300px; overflow-y: auto;"></div>
             <button class="close-modal" onclick="closeModal('active-bills-modal')">✖ CLOSE</button>
-        </div>
-    </div>
-
-    <div id="past-bills-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h3>History</h3>
-            <div id="past-bills-list" class="ledger-box" style="max-height: 300px; margin-top: 15px;"></div>
-            <button class="close-modal" onclick="closeModal('past-bills-modal')">✖ CLOSE</button>
-        </div>
-    </div>
-
-    <div id="view-past-bill-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h3 id="past-bill-title">Receipt</h3>
-            <p id="past-bill-date" style="font-size: 0.8rem; margin-top: -10px; margin-bottom: 15px; opacity: 0.6;"></p>
-            <div id="past-bill-receipt" class="bill-receipt"></div>
-            <input type="tel" id="past-bill-phone" class="remark-input" placeholder="Phone No." maxlength="10">
-            <button class="btn btn-secondary" style="width: 100%; margin-top: 5px;" onclick="sendPastBillWhatsApp()">Send Receipt</button>
-            <button class="close-modal" onclick="closeModal('view-past-bill-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -203,10 +144,8 @@
         <div class="modal-content">
             <h3 id="checkout-title">Bill</h3>
             <div id="checkout-receipt" class="bill-receipt" style="max-height: 35vh; overflow-y: auto;"></div>
-            
             <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="10">
             <button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px;" onclick="sendWhatsAppBill()">Send Pay Link</button>
-            
             <div class="modal-buttons">
                 <button class="btn btn-dark" onclick="openSplitBill()">Split</button>
                 <button class="btn btn-primary" onclick="payWithUPI(null)">UPI</button>
@@ -219,19 +158,13 @@
     <div id="split-bill-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Split Bill</h3>
-            <div style="font-size: 1rem; margin-bottom: 5px; opacity: 0.8;">Total: ₹<span id="split-total">0</span></div>
             <div style="font-size: 1.4rem; font-weight: bold; margin-bottom: 15px;">Due: ₹<span id="split-remaining">0</span></div>
-
             <div style="display: flex; gap: 10px; margin-bottom: 15px; justify-content: center;">
-                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(2)">/ 2</button>
-                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(3)">/ 3</button>
-                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(4)">/ 4</button>
+                <button class="btn btn-secondary" onclick="calculateSplit(2)">/ 2</button>
+                <button class="btn btn-secondary" onclick="calculateSplit(3)">/ 3</button>
             </div>
-
-            <p style="text-align: left; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; margin-bottom: 0; opacity: 0.7; width: 90%; margin-left: auto; margin-right: auto;">Collect Now (₹)</p>
             <input type="number" id="partial-pay-amount" class="remark-input" placeholder="0">
-
-            <div class="modal-buttons" style="margin-top: 20px;">
+            <div class="modal-buttons">
                 <button class="btn btn-primary" onclick="processSplit('upi')">UPI</button>
                 <button class="btn btn-primary" onclick="processSplit('cash')">Cash</button>
             </div>
@@ -242,7 +175,7 @@
     <div id="upi-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Scan</h3>
-            <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">₹0</p>
+            <p id="upi-amount-text" style="font-size: 1.5rem; font-weight: bold;">₹0</p>
             <img id="qr-image" src="" alt="QR">
             <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Confirm Payment</button></div>
             <button class="close-modal" onclick="closeModal('upi-modal')">✖ CANCEL</button>
@@ -252,33 +185,23 @@
     <div id="cash-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Ledger</h3>
-            <div style="display: flex; justify-content: space-around; margin-bottom: 20px; font-size: 1rem; font-weight: bold;">
-                <div>Drawer<br><span style="font-size: 1.2rem;">₹<span id="modal-cash-display">0</span></span></div>
-                <div>UPI<br><span style="font-size: 1.2rem;">₹<span id="modal-upi-display">0</span></span></div>
+            <div style="display: flex; justify-content: space-around; margin-bottom: 20px; font-weight: bold;">
+                <div>Drawer<br>₹<span id="modal-cash-display">0</span></div>
+                <div>UPI<br>₹<span id="modal-upi-display">0</span></div>
             </div>
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <button class="btn btn-secondary" style="flex: 1;" onclick="openTransactionModal('expense')">Expense</button>
-                <button class="btn btn-secondary" style="flex: 1;" onclick="openTransactionModal('withdrawal')">Withdraw</button>
-                <button class="btn btn-dark" style="flex: 1; padding: 12px 5px;" onclick="window.safeOpenModal('past-bills-modal')">History</button>
+                <button class="btn btn-dark" style="flex: 1;" onclick="openPastBills()">History</button>
+                <button class="btn btn-dark" style="flex: 1;" onclick="promptEOD()">End Day</button>
             </div>
-            <button class="btn btn-dark" style="width: 100%;" onclick="promptEOD()">End of Day</button>
-            
-            <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; font-size: 0.8rem; letter-spacing: 1px; opacity: 0.7;">LOGS</h4>
             <div id="ledger-list" class="ledger-box"></div>
             <button class="close-modal" onclick="closeModal('cash-modal')">✖ CLOSE</button>
         </div>
     </div>
 
-    <div id="transaction-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h3 id="transaction-title">Transaction</h3>
-            <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
-            <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason">
-            <input type="password" id="transaction-pin" class="remark-input" placeholder="PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
-            <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
-            <button class="close-modal" onclick="closeTransactionModal()">✖ CANCEL</button>
-        </div>
-    </div>
+    <div id="past-bills-modal" class="modal-overlay"><div class="modal-content"><h3>History</h3><div id="past-bills-list"></div><button class="close-modal" onclick="closeModal('past-bills-modal')">✖ CLOSE</button></div></div>
+    <div id="review-cart-modal" class="modal-overlay"><div class="modal-content"><h3>Cart</h3><div id="review-cart-list" class="bill-receipt"></div><div class="modal-buttons"><button class="btn btn-secondary" onclick="clearCart()">Empty</button></div><button class="close-modal" onclick="closeModal('review-cart-modal')">✖ CLOSE</button></div></div>
+    <div id="remark-modal" class="modal-overlay"><div class="modal-content"><h3 id="remark-item-title">Item</h3><div class="choice-grid" id="pos-sweetness-grid"><button class="choice-btn selected" onclick="window.selectSweetness('Medium sweet', this)">Medium</button><button class="choice-btn" onclick="window.selectSweetness('No sweetness', this)">None</button></div><div class="modal-buttons"><button class="btn btn-primary" onclick="confirmAddItem()">Add</button></div><button class="close-modal" onclick="closeModal('remark-modal')">✖ CLOSE</button></div></div>
+    <div id="table-modal" class="modal-overlay"><div class="modal-content"><h3>Table</h3><textarea id="pos-order-notes" class="remark-input" placeholder="Order notes..."></textarea><div class="table-grid" id="sender-table-grid"></div><button class="takeaway-btn" onclick="sendOrder('Takeaway')">Takeaway</button><button class="close-modal" onclick="closeModal('table-modal')">✖ CLOSE</button></div></div>
 
     <script>
         const firebaseConfig = {
@@ -293,52 +216,91 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const CAFE_WEBSITE_LINK = "https://ilacafe.github.io"; 
-        const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
-        const OWNER_WHATSAPP = "918882946526"; 
-        
-        window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
+        window.staffPins = {}; window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
+        window.salesLedger = []; window.pastBills = []; window.pendingWebOrders = {}; window.itemRoutingMap = {};
         window.cart = JSON.parse(localStorage.getItem('ila_pos_cart')) || {}; 
         window.totalAmount = parseFloat(localStorage.getItem('ila_pos_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_pos_items')) || 0;
-        
-        window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
-        window.salesLedger = []; window.pastBills = []; window.pendingWebOrders = {};
-        
-        window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
-        window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
-        window.pendingUPIAmount = 0; window.currentPaymentMethod = "UPI"; window.currentSweetness = "Medium sweet";
+        window.checkoutTableID = ""; window.pendingUPIAmount = 0; window.currentSweetness = "Medium sweet";
 
-        // ENGINE UPGRADE: ROUTING MAP FOR KITCHEN DISPLAYS
-        window.itemRoutingMap = {};
-
-        // VISIBILITY FIX: Force scroll to top on modal open
-        window.safeOpenModal = function(id) {
+        // FIX 1: VISIBILITY FORCE
+        function openModal(id) {
             const el = document.getElementById(id);
+            if(!el) return;
             el.classList.add('active');
             const content = el.querySelector('.modal-content');
-            if(content) content.scrollTop = 0;
-        };
+            if(content) content.scrollTop = 0; 
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-        function saveLocalCart() {
-            localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
-            localStorage.setItem('ila_pos_amount', window.totalAmount);
-            localStorage.setItem('ila_pos_items', window.totalItems);
-            updateCartUI();
+        // DATA SYNC
+        db.ref('pos/activeTables').on('value', snap => { window.activeTables = snap.val() || {}; updateDash(); });
+        db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDash(); });
+        db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDash(); });
+        db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
+        db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
+        db.ref('staff').on('value', snap => { window.staffPins = snap.val() || {}; });
+        db.ref('orders/pendingWeb').on('value', snap => {
+            window.pendingWebOrders = snap.val() || {};
+            let count = Object.keys(window.pendingWebOrders).length;
+            document.getElementById('web-orders-count').innerText = count;
+            document.getElementById('web-orders-count').style.opacity = count > 0 ? "1" : "0.5";
+        });
+
+        function updateDash() {
+            document.getElementById('cash-display').innerText = `₹${Math.round(window.cashDrawer)}`;
+            document.getElementById('upi-display').innerText = `₹${Math.round(window.upiTotal)}`;
+            document.getElementById('active-bills-count').innerText = Object.keys(window.activeTables).length;
+            document.getElementById('modal-cash-display').innerText = Math.round(window.cashDrawer);
+            document.getElementById('modal-upi-display').innerText = Math.round(window.upiTotal);
         }
 
-        function updateCartUI() {
-            const banner = document.getElementById('cart-banner');
-            if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
-            else { banner.classList.remove('visible'); }
-            if (window.renderInlineControls) window.renderInlineControls();
+        // KITCHEN ENGINE
+        db.ref('menu').on('value', snap => {
+            const data = snap.val() || {};
+            window.itemRoutingMap = {};
+            for(let c in data) { for(let i in data[c]) { 
+                window.itemRoutingMap[i] = data[c][i].routing || 'barista';
+                if(data[c][i].hasSizes) { 
+                    window.itemRoutingMap[i+" (Regular)"] = data[c][i].routing || 'barista'; 
+                    window.itemRoutingMap[i+" (Large)"] = data[c][i].routing || 'barista'; 
+                }
+            }}
+            renderPOSMenu(data);
+        });
+
+        function dispatchToKitchen(cart, dest, notes, src) {
+            let barista = {}; let chef = {};
+            for (let i in cart) {
+                let base = i.split(" (Med")[0].split(" (Less")[0].split(" (No")[0].split(" (Very")[0];
+                let route = window.itemRoutingMap[base] || 'barista';
+                if(route === 'chef') chef[i] = cart[i]; else barista[i] = cart[i];
+            }
+            const t = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            if(Object.keys(barista).length > 0) db.ref('orders/active/barista').push({items: barista, destination: dest, notes: notes, source: src, time: t});
+            if(Object.keys(chef).length > 0) db.ref('orders/active/chef').push({items: chef, destination: dest, notes: notes, source: src, time: t});
         }
 
+        function renderPOSMenu(data) {
+            const container = document.getElementById('live-menu-container');
+            container.innerHTML = "";
+            for (let category in data) {
+                let catHTML = `<section><h2>${category}</h2>`;
+                for (let itemName in data[category]) {
+                    const item = data[category][itemName];
+                    if (item.visibility === 'customer') continue;
+                    const safeName = itemName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    catHTML += `<div class="menu-row"><span>${itemName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
+                }
+                container.innerHTML += catHTML + `</section>`;
+            }
+            window.renderInlineControls();
+        }
+
+        // CART LOGIC
         window.getCartQty = function(baseName) {
             let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
-            for (let key in window.cart) {
-                if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; }
-            }
+            for (let key in window.cart) { if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; } }
             return qty;
         };
 
@@ -349,138 +311,46 @@
                 let price = container.getAttribute('data-price');
                 let reqSweet = container.getAttribute('data-sweet') === 'true';
                 let qty = window.getCartQty(safeName);
-
-                if (qty > 0) {
-                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
-                } else {
-                    container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
-                }
+                if (qty > 0) container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
+                else container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
             });
         };
 
         window.decrementInline = function(safeName) {
             let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
             let targetKey = null;
-            for (let key in window.cart) {
-                if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; }
-            }
+            for (let key in window.cart) { if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; } }
             if (targetKey) {
                 window.cart[targetKey].qty -= 1; window.totalAmount -= window.cart[targetKey].price; window.totalItems -= 1;
                 if (window.cart[targetKey].qty <= 0) delete window.cart[targetKey];
-                saveLocalCart(); 
-                if (window.totalItems === 0) closeModal('review-cart-modal'); 
-                else if (document.getElementById('review-cart-modal').classList.contains('active')) window.openReviewCartModal();
+                localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
+                localStorage.setItem('ila_pos_amount', window.totalAmount);
+                localStorage.setItem('ila_pos_items', window.totalItems);
+                updateCartUI();
             }
         };
 
-        function syncToCloud() {
-            db.ref('pos').update({
-                activeTables: Object.keys(window.activeTables).length > 0 ? window.activeTables : null,
-                cashDrawer: window.cashDrawer || 0,
-                upiTotal: window.upiTotal || 0,
-                salesLedger: window.salesLedger.length > 0 ? window.salesLedger : null,
-                pastBills: window.pastBills.length > 0 ? window.pastBills : null
-            }).catch(e => console.error("Cloud Sync Error: ", e));
-        }
-
-        db.ref('pos/activeTables').on('value', snap => { 
-            window.activeTables = snap.val() || {}; updateDashboards(); refreshActiveModals();
-        });
-        db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
-        db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
-        db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
-        db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
-
-        // WEB QUEUE LISTENER (RESTORED)
-        db.ref('orders/pendingWeb').on('value', snap => {
-            window.pendingWebOrders = snap.val() || {};
-            let count = Object.keys(window.pendingWebOrders).length;
-            let countEl = document.getElementById('web-orders-count');
-            if(countEl) { countEl.innerText = count; countEl.style.opacity = count > 0 ? "1" : "0.5"; }
-            if(document.getElementById('web-orders-modal').classList.contains('active')) renderWebOrders();
-        });
-
-        function updateDashboards() {
-            document.getElementById('cash-display').innerText = `₹${Math.round(window.cashDrawer)}`;
-            document.getElementById('upi-display').innerText = `₹${Math.round(window.upiTotal)}`;
-            document.getElementById('active-bills-count').innerText = Object.keys(window.activeTables).length;
-            document.getElementById('modal-cash-display').innerText = Math.round(window.cashDrawer);
-            document.getElementById('modal-upi-display').innerText = Math.round(window.upiTotal);
-        }
-
-        function refreshActiveModals() {
-            if(document.getElementById('active-bills-modal').classList.contains('active')) openActiveBills();
-            if(document.getElementById('checkout-modal').classList.contains('active') && window.checkoutTableID) {
-                if(!window.activeTables[window.checkoutTableID]) closeModal('checkout-modal'); 
-                else renderCheckoutReceipt(window.checkoutTableID);
-            }
-            if(document.getElementById('table-modal').classList.contains('active')) openTableModal();
-        }
-
-        let currentMenuData = {}; let liveCategoryOrder = []; window.currentItemOrder = {};
-
-        db.ref('.info/connected').on('value', function(snap) {
-            if (snap.val() === true) { document.getElementById('offline-indicator').style.display = 'none'; } 
-            else { document.getElementById('offline-indicator').style.display = 'block'; }
-        });
-
-        db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
-        db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; });
-        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; });
-        
-        db.ref('menu').on('value', snap => { 
-            currentMenuData = snap.val() || {}; 
-            localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
-            
-            window.itemRoutingMap = {};
-            for(let cat in currentMenuData) {
-                for(let item in currentMenuData[cat]) {
-                    let route = currentMenuData[cat][item].routing || 'barista';
-                    window.itemRoutingMap[item] = route;
-                    if(currentMenuData[cat][item].hasSizes) {
-                        window.itemRoutingMap[item + " (Regular)"] = route;
-                        window.itemRoutingMap[item + " (Large)"] = route;
-                    }
-                }
-            }
-            renderPOSMenu(currentMenuData, liveCategoryOrder); 
-        });
-
-        function renderPOSMenu(menuData, categoryOrder) {
-            const container = document.getElementById('live-menu-container');
-            if (!menuData) return;
-            container.innerHTML = "";
-            let activeCats = Object.keys(menuData);
-            let sortedCats = categoryOrder.filter(cat => activeCats.includes(cat));
-            activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
-
-            sortedCats.forEach(category => {
-                let catHTML = `<section><h2>${category}</h2>`;
-                let itemsInOrder = window.currentItemOrder && window.currentItemOrder[category] ? window.currentItemOrder[category] : Object.keys(menuData[category]);
-                
-                itemsInOrder.forEach(itemName => {
-                    const item = menuData[category][itemName];
-                    if (!item || item.visibility === 'customer') return; 
-                    const safeName = itemName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-
-                    if (item.hasSizes) {
-                        let safeNameReg = (itemName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let safeNameLrg = (itemName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${itemName}</span><div class="swap-container" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness}"></div><div class="swap-container" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness}"></div></div>`;
-                    } else {
-                        if (item.inStock) {
-                            catHTML += `<div class="menu-row"><span class="item-name">${itemName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
-                        } else {
-                            catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${itemName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
-                        }
-                    }
-                });
-                container.innerHTML += catHTML + `</section>`;
-            });
+        function updateCartUI() {
+            const banner = document.getElementById('cart-banner');
+            if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
+            else { banner.classList.remove('visible'); }
             window.renderInlineControls();
         }
 
-        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        window.promptRemark = function(itemName, price, reqSweet) {
+            if(!reqSweet) {
+                let fn = itemName.replace(/&quot;/g, '"');
+                if (window.cart[fn]) window.cart[fn].qty += 1; else window.cart[fn] = { price: price, qty: 1 };
+                window.totalAmount += price; window.totalItems += 1;
+                localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
+                localStorage.setItem('ila_pos_amount', window.totalAmount);
+                localStorage.setItem('ila_pos_items', window.totalItems);
+                updateCartUI(); return;
+            }
+            window.pendingItemName = itemName; window.pendingItemPrice = price;
+            document.getElementById('remark-item-title').innerText = itemName.replace(/&quot;/g, '"');
+            openModal('remark-modal');
+        }
 
         window.selectSweetness = function(val, btn) {
             window.currentSweetness = val;
@@ -489,281 +359,120 @@
             btn.classList.add('selected');
         };
 
-        window.promptRemark = function(itemName, price, requiresSweetness = false) {
-            let finalName = itemName.replace(/&quot;/g, '"');
-            if (!requiresSweetness) {
-                if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: price, qty: 1 };
-                window.totalAmount += price; window.totalItems += 1;
-                saveLocalCart(); return;
-            }
-            window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
-            document.getElementById('remark-item-title').innerText = finalName; 
-            window.currentSweetness = "Medium sweet";
-            const btns = document.querySelectorAll('#pos-sweetness-grid .choice-btn');
-            btns.forEach(b => b.classList.remove('selected'));
-            if(btns.length > 0) btns[0].classList.add('selected');
-            window.safeOpenModal('remark-modal');
-        };
-
         window.confirmAddItem = function() {
-            let finalName = window.pendingItemName.replace(/&quot;/g, '"') + ` (${window.currentSweetness})`;
-            if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
+            let fn = window.pendingItemName.replace(/&quot;/g, '"') + ` (${window.currentSweetness})`;
+            if (window.cart[fn]) window.cart[fn].qty += 1; else window.cart[fn] = { price: window.pendingItemPrice, qty: 1 };
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
-            saveLocalCart(); closeModal('remark-modal');
-        };
-
-        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveLocalCart(); closeModal('review-cart-modal'); };
-
-        window.openReviewCartModal = function() {
-            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
-            for (let item in window.cart) {
-                const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
-            }
-            window.safeOpenModal('review-cart-modal');
-        };
-
-        window.modifyCartItem = function(item, delta) {
-            let realItemName = item.replace(/&quot;/g, '"');
-            if (window.cart[realItemName]) {
-                window.cart[realItemName].qty += delta; window.totalAmount += (window.cart[realItemName].price * delta); window.totalItems += delta;
-                if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
-                saveLocalCart();
-                if (window.totalItems === 0) closeModal('review-cart-modal'); else window.openReviewCartModal();
-            }
-        };
-
-        window.openTableModal = function() {
-            if (window.totalItems === 0) return alert("Cart is empty!");
-            document.getElementById('pos-order-notes').value = "";
-            const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
-            for (let i = 1; i <= 10; i++) {
-                const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
-                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="window.sendOrder('${i}')">${i}</button>`;
-            }
-            window.safeOpenModal('table-modal');
-        };
-
-        // THE CORE KITCHEN ENGINE (RESTORED)
-        function dispatchToKitchen(cartObj, destination, notes, source) {
-            let baristaItems = {}; let chefItems = {};
-            for (let itemName in cartObj) {
-                let baseName = itemName.split(" (Med")[0];
-                let routing = window.itemRoutingMap[baseName] || 'barista';
-                if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
-                else { baristaItems[itemName] = cartObj[itemName]; }
-            }
-            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            if (Object.keys(baristaItems).length > 0) { db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr }); }
-            if (Object.keys(chefItems).length > 0) { db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr }); }
+            localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
+            localStorage.setItem('ila_pos_amount', window.totalAmount);
+            localStorage.setItem('ila_pos_items', window.totalItems);
+            updateCartUI(); closeModal('remark-modal');
         }
 
-        window.sendOrder = function(tableID) {
-            if (window.totalItems === 0) return alert("Cart is empty!");
-            const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
-            dispatchToKitchen(window.cart, destName, notes, "POS");
-            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
-            if (notes) { window.activeTables[tableID].notes = window.activeTables[tableID].notes ? window.activeTables[tableID].notes + " | " + notes : notes; }
-            for (let item in window.cart) {
-                if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
-                else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
-            }
-            window.activeTables[tableID].total += window.totalAmount;
-            syncToCloud(); closeModal('table-modal'); window.clearCart();
-        };
+        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; localStorage.clear(); updateCartUI(); closeModal('review-cart-modal'); };
 
+        // CHECKOUT LOGIC
         window.openActiveBills = function() {
             const list = document.getElementById('active-bills-list'); list.innerHTML = "";
             for (let table in window.activeTables) {
-                list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${table}')"><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span><span>₹${window.activeTables[table].total}</span></div>`;
+                list.innerHTML += `<div class="active-bill-item" onclick="openCheckout('${table}')"><strong>Table ${table}</strong><span>₹${window.activeTables[table].total}</span></div>`;
             }
-            window.safeOpenModal('active-bills-modal');
+            openModal('active-bills-modal');
         };
-
-        function renderCheckoutReceipt(tableID) {
-            const tableData = window.activeTables[tableID];
-            if(!tableData) return; 
-            let total = tableData.total; let paid = tableData.paid || 0; let remaining = total - paid;
-            let receiptHTML = "";
-            for (let item in tableData.items) { 
-                const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
-            }
-            receiptHTML += `<div class="bill-grand-total">Total: ₹${total}</div>`;
-            if (paid > 0) { receiptHTML += `<div style="text-align: right; opacity: 0.8; font-size: 0.9rem; margin-top: 5px;">Paid: ₹${paid}</div><div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`; }
-            document.getElementById('checkout-receipt').innerHTML = receiptHTML;
-            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
-        }
 
         window.openCheckout = function(tableID) {
-            window.checkoutTableID = tableID; 
-            renderCheckoutReceipt(tableID);
-            closeModal('active-bills-modal'); window.safeOpenModal('checkout-modal');
+            window.checkoutTableID = tableID;
+            const data = window.activeTables[tableID];
+            if(!data) return;
+            let listHTML = "";
+            for (let item in data.items) { listHTML += `<div class="bill-receipt-row"><span>${data.items[item].qty}x ${item}</span><span>₹${data.items[item].qty * data.items[item].price}</span></div>`; }
+            document.getElementById('checkout-receipt').innerHTML = listHTML + `<div class="bill-grand-total">Total: ₹${data.total}</div>`;
+            closeModal('active-bills-modal'); openModal('checkout-modal');
         };
 
-        window.removeTableItem = function(tableID, itemName) {
-            let realItemName = itemName.replace(/&quot;/g, '"');
-            const tableData = window.activeTables[tableID];
-            if(tableData && tableData.items[realItemName]) {
-                tableData.total -= tableData.items[realItemName].price; 
-                tableData.items[realItemName].qty -= 1;
-                if(tableData.items[realItemName].qty <= 0) delete tableData.items[realItemName];
-                if(Object.keys(tableData.items).length === 0) { delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return; }
-                syncToCloud();
-            }
+        window.payWithCash = function(custom) {
+            const data = window.activeTables[window.checkoutTableID];
+            const amt = parseFloat(custom || (data.total - (data.paid || 0)));
+            addLedgerEntry('cash_income', amt, `${window.checkoutTableID} (Cash)`);
+            data.paid = (data.paid || 0) + amt;
+            if(data.paid >= data.total) { savePastBill(window.checkoutTableID, data, "Cash"); db.ref('pos/activeTables/' + window.checkoutTableID).remove(); closeModal('checkout-modal'); closeModal('split-bill-modal'); }
+            else { db.ref('pos/activeTables/' + window.checkoutTableID).set(data); openCheckout(window.checkoutTableID); }
         };
 
-        window.openSplitBill = function() {
-            const tableData = window.activeTables[window.checkoutTableID];
-            let remaining = tableData.total - (tableData.paid || 0);
-            document.getElementById('split-total').innerText = tableData.total;
-            document.getElementById('split-remaining').innerText = remaining;
-            document.getElementById('partial-pay-amount').value = remaining;
-            closeModal('checkout-modal'); window.safeOpenModal('split-bill-modal');
-        };
-
-        window.closeSplitBill = function() { closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
-        window.calculateSplit = function(ways) {
-            const tableData = window.activeTables[window.checkoutTableID];
-            let remaining = tableData.total - (tableData.paid || 0);
-            document.getElementById('partial-pay-amount').value = Math.ceil(remaining / ways);
-        };
-
-        window.processSplit = function(method) {
-            let amount = parseFloat(document.getElementById('partial-pay-amount').value);
-            if (isNaN(amount) || amount <= 0) return;
-            if (method === 'upi') window.payWithUPI(amount); else window.payWithCash(amount);
-        };
-
-        // FIXED MATH FUNCTIONS
-        window.payWithCash = function(customAmount = null) {
-            const tableData = window.activeTables[window.checkoutTableID];
-            let amountToPay = parseFloat(customAmount !== null ? customAmount : (tableData.total - (tableData.paid || 0)));
-            addLedgerEntry('cash_income', amountToPay, `${window.checkoutTableID} (Cash)`);
-            tableData.paid = (tableData.paid || 0) + amountToPay;
-            if (tableData.paid >= tableData.total) {
-                saveToHistory(window.checkoutTableID, tableData, "Cash"); delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
-                closeModal('checkout-modal'); closeModal('split-bill-modal');
-            } else {
-                syncToCloud(); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
-            }
-        };
-
-        window.payWithUPI = function(customAmount = null) {
-            const tableData = window.activeTables[window.checkoutTableID];
-            let amountToPay = parseFloat(customAmount !== null ? customAmount : (tableData.total - (tableData.paid || 0)));
-            window.pendingUPIAmount = amountToPay;
-            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amountToPay}&cu=INR`;
-            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
-            document.getElementById('upi-amount-text').innerText = `₹${amountToPay}`;
-            closeModal('checkout-modal'); closeModal('split-bill-modal'); window.safeOpenModal('upi-modal');
+        window.payWithUPI = function(custom) {
+            const data = window.activeTables[window.checkoutTableID];
+            window.pendingUPIAmount = parseFloat(custom || (data.total - (data.paid || 0)));
+            const upiStr = `upi://pay?pa=sraveen.chirania-1@okaxis&pn=ILA&am=${window.pendingUPIAmount}&cu=INR`;
+            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiStr)}`;
+            document.getElementById('upi-amount-text').innerText = `₹${window.pendingUPIAmount}`;
+            closeModal('checkout-modal'); openModal('upi-modal');
         };
 
         window.confirmUPIPayment = function() {
-            let amountToPay = parseFloat(window.pendingUPIAmount);
-            const tableData = window.activeTables[window.checkoutTableID];
-            addLedgerEntry('upi_income', amountToPay, `${window.checkoutTableID} (UPI)`); 
-            tableData.paid = (tableData.paid || 0) + amountToPay;
-            if (tableData.paid >= tableData.total) {
-                saveToHistory(window.checkoutTableID, tableData, "UPI"); delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
-                closeModal('upi-modal'); 
-            } else {
-                syncToCloud(); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
-            }
+            const data = window.activeTables[window.checkoutTableID];
+            addLedgerEntry('upi_income', window.pendingUPIAmount, `${window.checkoutTableID} (UPI)`);
+            data.paid = (data.paid || 0) + window.pendingUPIAmount;
+            if(data.paid >= data.total) { savePastBill(window.checkoutTableID, data, "UPI"); db.ref('pos/activeTables/' + window.checkoutTableID).remove(); closeModal('upi-modal'); }
+            else { db.ref('pos/activeTables/' + window.checkoutTableID).set(data); openCheckout(window.checkoutTableID); }
         };
 
         function addLedgerEntry(type, amount, reason) {
             const val = parseFloat(amount);
-            const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            window.salesLedger.unshift({ date: timeString, type: type, amount: val, reason: reason }); 
-            if (type === 'cash_income') window.cashDrawer += val; else if (type === 'upi_income') window.upiTotal += val; else window.cashDrawer -= val; 
+            if (type === 'cash_income') db.ref('pos/cashDrawer').set(window.cashDrawer + val);
+            else if (type === 'upi_income') db.ref('pos/upiTotal').set(window.upiTotal + val);
+            const t = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            window.salesLedger.unshift({ date: t, type: type, amount: val, reason: reason });
+            db.ref('pos/salesLedger').set(window.salesLedger);
         }
 
-        function saveToHistory(tableID, tableData, paymentMethod) {
-            const localBill = { id: Date.now(), table: tableID, date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), items: JSON.parse(JSON.stringify(tableData.items)), total: tableData.total, notes: tableData.notes || "" };
-            window.pastBills.unshift(localBill); if(window.pastBills.length > 50) window.pastBills.pop(); 
-            const archivePacket = { timestamp: new Date().toLocaleString('en-GB'), source: "POS", tableOrAddress: tableID, notes: tableData.notes || "", payment: { method: paymentMethod, total: tableData.total }, items: tableData.items };
-            db.ref('orders/history/' + Date.now()).set(archivePacket);
+        function savePastBill(table, data, method) {
+            const bill = { table: table, date: new Date().toLocaleString(), items: data.items, total: data.total, method: method };
+            window.pastBills.unshift(bill); db.ref('pos/pastBills').set(window.pastBills);
+            db.ref('orders/history/' + Date.now()).set({timestamp: new Date().toLocaleString(), source: "POS", tableOrAddress: table, payment: {method: method, total: data.total}, items: data.items});
         }
 
-        function renderLedger() {
-            const list = document.getElementById('ledger-list'); list.innerHTML = "";
-            window.salesLedger.forEach(entry => {
-                let colorClass = entry.type.includes('income') ? 'ledger-income' : 'ledger-out';
-                list.innerHTML += `<div class="ledger-item"><div>${entry.reason}<span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">₹${parseFloat(entry.amount).toFixed(0)}</div></div>`;
-            });
-        }
-
-        // WEB ORDER FUNCTIONS (RESTORED & FIXED)
+        // WEB ORDER ENGINE
         window.openWebOrders = function() {
             const list = document.getElementById('web-orders-list'); list.innerHTML = "";
             if (Object.keys(window.pendingWebOrders).length === 0) return alert("No orders.");
             for (let id in window.pendingWebOrders) {
                 const o = window.pendingWebOrders[id];
-                list.innerHTML += `<div class="web-order-card"><strong>${o.tableOrAddress}</strong><br>₹${o.total}<br><button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="acceptWebOrder('${id}')">Accept & Route to Kitchen</button></div>`;
+                list.innerHTML += `<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; margin-bottom:15px; border-radius:8px;"><strong>${o.tableOrAddress}</strong><br>₹${o.total}<br><button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="acceptWebOrder('${id}')">Accept</button></div>`;
             }
-            window.safeOpenModal('web-orders-modal');
+            openModal('web-orders-modal');
         };
 
         window.acceptWebOrder = function(id) {
-            const order = window.pendingWebOrders[id];
-            dispatchToKitchen(order.items, order.tableOrAddress, order.notes, "Web App");
-            addLedgerEntry('upi_income', parseFloat(order.total), `Web: ${order.tableOrAddress}`);
-            const archive = { timestamp: new Date().toLocaleString('en-GB'), source: "Web App", tableOrAddress: order.tableOrAddress, notes: order.notes || "", payment: { method: "UPI", total: order.total }, items: order.items };
-            db.ref('orders/history/' + Date.now()).set(archive);
+            const o = window.pendingWebOrders[id];
+            dispatchToKitchen(o.items, o.tableOrAddress, o.notes, "Web");
+            addLedgerEntry('upi_income', o.total, `Web: ${o.tableOrAddress}`);
+            db.ref('orders/history/' + Date.now()).set({timestamp: new Date().toLocaleString(), source: "Web", tableOrAddress: o.tableOrAddress, payment: {method: "UPI", total: o.total}, items: o.items});
             db.ref('orders/pendingWeb/' + id).remove();
             closeModal('web-orders-modal');
         };
 
+        function renderLedger() {
+            const list = document.getElementById('ledger-list'); list.innerHTML = "";
+            window.salesLedger.forEach(e => {
+                let c = e.type.includes('income') ? 'ledger-income' : 'ledger-out';
+                list.innerHTML += `<div class="ledger-item"><div>${e.reason}<br><small>${e.date}</small></div><div class="${c}">₹${Math.round(e.amount)}</div></div>`;
+            });
+        }
+
+        window.openCashManagement = function() { renderLedger(); openModal('cash-modal'); };
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list'); list.innerHTML = "";
-            window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; });
-            window.safeOpenModal('past-bills-modal');
-        };
-
-        window.viewPastBill = function(id) {
-            const bill = window.pastBills.find(b => b.id === id); if (!bill) return; window.currentPastBillID = id;
-            document.getElementById('past-bill-title').innerText = bill.table;
-            let receiptHTML = ""; for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
-            document.getElementById('past-bill-receipt').innerHTML = receiptHTML + `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
-            closeModal('past-bills-modal'); window.safeOpenModal('view-past-bill-modal');
-        };
-
-        window.sendPastBillWhatsApp = function() {
-            const phone = document.getElementById('past-bill-phone').value.trim(); if (phone.length < 10) return;
-            const bill = window.pastBills.find(b => b.id === window.currentPastBillID);
-            let billStr = `ILA Receipt\nTotal: ₹${bill.total}`;
-            window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
-        };
-
-        window.sendWhatsAppBill = function() {
-            const phone = document.getElementById('checkout-phone').value.trim(); if (phone.length < 10) return;
-            const tableData = window.activeTables[window.checkoutTableID];
-            let billStr = `ILA\nTotal: ₹${tableData.total}\nPay: ${CAFE_WEBSITE_LINK}/pay.html?am=${tableData.total}`;
-            window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
-        };
-
-        window.openCashManagement = function() { renderLedger(); window.safeOpenModal('cash-modal'); };
-        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type; closeModal('cash-modal'); window.safeOpenModal('transaction-modal'); };
-        window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
-
-        window.confirmTransaction = function() {
-            const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
-            if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
-            const staffName = window.staffPins[pinStr]; if (!staffName) return alert("Invalid PIN");
-            addLedgerEntry(window.currentTransactionType === 'expense' ? 'expense' : 'withdrawal', amount, `${reasonStr} (${staffName})`);
-            syncToCloud(); window.closeTransactionModal();
+            window.pastBills.forEach(b => { list.innerHTML += `<div class="active-bill-item"><strong>${b.table}</strong><span>₹${b.total}</span></div>`; });
+            openModal('past-bills-modal');
         };
 
         window.promptEOD = function() {
-            const pinStr = prompt("Enter PIN:");
-            const staffName = window.staffPins[pinStr]; if (!staffName) return alert("Invalid PIN");
-            let report = `ILA EOD\nBy: ${staffName}\nUPI: ₹${window.upiTotal}\nCash: ₹${window.cashDrawer}`;
-            if (confirm("Send Report?")) {
-                window.activeTables = {}; window.upiTotal = 0; window.cashDrawer = 0; window.salesLedger = []; window.pastBills = []; syncToCloud();
-                window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`;
-            }
+            const pin = prompt("Enter PIN:");
+            if(window.staffPins[pin]) {
+                const rep = `ILA EOD\nUPI: ₹${window.upiTotal}\nCash: ₹${window.cashDrawer}`;
+                db.ref('pos').update({cashDrawer: 0, upiTotal: 0, salesLedger: null, activeTables: null});
+                window.location.href = `https://wa.me/918882946526?text=${encodeURIComponent(rep)}`;
+            } else alert("Invalid PIN.");
         };
 
         updateCartUI();
