@@ -56,6 +56,13 @@
         .item-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;}
 
         .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; border: 1px solid rgba(255,255,255,0.3); }
+
+        /* ANALYTICS STYLES - Matched to your exact theme */
+        .dash-row { display: flex; justify-content: space-between; margin-bottom: 15px; text-align: center;}
+        .dash-box { flex: 1; }
+        .dash-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
+        .dash-val { font-size: 1.3rem; font-weight: bold; }
+        .history-card { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -105,13 +112,22 @@
                 <div class="form-group" style="flex: 1;"><label>Large (₹)</label><input type="number" id="add-price-lrg" placeholder="0"></div>
             </div>
 
-            <div class="form-group">
-                <label>Platform Visibility</label>
-                <select id="add-visibility">
-                    <option value="both" selected>Both Apps</option>
-                    <option value="pos">POS Only</option>
-                    <option value="customer">Customer App Only</option>
-                </select>
+            <div class="row-group">
+                <div class="form-group" style="flex: 1;">
+                    <label>Platform Visibility</label>
+                    <select id="add-visibility">
+                        <option value="both" selected>Both Apps</option>
+                        <option value="pos">POS Only</option>
+                        <option value="customer">Customer App Only</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label>Kitchen Routing</label>
+                    <select id="add-routing">
+                        <option value="barista" selected>Barista</option>
+                        <option value="chef">Chef</option>
+                    </select>
+                </div>
             </div>
 
             <div class="form-group checkbox-group">
@@ -125,6 +141,18 @@
         <div class="admin-card" style="border: none; background: transparent; padding: 0; margin-top: 30px;">
             <h2 style="border: none; padding: 0; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;">Live Menu</h2>
             <div id="live-menu-container"><p style="opacity: 0.5; margin-top: 20px;">Loading database...</p></div>
+        </div>
+
+        <div class="admin-card" style="margin-top: 30px;">
+            <h2>Order Ledger & Revenue</h2>
+            <div class="dash-row">
+                <div class="dash-box"><div class="dash-label">Today's Total</div><div class="dash-val" id="ledger-total">₹0</div></div>
+                <div class="dash-box"><div class="dash-label">UPI</div><div class="dash-val" id="ledger-upi">₹0</div></div>
+                <div class="dash-box"><div class="dash-label">Cash</div><div class="dash-val" id="ledger-cash">₹0</div></div>
+            </div>
+            <div id="history-container" style="max-height: 400px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                <p style="opacity: 0.5; text-align: center;">Waiting for orders...</p>
+            </div>
         </div>
 
     </div>
@@ -143,6 +171,7 @@
         const db = firebase.database();
 
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
+        let orderHistory = {};
 
         db.ref('settings/isOpen').on('value', (snapshot) => {
             isCafeOpen = snapshot.val() === null ? true : snapshot.val(); 
@@ -176,6 +205,12 @@
             if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
             if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
             renderAllViews();
+        });
+
+        // HISTORY LISTENER
+        db.ref('orders/history').on('value', snap => {
+            orderHistory = snap.val() || {};
+            renderLedger();
         });
 
         function getSortedCategories() { return currentCategoryOrder.filter(cat => Object.keys(currentMenuData).includes(cat)); }
@@ -224,6 +259,7 @@
                     const item = currentMenuData[category][itemName];
                     const safeCategory = category.replace(/'/g, "\\'"); const safeName = itemName.replace(/'/g, "\\'");
                     const safeVisibility = item.visibility ? item.visibility : 'both';
+                    const safeRouting = item.routing ? item.routing : 'barista';
                     
                     let upDisabled = index === 0 ? 'opacity:0.2; pointer-events:none;' : '';
                     let downDisabled = index === validItems.length - 1 ? 'opacity:0.2; pointer-events:none;' : '';
@@ -232,6 +268,9 @@
                     let badgeHTML = item.inStock ? "" : `<span class="badge">Out</span>`;
                     let visLabel = item.visibility === "pos" ? "POS Only" : (item.visibility === "customer" ? "App Only" : "");
                     let visHTML = visLabel ? `<span class="badge">${visLabel}</span>` : "";
+                    
+                    let routeLabel = item.routing === 'chef' ? 'Chef' : 'Barista';
+                    let routeHTML = `<span class="badge">${routeLabel}</span>`;
                     
                     let priceDisplay = item.hasSizes ? `₹${item.priceReg} / ₹${item.priceLrg}` : `₹${item.price}`;
 
@@ -242,11 +281,11 @@
                                 <button class="btn-move-item" style="${downDisabled}" onclick="moveItem('${safeCategory}', ${index}, 1)">▼</button>
                             </div>
                             <div class="item-details">
-                                <div class="item-name">${itemName} ${badgeHTML}</div>
+                                <div class="item-name">${itemName} ${badgeHTML} ${routeHTML}</div>
                                 <div class="item-meta">${priceDisplay} ${visHTML}</div>
                             </div>
                             <div class="item-actions">
-                                <button class="btn-action" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0})">Edit</button>
+                                <button class="btn-action" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0}, '${safeRouting}')">Edit</button>
                                 <button class="btn-action" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${item.inStock ? "Hide" : "Show"}</button>
                                 <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="deleteItem('${safeCategory}', '${safeName}')">✖</button>
                             </div>
@@ -271,12 +310,13 @@
             const category = document.getElementById('add-category').value.trim();
             const name = document.getElementById('add-name').value.trim();
             const visibility = document.getElementById('add-visibility').value;
+            const routing = document.getElementById('add-routing').value;
             const requiresSweetness = document.getElementById('add-sweetness').checked;
             const hasSizes = document.getElementById('add-has-sizes').checked;
 
             if (!category || !name) { alert("Please fill in Category and Name."); return; }
 
-            let updateData = { requiresSweetness: requiresSweetness, visibility: visibility, hasSizes: hasSizes };
+            let updateData = { requiresSweetness: requiresSweetness, visibility: visibility, routing: routing, hasSizes: hasSizes };
 
             if(hasSizes) {
                 const pReg = parseFloat(document.getElementById('add-price-reg').value);
@@ -299,9 +339,14 @@
             });
         };
 
-        window.editItem = function(category, name, price, visibility, requiresSweetness, hasSizes, priceReg, priceLrg) {
-            document.getElementById('add-category').value = category; document.getElementById('add-name').value = name; document.getElementById('add-visibility').value = visibility || "both";
-            document.getElementById('add-sweetness').checked = !!requiresSweetness; document.getElementById('add-has-sizes').checked = !!hasSizes; window.toggleSizeInputs();
+        window.editItem = function(category, name, price, visibility, requiresSweetness, hasSizes, priceReg, priceLrg, routing) {
+            document.getElementById('add-category').value = category; 
+            document.getElementById('add-name').value = name; 
+            document.getElementById('add-visibility').value = visibility || "both";
+            document.getElementById('add-routing').value = routing || "barista";
+            document.getElementById('add-sweetness').checked = !!requiresSweetness; 
+            document.getElementById('add-has-sizes').checked = !!hasSizes; 
+            window.toggleSizeInputs();
             if (hasSizes) { document.getElementById('add-price-reg').value = priceReg; document.getElementById('add-price-lrg').value = priceLrg; } 
             else { document.getElementById('add-price').value = price; }
             document.getElementById('menu-form-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -337,6 +382,64 @@
             db.ref('staff/' + pin).set(name).then(() => { document.getElementById('staff-name').value = ""; document.getElementById('staff-pin').value = ""; });
         };
         window.removeStaff = function(pin, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); };
+
+        function renderLedger() {
+            const container = document.getElementById('history-container');
+            const sortedIds = Object.keys(orderHistory).sort((a, b) => b - a); 
+            
+            if (sortedIds.length === 0) {
+                container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No orders in history.</p>";
+                return;
+            }
+
+            let todayTotal = 0; let todayUPI = 0; let todayCash = 0;
+            let listHTML = "";
+
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+            sortedIds.forEach(id => {
+                const order = orderHistory[id];
+                const orderTime = parseInt(id);
+
+                if (orderTime >= startOfToday) {
+                    const amt = order.payment.total || 0;
+                    todayTotal += amt;
+                    if (order.payment.method === "UPI") todayUPI += amt;
+                    else todayCash += amt;
+                }
+
+                let itemsHTML = "";
+                if(order.items) {
+                    for(let itemName in order.items) {
+                        const item = order.items[itemName];
+                        itemsHTML += `<div style="font-size: 0.9rem; margin-bottom: 2px;">${item.qty}x ${itemName} - ₹${item.qty * item.price}</div>`;
+                    }
+                }
+
+                listHTML += `
+                <div class="history-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px;">
+                        <div>
+                            <strong style="font-size: 1.1rem;">${order.tableOrAddress}</strong>
+                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.timestamp} • ${order.source}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <strong style="font-size: 1.1rem;">₹${order.payment.total}</strong>
+                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.payment.method}</div>
+                        </div>
+                    </div>
+                    ${itemsHTML}
+                    ${order.notes ? `<div style="font-size: 0.85rem; color: #ffcc00; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}
+                </div>`;
+            });
+
+            container.innerHTML = listHTML;
+            document.getElementById('ledger-total').innerText = '₹' + todayTotal;
+            document.getElementById('ledger-upi').innerText = '₹' + todayUPI;
+            document.getElementById('ledger-cash').innerText = '₹' + todayCash;
+        }
+
     </script>
 </body>
 </html>
