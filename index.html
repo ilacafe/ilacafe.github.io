@@ -271,7 +271,6 @@
             if (window.renderInlineControls) window.renderInlineControls();
         }
 
-        /* NEW: PRICE SWAP ENGINE */
         window.getCartQty = function(baseName) {
             let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
             for (let key in window.cart) {
@@ -547,9 +546,11 @@
             document.getElementById('payment-modal').classList.add('active');
         };
 
+        // NEW: DUAL-ACTION CHECKOUT LOGIC
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo; 
             
+            // Save preferences for quick re-order
             localStorage.setItem('ila_last_order', JSON.stringify(window.cart));
             localStorage.setItem('ila_last_amount', window.totalAmount);
             localStorage.setItem('ila_last_order_type', info.type); 
@@ -557,14 +558,29 @@
                 localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
             }
 
+            // Action 1: Push data silently to the POS Web Queue
+            db.ref('orders/pendingWeb').push({
+                orderType: info.type,
+                tableOrAddress: info.details,
+                notes: info.notes || "",
+                items: window.cart,
+                total: window.totalAmount,
+                paymentMethod: "UPI"
+            });
+
+            // Action 2: Draft the exact same message for WhatsApp
             let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
-            
             if (info.notes) { message += `Notes: ${info.notes}\n`; }
             message += `\n`;
-            
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
             message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
-            setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
+            
+            // Clear cart and redirect to WhatsApp
+            setTimeout(() => { 
+                window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); 
+                closeModal('payment-modal'); 
+                window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; 
+            }, 100);
         };
 
         updateCartUI(); window.updateDynamicFields();
