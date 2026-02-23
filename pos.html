@@ -129,7 +129,8 @@
     <div id="web-orders-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Web Orders</h3>
-            <div id="web-orders-list" style="margin-top: 15px; max-height: 400px; overflow-y: auto;"></div>
+            <div id="web-orders-list" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
+                </div>
             <button class="close-modal" onclick="closeModal('web-orders-modal')">✖ CLOSE</button>
         </div>
     </div>
@@ -308,7 +309,7 @@
         window.totalItems = parseInt(localStorage.getItem('ila_pos_items')) || 0;
         
         window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
-        window.salesLedger = []; window.pastBills = []; window.pendingWebOrders = {};
+        window.salesLedger = []; window.pastBills = [];
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
@@ -316,7 +317,7 @@
 
         window.itemRoutingMap = {};
 
-        // UPDATED: Full web order card with items shown
+        // PHASE 3 UPGRADE: Detailed Web Queue View
         window.openWebOrders = function() {
             const list = document.getElementById('web-orders-list'); 
             list.innerHTML = "";
@@ -325,12 +326,18 @@
             } else {
                 for (let id in window.pendingWebOrders) {
                     const o = window.pendingWebOrders[id];
-                    let itemsHTML = "<div style='margin:10px 0; padding-left:8px; border-left:2px solid rgba(255,255,255,0.2); font-size:0.9rem;'>";
-                    for(let i in o.items) { itemsHTML += `<div>${o.items[i].qty}x ${i}</div>`; }
+                    
+                    let itemsHTML = "<div style='margin: 10px 0; font-size: 0.9rem; opacity: 0.8; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.3);'>";
+                    for(let itemName in o.items) {
+                        itemsHTML += `<div style="margin-bottom: 3px;">${o.items[itemName].qty}x ${itemName}</div>`;
+                    }
+                    if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; color:#ffdd99;">Notes: ${o.notes}</div>`;
                     itemsHTML += "</div>";
 
                     list.innerHTML += `<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left;">
-                        <strong>${o.tableOrAddress}</strong><br>${itemsHTML}₹${o.total}<br>
+                        <strong style="font-size: 1.1rem; text-transform: uppercase;">${o.tableOrAddress}</strong><br>
+                        ${itemsHTML}
+                        <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
                         <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.acceptWebOrder('${id}')">Accept & Send to Kitchen</button>
                     </div>`;
                 }
@@ -338,46 +345,46 @@
             document.getElementById('web-orders-modal').classList.add('active');
         };
 
+        // PHASE 3 UPGRADE: Inject accepted web orders into the POS History
         window.acceptWebOrder = function(id) {
             const order = window.pendingWebOrders[id];
             if (!order) return;
+            
+            // 1. Route to Kitchen
             dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App");
+            
+            // 2. Add to Math/Ledger
             addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`);
             
+            // 3. Save to POS Local History (So you can see it in 'Logs')
             const localBill = { 
-                id: Date.now(), table: "Web: " + order.tableOrAddress, 
+                id: Date.now(), 
+                table: "Web: " + order.tableOrAddress, 
                 date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), 
-                items: JSON.parse(JSON.stringify(order.items)), total: order.total, notes: order.notes || "" 
+                items: JSON.parse(JSON.stringify(order.items)), 
+                total: order.total, 
+                notes: order.notes || "" 
             };
             window.pastBills.unshift(localBill);
             if(window.pastBills.length > 50) window.pastBills.pop();
+            syncToCloud();
             
+            // 4. Save to Permanent Enterprise History
             const archivePacket = {
-                timestamp: new Date().toLocaleString('en-GB'), source: "Web App", tableOrAddress: order.tableOrAddress, notes: order.notes || "",
-                payment: { method: "UPI", total: order.total }, items: order.items
+                timestamp: new Date().toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}),
+                source: "Web App",
+                orderType: "Delivery/Web",
+                tableOrAddress: order.tableOrAddress,
+                notes: order.notes || "",
+                payment: { method: "UPI", total: order.total },
+                items: order.items
             };
             db.ref('orders/history/' + Date.now()).set(archivePacket);
+            
+            // 5. Remove from Queue & Close
             db.ref('orders/pendingWeb/' + id).remove();
             closeModal('web-orders-modal');
         };
-
-        // NEW: Master Archive function for POS walk-ins
-        function archivePOSTable(tableID, tableData, method) {
-            const localBill = { 
-                id: Date.now(), table: tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID, 
-                date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), 
-                items: JSON.parse(JSON.stringify(tableData.items)), total: tableData.total, notes: tableData.notes || "" 
-            };
-            window.pastBills.unshift(localBill);
-            if(window.pastBills.length > 50) window.pastBills.pop();
-
-            const archivePacket = {
-                timestamp: new Date().toLocaleString('en-GB'), source: "POS Walk-in", tableOrAddress: tableID, notes: tableData.notes || "",
-                payment: { method: method, total: tableData.total }, items: tableData.items
-            };
-            db.ref('orders/history/' + Date.now()).set(archivePacket);
-            syncToCloud();
-        }
 
         function saveLocalCart() {
             localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
@@ -388,32 +395,41 @@
 
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
-            if (window.totalItems > 0) { 
-                document.getElementById('cart-total-text').innerText = `₹${Math.round(window.totalAmount)}`; 
-                banner.classList.add('visible'); 
-            } 
+            if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
             else { banner.classList.remove('visible'); }
             if (window.renderInlineControls) window.renderInlineControls();
         }
 
         window.getCartQty = function(baseName) {
             let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
-            for (let key in window.cart) { if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; } }
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; }
+            }
             return qty;
         };
 
         window.renderInlineControls = function() {
             const containers = document.querySelectorAll('.swap-container');
             containers.forEach(container => {
-                let safeName = container.getAttribute('data-item'), price = container.getAttribute('data-price'), reqSweet = container.getAttribute('data-sweet') === 'true', qty = window.getCartQty(safeName);
-                if (qty > 0) { container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`; } 
-                else { container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`; }
+                let safeName = container.getAttribute('data-item');
+                let price = container.getAttribute('data-price');
+                let reqSweet = container.getAttribute('data-sweet') === 'true';
+                let qty = window.getCartQty(safeName);
+
+                if (qty > 0) {
+                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
+                } else {
+                    container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
+                }
             });
         };
 
         window.decrementInline = function(safeName) {
-            let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'"), targetKey = null;
-            for (let key in window.cart) { if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; } }
+            let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            let targetKey = null;
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; }
+            }
             if (targetKey) {
                 window.cart[targetKey].qty -= 1; window.totalAmount -= window.cart[targetKey].price; window.totalItems -= 1;
                 if (window.cart[targetKey].qty <= 0) delete window.cart[targetKey];
@@ -426,21 +442,30 @@
         function syncToCloud() {
             db.ref('pos').update({
                 activeTables: Object.keys(window.activeTables).length > 0 ? window.activeTables : null,
-                cashDrawer: window.cashDrawer || 0, upiTotal: window.upiTotal || 0,
+                cashDrawer: window.cashDrawer || 0,
+                upiTotal: window.upiTotal || 0,
                 salesLedger: window.salesLedger.length > 0 ? window.salesLedger : null,
                 pastBills: window.pastBills.length > 0 ? window.pastBills : null
-            });
+            }).catch(e => console.error("Cloud Sync Error: ", e));
         }
 
-        db.ref('pos/activeTables').on('value', snap => { window.activeTables = snap.val() || {}; updateDashboards(); refreshActiveModals(); });
+        db.ref('pos/activeTables').on('value', snap => { 
+            window.activeTables = snap.val() || {}; updateDashboards(); refreshActiveModals();
+        });
         db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
         db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
         db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
         db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
+
         db.ref('orders/pendingWeb').on('value', snap => {
             window.pendingWebOrders = snap.val() || {};
-            document.getElementById('web-orders-count').innerText = Object.keys(window.pendingWebOrders).length;
-            if(document.getElementById('web-orders-modal').classList.contains('active')) window.openWebOrders();
+            let count = Object.keys(window.pendingWebOrders).length;
+            document.getElementById('web-orders-count').innerText = count;
+            document.getElementById('web-orders-count').style.opacity = count > 0 ? "1" : "0.5";
+            
+            if(document.getElementById('web-orders-modal').classList.contains('active')) {
+                window.openWebOrders();
+            }
         });
 
         function updateDashboards() {
@@ -454,63 +479,143 @@
         function refreshActiveModals() {
             if(document.getElementById('active-bills-modal').classList.contains('active')) openActiveBills();
             if(document.getElementById('checkout-modal').classList.contains('active') && window.checkoutTableID) {
-                if(!window.activeTables[window.checkoutTableID]) closeModal('checkout-modal'); else renderCheckoutReceipt(window.checkoutTableID);
+                if(!window.activeTables[window.checkoutTableID]) closeModal('checkout-modal'); 
+                else renderCheckoutReceipt(window.checkoutTableID);
             }
+            if(document.getElementById('table-modal').classList.contains('active')) openTableModal();
         }
 
+        let currentMenuData = {}; let liveCategoryOrder = []; window.currentItemOrder = {};
+
+        db.ref('.info/connected').on('value', function(snap) {
+            if (snap.val() === true) {
+                document.getElementById('offline-indicator').style.display = 'none';
+            } else {
+                document.getElementById('offline-indicator').style.display = 'block';
+                let cachedMenu = JSON.parse(localStorage.getItem('ila_cached_menu'));
+                let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
+                window.currentItemOrder = JSON.parse(localStorage.getItem('ila_cached_item_order')) || {};
+                if(cachedMenu) renderPOSMenu(cachedMenu, cachedOrder || []);
+            }
+        });
+
+        db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
+        db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
+        
         db.ref('menu').on('value', snap => { 
-            let currentMenuData = snap.val() || {}; 
+            currentMenuData = snap.val() || {}; 
+            localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
+            
             window.itemRoutingMap = {};
             for(let cat in currentMenuData) {
                 for(let item in currentMenuData[cat]) {
                     let route = currentMenuData[cat][item].routing || 'barista';
                     window.itemRoutingMap[item] = route;
-                    if(currentMenuData[cat][item].hasSizes) { window.itemRoutingMap[item + " (Regular)"] = route; window.itemRoutingMap[item + " (Large)"] = route; }
+                    if(currentMenuData[cat][item].hasSizes) {
+                        window.itemRoutingMap[item + " (Regular)"] = route;
+                        window.itemRoutingMap[item + " (Large)"] = route;
+                    }
                 }
             }
-            renderPOSMenu(currentMenuData, JSON.parse(localStorage.getItem('ila_cached_category_order')) || []); 
+            renderPOSMenu(currentMenuData, liveCategoryOrder); 
         });
 
         function renderPOSMenu(menuData, categoryOrder) {
-            const container = document.getElementById('live-menu-container'); if (!menuData) return;
+            const container = document.getElementById('live-menu-container');
+            if (!menuData) return;
             container.innerHTML = "";
-            let activeCats = Object.keys(menuData), sortedCats = categoryOrder.filter(cat => activeCats.includes(cat));
+
+            let activeCats = Object.keys(menuData);
+            let sortedCats = categoryOrder.filter(cat => activeCats.includes(cat));
             activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
+
             sortedCats.forEach(category => {
-                let itemsInOrder = Object.keys(menuData[category]);
-                let catHTML = `<section><h2>${category}</h2>`;
+                let standardItems = []; let sizedItems = []; let hasVisibleItems = false;
+                let itemsInOrder = window.currentItemOrder && window.currentItemOrder[category] ? window.currentItemOrder[category] : Object.keys(menuData[category]);
+                
                 itemsInOrder.forEach(itemName => {
-                    const item = menuData[category][itemName]; if (!item || item.visibility === 'customer') return; 
-                    const safeName = itemName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    if (item.hasSizes) {
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${itemName}</span><div class="swap-container" data-item="${safeName} (Regular)" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness}"></div><div class="swap-container" data-item="${safeName} (Large)" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness}"></div></div>`;
+                    const item = menuData[category] ? menuData[category][itemName] : null;
+                    if (!item || item.visibility === 'customer') return; 
+                    hasVisibleItems = true; item.originalName = itemName; 
+                    if (item.hasSizes) { sizedItems.push(item); } else { standardItems.push(item); }
+                });
+
+                if (!hasVisibleItems) return;
+                let catHTML = `<section><h2>${category}</h2>`;
+
+                standardItems.forEach(item => {
+                    const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    if (item.inStock) {
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${itemName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
                     }
                 });
-                container.innerHTML += catHTML + `</section>`;
+
+                if (sizedItems.length > 0) {
+                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
+                    sizedItems.forEach(item => {
+                        let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+
+                        if (item.inStock) {
+                            if(item.priceReg) regHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '<div style="width:100%; text-align:right;">-</div>';
+                            if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
+                        }
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
+                    });
+                }
+                catHTML += `</section>`;
+                container.innerHTML += catHTML;
             });
             window.renderInlineControls();
         }
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-        window.selectSweetness = function(val, btn) { window.currentSweetness = val; let siblings = btn.parentNode.children; for(let s of siblings) s.classList.remove('selected'); btn.classList.add('selected'); };
+
+        window.selectSweetness = function(val, btn) {
+            window.currentSweetness = val;
+            let siblings = btn.parentNode.children;
+            for(let s of siblings) s.classList.remove('selected');
+            btn.classList.add('selected');
+        };
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             let finalName = itemName.replace(/&quot;/g, '"');
+            
             if (!requiresSweetness) {
-                if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: price, qty: 1 };
-                window.totalAmount += parseFloat(price) || 0; window.totalItems += 1;
-                saveLocalCart(); return;
+                if (window.cart[finalName]) window.cart[finalName].qty += 1; 
+                else window.cart[finalName] = { price: price, qty: 1 };
+                
+                window.totalAmount += parseFloat(price) || 0; 
+                window.totalItems += 1;
+                
+                if (navigator.vibrate) navigator.vibrate(50);
+                saveLocalCart();
+                return;
             }
-            window.pendingItemName = itemName; window.pendingItemPrice = price; document.getElementById('remark-item-title').innerText = finalName; 
+
+            window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
+            document.getElementById('remark-item-title').innerText = finalName; 
+            
+            window.currentSweetness = "Medium sweet";
+            const btns = document.querySelectorAll('#pos-sweetness-grid .choice-btn');
+            btns.forEach(b => b.classList.remove('selected'));
+            if(btns.length > 0) btns[0].classList.add('selected');
+
             document.getElementById('remark-modal').classList.add('active');
         };
 
         window.confirmAddItem = function() {
-            let finalName = window.pendingItemName.replace(/&quot;/g, '"') + ` (${window.currentSweetness})`;
+            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
+            if (window.currentSweetness !== "") finalName += ` (${window.currentSweetness})`;
+            
             if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
-            window.totalAmount += parseFloat(window.pendingItemPrice) || 0; window.totalItems += 1;
+            window.totalAmount += parseFloat(window.pendingItemPrice) || 0; 
+            window.totalItems += 1;
             saveLocalCart(); closeModal('remark-modal');
         };
 
@@ -518,9 +623,12 @@
 
         window.openReviewCartModal = function() {
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
-            for (let item in window.cart) {
-                const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                list.innerHTML += `<div class="bill-receipt-row"><span>${item}</span><span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button>${window.cart[item].qty}<button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+            if (window.totalItems === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.5;'>Empty</p>"; } 
+            else {
+                for (let item in window.cart) {
+                    const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                }
             }
             document.getElementById('review-cart-modal').classList.add('active');
         };
@@ -530,187 +638,335 @@
             if (window.cart[realItemName]) {
                 window.cart[realItemName].qty += delta; window.totalAmount += (parseFloat(window.cart[realItemName].price) * delta); window.totalItems += delta;
                 if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
-                saveLocalCart(); if (window.totalItems === 0) closeModal('review-cart-modal'); else window.openReviewCartModal();
+                saveLocalCart();
+                if (window.totalItems === 0) closeModal('review-cart-modal'); else window.openReviewCartModal();
             }
         };
 
         window.openTableModal = function() {
-            if (window.totalItems === 0) return alert("Empty!");
+            if (window.totalItems === 0) return alert("Cart is empty!");
+            
+            document.getElementById('pos-order-notes').value = "";
+            
             const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
-            for (let i = 1; i <= 10; i++) { grid.innerHTML += `<button class="table-btn ${window.activeTables[i.toString()] ? 'occupied' : ''}" onclick="window.sendOrder('${i}')">${i}</button>`; }
+            for (let i = 1; i <= 10; i++) {
+                const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
+                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="window.sendOrder('${i}')">${i}</button>`;
+            }
             document.getElementById('table-modal').classList.add('active');
         };
 
         function dispatchToKitchen(cartObj, destination, notes, source) {
-            let baristaItems = {}, chefItems = {};
+            let baristaItems = {}; let chefItems = {};
+            
             for (let itemName in cartObj) {
-                let baseName = itemName.split(" (Med")[0].split(" (Less")[0].split(" (No ")[0].split(" (Very")[0];
+                let baseName = itemName.split(" (Medium")[0].split(" (Less")[0].split(" (No ")[0].split(" (Very")[0];
                 let routing = window.itemRoutingMap[baseName] || 'barista';
-                if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } else { baristaItems[itemName] = cartObj[itemName]; }
+                
+                if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
+                else { baristaItems[itemName] = cartObj[itemName]; }
             }
+
             const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            if (Object.keys(baristaItems).length > 0) { db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr }); }
-            if (Object.keys(chefItems).length > 0) { db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr }); }
+            
+            if (Object.keys(baristaItems).length > 0) {
+                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr });
+            }
+            if (Object.keys(chefItems).length > 0) {
+                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr });
+            }
         }
 
         window.sendOrder = function(tableID) {
-            const notes = document.getElementById('pos-order-notes').value.trim();
-            dispatchToKitchen(window.cart, tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID, notes, "POS");
+            if (window.totalItems === 0) return alert("Cart is empty!");
+            
+            const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
+            
+            dispatchToKitchen(window.cart, destName, notes, "POS");
+
             if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
-            if (notes) window.activeTables[tableID].notes = window.activeTables[tableID].notes ? window.activeTables[tableID].notes + " | " + notes : notes;
+            
+            if (notes) {
+                if (window.activeTables[tableID].notes) window.activeTables[tableID].notes += " | " + notes;
+                else window.activeTables[tableID].notes = notes;
+            }
+
             for (let item in window.cart) {
                 if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
                 else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
             }
-            window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + parseFloat(window.totalAmount);
-            syncToCloud(); closeModal('table-modal'); window.clearCart();
+            
+            let safeTotal = parseFloat(window.totalAmount) || 0;
+            window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + safeTotal;
+            syncToCloud();
+            
+            closeModal('table-modal'); window.clearCart();
         };
 
         window.openActiveBills = function() {
             const list = document.getElementById('active-bills-list'); list.innerHTML = "";
-            for (let table in window.activeTables) {
-                list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${table}')"><strong>${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</strong><span>₹${window.activeTables[table].total}</span></div>`;
+            if (Object.keys(window.activeTables).length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No active tables.</p>"; } 
+            else {
+                for (let table in window.activeTables) {
+                    list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${table}')"><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span><span>₹${window.activeTables[table].total}</span></div>`;
+                }
             }
             document.getElementById('active-bills-modal').classList.add('active');
         };
 
         function renderCheckoutReceipt(tableID) {
-            const d = window.activeTables[tableID]; if(!d) return; 
-            let total = parseFloat(d.total) || 0, paid = parseFloat(d.paid) || 0, remaining = total - paid, receiptHTML = "";
-            for (let item in d.items) { 
-                const safeName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeName}')">✖</span> ${d.items[item].qty}x ${item}</span><span>₹${d.items[item].qty * d.items[item].price}</span></div>`; 
+            const tableData = window.activeTables[tableID];
+            if(!tableData) return; 
+            
+            let total = parseFloat(tableData.total) || 0; 
+            let paid = parseFloat(tableData.paid) || 0; 
+            let remaining = total - paid;
+            let receiptHTML = "";
+            
+            if (tableData.notes) {
+                receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${tableData.notes}</div>`;
             }
-            document.getElementById('checkout-receipt').innerHTML = receiptHTML + `<div class="bill-grand-total">Total: ₹${total}</div>` + (paid > 0 ? `<div style="text-align:right; opacity:0.8;">Paid: ₹${paid}</div><div style="text-align:right; font-weight:bold;">Due: ₹${remaining}</div>` : "");
-            document.getElementById('checkout-title').innerText = tableID;
+
+            for (let item in tableData.items) { 
+                const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
+            }
+            receiptHTML += `<div class="bill-grand-total">Total: ₹${total}</div>`;
+            if (paid > 0) {
+                receiptHTML += `<div style="text-align: right; opacity: 0.8; font-size: 0.9rem; margin-top: 5px;">Paid: ₹${paid}</div>`;
+                receiptHTML += `<div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`;
+            }
+            document.getElementById('checkout-receipt').innerHTML = receiptHTML;
+            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
         }
 
-        window.openCheckout = function(id) { window.checkoutTableID = id; renderCheckoutReceipt(id); closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active'); };
+        window.openCheckout = function(tableID) {
+            window.checkoutTableID = tableID; 
+            document.getElementById('checkout-phone').value = ""; 
+            renderCheckoutReceipt(tableID);
+            closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
+        };
 
         window.removeTableItem = function(tableID, itemName) {
-            let realName = itemName.replace(/&quot;/g, '"'), d = window.activeTables[tableID];
-            if(d && d.items[realName]) {
-                d.total = (parseFloat(d.total) || 0) - parseFloat(d.items[realName].price); d.items[realName].qty -= 1;
-                if(d.items[realName].qty <= 0) delete d.items[realName];
-                let paid = parseFloat(d.paid) || 0, newTotal = parseFloat(d.total) || 0;
-                if(Object.keys(d.items).length === 0 || (paid >= newTotal && paid > 0)) {
-                    // ARCHIVE FIX: Save to history if partially/fully paid before closing
-                    if(paid > 0) archivePOSTable(tableID, d, "Partial/Cleared");
-                    delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); 
-                } else { syncToCloud(); }
+            let realItemName = itemName.replace(/&quot;/g, '"');
+            const tableData = window.activeTables[tableID];
+            if(tableData && tableData.items[realItemName]) {
+                tableData.total = (parseFloat(tableData.total) || 0) - (parseFloat(tableData.items[realItemName].price) || 0); 
+                tableData.items[realItemName].qty -= 1;
+                if(tableData.items[realItemName].qty <= 0) delete tableData.items[realItemName];
+                
+                let paid = parseFloat(tableData.paid) || 0;
+                let newTotal = parseFloat(tableData.total) || 0;
+
+                if(Object.keys(tableData.items).length === 0) { 
+                    delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return; 
+                }
+                if(paid >= newTotal && paid > 0) {
+                     delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return;
+                }
+                syncToCloud();
             }
         };
 
         window.openSplitBill = function() {
-            const d = window.activeTables[window.checkoutTableID];
-            let remaining = (parseFloat(d.total) || 0) - (parseFloat(d.paid) || 0);
-            document.getElementById('split-total').innerText = d.total; document.getElementById('split-remaining').innerText = remaining;
-            document.getElementById('partial-pay-amount').value = remaining; closeModal('checkout-modal'); document.getElementById('split-bill-modal').classList.add('active');
+            const tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            document.getElementById('split-total').innerText = total;
+            document.getElementById('split-remaining').innerText = remaining;
+            document.getElementById('partial-pay-amount').value = remaining;
+            closeModal('checkout-modal'); document.getElementById('split-bill-modal').classList.add('active');
         };
 
+        window.closeSplitBill = function() { closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
+        
         window.calculateSplit = function(ways) {
-            const d = window.activeTables[window.checkoutTableID];
-            let rem = (parseFloat(d.total) || 0) - (parseFloat(d.paid) || 0);
-            document.getElementById('partial-pay-amount').value = Math.ceil(rem / ways);
+            const tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            document.getElementById('partial-pay-amount').value = Math.ceil(remaining / ways);
         };
 
         window.processSplit = function(method) {
-            let amt = parseFloat(document.getElementById('partial-pay-amount').value), d = window.activeTables[window.checkoutTableID], rem = (parseFloat(d.total) || 0) - (parseFloat(d.paid) || 0);
-            if (isNaN(amt) || amt <= 0) return; if (amt > rem) amt = rem;
-            if (method === 'upi') window.payWithUPI(amt); else window.payWithCash(amt);
+            let amount = parseFloat(document.getElementById('partial-pay-amount').value);
+            let tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            
+            if (isNaN(amount) || amount <= 0) return;
+            if (amount > remaining) amount = remaining; 
+            
+            if (method === 'upi') window.payWithUPI(amount); else window.payWithCash(amount);
         };
 
-        window.payWithCash = function(customAmt = null) {
-            const d = window.activeTables[window.checkoutTableID];
-            let amt = customAmt !== null ? parseFloat(customAmt) : ((parseFloat(d.total) || 0) - (parseFloat(d.paid) || 0));
-            addLedgerEntry('cash_income', amt, `${window.checkoutTableID} (Cash)`);
-            d.paid = (parseFloat(d.paid) || 0) + amt;
-            if (d.paid >= d.total) { 
-                archivePOSTable(window.checkoutTableID, d, "Cash");
-                delete window.activeTables[window.checkoutTableID]; syncToCloud(); closeModal('checkout-modal'); closeModal('split-bill-modal'); 
-            } else { syncToCloud(); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); }
+        window.payWithCash = function(customAmount = null) {
+            window.currentPaymentMethod = "Cash";
+            const tableData = window.activeTables[window.checkoutTableID];
+            
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            
+            let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
+            amountToPay = amountToPay || 0;
+
+            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (Cash)' : `Table ${window.checkoutTableID} (Cash)`;
+            
+            addLedgerEntry('cash_income', amountToPay, reason);
+            tableData.paid = paid + amountToPay;
+            
+            if (tableData.paid >= total) {
+                delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
+                closeModal('checkout-modal'); closeModal('split-bill-modal');
+            } else {
+                syncToCloud(); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
+            }
         };
 
-        window.payWithUPI = function(customAmt = null) {
-            const d = window.activeTables[window.checkoutTableID];
-            let amt = customAmt !== null ? parseFloat(customAmt) : ((parseFloat(d.total) || 0) - (parseFloat(d.paid) || 0));
-            window.pendingUPIAmount = amt;
-            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent('upi://pay?pa='+CAFE_UPI_ID+'&pn=ILA&am='+amt+'&cu=INR')}`;
-            document.getElementById('upi-amount-text').innerText = `₹${amt}`;
+        window.payWithUPI = function(customAmount = null) {
+            window.currentPaymentMethod = "UPI";
+            const tableData = window.activeTables[window.checkoutTableID];
+            
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+
+            let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
+            amountToPay = amountToPay || 0;
+            
+            window.pendingUPIAmount = amountToPay;
+            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${amountToPay}&cu=INR`;
+            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
+            document.getElementById('upi-amount-text').innerText = `₹${amountToPay}`;
+            
             closeModal('checkout-modal'); closeModal('split-bill-modal'); document.getElementById('upi-modal').classList.add('active');
         };
 
         window.confirmUPIPayment = function() {
-            const d = window.activeTables[window.checkoutTableID];
-            let amt = parseFloat(window.pendingUPIAmount) || 0;
-            addLedgerEntry('upi_income', amt, `${window.checkoutTableID} (UPI)`);
-            d.paid = (parseFloat(d.paid) || 0) + amt;
-            if (d.paid >= d.total) { 
-                archivePOSTable(window.checkoutTableID, d, "UPI");
-                delete window.activeTables[window.checkoutTableID]; syncToCloud(); closeModal('upi-modal'); 
-            } else { syncToCloud(); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID); }
+            let amountToPay = parseFloat(window.pendingUPIAmount) || 0;
+            const tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+
+            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (UPI)' : `Table ${window.checkoutTableID} (UPI)`;
+            
+            addLedgerEntry('upi_income', amountToPay, reason); 
+            tableData.paid = paid + amountToPay;
+
+            if (tableData.paid >= total) {
+                delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
+                closeModal('upi-modal'); 
+            } else {
+                syncToCloud(); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
+            }
         };
 
         function addLedgerEntry(type, amount, reason) {
-            const val = parseFloat(amount) || 0;
-            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            window.salesLedger.unshift({ date: time, type: type, amount: val, reason: reason }); 
-            if (type === 'cash_income') window.cashDrawer = (parseFloat(window.cashDrawer) || 0) + val;
-            else if (type === 'upi_income') window.upiTotal = (parseFloat(window.upiTotal) || 0) + val;
-            else window.cashDrawer = (parseFloat(window.cashDrawer) || 0) - val;
+            const parsedAmount = parseFloat(amount) || 0;
+            const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            window.salesLedger.unshift({ date: timeString, type: type, amount: parsedAmount, reason: reason }); 
+            
+            if (type === 'cash_income') {
+                window.cashDrawer = (parseFloat(window.cashDrawer) || 0) + parsedAmount;
+            } else if (type === 'upi_income') {
+                window.upiTotal = (parseFloat(window.upiTotal) || 0) + parsedAmount;
+            } else {
+                window.cashDrawer = (parseFloat(window.cashDrawer) || 0) - parsedAmount;
+            }
             syncToCloud();
         }
 
         function renderLedger() {
             const list = document.getElementById('ledger-list'); list.innerHTML = "";
-            window.salesLedger.forEach(e => {
-                let col = e.type.includes('income') ? 'ledger-income' : 'ledger-out';
-                list.innerHTML += `<div class="ledger-item"><div><strong>${e.type.includes('cash')?'CASH:':'UPI:'}</strong> ${e.reason}<span class="ledger-meta">${e.date}</span></div><div class="${col}">₹${Math.round(e.amount)}</div></div>`;
+            if (window.salesLedger.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; return; }
+            window.salesLedger.forEach(entry => {
+                let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
+                if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'CASH: '; } 
+                else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
+                
+                let safeAmount = parseFloat(entry.amount) || 0;
+                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
             });
         }
 
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list'); list.innerHTML = "";
-            window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" onclick="window.viewPastBill(${bill.id})"><div><strong>${bill.table}</strong><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; });
+            if (window.pastBills.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; } 
+            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table === 'Takeaway' ? 'Takeaway' : 'Table ' + bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
             document.getElementById('past-bills-modal').classList.add('active');
         };
 
         window.viewPastBill = function(id) {
             const bill = window.pastBills.find(b => b.id === id); if (!bill) return; window.currentPastBillID = id;
-            document.getElementById('past-bill-title').innerText = bill.table; document.getElementById('past-bill-date').innerText = bill.date;
-            let h = ""; for (let i in bill.items) { h += `<div class="bill-receipt-row"><span>${bill.items[i].qty}x ${i}</span><span>₹${bill.items[i].qty * bill.items[i].price}</span></div>`; }
-            document.getElementById('past-bill-receipt').innerHTML = h + `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
+            document.getElementById('past-bill-title').innerText = bill.table === 'Takeaway' ? 'Takeaway' : `Table ${bill.table}`;
+            document.getElementById('past-bill-date').innerText = bill.date;
+            let receiptHTML = ""; 
+            if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${bill.notes}</div>`;
+            for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
+            receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
+            document.getElementById('past-bill-receipt').innerHTML = receiptHTML; document.getElementById('past-bill-phone').value = "";
             closeModal('past-bills-modal'); document.getElementById('view-past-bill-modal').classList.add('active');
         };
 
         window.sendPastBillWhatsApp = function() {
             const phone = document.getElementById('past-bill-phone').value.trim(); if (phone.length < 10) return;
-            const b = window.pastBills.find(x => x.id === window.currentPastBillID);
-            window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent('ILA Receipt\nTotal: ₹' + b.total)}`;
+            const bill = window.pastBills.find(b => b.id === window.currentPastBillID); let billStr = `ILA\n\n`;
+            for (let item in bill.items) { billStr += `${bill.items[item].qty}x ${item} - ₹${bill.items[item].qty * bill.items[item].price}\n`; }
+            billStr += `\nPaid: ₹${bill.total}`; window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
         window.sendWhatsAppBill = function() {
-            const p = document.getElementById('checkout-phone').value.trim(); if (p.length < 10) return;
-            const d = window.activeTables[window.checkoutTableID];
-            window.location.href = `https://wa.me/91${p}?text=${encodeURIComponent('ILA\nTotal: ₹' + d.total + '\nPay: ' + CAFE_WEBSITE_LINK + '/pay.html?am=' + (d.total - (d.paid||0)))}`;
+            const phone = document.getElementById('checkout-phone').value.trim(); if (phone.length < 10) return;
+            const tableData = window.activeTables[window.checkoutTableID]; let billStr = `ILA\n\n`;
+            for (let item in tableData.items) { billStr += `${tableData.items[item].qty}x ${item} - ₹${tableData.items[item].qty * tableData.items[item].price}\n`; }
+            
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+
+            billStr += `\nTotal: ₹${total}\n`;
+            if(paid > 0) billStr += `Paid: ₹${paid}\nDue: ₹${remaining}\n\n`;
+            else billStr += `\n`;
+
+            billStr += `Pay via UPI:\n${CAFE_WEBSITE_LINK}/pay.html?am=${remaining}`;
+            window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
         window.openCashManagement = function() { renderLedger(); document.getElementById('cash-modal').classList.add('active'); };
-        window.openTransactionModal = function(t) { window.currentTransactionType = t; document.getElementById('transaction-title').innerText = t; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); };
+        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
         window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
+
         window.confirmTransaction = function() {
-            const amt = parseFloat(document.getElementById('transaction-amount').value), reason = document.getElementById('transaction-reason').value.trim(), pin = document.getElementById('transaction-pin').value.trim();
-            if (isNaN(amt) || amt <= 0 || !window.staffPins[pin]) return alert("Invalid");
-            addLedgerEntry(window.currentTransactionType, amt, `${reason} (${window.staffPins[pin]})`);
+            const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
+            if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
+            const staffName = window.staffPins[pinStr]; if (!staffName) return;
+            
+            let currentCash = parseFloat(window.cashDrawer) || 0;
+            if (amount > currentCash && !confirm(`Only ₹${currentCash} in drawer. Continue?`)) return;
+            
+            addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (${staffName})`);
             window.closeTransactionModal();
         };
 
         window.promptEOD = function() {
-            const pin = prompt("PIN:"); if (!window.staffPins[pin]) return;
-            let rep = `ILA EOD\nUPI: ₹${Math.round(window.upiTotal)}\nCash: ₹${Math.round(window.cashDrawer)}`;
+            const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
+            const staffName = window.staffPins[pinStr]; if (!staffName) return;
+            if (Object.keys(window.activeTables).length > 0) { if(!confirm("Tables open. End day?")) return; }
+            
+            let safeUPI = parseFloat(window.upiTotal) || 0;
+            let safeCash = parseFloat(window.cashDrawer) || 0;
+
+            let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${Math.round(safeUPI)}\nCash: ₹${Math.round(safeCash)}\n\nEXPENSES:\n`;
+            let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
+            if (!exp) report += `None.\n`;
             if (confirm("Send Report?")) {
-                window.activeTables = {}; window.upiTotal = 0; window.cashDrawer = 0; window.salesLedger = []; window.pastBills = []; syncToCloud();
-                window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(rep)}`;
+                window.activeTables = {}; window.upiTotal = 0; window.cashDrawer = 0; window.salesLedger = []; window.pastBills = []; syncToCloud(); closeModal('cash-modal');
+                setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
         };
         updateCartUI();
