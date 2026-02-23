@@ -21,27 +21,24 @@
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
-        .menu-row, .coffee-row, .coffee-header { display: grid; grid-template-columns: 1fr 100px 100px; gap: 5px; align-items: center; width: 100%; }
-        .menu-row, .coffee-row { margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .coffee-header { margin-bottom: 8px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; }
+        /* ORIGINAL UNTOUCHED MENU LAYOUT */
+        .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; padding-right: 5px;}
         
-        .item-name { padding-right: 5px; line-height: 1.2; word-break: break-word; }
+        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
+        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         
-        .variant-col { display: flex; justify-content: flex-end; align-items: center; width: 100%; }
-        .price-text { width: 35px; text-align: right; margin-right: 8px; font-size: 0.95rem; font-weight: 500; flex-shrink: 0;}
-        .btn-wrap { width: 55px; display: flex; justify-content: flex-end; flex-shrink: 0;}
-
-        .header-col { display: flex; justify-content: flex-end; width: 100%; }
-        .header-text-wrap { width: 55px; text-align: center; } 
-
-        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 28px; height: 28px; font-size: 1.3rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; line-height: 1;}
+        /* PRICE SWAP LOGIC CSS */
+        .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
+        
+        .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
 
-        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 28px; width: 55px; box-sizing: border-box; }
-        .qty-btn { background: transparent; color: white; border: none; width: 18px; height: 100%; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; line-height: 1;}
+        .qty-ctrl { display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; height: 32px; box-sizing: border-box; }
+        .qty-btn { background: transparent; color: white; border: none; width: 26px; height: 100%; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; line-height: 1; }
         .qty-btn:active { background: white; color: var(--brand-bg); }
-        .qty-num { width: 19px; text-align: center; font-weight: bold; font-size: 0.9rem; }
+        .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
 
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
@@ -63,7 +60,7 @@
         
         .remark-input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); }
-        
+
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         .type-row { display: flex; gap: 8px; margin-top: 8px; }
         .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1;}
@@ -87,10 +84,7 @@
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 10px; }
         .bill-receipt-row:last-child { margin-bottom: 0; border-bottom: none; padding-bottom: 0;}
 
-        /* REDESIGNED PREMIUM CLOSED SCREEN */
-        #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; justify-content: center; align-items: center; z-index: 5000; padding: 20px; box-sizing: border-box; }
-        .closed-card { background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.1); padding: 50px 30px; border-radius: 12px; text-align: center; width: 100%; max-width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); display: flex; flex-direction: column; align-items: center; }
-        .closed-line { width: 40px; height: 1px; background-color: rgba(255,255,255,0.3); margin: 0 auto 20px auto; }
+        #closed-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--brand-bg); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 3000; text-align: center; padding: 20px; box-sizing: border-box; }
         
         .usual-box { border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 15px; cursor: pointer; text-align: center; transition: background-color 0.2s; margin-bottom: 25px; }
         .usual-box:active { background-color: rgba(255, 255, 255, 0.1); }
@@ -99,22 +93,9 @@
 <body>
 
     <div id="closed-screen">
-        <div class="closed-card">
-            <img src="logo.png" alt="ILA Logo" style="max-width: 140px; margin-bottom: 30px; opacity: 0.9;">
-            <h1 style="text-transform: uppercase; font-size: 1.6rem; letter-spacing: 4px; margin: 0 0 15px 0; font-weight: 700;">Closed</h1>
-            <div class="closed-line"></div>
-            <p style="opacity: 0.7; font-size: 0.95rem; margin: 0; letter-spacing: 0.5px; line-height: 1.5;">We are not accepting orders<br>at this time.</p>
-        </div>
-    </div>
-
-    <div id="system-modal" class="modal-overlay" style="z-index: 5000;">
-        <div class="modal-content" style="max-width: 320px;">
-            <h3 id="system-modal-title" style="margin-bottom: 10px;">Notice</h3>
-            <p id="system-modal-msg" style="font-size: 0.95rem; opacity: 0.8; margin-bottom: 20px; line-height: 1.4;"></p>
-            <div class="modal-buttons" style="margin-top: 0;">
-                <button class="btn btn-primary" id="system-modal-confirm">OK</button>
-            </div>
-        </div>
+        <img src="logo.png" alt="ILA Logo" style="max-width: 200px; margin-bottom: 20px;">
+        <h1 style="text-transform: uppercase; font-size: 1.5rem; letter-spacing: 2px;">Closed</h1>
+        <p style="opacity: 0.7; font-size: 1rem;">We are currently not accepting orders.</p>
     </div>
 
     <div class="container">
@@ -246,6 +227,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        const OWNER_WHATSAPP = "918882946526"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         
         window.cart = JSON.parse(localStorage.getItem('ila_customer_cart')) || {}; 
@@ -273,13 +255,6 @@
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
         window.flatMenu = {}; 
 
-        window.showSystemAlert = function(title, msg) {
-            document.getElementById('system-modal-title').innerText = title;
-            document.getElementById('system-modal-msg').innerHTML = msg.replace(/\n/g, '<br>');
-            document.getElementById('system-modal-confirm').onclick = () => closeModal('system-modal');
-            document.getElementById('system-modal').classList.add('active');
-        };
-
         function saveCart() { 
             localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); 
             localStorage.setItem('ila_customer_amount', window.totalAmount); 
@@ -296,6 +271,7 @@
             if (window.renderInlineControls) window.renderInlineControls();
         }
 
+        /* NEW: PRICE SWAP ENGINE */
         window.getCartQty = function(baseName) {
             let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
             for (let key in window.cart) {
@@ -426,11 +402,11 @@
         };
 
         window.loadUsualOrder = function() {
-            if(Object.keys(window.flatMenu).length === 0) return showSystemAlert("Syncing", "Menu is syncing, please try again in a second.");
+            if(Object.keys(window.flatMenu).length === 0) return alert("Menu syncing, please try again in a second.");
             let result = window.validateAndSyncCart(window.lastOrder);
             
             if(result.removed.length > 0) {
-                showSystemAlert("Out of Stock", "Sorry, some items in your usual order are currently out of stock:\n\n- " + result.removed.join("\n- "));
+                alert("Sorry, some items in your usual order are currently out of stock:\n- " + result.removed.join("\n- "));
                 if(result.count === 0) return; 
             }
             
@@ -457,7 +433,6 @@
                 window.totalItems += 1;
                 
                 if (navigator.vibrate) navigator.vibrate(50);
-                
                 saveCart(); 
                 return;
             }
@@ -485,14 +460,14 @@
         window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('checkout-modal'); };
 
         window.openCheckoutModal = function() {
-            if (window.totalItems === 0) return showSystemAlert("Empty Cart", "Your cart is currently empty.");
+            if (window.totalItems === 0) return alert("Your cart is empty!");
             
             let result = window.validateAndSyncCart(window.cart);
             if(result.changed) {
                 window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
                 saveCart(); 
                 if(result.removed.length > 0) {
-                    showSystemAlert("Cart Updated", "Some items in your cart are no longer available and were removed.");
+                    alert("Cart updated: Some items are no longer available and were removed.");
                     if(window.totalItems === 0) return;
                 }
             }
@@ -547,15 +522,9 @@
             const type = window.currentOrderType; let details = "";
             const notes = document.getElementById('cart-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-            if (type === 'Delivery') { 
-                details = document.getElementById('delivery-address').value.trim(); 
-                if (details.length < 5) return showSystemAlert("Missing Info", "Please enter a valid delivery address."); 
-            } else if (type === 'Dine-in') { 
-                if (!window.currentDineInTable) return showSystemAlert("Missing Info", "Please select your table number."); 
-                details = "Table " + window.currentDineInTable; 
-            } else if (type === 'Takeaway') { 
-                const time = document.getElementById('takeaway-time').value; details = `Pickup: ${time} min`; 
-            }
+            if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Address required."); return; } } 
+            else if (type === 'Dine-in') { if (!window.currentDineInTable) { alert("Please select a table number."); return; } details = "Table " + window.currentDineInTable; } 
+            else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup: ${time} min`; }
 
             window.currentOrderInfo = { type, details, notes };
             closeModal('checkout-modal');
@@ -588,19 +557,14 @@
                 localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
             }
 
-            const payload = {
-                orderType: info.type,
-                tableOrAddress: info.details,
-                notes: info.notes || "",
-                items: window.cart,
-                total: window.totalAmount,
-                paymentMethod: "UPI"
-            };
-
-            db.ref('orders/pendingWeb').push(payload).then(() => {
-                window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('payment-modal'); 
-                showSystemAlert("Order Sent!", "Your order has been sent to the kitchen. Thank you!");
-            });
+            let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
+            
+            if (info.notes) { message += `Notes: ${info.notes}\n`; }
+            message += `\n`;
+            
+            for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
+            message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
+            setTimeout(() => { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('payment-modal'); window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; }, 100);
         };
 
         updateCartUI(); window.updateDynamicFields();
