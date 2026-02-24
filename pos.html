@@ -52,6 +52,13 @@
         .cart-clear { font-size: 0.8rem; opacity: 0.7; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
+        /* PHASE 3: Toast Notification Styles */
+        #notification-area { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 3000; pointer-events: none; }
+        .toast-card { background: white; color: var(--brand-bg); padding: 12px 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); margin-bottom: 10px; font-family: 'Quicksand', sans-serif; font-weight: bold; display: flex; justify-content: space-between; align-items: center; animation: slideDown 0.3s ease-out; pointer-events: auto; }
+        .toast-card small { font-weight: normal; opacity: 0.8; font-size: 0.8rem; margin-left: 10px; }
+        .toast-close { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: var(--brand-bg); padding: 0 5px; }
+        @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: flex-start; padding-top: 5vh; box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
@@ -106,6 +113,8 @@
             <div id="offline-indicator" style="display:none; background:transparent; border: 1px solid white; color:white; padding:5px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
         </header>
 
+        <div id="notification-area"></div>
+
         <div class="dashboard-bar">
             <div class="dash-stat" onclick="openActiveBills()"><span class="dash-label">Bills</span><span class="dash-value" id="active-bills-count">0</span></div>
             <div class="dash-divider"></div>
@@ -129,8 +138,7 @@
     <div id="web-orders-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Web Orders</h3>
-            <div id="web-orders-list" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
-                </div>
+            <div id="web-orders-list" style="margin-top: 15px; max-height: 400px; overflow-y: auto;"></div>
             <button class="close-modal" onclick="closeModal('web-orders-modal')">✖ CLOSE</button>
         </div>
     </div>
@@ -149,8 +157,7 @@
             <h3 id="remark-item-title">Item</h3>
             <div style="text-align: left; width: 100%; margin: 15px auto;">
                 <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Preferences</label>
-                <div class="choice-grid" id="pos-sweetness-grid">
-                    </div>
+                <div class="choice-grid" id="pos-sweetness-grid"></div>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="closeModal('remark-modal')">Cancel</button>
@@ -299,13 +306,11 @@
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "918882946526"; 
         
-        // PHASE 2: Define Modifiers (Name: Price)
         window.defaultModifiers = [
             { name: "Medium sweet", price: 0 },
             { name: "No sweetness", price: 0 },
             { name: "Less sweet", price: 0 },
             { name: "Very sweet", price: 0 }
-            // Example: { name: "Oat Milk", price: 40 }
         ];
 
         window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
@@ -320,10 +325,28 @@
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
         window.pendingUPIAmount = 0; window.currentPaymentMethod = "UPI"; 
         
-        // Phase 2: Track both selected name and added cost
         window.currentModifierName = ""; window.currentModifierPrice = 0;
 
         window.itemRoutingMap = {};
+
+        // PHASE 3: Notification Listener (The Ear)
+        db.ref('orders/ready').limitToLast(1).on('child_added', snapshot => {
+            const data = snapshot.val();
+            // Basic timestamp check to prevent spamming old notifications on reload
+            if (Date.now() - data.timestamp < 300000) { // 5 minutes
+                showToast(`🔔 ${data.table} Ready`, data.time);
+            }
+        });
+
+        function showToast(msg, subMsg) {
+            const area = document.getElementById('notification-area');
+            const toast = document.createElement('div');
+            toast.className = 'toast-card';
+            toast.innerHTML = `<span>${msg}<small>${subMsg}</small></span><button class="toast-close" onclick="this.parentElement.remove()">×</button>`;
+            area.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 5000);
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        }
 
         function archivePOSTable(tableID, tableData, method) {
             const localBill = { 
@@ -379,7 +402,6 @@
         window.acceptWebOrder = function(id) {
             const order = window.pendingWebOrders[id];
             if (!order) return;
-            
             dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App");
             addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`);
             
@@ -405,7 +427,6 @@
                 items: order.items
             };
             db.ref('orders/history/' + Date.now()).set(archivePacket);
-            
             db.ref('orders/pendingWeb/' + id).remove();
             closeModal('web-orders-modal');
         };
@@ -603,12 +624,9 @@
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-        // PHASE 2: Dynamic Sweetness/Modifier Logic
         window.selectSweetness = function(val, price, btn) {
             window.currentModifierName = val;
             window.currentModifierPrice = price;
-            
-            // Visual Update
             let siblings = btn.parentNode.children;
             for(let s of siblings) s.classList.remove('selected');
             btn.classList.add('selected');
@@ -618,7 +636,6 @@
             let finalName = itemName.replace(/&quot;/g, '"');
             
             if (!requiresSweetness) {
-                // ... same logic as before for non-sweet items ...
                 if (window.cart[finalName]) window.cart[finalName].qty += 1; 
                 else window.cart[finalName] = { price: price, qty: 1 };
                 window.totalAmount += parseFloat(price) || 0; 
@@ -628,26 +645,16 @@
                 return;
             }
 
-            // DYNAMIC BUTTON GENERATION
             const grid = document.getElementById('pos-sweetness-grid');
-            grid.innerHTML = ""; // Clear old buttons
-            
-            let firstBtn = null;
-            
+            grid.innerHTML = "";
             window.defaultModifiers.forEach((mod, index) => {
                 let btn = document.createElement("button");
                 btn.className = "choice-btn";
-                // Show price if > 0
                 let label = mod.price > 0 ? `${mod.name} (+₹${mod.price})` : mod.name;
                 btn.innerText = label;
-                
-                // Click handler captures specific price
                 btn.onclick = function() { window.selectSweetness(mod.name, mod.price, this); };
-                
                 if(index === 0) { 
                     btn.classList.add('selected'); 
-                    firstBtn = btn;
-                    // Set default selection
                     window.currentModifierName = mod.name;
                     window.currentModifierPrice = mod.price;
                 }
@@ -663,25 +670,15 @@
 
         window.confirmAddItem = function() {
             let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            
-            // Append modifier name
-            if (window.currentModifierName !== "") {
-                finalName += ` (${window.currentModifierName})`;
-            }
-            
-            // Calculate Total Price (Base + Modifier)
+            if (window.currentModifierName !== "") { finalName += ` (${window.currentModifierName})`; }
             let finalPrice = (parseFloat(window.pendingItemPrice) || 0) + (parseFloat(window.currentModifierPrice) || 0);
 
-            if (window.cart[finalName]) {
-                window.cart[finalName].qty += 1; 
-            } else {
-                window.cart[finalName] = { price: finalPrice, qty: 1 };
-            }
+            if (window.cart[finalName]) { window.cart[finalName].qty += 1; } 
+            else { window.cart[finalName] = { price: finalPrice, qty: 1 }; }
             
             window.totalAmount += finalPrice; 
             window.totalItems += 1;
-            saveLocalCart(); 
-            closeModal('remark-modal');
+            saveLocalCart(); closeModal('remark-modal');
         };
 
         window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveLocalCart(); closeModal('review-cart-modal'); };
