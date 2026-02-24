@@ -125,17 +125,35 @@
             }
         });
 
+        // === UPGRADED: "DONE" Button Logic ===
         window.markOrderDone = function(id) {
-            // Add a quick fade out animation before deleting for smooth UX
-            const ticket = document.getElementById('ticket-' + id);
-            if(ticket) {
-                ticket.style.opacity = '0';
-                ticket.style.transform = 'scale(0.95)';
-                ticket.style.transition = 'all 0.2s';
-            }
-            setTimeout(() => {
-                db.ref('orders/active/barista/' + id).remove();
-            }, 200);
+            // 1. Get the order details first
+            db.ref('orders/active/barista/' + id).once('value').then(snapshot => {
+                const order = snapshot.val();
+                if (!order) return; // Order was already removed
+
+                // 2. Send "Ready" signal to POS (This allows POS to display notification)
+                const readySignal = {
+                    table: order.destination,
+                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    timestamp: Date.now()
+                };
+                db.ref('orders/ready').push(readySignal);
+
+                // 3. Archive to Completed (Production Log)
+                db.ref('orders/completed/barista/' + id).set(order);
+
+                // 4. UI Animation & Removal
+                const ticket = document.getElementById('ticket-' + id);
+                if(ticket) {
+                    ticket.style.opacity = '0';
+                    ticket.style.transform = 'scale(0.95)';
+                    ticket.style.transition = 'all 0.2s';
+                }
+                setTimeout(() => {
+                    db.ref('orders/active/barista/' + id).remove();
+                }, 200);
+            });
         };
 
     </script>
