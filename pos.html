@@ -52,11 +52,43 @@
         .cart-clear { font-size: 0.8rem; opacity: 0.7; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        /* Toast Notification Styles */
-        #notification-area { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 3000; pointer-events: none; }
-        .toast-card { background: white; color: var(--brand-bg); padding: 12px 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); margin-bottom: 10px; font-family: 'Quicksand', sans-serif; font-weight: bold; display: flex; justify-content: space-between; align-items: center; animation: slideDown 0.3s ease-out; pointer-events: auto; }
-        .toast-card small { font-weight: normal; opacity: 0.8; font-size: 0.8rem; margin-left: 10px; }
-        .toast-close { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: var(--brand-bg); padding: 0 5px; }
+        /* UPDATED NOTIFICATION STYLES (Minimal & Persistent) */
+        #notification-area { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; z-index: 3000; pointer-events: none; }
+        
+        .toast-card { 
+            background: white; 
+            color: #8c7255; 
+            padding: 15px 20px; 
+            border-radius: 6px; 
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4); 
+            margin-bottom: 10px; 
+            font-family: 'Quicksand', sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            pointer-events: auto; 
+            animation: slideDown 0.3s ease-out;
+            border-left: 4px solid #8c7255;
+        }
+        
+        .toast-header { font-weight: 700; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px; }
+        .toast-details { font-size: 0.9rem; margin-top: 5px; opacity: 0.9; line-height: 1.4; font-weight: 500; }
+        
+        .toast-btn {
+            background: transparent;
+            color: #8c7255;
+            border: 1px solid #8c7255;
+            padding: 6px 0;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            margin-top: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            width: 100%;
+            transition: background 0.2s;
+        }
+        .toast-btn:active { background: #f0f0f0; }
+
         @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: flex-start; padding-top: 5vh; box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
@@ -329,21 +361,27 @@
 
         window.itemRoutingMap = {};
 
-        // Notification Listener (The Ear)
+        // Notification Listener (Clean, No Icon, Persistent, With Items)
         db.ref('orders/ready').limitToLast(1).on('child_added', snapshot => {
             const data = snapshot.val();
+            // Basic timestamp check (5 min)
             if (Date.now() - data.timestamp < 300000) { 
-                showToast(`🔔 ${data.table} Ready`, data.time);
+                showToast(data.table + ' Ready', data.items || 'Check order list');
             }
         });
 
-        function showToast(msg, subMsg) {
+        function showToast(title, details) {
             const area = document.getElementById('notification-area');
             const toast = document.createElement('div');
             toast.className = 'toast-card';
-            toast.innerHTML = `<span>${msg}<small>${subMsg}</small></span><button class="toast-close" onclick="this.parentElement.remove()">×</button>`;
+            toast.innerHTML = `
+                <div class="toast-header">${title}</div>
+                <div class="toast-details">${details}</div>
+                <button class="toast-btn" onclick="this.parentElement.remove()">OKAY</button>
+            `;
             area.appendChild(toast);
-            setTimeout(() => { toast.remove(); }, 5000);
+            
+            // Play vibration
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
         }
 
@@ -708,32 +746,6 @@
                 if (window.totalItems === 0) closeModal('review-cart-modal'); else window.openReviewCartModal();
             }
         };
-
-        function dispatchToKitchen(cartObj, destination, notes, source) {
-            let baristaItems = {}; let chefItems = {};
-            
-            for (let itemName in cartObj) {
-                // Simplified routing: check if base item name is in chef list
-                // For now, this logic relies on the map.
-                // NOTE: Modifiers like (Oat Milk) might break strict matching if not handled.
-                // We will use a loose match here to be safe.
-                
-                let baseName = itemName.split(" (")[0]; // Strip modifiers for routing
-                let routing = window.itemRoutingMap[baseName] || 'barista';
-                
-                if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
-                else { baristaItems[itemName] = cartObj[itemName]; }
-            }
-
-            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
-            if (Object.keys(baristaItems).length > 0) {
-                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr });
-            }
-            if (Object.keys(chefItems).length > 0) {
-                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr });
-            }
-        }
 
         // === RESTORED V1 LOGIC (ROBUST MODE) ===
         // This removes the "Transaction" that was causing freezing.
