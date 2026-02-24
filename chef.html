@@ -20,6 +20,7 @@
         .header-title { font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin: 0;}
         .clock { font-size: 1.2rem; font-weight: bold; opacity: 0.8; }
 
+        /* KDS TICKET GRID */
         .kds-container { padding: 0 5%; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; align-items: start; padding-bottom: 50px;}
         
         .ticket-card { background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; animation: fadeIn 0.3s ease-out; }
@@ -49,7 +50,7 @@
 
     <header>
         <img src="logo.png" alt="ILA Logo" class="logo">
-        <h1 class="header-title">Kitchen Display</h1>
+        <h1 class="header-title">Chef Display</h1>
         <div class="clock" id="live-clock">00:00</div>
     </header>
 
@@ -73,11 +74,12 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // Live Clock
         setInterval(() => {
             document.getElementById('live-clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }, 1000);
 
-        // Listen specifically for Chef Orders
+        // Listen for CHEF Orders (Changed from Barista)
         db.ref('orders/active/chef').on('value', snap => {
             const orders = snap.val();
             const board = document.getElementById('ticket-board');
@@ -92,8 +94,10 @@
                 return;
             }
 
+            // Render Orders (Oldest first)
             for (let id in orders) {
                 const order = orders[id];
+                
                 let itemsHTML = "";
                 for (let itemName in order.items) {
                     itemsHTML += `
@@ -121,17 +125,46 @@
             }
         });
 
+        // === UPGRADED: "DONE" Button Logic for Chef ===
         window.markOrderDone = function(id) {
-            const ticket = document.getElementById('ticket-' + id);
-            if(ticket) {
-                ticket.style.opacity = '0';
-                ticket.style.transform = 'scale(0.95)';
-                ticket.style.transition = 'all 0.2s';
-            }
-            setTimeout(() => {
-                db.ref('orders/active/chef/' + id).remove();
-            }, 200);
+            // 1. Get order details first
+            db.ref('orders/active/chef/' + id).once('value').then(snapshot => {
+                const order = snapshot.val();
+                if (!order) return; 
+
+                // 2. Generate Item Summary (For the POS Notification)
+                let itemSummary = [];
+                for(let item in order.items) {
+                    itemSummary.push(`${order.items[item].qty}x ${item}`);
+                }
+                let summaryString = itemSummary.join(", ");
+
+                // 3. Send "Ready" signal to POS
+                // Contains: Table Name, Time, and the list of items
+                const readySignal = {
+                    table: order.destination,
+                    items: summaryString,
+                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                    timestamp: Date.now()
+                };
+                db.ref('orders/ready').push(readySignal);
+
+                // 4. Archive to Completed (Production Log)
+                db.ref('orders/completed/chef/' + id).set(order);
+
+                // 5. UI Animation & Removal
+                const ticket = document.getElementById('ticket-' + id);
+                if(ticket) {
+                    ticket.style.opacity = '0';
+                    ticket.style.transform = 'scale(0.95)';
+                    ticket.style.transition = 'all 0.2s';
+                }
+                setTimeout(() => {
+                    db.ref('orders/active/chef/' + id).remove();
+                }, 200);
+            });
         };
+
     </script>
 </body>
 </html>
