@@ -477,17 +477,6 @@
         db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
         db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
 
-        db.ref('orders/pendingWeb').on('value', snap => {
-            window.pendingWebOrders = snap.val() || {};
-            let count = Object.keys(window.pendingWebOrders).length;
-            document.getElementById('web-orders-count').innerText = count;
-            document.getElementById('web-orders-count').style.opacity = count > 0 ? "1" : "0.5";
-            
-            if(document.getElementById('web-orders-modal').classList.contains('active')) {
-                window.openWebOrders();
-            }
-        });
-
         function updateDashboards() {
             document.getElementById('cash-display').innerText = `₹${Math.round(window.cashDrawer)}`;
             document.getElementById('upi-display').innerText = `₹${Math.round(window.upiTotal)}`;
@@ -663,6 +652,55 @@
             }
         };
 
+        // === PHASE 1: Race Condition Fix (Using Transaction) ===
+        window.sendOrder = function(tableID) {
+            if (window.totalItems === 0) return alert("Cart is empty!");
+            
+            const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
+            
+            // 1. Dispatch to Kitchen Display
+            dispatchToKitchen(window.cart, destName, notes, "POS");
+
+            // 2. Prepare the new items to add
+            let newItems = {};
+            for (let item in window.cart) {
+                newItems[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
+            }
+            let addedTotal = parseFloat(window.totalAmount);
+
+            // 3. SECURE TRANSACTION: Merge with cloud data instead of overwriting
+            db.ref('pos/activeTables/' + tableID).transaction((currentTable) => {
+                if (!currentTable) {
+                    // Table is empty, create new
+                    return { items: newItems, total: addedTotal, paid: 0, notes: notes };
+                } else {
+                    // Table exists, merge items
+                    if (!currentTable.items) currentTable.items = {};
+                    for (let item in newItems) {
+                        if (currentTable.items[item]) {
+                            currentTable.items[item].qty += newItems[item].qty;
+                        } else {
+                            currentTable.items[item] = newItems[item];
+                        }
+                    }
+                    currentTable.total = (parseFloat(currentTable.total) || 0) + addedTotal;
+                    if (notes) {
+                        currentTable.notes = currentTable.notes ? currentTable.notes + " | " + notes : notes;
+                    }
+                    return currentTable;
+                }
+            }, (error, committed, snapshot) => {
+                if (error) {
+                    alert("Sync Error. Please try again.");
+                } else {
+                    // Success
+                    closeModal('table-modal'); 
+                    window.clearCart();
+                }
+            });
+        };
+
         window.openTableModal = function() {
             if (window.totalItems === 0) return alert("Cart is empty!");
             
@@ -674,54 +712,6 @@
                 grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="window.sendOrder('${i}')">${i}</button>`;
             }
             document.getElementById('table-modal').classList.add('active');
-        };
-
-        function dispatchToKitchen(cartObj, destination, notes, source) {
-            let baristaItems = {}; let chefItems = {};
-            
-            for (let itemName in cartObj) {
-                let baseName = itemName.split(" (Medium")[0].split(" (Less")[0].split(" (No ")[0].split(" (Very")[0];
-                let routing = window.itemRoutingMap[baseName] || 'barista';
-                
-                if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
-                else { baristaItems[itemName] = cartObj[itemName]; }
-            }
-
-            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
-            if (Object.keys(baristaItems).length > 0) {
-                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr });
-            }
-            if (Object.keys(chefItems).length > 0) {
-                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr });
-            }
-        }
-
-        window.sendOrder = function(tableID) {
-            if (window.totalItems === 0) return alert("Cart is empty!");
-            
-            const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
-            let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
-            
-            dispatchToKitchen(window.cart, destName, notes, "POS");
-
-            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
-            
-            if (notes) {
-                if (window.activeTables[tableID].notes) window.activeTables[tableID].notes += " | " + notes;
-                else window.activeTables[tableID].notes = notes;
-            }
-
-            for (let item in window.cart) {
-                if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
-                else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
-            }
-            
-            let safeTotal = parseFloat(window.totalAmount) || 0;
-            window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + safeTotal;
-            syncToCloud();
-            
-            closeModal('table-modal'); window.clearCart();
         };
 
         window.openActiveBills = function() {
@@ -768,10 +758,27 @@
             closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
 
+        // === PHASE 1: Void Tracking Fix ===
         window.removeTableItem = function(tableID, itemName) {
             let realItemName = itemName.replace(/&quot;/g, '"');
             const tableData = window.activeTables[tableID];
+            
             if(tableData && tableData.items[realItemName]) {
+                // 1. ASK FOR REASON
+                const reason = prompt(`Removing ${realItemName}. Reason?`);
+                if (!reason) return; // Cancelled
+
+                // 2. LOG VOID
+                const voidData = {
+                    time: new Date().toLocaleString(),
+                    table: tableID,
+                    item: realItemName,
+                    value: tableData.items[realItemName].price,
+                    reason: reason
+                };
+                db.ref('security/voids').push(voidData);
+
+                // 3. EXECUTE REMOVAL
                 tableData.total = (parseFloat(tableData.total) || 0) - (parseFloat(tableData.items[realItemName].price) || 0); 
                 tableData.items[realItemName].qty -= 1;
                 if(tableData.items[realItemName].qty <= 0) delete tableData.items[realItemName];
@@ -920,13 +927,13 @@
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list'); list.innerHTML = "";
             if (window.pastBills.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; } 
-            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table === 'Takeaway' ? 'Takeaway' : 'Table ' + bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
+            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
             document.getElementById('past-bills-modal').classList.add('active');
         };
 
         window.viewPastBill = function(id) {
             const bill = window.pastBills.find(b => b.id === id); if (!bill) return; window.currentPastBillID = id;
-            document.getElementById('past-bill-title').innerText = bill.table === 'Takeaway' ? 'Takeaway' : `Table ${bill.table}`;
+            document.getElementById('past-bill-title').innerText = bill.table;
             document.getElementById('past-bill-date').innerText = bill.date;
             let receiptHTML = ""; 
             if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${bill.notes}</div>`;
