@@ -20,7 +20,6 @@
         .header-title { font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin: 0;}
         .clock { font-size: 1.2rem; font-weight: bold; opacity: 0.8; }
 
-        /* KDS TICKET GRID */
         .kds-container { padding: 0 5%; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; align-items: start; padding-bottom: 50px;}
         
         .ticket-card { background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; animation: fadeIn 0.3s ease-out; }
@@ -74,37 +73,33 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Live Clock
         setInterval(() => {
             document.getElementById('live-clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }, 1000);
 
-        // Listen for CHEF Orders (Changed from Barista)
+        // LISTEN: Chef Channel
         db.ref('orders/active/chef').on('value', snap => {
             const orders = snap.val();
             const board = document.getElementById('ticket-board');
             board.innerHTML = "";
 
             if (!orders) {
-                board.innerHTML = `
-                    <div class="empty-state">
-                        <h2>No Orders</h2>
-                        <p>Waiting for tickets...</p>
-                    </div>`;
+                board.innerHTML = `<div class="empty-state"><h2>No Orders</h2><p>Waiting for tickets...</p></div>`;
                 return;
             }
 
-            // Render Orders (Oldest first)
             for (let id in orders) {
                 const order = orders[id];
-                
                 let itemsHTML = "";
-                for (let itemName in order.items) {
-                    itemsHTML += `
-                        <div class="item-row">
-                            <span class="item-qty">${order.items[itemName].qty}x</span>
-                            <span class="item-name">${itemName}</span>
-                        </div>`;
+                
+                if(order.items) {
+                    for (let itemName in order.items) {
+                        itemsHTML += `
+                            <div class="item-row">
+                                <span class="item-qty">${order.items[itemName].qty}x</span>
+                                <span class="item-name">${itemName}</span>
+                            </div>`;
+                    }
                 }
 
                 let notesHTML = order.notes ? `<div class="ticket-notes">Notes: ${order.notes}</div>` : "";
@@ -125,22 +120,22 @@
             }
         });
 
-        // === UPGRADED: "DONE" Button Logic for Chef ===
+        // ACTION: Send Signal & Archive
         window.markOrderDone = function(id) {
-            // 1. Get order details first
             db.ref('orders/active/chef/' + id).once('value').then(snapshot => {
                 const order = snapshot.val();
                 if (!order) return; 
 
-                // 2. Generate Item Summary (For the POS Notification)
-                let itemSummary = [];
-                for(let item in order.items) {
-                    itemSummary.push(`${order.items[item].qty}x ${item}`);
+                // 1. Create Summary (e.g. "1x Pasta, 1x Burger")
+                let summaryList = [];
+                if(order.items) {
+                    for(let item in order.items) {
+                        summaryList.push(`${order.items[item].qty}x ${item}`);
+                    }
                 }
-                let summaryString = itemSummary.join(", ");
+                let summaryString = summaryList.join(", ");
 
-                // 3. Send "Ready" signal to POS
-                // Contains: Table Name, Time, and the list of items
+                // 2. Send Signal to POS
                 const readySignal = {
                     table: order.destination,
                     items: summaryString,
@@ -149,10 +144,8 @@
                 };
                 db.ref('orders/ready').push(readySignal);
 
-                // 4. Archive to Completed (Production Log)
+                // 3. Archive & Delete
                 db.ref('orders/completed/chef/' + id).set(order);
-
-                // 5. UI Animation & Removal
                 const ticket = document.getElementById('ticket-' + id);
                 if(ticket) {
                     ticket.style.opacity = '0';
@@ -164,7 +157,6 @@
                 }, 200);
             });
         };
-
     </script>
 </body>
 </html>
