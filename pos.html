@@ -148,13 +148,9 @@
         <div class="modal-content">
             <h3 id="remark-item-title">Item</h3>
             <div style="text-align: left; width: 100%; margin: 15px auto;">
-                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Sweetness</label>
+                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Preferences</label>
                 <div class="choice-grid" id="pos-sweetness-grid">
-                    <button class="choice-btn selected" onclick="window.selectSweetness('Medium sweet', this)">Medium</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('No sweetness', this)">None</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('Less sweet', this)">Less</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('Very sweet', this)">Extra</button>
-                </div>
+                    </div>
             </div>
             <div class="modal-buttons">
                 <button class="btn btn-secondary" onclick="closeModal('remark-modal')">Cancel</button>
@@ -303,6 +299,15 @@
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "918882946526"; 
         
+        // PHASE 2: Define Modifiers (Name: Price)
+        window.defaultModifiers = [
+            { name: "Medium sweet", price: 0 },
+            { name: "No sweetness", price: 0 },
+            { name: "Less sweet", price: 0 },
+            { name: "Very sweet", price: 0 }
+            // Example: { name: "Oat Milk", price: 40 }
+        ];
+
         window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
         window.cart = JSON.parse(localStorage.getItem('ila_pos_cart')) || {}; 
         window.totalAmount = parseFloat(localStorage.getItem('ila_pos_amount')) || 0;
@@ -313,7 +318,10 @@
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
-        window.pendingUPIAmount = 0; window.currentPaymentMethod = "UPI"; window.currentSweetness = "Medium sweet";
+        window.pendingUPIAmount = 0; window.currentPaymentMethod = "UPI"; 
+        
+        // Phase 2: Track both selected name and added cost
+        window.currentModifierName = ""; window.currentModifierPrice = 0;
 
         window.itemRoutingMap = {};
 
@@ -350,7 +358,6 @@
             } else {
                 for (let id in window.pendingWebOrders) {
                     const o = window.pendingWebOrders[id];
-                    
                     let itemsHTML = "<div style='margin: 10px 0; font-size: 0.9rem; opacity: 0.8; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.3);'>";
                     for(let itemName in o.items) {
                         itemsHTML += `<div style="margin-bottom: 3px;">${o.items[itemName].qty}x ${itemName}</div>`;
@@ -477,6 +484,17 @@
         db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
         db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
 
+        db.ref('orders/pendingWeb').on('value', snap => {
+            window.pendingWebOrders = snap.val() || {};
+            let count = Object.keys(window.pendingWebOrders).length;
+            document.getElementById('web-orders-count').innerText = count;
+            document.getElementById('web-orders-count').style.opacity = count > 0 ? "1" : "0.5";
+            
+            if(document.getElementById('web-orders-modal').classList.contains('active')) {
+                window.openWebOrders();
+            }
+        });
+
         function updateDashboards() {
             document.getElementById('cash-display').innerText = `₹${Math.round(window.cashDrawer)}`;
             document.getElementById('upi-display').innerText = `₹${Math.round(window.upiTotal)}`;
@@ -585,8 +603,12 @@
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-        window.selectSweetness = function(val, btn) {
-            window.currentSweetness = val;
+        // PHASE 2: Dynamic Sweetness/Modifier Logic
+        window.selectSweetness = function(val, price, btn) {
+            window.currentModifierName = val;
+            window.currentModifierPrice = price;
+            
+            // Visual Update
             let siblings = btn.parentNode.children;
             for(let s of siblings) s.classList.remove('selected');
             btn.classList.add('selected');
@@ -596,36 +618,70 @@
             let finalName = itemName.replace(/&quot;/g, '"');
             
             if (!requiresSweetness) {
+                // ... same logic as before for non-sweet items ...
                 if (window.cart[finalName]) window.cart[finalName].qty += 1; 
                 else window.cart[finalName] = { price: price, qty: 1 };
-                
                 window.totalAmount += parseFloat(price) || 0; 
                 window.totalItems += 1;
-                
                 if (navigator.vibrate) navigator.vibrate(50);
                 saveLocalCart();
                 return;
             }
 
-            window.pendingItemName = itemName; window.pendingItemPrice = price; window.isBeveragePending = requiresSweetness;
-            document.getElementById('remark-item-title').innerText = finalName; 
+            // DYNAMIC BUTTON GENERATION
+            const grid = document.getElementById('pos-sweetness-grid');
+            grid.innerHTML = ""; // Clear old buttons
             
-            window.currentSweetness = "Medium sweet";
-            const btns = document.querySelectorAll('#pos-sweetness-grid .choice-btn');
-            btns.forEach(b => b.classList.remove('selected'));
-            if(btns.length > 0) btns[0].classList.add('selected');
+            let firstBtn = null;
+            
+            window.defaultModifiers.forEach((mod, index) => {
+                let btn = document.createElement("button");
+                btn.className = "choice-btn";
+                // Show price if > 0
+                let label = mod.price > 0 ? `${mod.name} (+₹${mod.price})` : mod.name;
+                btn.innerText = label;
+                
+                // Click handler captures specific price
+                btn.onclick = function() { window.selectSweetness(mod.name, mod.price, this); };
+                
+                if(index === 0) { 
+                    btn.classList.add('selected'); 
+                    firstBtn = btn;
+                    // Set default selection
+                    window.currentModifierName = mod.name;
+                    window.currentModifierPrice = mod.price;
+                }
+                grid.appendChild(btn);
+            });
 
+            window.pendingItemName = itemName; 
+            window.pendingItemPrice = price; 
+            window.isBeveragePending = requiresSweetness;
+            document.getElementById('remark-item-title').innerText = finalName; 
             document.getElementById('remark-modal').classList.add('active');
         };
 
         window.confirmAddItem = function() {
             let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            if (window.currentSweetness !== "") finalName += ` (${window.currentSweetness})`;
             
-            if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
-            window.totalAmount += parseFloat(window.pendingItemPrice) || 0; 
+            // Append modifier name
+            if (window.currentModifierName !== "") {
+                finalName += ` (${window.currentModifierName})`;
+            }
+            
+            // Calculate Total Price (Base + Modifier)
+            let finalPrice = (parseFloat(window.pendingItemPrice) || 0) + (parseFloat(window.currentModifierPrice) || 0);
+
+            if (window.cart[finalName]) {
+                window.cart[finalName].qty += 1; 
+            } else {
+                window.cart[finalName] = { price: finalPrice, qty: 1 };
+            }
+            
+            window.totalAmount += finalPrice; 
             window.totalItems += 1;
-            saveLocalCart(); closeModal('remark-modal');
+            saveLocalCart(); 
+            closeModal('remark-modal');
         };
 
         window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveLocalCart(); closeModal('review-cart-modal'); };
