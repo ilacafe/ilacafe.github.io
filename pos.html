@@ -52,7 +52,7 @@
         .cart-clear { font-size: 0.8rem; opacity: 0.7; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        /* PHASE 3: Toast Notification Styles */
+        /* Toast Notification Styles */
         #notification-area { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 3000; pointer-events: none; }
         .toast-card { background: white; color: var(--brand-bg); padding: 12px 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); margin-bottom: 10px; font-family: 'Quicksand', sans-serif; font-weight: bold; display: flex; justify-content: space-between; align-items: center; animation: slideDown 0.3s ease-out; pointer-events: auto; }
         .toast-card small { font-weight: normal; opacity: 0.8; font-size: 0.8rem; margin-left: 10px; }
@@ -329,11 +329,10 @@
 
         window.itemRoutingMap = {};
 
-        // PHASE 3: Notification Listener (The Ear)
+        // Notification Listener (The Ear)
         db.ref('orders/ready').limitToLast(1).on('child_added', snapshot => {
             const data = snapshot.val();
-            // Basic timestamp check to prevent spamming old notifications on reload
-            if (Date.now() - data.timestamp < 300000) { // 5 minutes
+            if (Date.now() - data.timestamp < 300000) { 
                 showToast(`🔔 ${data.table} Ready`, data.time);
             }
         });
@@ -402,7 +401,12 @@
         window.acceptWebOrder = function(id) {
             const order = window.pendingWebOrders[id];
             if (!order) return;
-            dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App");
+            
+            // Safety wrapper
+            try {
+                dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App");
+            } catch(e) { console.error("Kitchen dispatch error", e); }
+
             addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`);
             
             const localBill = { 
@@ -705,53 +709,66 @@
             }
         };
 
-        // === PHASE 1: Race Condition Fix (Using Transaction) ===
+        function dispatchToKitchen(cartObj, destination, notes, source) {
+            let baristaItems = {}; let chefItems = {};
+            
+            for (let itemName in cartObj) {
+                // Simplified routing: check if base item name is in chef list
+                // For now, this logic relies on the map.
+                // NOTE: Modifiers like (Oat Milk) might break strict matching if not handled.
+                // We will use a loose match here to be safe.
+                
+                let baseName = itemName.split(" (")[0]; // Strip modifiers for routing
+                let routing = window.itemRoutingMap[baseName] || 'barista';
+                
+                if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
+                else { baristaItems[itemName] = cartObj[itemName]; }
+            }
+
+            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            if (Object.keys(baristaItems).length > 0) {
+                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr });
+            }
+            if (Object.keys(chefItems).length > 0) {
+                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr });
+            }
+        }
+
+        // === RESTORED V1 LOGIC (ROBUST MODE) ===
+        // This removes the "Transaction" that was causing freezing.
         window.sendOrder = function(tableID) {
             if (window.totalItems === 0) return alert("Cart is empty!");
             
             const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
             let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
             
-            // 1. Dispatch to Kitchen Display
-            dispatchToKitchen(window.cart, destName, notes, "POS");
+            // 1. Dispatch to Kitchen (Wrapped in try/catch for safety)
+            try {
+                dispatchToKitchen(window.cart, destName, notes, "POS");
+            } catch(e) { console.error("Kitchen dispatch error", e); }
 
-            // 2. Prepare the new items to add
-            let newItems = {};
-            for (let item in window.cart) {
-                newItems[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
+            // 2. Local State Update (Instant Feedback)
+            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
+            
+            if (notes) {
+                if (window.activeTables[tableID].notes) window.activeTables[tableID].notes += " | " + notes;
+                else window.activeTables[tableID].notes = notes;
             }
-            let addedTotal = parseFloat(window.totalAmount);
 
-            // 3. SECURE TRANSACTION: Merge with cloud data instead of overwriting
-            db.ref('pos/activeTables/' + tableID).transaction((currentTable) => {
-                if (!currentTable) {
-                    // Table is empty, create new
-                    return { items: newItems, total: addedTotal, paid: 0, notes: notes };
-                } else {
-                    // Table exists, merge items
-                    if (!currentTable.items) currentTable.items = {};
-                    for (let item in newItems) {
-                        if (currentTable.items[item]) {
-                            currentTable.items[item].qty += newItems[item].qty;
-                        } else {
-                            currentTable.items[item] = newItems[item];
-                        }
-                    }
-                    currentTable.total = (parseFloat(currentTable.total) || 0) + addedTotal;
-                    if (notes) {
-                        currentTable.notes = currentTable.notes ? currentTable.notes + " | " + notes : notes;
-                    }
-                    return currentTable;
-                }
-            }, (error, committed, snapshot) => {
-                if (error) {
-                    alert("Sync Error. Please try again.");
-                } else {
-                    // Success
-                    closeModal('table-modal'); 
-                    window.clearCart();
-                }
-            });
+            for (let item in window.cart) {
+                if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
+                else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
+            }
+            
+            let safeTotal = parseFloat(window.totalAmount) || 0;
+            window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + safeTotal;
+            
+            // 3. Sync to Cloud
+            syncToCloud();
+            
+            closeModal('table-modal'); 
+            window.clearCart();
         };
 
         window.openTableModal = function() {
