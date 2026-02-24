@@ -317,7 +317,6 @@
 
         window.itemRoutingMap = {};
 
-        // === ARCHIVE ENGINE ADDED HERE ===
         function archivePOSTable(tableID, tableData, method) {
             const localBill = { 
                 id: Date.now(), 
@@ -414,7 +413,6 @@
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
             if (window.totalItems > 0) { 
-                // === MATH FIX: Math.round added here ===
                 document.getElementById('cart-total-text').innerText = `₹${Math.round(window.totalAmount)}`; 
                 banner.classList.add('visible'); 
             } 
@@ -785,7 +783,6 @@
                     delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return; 
                 }
                 if(paid >= newTotal && paid > 0) {
-                     // === ARCHIVE FIX ADDED HERE ===
                      archivePOSTable(tableID, tableData, "Partial/Cleared");
                      delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return;
                 }
@@ -844,7 +841,6 @@
             tableData.paid = paid + amountToPay;
             
             if (tableData.paid >= total) {
-                // === ARCHIVE FIX ADDED HERE ===
                 archivePOSTable(window.checkoutTableID, tableData, "Cash");
                 delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
                 closeModal('checkout-modal'); closeModal('split-bill-modal');
@@ -884,7 +880,6 @@
             tableData.paid = paid + amountToPay;
 
             if (tableData.paid >= total) {
-                // === ARCHIVE FIX ADDED HERE ===
                 archivePOSTable(window.checkoutTableID, tableData, "UPI");
                 delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
                 closeModal('upi-modal'); 
@@ -925,13 +920,13 @@
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list'); list.innerHTML = "";
             if (window.pastBills.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; } 
-            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
+            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table === 'Takeaway' ? 'Takeaway' : 'Table ' + bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
             document.getElementById('past-bills-modal').classList.add('active');
         };
 
         window.viewPastBill = function(id) {
             const bill = window.pastBills.find(b => b.id === id); if (!bill) return; window.currentPastBillID = id;
-            document.getElementById('past-bill-title').innerText = bill.table;
+            document.getElementById('past-bill-title').innerText = bill.table === 'Takeaway' ? 'Takeaway' : `Table ${bill.table}`;
             document.getElementById('past-bill-date').innerText = bill.date;
             let receiptHTML = ""; 
             if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${bill.notes}</div>`;
@@ -993,7 +988,7 @@
             let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
             if (!exp) report += `None.\n`;
             if (confirm("Send Report?")) {
-                window.activeTables = {}; window.upiTotal = 0; window.cashDrawer = 0; window.salesLedger = []; window.pastBills = []; syncToCloud(); closeModal('cash-modal');
+                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; syncToCloud(); closeModal('cash-modal');
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
         };
