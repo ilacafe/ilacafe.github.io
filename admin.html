@@ -186,7 +186,7 @@
         </div>
 
         <div class="admin-card" style="margin-top: 30px; margin-bottom: 60px;">
-            <h2 style="color: #ffcccc;">Security Logs (Voids)</h2>
+            <h2>Security Logs (Voids)</h2>
             <div id="voids-container" style="max-height: 300px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
                 <p style="opacity: 0.5; text-align: center;">Loading logs...</p>
             </div>
@@ -484,7 +484,7 @@
                         </div>
                     </div>
                     ${itemsHTML}
-                    ${order.notes ? `<div style="font-size: 0.85rem; color: #ffcc00; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}
+                    ${order.notes ? `<div style="font-size: 0.85rem; opacity: 0.8; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}
                 </div>`;
             });
 
@@ -494,12 +494,11 @@
             document.getElementById('ledger-cash').innerText = '₹' + todayCash;
         }
 
-        // === NEW: VOIDS LISTENER ===
+        // === SECURITY LOGS (VOIDS) ===
         db.ref('security/voids').limitToLast(50).on('value', snap => {
             const container = document.getElementById('voids-container');
             const voidsData = snap.val() || {};
             
-            // Sort by push ID (newest first)
             const sortedIds = Object.keys(voidsData).sort((a, b) => b.localeCompare(a)); 
             
             if (sortedIds.length === 0) {
@@ -511,13 +510,13 @@
             sortedIds.forEach(id => {
                 const v = voidsData[id];
                 listHTML += `
-                <div class="history-card" style="border-left: 4px solid #ff4d4d;">
+                <div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
                         <strong style="font-size: 1.05rem;">${v.item}</strong>
-                        <strong style="color: #ffcccc;">-₹${v.value}</strong>
+                        <strong style="opacity: 0.9;">-₹${v.value}</strong>
                     </div>
-                    <div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 5px;">Table/Order: ${v.table} • ${v.time}</div>
-                    <div style="font-size: 0.85rem; font-style: italic; color: #ffcc00;">Reason: "${v.reason}"</div>
+                    <div style="font-size: 0.8rem; opacity: 0.6; margin-bottom: 5px;">Table/Order: ${v.table} • ${v.time}</div>
+                    <div style="font-size: 0.85rem; font-style: italic; opacity: 0.8;">Reason: "${v.reason}"</div>
                 </div>`;
             });
             container.innerHTML = listHTML;
