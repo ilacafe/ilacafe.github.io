@@ -154,7 +154,7 @@
             <div class="dash-divider"></div>
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">Cups</span><span class="dash-value" id="cups-display">0</span></div>
+            <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">Shots</span><span class="dash-value" id="cups-display">0</span></div>
         </div>
 
         <div id="live-menu-container">
@@ -578,14 +578,15 @@
                         if(matchedCoffee) {
                             let qty = bill.items[itemName].qty || 0;
                             if(itemName.includes("(Large)")) {
-                                cupTotal += (qty * 1.5);
+                                cupTotal += (qty * 3); // UPDATED: Large = 3 Shots
                             } else {
-                                cupTotal += qty;
+                                cupTotal += (qty * 2); // UPDATED: Regular = 2 Shots
                             }
                         }
                     }
                 }
             });
+            // Update the UI label to reflect "Shots" so your staff understands the metric
             document.getElementById('cups-display').innerText = cupTotal;
         }
 
