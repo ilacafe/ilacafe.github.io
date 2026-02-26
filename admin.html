@@ -9,6 +9,8 @@
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
@@ -54,10 +56,9 @@
         .item-name { font-weight: bold; font-size: 1.1rem; }
         .item-meta { font-size: 0.85rem; opacity: 0.7; margin-top: 2px;}
         .item-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;}
-
         .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; border: 1px solid rgba(255,255,255,0.3); }
 
-        /* ANALYTICS STYLES */
+        /* LEDGER STYLES */
         .dash-row { display: flex; justify-content: space-between; margin-bottom: 15px; text-align: center;}
         .dash-box { flex: 1; }
         .dash-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
@@ -71,8 +72,18 @@
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--brand-text); }
         input:checked + .slider:before { transform: translateX(24px); background-color: var(--brand-bg); }
-
         .control-row { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; flex: 1; }
+
+        /* ANALYTICS UI */
+        .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
+        .analytics-pill { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; text-align: center; }
+        .pill-val { font-size: 1.5rem; font-weight: bold; }
+        .pill-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.6; letter-spacing: 1px; margin-top: 5px; }
+        .chart-container { background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-top: 15px; position: relative; height: 220px; width: 100%; box-sizing: border-box;}
+        .top-item-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed rgba(255,255,255,0.1); font-size: 0.9rem;}
+        .top-item-row:last-child { border-bottom: none; }
+        
+        @media(max-width: 500px) { .analytics-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -85,6 +96,41 @@
         <div class="admin-card" style="text-align: center; padding: 20px;">
             <p style="font-size: 0.8rem; opacity: 0.8; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; margin-top: 0;">Master Switch</p>
             <button id="master-status-btn" class="btn" onclick="toggleCafeStatus()">Loading...</button>
+        </div>
+
+        <div class="admin-card">
+            <h2>Insights</h2>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <div class="analytics-pill" style="flex: 1;">
+                    <div class="pill-val" id="stat-aov">₹0</div>
+                    <div class="pill-label">Avg Order Value</div>
+                </div>
+                <div class="analytics-pill" style="flex: 1;">
+                    <div class="pill-val" id="stat-orders">0</div>
+                    <div class="pill-label">Orders Today</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="revenueChart"></canvas>
+            </div>
+
+            <div class="analytics-grid">
+                <div style="background: rgba(0,0,0,0.15); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 10px; text-align: center;">Order Types</div>
+                    <div style="position: relative; height: 140px; width: 100%;">
+                        <canvas id="typeChart"></canvas>
+                    </div>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.15); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 10px; text-align: center;">Top Sellers</div>
+                    <div id="top-items-list">
+                        <p style="opacity: 0.5; text-align: center; font-size: 0.8rem;">Loading...</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="admin-card">
@@ -108,13 +154,22 @@
         </div>
 
         <div class="admin-card">
-            <h2>Staff PINs</h2>
-            <div class="row-group" style="margin-bottom: 15px;">
-                <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="staff-name" placeholder="Name" required></div>
-                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="staff-pin" placeholder="PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric" required></div>
+            <h2>Order Ledger & Revenue</h2>
+            <div class="dash-row">
+                <div class="dash-box"><div class="dash-label">Today's Total</div><div class="dash-val" id="ledger-total">₹0</div></div>
+                <div class="dash-box"><div class="dash-label">UPI</div><div class="dash-val" id="ledger-upi">₹0</div></div>
+                <div class="dash-box"><div class="dash-label">Cash</div><div class="dash-val" id="ledger-cash">₹0</div></div>
             </div>
-            <button class="btn btn-secondary" onclick="addStaff()">Add Staff</button>
-            <div id="staff-list-container" style="margin-top: 20px;"></div>
+            <div id="history-container" style="max-height: 400px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                <p style="opacity: 0.5; text-align: center;">Waiting for orders...</p>
+            </div>
+        </div>
+
+        <div class="admin-card" style="margin-bottom: 60px;">
+            <h2>Security Logs (Voids)</h2>
+            <div id="voids-container" style="max-height: 300px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                <p style="opacity: 0.5; text-align: center;">Loading logs...</p>
+            </div>
         </div>
 
         <div class="admin-card">
@@ -124,7 +179,6 @@
 
         <div class="admin-card" id="menu-form-section">
             <h2>Add / Edit Item</h2>
-            
             <div class="form-group"><label>Category</label><input type="text" id="add-category" placeholder="e.g., Coffee" required></div>
             <div class="form-group"><label>Item Name</label><input type="text" id="add-name" placeholder="e.g., Latte" required></div>
             
@@ -164,7 +218,6 @@
                 <input type="checkbox" id="add-sweetness" style="width: 18px; height: 18px;">
                 <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Requires Sweetness Level</label>
             </div>
-
             <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
         </div>
 
@@ -173,23 +226,14 @@
             <div id="live-menu-container"><p style="opacity: 0.5; margin-top: 20px;">Loading database...</p></div>
         </div>
 
-        <div class="admin-card" style="margin-top: 30px;">
-            <h2>Order Ledger & Revenue</h2>
-            <div class="dash-row">
-                <div class="dash-box"><div class="dash-label">Today's Total</div><div class="dash-val" id="ledger-total">₹0</div></div>
-                <div class="dash-box"><div class="dash-label">UPI</div><div class="dash-val" id="ledger-upi">₹0</div></div>
-                <div class="dash-box"><div class="dash-label">Cash</div><div class="dash-val" id="ledger-cash">₹0</div></div>
+        <div class="admin-card">
+            <h2>Staff PINs</h2>
+            <div class="row-group" style="margin-bottom: 15px;">
+                <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="staff-name" placeholder="Name" required></div>
+                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="staff-pin" placeholder="PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric" required></div>
             </div>
-            <div id="history-container" style="max-height: 400px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                <p style="opacity: 0.5; text-align: center;">Waiting for orders...</p>
-            </div>
-        </div>
-
-        <div class="admin-card" style="margin-top: 30px; margin-bottom: 60px;">
-            <h2>Security Logs (Voids)</h2>
-            <div id="voids-container" style="max-height: 300px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                <p style="opacity: 0.5; text-align: center;">Loading logs...</p>
-            </div>
+            <button class="btn btn-secondary" onclick="addStaff()">Add Staff</button>
+            <div id="staff-list-container" style="margin-top: 20px;"></div>
         </div>
 
     </div>
@@ -210,7 +254,15 @@
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
         let orderHistory = {};
 
-        // === 1. MASTER SWITCH ===
+        // Chart.js Instances (Global to allow redrawing)
+        let revChartInstance = null;
+        let typeChartInstance = null;
+
+        // Configuration for minimal charts
+        Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
+        Chart.defaults.font.family = "'Quicksand', sans-serif";
+
+        // === MASTER SWITCH ===
         db.ref('settings/isOpen').on('value', (snapshot) => {
             isCafeOpen = snapshot.val() === null ? true : snapshot.val(); 
             const btn = document.getElementById('master-status-btn');
@@ -219,7 +271,7 @@
         });
         window.toggleCafeStatus = function() { db.ref('settings/isOpen').set(!isCafeOpen); };
 
-        // === 2. SERVICE CONTROLS ===
+        // === SERVICE CONTROLS ===
         db.ref('settings/storeStatus').on('value', snap => {
             const status = snap.val() || { delivery: true, takeaway: true };
             document.getElementById('toggle-delivery').checked = status.delivery;
@@ -227,37 +279,18 @@
         });
 
         window.updateStoreStatus = function() {
-            const del = document.getElementById('toggle-delivery').checked;
-            const tak = document.getElementById('toggle-takeaway').checked;
             db.ref('settings/storeStatus').set({
-                delivery: del,
-                takeaway: tak
+                delivery: document.getElementById('toggle-delivery').checked,
+                takeaway: document.getElementById('toggle-takeaway').checked
             });
         };
 
-        // === 3. MENU & ORDER LOGIC ===
+        // === MENU LOGIC ===
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderAllViews(); });
         db.ref('settings/itemOrder').on('value', snap => { currentItemOrder = snap.val() || {}; renderAllViews(); });
 
         db.ref('menu').on('value', (snapshot) => {
             currentMenuData = snapshot.val() || {};
-            let requiresCategorySave = false; let requiresItemSave = false;
-            let categoriesInMenu = Object.keys(currentMenuData);
-
-            categoriesInMenu.forEach(cat => {
-                if (!currentCategoryOrder.includes(cat)) { currentCategoryOrder.push(cat); requiresCategorySave = true; }
-            });
-
-            categoriesInMenu.forEach(cat => {
-                if (!currentItemOrder[cat]) { currentItemOrder[cat] = []; requiresItemSave = true; }
-                let itemsInCat = Object.keys(currentMenuData[cat]);
-                itemsInCat.forEach(itemName => { if (!currentItemOrder[cat].includes(itemName)) { currentItemOrder[cat].push(itemName); requiresItemSave = true; } });
-                let cleanOrder = currentItemOrder[cat].filter(itemName => itemsInCat.includes(itemName));
-                if (cleanOrder.length !== currentItemOrder[cat].length) { currentItemOrder[cat] = cleanOrder; requiresItemSave = true; }
-            });
-
-            if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
-            if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
             renderAllViews();
         });
 
@@ -281,7 +314,6 @@
 
         function renderAllViews() {
             let sortedCats = getSortedCategories();
-            
             let sorterContainer = document.getElementById('category-order-container');
             if (sortedCats.length === 0) sorterContainer.innerHTML = "<p style='opacity:0.5;'>No categories.</p>";
             else {
@@ -319,7 +351,6 @@
                     
                     let routeLabel = item.routing === 'chef' ? 'Chef' : 'Barista';
                     let routeHTML = `<span class="badge">${routeLabel}</span>`;
-                    
                     let priceDisplay = item.hasSizes ? `₹${item.priceReg} / ₹${item.priceLrg}` : `₹${item.price}`;
 
                     menuHTML += `
@@ -407,20 +438,14 @@
             const staffData = snapshot.val();
             const container = document.getElementById('staff-list-container');
             container.innerHTML = "";
-
-            if (!staffData) {
-                container.innerHTML = "<p style='opacity: 0.5; font-size: 0.9rem;'>No staff PINs registered.</p>";
-                return;
-            }
-
+            if (!staffData) return;
             for (let pin in staffData) {
                 const name = staffData[pin];
                 container.innerHTML += `
                     <div class="list-item">
                         <div><strong>${name}</strong> <span style="opacity: 0.6; margin-left: 10px; font-size: 0.9rem;">PIN: ${pin}</span></div>
                         <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${pin}', '${name}')">✖</button>
-                    </div>
-                `;
+                    </div>`;
             }
         });
 
@@ -431,10 +456,11 @@
         };
         window.removeStaff = function(pin, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); };
 
-        // HISTORY LISTENER
+        // === HISTORY & ANALYTICS LISTENER ===
         db.ref('orders/history').on('value', snap => {
             orderHistory = snap.val() || {};
             renderLedger();
+            processAnalytics();
         });
 
         function renderLedger() {
@@ -455,11 +481,11 @@
             sortedIds.forEach(id => {
                 const order = orderHistory[id];
                 const orderTime = parseInt(id);
+                const amt = order.payment ? (order.payment.total || 0) : 0;
 
                 if (orderTime >= startOfToday) {
-                    const amt = order.payment.total || 0;
                     todayTotal += amt;
-                    if (order.payment.method === "UPI") todayUPI += amt;
+                    if (order.payment && order.payment.method === "UPI") todayUPI += amt;
                     else todayCash += amt;
                 }
 
@@ -475,16 +501,16 @@
                 <div class="history-card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px;">
                         <div>
-                            <strong style="font-size: 1.1rem;">${order.tableOrAddress}</strong>
-                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.timestamp} • ${order.source}</div>
+                            <strong style="font-size: 1.1rem;">${order.tableOrAddress || "Order"}</strong>
+                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.timestamp || ""} • ${order.source || "POS"}</div>
                         </div>
                         <div style="text-align:right;">
-                            <strong style="font-size: 1.1rem;">₹${order.payment.total}</strong>
-                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.payment.method}</div>
+                            <strong style="font-size: 1.1rem;">₹${amt}</strong>
+                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.payment ? order.payment.method : ""}</div>
                         </div>
                     </div>
                     ${itemsHTML}
-                    ${order.notes ? `<div style="font-size: 0.85rem; opacity: 0.8; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}
+                    ${order.notes ? `<div style="font-size: 0.85rem; opacity:0.8; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}
                 </div>`;
             });
 
@@ -492,6 +518,154 @@
             document.getElementById('ledger-total').innerText = '₹' + todayTotal;
             document.getElementById('ledger-upi').innerText = '₹' + todayUPI;
             document.getElementById('ledger-cash').innerText = '₹' + todayCash;
+        }
+
+        // === ADVANCED ANALYTICS LOGIC ===
+        function processAnalytics() {
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            
+            let totalLifetimeRev = 0;
+            let totalLifetimeOrders = 0;
+            let todayOrdersCount = 0;
+            
+            let orderTypes = { "Dine-in": 0, "Takeaway": 0, "Delivery": 0 };
+            let itemCounts = {};
+            
+            // Prepare 7-day structure
+            let dailyRevMap = {};
+            let labels7Days = [];
+            let data7Days = [];
+            
+            for(let i=6; i>=0; i--) {
+                let d = new Date();
+                d.setDate(d.getDate() - i);
+                let dateKey = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+                let labelStr = d.toLocaleDateString('en-US', {weekday: 'short'}); // Mon, Tue
+                if(i===0) labelStr = "Today";
+                dailyRevMap[dateKey] = 0;
+                labels7Days.push({ key: dateKey, label: labelStr });
+            }
+
+            // Parse DB
+            Object.keys(orderHistory).forEach(id => {
+                const order = orderHistory[id];
+                const ts = parseInt(id);
+                const amt = order.payment ? (order.payment.total || 0) : 0;
+                
+                totalLifetimeRev += amt;
+                totalLifetimeOrders++;
+                
+                if(ts >= startOfToday) todayOrdersCount++;
+
+                // Distribution
+                let type = order.orderType || "Unknown";
+                if(type.includes("Delivery") || type.includes("Web")) orderTypes["Delivery"]++;
+                else if(type.includes("Takeaway")) orderTypes["Takeaway"]++;
+                else orderTypes["Dine-in"]++;
+
+                // Top Items (Strip modifiers for clean counting)
+                if(order.items) {
+                    for(let item in order.items) {
+                        let baseName = item.split(" (")[0];
+                        itemCounts[baseName] = (itemCounts[baseName] || 0) + order.items[item].qty;
+                    }
+                }
+
+                // Map to 7 Days
+                let orderDate = new Date(ts);
+                let dateKey = orderDate.getFullYear() + '-' + orderDate.getMonth() + '-' + orderDate.getDate();
+                if(dailyRevMap[dateKey] !== undefined) {
+                    dailyRevMap[dateKey] += amt;
+                }
+            });
+
+            // Populate Chart Arrays
+            labels7Days.forEach(day => { data7Days.push(dailyRevMap[day.key]); });
+
+            // Sort Top Items
+            let sortedItems = Object.keys(itemCounts).sort((a,b) => itemCounts[b] - itemCounts[a]).slice(0, 5);
+            let topListHTML = "";
+            sortedItems.forEach(item => {
+                topListHTML += `<div class="top-item-row"><span>${item}</span><span style="font-weight:bold;">${itemCounts[item]} sold</span></div>`;
+            });
+            if(topListHTML === "") topListHTML = "<p style='opacity:0.5; text-align:center;'>Not enough data.</p>";
+            document.getElementById('top-items-list').innerHTML = topListHTML;
+
+            // Metrics
+            let aov = totalLifetimeOrders > 0 ? Math.round(totalLifetimeRev / totalLifetimeOrders) : 0;
+            document.getElementById('stat-aov').innerText = "₹" + aov;
+            document.getElementById('stat-orders').innerText = todayOrdersCount;
+
+            // Draw Charts
+            drawRevenueChart(labels7Days.map(l => l.label), data7Days);
+            drawTypeChart(orderTypes);
+        }
+
+        function drawRevenueChart(labels, data) {
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            if(revChartInstance) revChartInstance.destroy();
+
+            // Gradient Fill
+            let gradient = ctx.createLinearGradient(0, 0, 0, 220);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+
+            revChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Revenue (₹)',
+                        data: data,
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4, // Smooth curves
+                        pointRadius: 3,
+                        pointBackgroundColor: '#8c7255'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)' } },
+                        y: { 
+                            grid: { color: 'rgba(255,255,255,0.05)' }, 
+                            ticks: { color: 'rgba(255,255,255,0.6)', maxTicksLimit: 5 },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function drawTypeChart(types) {
+            const ctx = document.getElementById('typeChart').getContext('2d');
+            if(typeChartInstance) typeChartInstance.destroy();
+
+            typeChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Dine-in', 'Takeaway', 'Delivery'],
+                    datasets: [{
+                        data: [types["Dine-in"], types["Takeaway"], types["Delivery"]],
+                        backgroundColor: ['#ffffff', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.2)'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: {
+                        legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 12, font: { size: 10 } } }
+                    }
+                }
+            });
         }
 
         // === SECURITY LOGS (VOIDS) ===
@@ -521,7 +695,6 @@
             });
             container.innerHTML = listHTML;
         });
-
     </script>
 </body>
 </html>
