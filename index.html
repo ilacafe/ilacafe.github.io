@@ -21,14 +21,12 @@
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
-        /* ORIGINAL UNTOUCHED MENU LAYOUT */
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; padding-right: 5px;}
         
         .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         
-        /* PRICE SWAP LOGIC CSS */
         .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
         
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
@@ -62,13 +60,15 @@
         .remark-input::placeholder { color: rgba(255,255,255,0.4); }
 
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-        .type-row { display: flex; gap: 8px; margin-top: 8px; }
+        
+        /* ORDER TYPE TOGGLES */
+        .type-row { display: flex; gap: 8px; margin-top: 8px; justify-content: center; }
+        .type-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 10px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1; }
+        .type-btn.selected { background: white; color: var(--brand-bg); border-color: white; }
+        .type-btn.hidden { display: none; }
+
         .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1;}
         .choice-btn.selected { background: white; color: var(--brand-bg); border-color: white;}
-        
-        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
-        .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; transition: all 0.2s;}
-        .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
         
         .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
         .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; border: none; text-transform: uppercase; letter-spacing: 1px;}
@@ -88,6 +88,13 @@
         
         .usual-box { border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 15px; cursor: pointer; text-align: center; transition: background-color 0.2s; margin-bottom: 25px; }
         .usual-box:active { background-color: rgba(255, 255, 255, 0.1); }
+
+        #table-badge { display: none; background: rgba(255,255,255,0.15); padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); }
+        
+        /* Table Grid Logic */
+        .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
+        .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; transition: all 0.2s;}
+        .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
     </style>
 </head>
 <body>
@@ -101,6 +108,7 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo" onclick="this.style.transform = `rotate(${this.rotation = (this.rotation || 0) + 360}deg)`">
+            <div id="table-badge"></div>
         </header>
 
         <div id="usual-order-container" style="display: none;">
@@ -163,20 +171,31 @@
                     <textarea id="cart-notes" class="remark-input" placeholder="e.g. Oat milk, extra napkins..." style="height: 50px; resize: none; margin-top: 5px;"></textarea>
                 </div>
 
-                <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
-                <div class="type-row">
-                    <button class="choice-btn selected" id="type-dinein" onclick="window.setOrderType('Dine-in')">Dine-in</button>
-                    <button class="choice-btn" id="type-takeaway" onclick="window.setOrderType('Takeaway')">Takeaway</button>
-                    <button class="choice-btn" id="type-delivery" onclick="window.setOrderType('Delivery')">Delivery</button>
+                <div id="order-type-section">
+                    <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
+                    <div class="type-row">
+                        <button class="type-btn selected" id="type-dinein" onclick="window.setOrderType('Dine-in')">Dine-in</button>
+                        <button class="type-btn" id="type-takeaway" onclick="window.setOrderType('Takeaway')">Takeaway</button>
+                        <button class="type-btn" id="type-delivery" onclick="window.setOrderType('Delivery')">Delivery</button>
+                    </div>
+                </div>
+
+                <div id="scan-instruction" style="display:none; text-align:center; padding:15px; border:1px dashed rgba(255,255,255,0.3); border-radius:8px; margin-top:10px;">
+                    <p style="margin:0; font-size:0.9rem;">Delivery & Takeaway currently unavailable.</p>
+                    <p style="margin:5px 0 0; font-weight:bold; color:#ffcc00;">Please scan the QR code on your table.</p>
                 </div>
                 
                 <div id="dynamic-fields" style="margin-top: 15px;">
-                    <div id="field-dinein" style="display: block;">
-                        <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Table Number</label>
-                        <div class="table-grid" id="customer-table-grid"></div>
-                    </div>
                     <div id="field-delivery" style="display: none;">
                         <textarea id="delivery-address" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
+                    </div>
+                    <div id="field-dinein" style="display: none;">
+                        <div id="manual-table-selector">
+                            <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Table Number</label>
+                            <div class="table-grid" id="customer-table-grid"></div>
+                        </div>
+                        <div id="fixed-table-display" style="display:none; text-align:center; padding:10px; font-weight:bold; color:#ffcc00; border:1px solid rgba(255,255,255,0.2); border-radius:6px;">
+                            </div>
                     </div>
                     <div id="field-takeaway" style="display: none; text-align: center; padding: 10px 0;">
                         <div style="font-weight: bold; font-size: 1rem;">Pickup: <span id="time-display">30</span> min</div>
@@ -187,7 +206,7 @@
 
             <div class="modal-buttons" style="margin-top: 20px;">
                 <button class="btn btn-secondary" onclick="window.clearCart()">Empty</button>
-                <button class="btn btn-primary" onclick="window.proceedToPayment()">Pay</button>
+                <button class="btn btn-primary" id="btn-pay" onclick="window.proceedToPayment()">Pay</button>
             </div>
             <button class="close-modal" onclick="closeModal('checkout-modal')">✖ CLOSE</button>
         </div>
@@ -230,6 +249,22 @@
         const OWNER_WHATSAPP = "918882946526"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         
+        // --- URL PARAMS (Table Logic) ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTable = urlParams.get('table'); // e.g., ?table=5
+
+        if(urlTable) {
+            const badge = document.getElementById('table-badge');
+            badge.style.display = 'inline-block';
+            badge.innerText = "Table " + urlTable;
+            // Pre-fill fixed display logic
+            document.getElementById('manual-table-selector').style.display = 'none';
+            const fixedDisplay = document.getElementById('fixed-table-display');
+            fixedDisplay.style.display = 'block';
+            fixedDisplay.innerText = "Ordering for Table " + urlTable;
+        }
+
+        // --- STATE & STORAGE ---
         window.cart = JSON.parse(localStorage.getItem('ila_customer_cart')) || {}; 
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
@@ -239,12 +274,17 @@
         window.lastAddress = localStorage.getItem('ila_last_address') || "";
         window.currentOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
         
-        const tableGrid = document.getElementById('customer-table-grid');
-        for(let i=1; i<=10; i++) { tableGrid.innerHTML += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
+        window.storeStatus = { delivery: true, takeaway: true }; // Default
 
         if (window.lastAddress) document.getElementById('delivery-address').value = window.lastAddress;
 
+        // Populate Table Grid for Manual Selection
+        const tableGrid = document.getElementById('customer-table-grid');
+        for(let i=1; i<=10; i++) { tableGrid.innerHTML += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
+
+        // Show "Usual Order" only if same context
         if (window.lastOrder && Object.keys(window.lastOrder).length > 0) {
+            // Only show usual if not switching from table to delivery, etc.
             document.getElementById('usual-order-container').style.display = 'block';
             let desc = Object.keys(window.lastOrder).map(k => `${window.lastOrder[k].qty}x ${k}`).join(', ');
             document.getElementById('usual-order-desc').innerText = `${desc} — ₹${window.lastAmount}`;
@@ -252,8 +292,79 @@
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.currentOrderInfo = null;
         window.currentSweetness = "Medium sweet"; window.currentDineInTable = "";
+        
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
         window.flatMenu = {}; 
+
+        // --- LISTENERS ---
+        
+        // 1. Store Availability Listener
+        db.ref('settings/storeStatus').on('value', snap => {
+            window.storeStatus = snap.val() || { delivery: true, takeaway: true };
+            updateCheckoutOptions();
+        });
+
+        // 2. Cafe Open/Close
+        db.ref('settings/isOpen').on('value', snap => {
+            const isOpen = snap.val(); const lockScreen = document.getElementById('closed-screen');
+            if (isOpen === false) { lockScreen.style.display = "flex"; document.body.style.overflow = "hidden"; } 
+            else { lockScreen.style.display = "none"; document.body.style.overflow = "auto"; }
+        });
+
+        // 3. Menu Data
+        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderCustomerMenu(); });
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; renderCustomerMenu(); });
+        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; renderCustomerMenu(); });
+
+
+        // --- LOGIC FUNCTIONS ---
+
+        function updateCheckoutOptions() {
+            const btnDel = document.getElementById('type-delivery');
+            const btnTak = document.getElementById('type-takeaway');
+            const btnDin = document.getElementById('type-dinein');
+            const scanMsg = document.getElementById('scan-instruction');
+            const payBtn = document.getElementById('btn-pay');
+            
+            // 1. If URL has Table -> Force Dine-in, Hide others
+            if(urlTable) {
+                btnDin.classList.add('selected'); btnDin.style.display = 'block';
+                btnDel.style.display = 'none'; btnTak.style.display = 'none';
+                scanMsg.style.display = 'none';
+                window.currentOrderType = 'Dine-in';
+                window.updateDynamicFields();
+                return;
+            }
+
+            // 2. No Table -> Check Store Status
+            // Hide/Show based on status
+            if(window.storeStatus.delivery) btnDel.classList.remove('hidden'); else btnDel.classList.add('hidden');
+            if(window.storeStatus.takeaway) btnTak.classList.remove('hidden'); else btnTak.classList.add('hidden');
+
+            // Dine-in button is hidden for remote users (General Link)
+            // Strategy: General Link is for Del/Tak. Table Link is for Dine-in.
+            btnDin.classList.add('hidden'); 
+
+            // Logic: If both Del & Tak are OFF, show "Scan" message
+            if(!window.storeStatus.delivery && !window.storeStatus.takeaway) {
+                scanMsg.style.display = 'block';
+                document.getElementById('order-type-section').style.display = 'none';
+                payBtn.disabled = true; payBtn.style.opacity = '0.5';
+            } else {
+                scanMsg.style.display = 'none';
+                document.getElementById('order-type-section').style.display = 'block';
+                payBtn.disabled = false; payBtn.style.opacity = '1';
+                
+                // Auto-select valid option if current is invalid
+                if (window.currentOrderType === 'Delivery' && !window.storeStatus.delivery) window.setOrderType('Takeaway');
+                else if (window.currentOrderType === 'Takeaway' && !window.storeStatus.takeaway) window.setOrderType('Delivery');
+                else if (window.currentOrderType === 'Dine-in') {
+                    // Reset to available
+                     if(window.storeStatus.delivery) window.setOrderType('Delivery');
+                     else if(window.storeStatus.takeaway) window.setOrderType('Takeaway');
+                }
+            }
+        }
 
         function saveCart() { 
             localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); 
@@ -309,16 +420,6 @@
                 else if (document.getElementById('checkout-modal').classList.contains('active')) window.openCheckoutModal();
             }
         };
-
-        db.ref('settings/isOpen').on('value', snap => {
-            const isOpen = snap.val(); const lockScreen = document.getElementById('closed-screen');
-            if (isOpen === false) { lockScreen.style.display = "flex"; document.body.style.overflow = "hidden"; } 
-            else { lockScreen.style.display = "none"; document.body.style.overflow = "auto"; }
-        });
-
-        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderCustomerMenu(); });
-        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; renderCustomerMenu(); });
-        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; renderCustomerMenu(); });
 
         function renderCustomerMenu() {
             const container = document.getElementById('live-menu-container');
@@ -480,7 +581,8 @@
             document.getElementById('cart-notes').value = "";
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             
-            window.setOrderType(window.currentOrderType);
+            // Check Store Status before opening to ensure valid state
+            updateCheckoutOptions();
             document.getElementById('checkout-modal').classList.add('active');
         };
 
@@ -513,8 +615,8 @@
         window.updateDynamicFields = function() {
             const type = window.currentOrderType;
             document.getElementById('field-delivery').style.display = type === 'Delivery' ? 'block' : 'none';
-            document.getElementById('field-dinein').style.display = type === 'Dine-in' ? 'block' : 'none';
             document.getElementById('field-takeaway').style.display = type === 'Takeaway' ? 'block' : 'none';
+            document.getElementById('field-dinein').style.display = type === 'Dine-in' ? 'block' : 'none';
         };
 
         window.proceedToPayment = function() {
@@ -522,7 +624,11 @@
             const notes = document.getElementById('cart-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
             if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Address required."); return; } } 
-            else if (type === 'Dine-in') { if (!window.currentDineInTable) { alert("Please select a table number."); return; } details = "Table " + window.currentDineInTable; } 
+            else if (type === 'Dine-in') { 
+                if(urlTable) details = "Table " + urlTable; 
+                else if (window.currentDineInTable) details = "Table " + window.currentDineInTable;
+                else { alert("Please select a table number."); return; }
+            } 
             else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup: ${time} min`; }
 
             window.currentOrderInfo = { type, details, notes };
@@ -546,11 +652,10 @@
             document.getElementById('payment-modal').classList.add('active');
         };
 
-        // NEW: DUAL-ACTION CHECKOUT LOGIC
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo; 
             
-            // Save preferences for quick re-order
+            // Save preferences
             localStorage.setItem('ila_last_order', JSON.stringify(window.cart));
             localStorage.setItem('ila_last_amount', window.totalAmount);
             localStorage.setItem('ila_last_order_type', info.type); 
@@ -558,7 +663,7 @@
                 localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
             }
 
-            // Action 1: Push data silently to the POS Web Queue
+            // PUSH to DB
             db.ref('orders/pendingWeb').push({
                 orderType: info.type,
                 tableOrAddress: info.details,
@@ -568,14 +673,13 @@
                 paymentMethod: "UPI"
             });
 
-            // Action 2: Draft the exact same message for WhatsApp
+            // WHATSAPP
             let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
             if (info.notes) { message += `Notes: ${info.notes}\n`; }
             message += `\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
             message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
             
-            // Clear cart and redirect to WhatsApp
             setTimeout(() => { 
                 window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); 
                 closeModal('payment-modal'); 
@@ -583,7 +687,7 @@
             }, 100);
         };
 
-        updateCartUI(); window.updateDynamicFields();
+        updateCartUI(); 
     </script>
 </body>
 </html>
