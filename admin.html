@@ -64,7 +64,7 @@
         .dash-val { font-size: 1.3rem; font-weight: bold; }
         .history-card { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; margin-bottom: 10px; }
 
-        /* NEW TOGGLE SWITCH STYLES */
+        /* TOGGLE SWITCH STYLES */
         .toggle-switch { position: relative; display: inline-block; width: 50px; height: 26px; margin: 0; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.4); transition: .4s; border-radius: 34px; border: 1px solid rgba(255,255,255,0.2); }
@@ -185,6 +185,13 @@
             </div>
         </div>
 
+        <div class="admin-card" style="margin-top: 30px; margin-bottom: 60px;">
+            <h2 style="color: #ffcccc;">Security Logs (Voids)</h2>
+            <div id="voids-container" style="max-height: 300px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                <p style="opacity: 0.5; text-align: center;">Loading logs...</p>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -212,7 +219,7 @@
         });
         window.toggleCafeStatus = function() { db.ref('settings/isOpen').set(!isCafeOpen); };
 
-        // === 2. SERVICE CONTROLS (NEW) ===
+        // === 2. SERVICE CONTROLS ===
         db.ref('settings/storeStatus').on('value', snap => {
             const status = snap.val() || { delivery: true, takeaway: true };
             document.getElementById('toggle-delivery').checked = status.delivery;
@@ -252,12 +259,6 @@
             if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
             if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
             renderAllViews();
-        });
-
-        // HISTORY LISTENER
-        db.ref('orders/history').on('value', snap => {
-            orderHistory = snap.val() || {};
-            renderLedger();
         });
 
         function getSortedCategories() { return currentCategoryOrder.filter(cat => Object.keys(currentMenuData).includes(cat)); }
@@ -430,6 +431,12 @@
         };
         window.removeStaff = function(pin, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); };
 
+        // HISTORY LISTENER
+        db.ref('orders/history').on('value', snap => {
+            orderHistory = snap.val() || {};
+            renderLedger();
+        });
+
         function renderLedger() {
             const container = document.getElementById('history-container');
             const sortedIds = Object.keys(orderHistory).sort((a, b) => b - a); 
@@ -486,6 +493,36 @@
             document.getElementById('ledger-upi').innerText = '₹' + todayUPI;
             document.getElementById('ledger-cash').innerText = '₹' + todayCash;
         }
+
+        // === NEW: VOIDS LISTENER ===
+        db.ref('security/voids').limitToLast(50).on('value', snap => {
+            const container = document.getElementById('voids-container');
+            const voidsData = snap.val() || {};
+            
+            // Sort by push ID (newest first)
+            const sortedIds = Object.keys(voidsData).sort((a, b) => b.localeCompare(a)); 
+            
+            if (sortedIds.length === 0) {
+                container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No voids recorded.</p>";
+                return;
+            }
+
+            let listHTML = "";
+            sortedIds.forEach(id => {
+                const v = voidsData[id];
+                listHTML += `
+                <div class="history-card" style="border-left: 4px solid #ff4d4d;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
+                        <strong style="font-size: 1.05rem;">${v.item}</strong>
+                        <strong style="color: #ffcccc;">-₹${v.value}</strong>
+                    </div>
+                    <div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 5px;">Table/Order: ${v.table} • ${v.time}</div>
+                    <div style="font-size: 0.85rem; font-style: italic; color: #ffcc00;">Reason: "${v.reason}"</div>
+                </div>`;
+            });
+            container.innerHTML = listHTML;
+        });
+
     </script>
 </body>
 </html>
