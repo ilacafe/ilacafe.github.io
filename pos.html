@@ -17,11 +17,11 @@
         header { text-align: center; margin-bottom: 20px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
-        .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1; transition: opacity 0.2s; }
         .dash-stat:active { opacity: 0.5; }
-        .dash-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 2px; font-weight: bold; }
-        .dash-value { font-size: 1.1rem; font-weight: 700; }
+        .dash-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 2px; font-weight: bold; }
+        .dash-value { font-size: 1rem; font-weight: 700; }
         .dash-divider { width: 1px; height: 25px; background-color: rgba(255, 255, 255, 0.2); }
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
@@ -52,7 +52,6 @@
         .cart-clear { font-size: 0.8rem; opacity: 0.7; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        /* --- UPDATED NOTIFICATION STYLES (Minimal, Classy, Button) --- */
         #notification-area { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; z-index: 3000; pointer-events: none; }
         
         .toast-card { 
@@ -90,7 +89,6 @@
 
         @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        /* Rest of CSS remains exactly as you had it */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: flex-start; padding-top: 5vh; box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
@@ -155,6 +153,8 @@
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">Cash</span><span class="dash-value" id="cash-display">₹0</span></div>
             <div class="dash-divider"></div>
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span></div>
+            <div class="dash-divider"></div>
+            <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">Cups</span><span class="dash-value" id="cups-display">0</span></div>
         </div>
 
         <div id="live-menu-container">
@@ -360,13 +360,11 @@
         window.currentModifierName = ""; window.currentModifierPrice = 0;
 
         window.itemRoutingMap = {};
+        window.coffeeItemsMap = {}; // Tracks which items are coffees for the cup count
 
-        // === UPGRADED LISTENER: Minimal, Persistent, with Details ===
         db.ref('orders/ready').limitToLast(1).on('child_added', snap => {
             const data = snap.val();
-            // Basic timestamp check (5 min)
             if (Date.now() - data.timestamp < 300000) { 
-                // Display the specific items if sent by KDS, otherwise generic
                 let detailText = data.items ? data.items : "Ready for pickup";
                 showToast(data.table + ' Ready', detailText);
             }
@@ -382,8 +380,6 @@
                 <button class="toast-btn" onclick="this.parentElement.remove()">OKAY</button>
             `;
             area.appendChild(toast);
-            
-            // Vibrate if supported
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
         }
 
@@ -410,6 +406,7 @@
             };
             db.ref('orders/history/' + Date.now()).set(archivePacket);
             syncToCloud();
+            calculateDailyCups();
         }
 
         window.openWebOrders = function() {
@@ -442,7 +439,6 @@
             const order = window.pendingWebOrders[id];
             if (!order) return;
             
-            // Safety wrapper
             try {
                 dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App");
             } catch(e) { console.error("Kitchen dispatch error", e); }
@@ -460,6 +456,7 @@
             window.pastBills.unshift(localBill);
             if(window.pastBills.length > 50) window.pastBills.pop();
             syncToCloud();
+            calculateDailyCups();
             
             const archivePacket = {
                 timestamp: new Date().toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}),
@@ -547,7 +544,10 @@
         db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
         db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
         db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
-        db.ref('pos/pastBills').on('value', snap => { window.pastBills = snap.val() || []; });
+        db.ref('pos/pastBills').on('value', snap => { 
+            window.pastBills = snap.val() || []; 
+            calculateDailyCups();
+        });
 
         db.ref('orders/pendingWeb').on('value', snap => {
             window.pendingWebOrders = snap.val() || {};
@@ -559,6 +559,35 @@
                 window.openWebOrders();
             }
         });
+
+        // === 100% SAFE CUPS CALCULATION LOGIC ===
+        function calculateDailyCups() {
+            let cupTotal = 0;
+            const todayStr = new Date().toLocaleDateString();
+            
+            // Sort keys by length so "Filter Coffee (Large)" is checked before "Filter Coffee"
+            let coffeeKeys = Object.keys(window.coffeeItemsMap).sort((a,b) => b.length - a.length);
+
+            window.pastBills.forEach(bill => {
+                // Ensure bill.date exists before checking includes()
+                if(bill.date && bill.date.includes(todayStr) && bill.items) {
+                    for(let itemName in bill.items) {
+                        // Safely check if the item name begins with any of our known coffee items
+                        let matchedCoffee = coffeeKeys.find(key => itemName.startsWith(key));
+                        
+                        if(matchedCoffee) {
+                            let qty = bill.items[itemName].qty || 0;
+                            if(itemName.includes("(Large)")) {
+                                cupTotal += (qty * 1.5);
+                            } else {
+                                cupTotal += qty;
+                            }
+                        }
+                    }
+                }
+            });
+            document.getElementById('cups-display').innerText = cupTotal;
+        }
 
         function updateDashboards() {
             document.getElementById('cash-display').innerText = `₹${Math.round(window.cashDrawer)}`;
@@ -600,17 +629,28 @@
             localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
             
             window.itemRoutingMap = {};
+            window.coffeeItemsMap = {}; // Reset coffee map
+
             for(let cat in currentMenuData) {
+                // Ensure category names like "Coffee", "Hot Coffee", "Beverages" count towards cups
+                let isCoffeeCat = cat.toLowerCase().includes('coffee') || cat.toLowerCase().includes('beverage');
+
                 for(let item in currentMenuData[cat]) {
                     let route = currentMenuData[cat][item].routing || 'barista';
                     window.itemRoutingMap[item] = route;
+                    
+                    if(isCoffeeCat) window.coffeeItemsMap[item] = true;
+
                     if(currentMenuData[cat][item].hasSizes) {
                         window.itemRoutingMap[item + " (Regular)"] = route;
                         window.itemRoutingMap[item + " (Large)"] = route;
+                        if(isCoffeeCat) window.coffeeItemsMap[item + " (Regular)"] = true;
+                        if(isCoffeeCat) window.coffeeItemsMap[item + " (Large)"] = true;
                     }
                 }
             }
             renderPOSMenu(currentMenuData, liveCategoryOrder); 
+            calculateDailyCups(); // Recalculate on load
         });
 
         function renderPOSMenu(menuData, categoryOrder) {
@@ -753,12 +793,7 @@
             let baristaItems = {}; let chefItems = {};
             
             for (let itemName in cartObj) {
-                // Simplified routing: check if base item name is in chef list
-                // For now, this logic relies on the map.
-                // NOTE: Modifiers like (Oat Milk) might break strict matching if not handled.
-                // We will use a loose match here to be safe.
-                
-                let baseName = itemName.split(" (")[0]; // Strip modifiers for routing
+                let baseName = itemName.split(" (")[0]; 
                 let routing = window.itemRoutingMap[baseName] || 'barista';
                 
                 if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
@@ -775,20 +810,16 @@
             }
         }
 
-        // === RESTORED V1 LOGIC (ROBUST MODE) ===
-        // This removes the "Transaction" that was causing freezing.
         window.sendOrder = function(tableID) {
             if (window.totalItems === 0) return alert("Cart is empty!");
             
             const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
             let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
             
-            // 1. Dispatch to Kitchen (Wrapped in try/catch for safety)
             try {
                 dispatchToKitchen(window.cart, destName, notes, "POS");
             } catch(e) { console.error("Kitchen dispatch error", e); }
 
-            // 2. Local State Update (Instant Feedback)
             if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
             
             if (notes) {
@@ -804,7 +835,6 @@
             let safeTotal = parseFloat(window.totalAmount) || 0;
             window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + safeTotal;
             
-            // 3. Sync to Cloud
             syncToCloud();
             
             closeModal('table-modal'); 
@@ -868,17 +898,14 @@
             closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
 
-        // === PHASE 1: Void Tracking Fix ===
         window.removeTableItem = function(tableID, itemName) {
             let realItemName = itemName.replace(/&quot;/g, '"');
             const tableData = window.activeTables[tableID];
             
             if(tableData && tableData.items[realItemName]) {
-                // 1. ASK FOR REASON
                 const reason = prompt(`Removing ${realItemName}. Reason?`);
-                if (!reason) return; // Cancelled
+                if (!reason) return; 
 
-                // 2. LOG VOID
                 const voidData = {
                     time: new Date().toLocaleString(),
                     table: tableID,
@@ -888,7 +915,6 @@
                 };
                 db.ref('security/voids').push(voidData);
 
-                // 3. EXECUTE REMOVAL
                 tableData.total = (parseFloat(tableData.total) || 0) - (parseFloat(tableData.items[realItemName].price) || 0); 
                 tableData.items[realItemName].qty -= 1;
                 if(tableData.items[realItemName].qty <= 0) delete tableData.items[realItemName];
