@@ -17,6 +17,7 @@
         header { text-align: center; margin-bottom: 25px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
+        /* 5-ITEM DASHBOARD - Tuned to fit perfectly on mobile */
         .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1; transition: opacity 0.2s; }
         .dash-stat:active { opacity: 0.5; }
@@ -113,10 +114,6 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo">
-            <div style="margin-top: 12px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; opacity: 0.7; cursor: pointer; display: inline-block; border-bottom: 1px dashed rgba(255,255,255,0.3); padding-bottom: 2px;" onclick="openPastBills()">
-                Today's Shots: <span id="cups-display" style="font-weight: bold; color: white;">0</span>
-            </div>
-            
             <div id="offline-indicator" style="display:none; background:transparent; border: 1px solid rgba(255,255,255,0.5); color:white; opacity: 0.8; padding:5px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
         </header>
 
@@ -130,6 +127,8 @@
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">Cash</span><span class="dash-value" id="cash-display">₹0</span></div>
             <div class="dash-divider"></div>
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span></div>
+            <div class="dash-divider"></div>
+            <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">Shots</span><span class="dash-value" id="cups-display">0</span></div>
         </div>
 
         <div id="live-menu-container">
