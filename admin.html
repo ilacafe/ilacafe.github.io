@@ -218,6 +218,7 @@
                 <input type="checkbox" id="add-sweetness" style="width: 18px; height: 18px;">
                 <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Requires Sweetness Level</label>
             </div>
+            
             <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
         </div>
 
@@ -291,6 +292,23 @@
 
         db.ref('menu').on('value', (snapshot) => {
             currentMenuData = snapshot.val() || {};
+            let requiresCategorySave = false; let requiresItemSave = false;
+            let categoriesInMenu = Object.keys(currentMenuData);
+
+            categoriesInMenu.forEach(cat => {
+                if (!currentCategoryOrder.includes(cat)) { currentCategoryOrder.push(cat); requiresCategorySave = true; }
+            });
+
+            categoriesInMenu.forEach(cat => {
+                if (!currentItemOrder[cat]) { currentItemOrder[cat] = []; requiresItemSave = true; }
+                let itemsInCat = Object.keys(currentMenuData[cat]);
+                itemsInCat.forEach(itemName => { if (!currentItemOrder[cat].includes(itemName)) { currentItemOrder[cat].push(itemName); requiresItemSave = true; } });
+                let cleanOrder = currentItemOrder[cat].filter(itemName => itemsInCat.includes(itemName));
+                if (cleanOrder.length !== currentItemOrder[cat].length) { currentItemOrder[cat] = cleanOrder; requiresItemSave = true; }
+            });
+
+            if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
+            if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
             renderAllViews();
         });
 
@@ -332,7 +350,15 @@
             let menuHTML = "";
             sortedCats.forEach(category => {
                 menuHTML += `<div class="category-block"><div class="category-title">${category}</div>`;
+                
                 let itemsInOrder = currentItemOrder[category] || [];
+                
+                // --- SURGICAL FIX: Force missing items to appear (Bypasses Firebase race condition) ---
+                Object.keys(currentMenuData[category] || {}).forEach(item => {
+                    if(!itemsInOrder.includes(item)) itemsInOrder.push(item);
+                });
+                // --------------------------------------------------------------------------------------
+
                 let validItems = itemsInOrder.filter(item => currentMenuData[category][item]);
 
                 validItems.forEach((itemName, index) => {
@@ -385,15 +411,21 @@
             }
         };
 
+        // --- SURGICAL FIX: Visual Feedback & Firebase Sanitation ---
         window.addMenuItem = function() {
-            const category = document.getElementById('add-category').value.trim();
-            const name = document.getElementById('add-name').value.trim();
+            let category = document.getElementById('add-category').value.trim();
+            let name = document.getElementById('add-name').value.trim();
+            
+            // Clean invalid Firebase characters that cause silent crashes
+            category = category.replace(/[.#$\[\]]/g, '');
+            name = name.replace(/[.#$\[\]]/g, '');
+
+            if (!category || !name) { alert("Please fill in Category and Name."); return; }
+
             const visibility = document.getElementById('add-visibility').value;
             const routing = document.getElementById('add-routing').value;
             const requiresSweetness = document.getElementById('add-sweetness').checked;
             const hasSizes = document.getElementById('add-has-sizes').checked;
-
-            if (!category || !name) { alert("Please fill in Category and Name."); return; }
 
             let updateData = { requiresSweetness: requiresSweetness, visibility: visibility, routing: routing, hasSizes: hasSizes };
 
@@ -408,13 +440,39 @@
                 updateData.price = price; updateData.priceReg = null; updateData.priceLrg = null;
             }
 
+            // Visual Feedback setup
+            const btn = document.querySelector('#menu-form-section .btn-primary');
+            const originalText = btn.innerText;
+            btn.innerText = "SAVING...";
+            btn.disabled = true;
+
             db.ref('menu/' + category + '/' + name).update(updateData).then(() => {
                 db.ref('menu/' + category + '/' + name + '/inStock').once('value').then(snap => {
                     if(!snap.exists()) db.ref('menu/' + category + '/' + name + '/inStock').set(true);
                 });
-                document.getElementById('add-name').value = ""; document.getElementById('add-price').value = "";
-                document.getElementById('add-price-reg').value = ""; document.getElementById('add-price-lrg').value = "";
+                
+                // Clear fields but leave Category for rapid entry
+                document.getElementById('add-name').value = ""; 
+                document.getElementById('add-price').value = "";
+                document.getElementById('add-price-reg').value = ""; 
+                document.getElementById('add-price-lrg').value = "";
                 document.getElementById('add-name').focus();
+
+                btn.innerText = "✅ SAVED";
+                btn.style.backgroundColor = "#4caf50"; // Success Green
+                btn.style.color = "white";
+
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.backgroundColor = ""; // Reset to CSS default
+                    btn.style.color = ""; // Reset to CSS default
+                    btn.disabled = false;
+                }, 1500);
+
+            }).catch(error => {
+                alert("Error saving item: " + error.message);
+                btn.innerText = originalText;
+                btn.disabled = false;
             });
         };
 
@@ -520,7 +578,6 @@
             document.getElementById('ledger-cash').innerText = '₹' + todayCash;
         }
 
-        // === ADVANCED ANALYTICS LOGIC ===
         function processAnalytics() {
             const now = new Date();
             const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -532,7 +589,6 @@
             let orderTypes = { "Dine-in": 0, "Takeaway": 0, "Delivery": 0 };
             let itemCounts = {};
             
-            // Prepare 7-day structure
             let dailyRevMap = {};
             let labels7Days = [];
             let data7Days = [];
@@ -541,13 +597,12 @@
                 let d = new Date();
                 d.setDate(d.getDate() - i);
                 let dateKey = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
-                let labelStr = d.toLocaleDateString('en-US', {weekday: 'short'}); // Mon, Tue
+                let labelStr = d.toLocaleDateString('en-US', {weekday: 'short'}); 
                 if(i===0) labelStr = "Today";
                 dailyRevMap[dateKey] = 0;
                 labels7Days.push({ key: dateKey, label: labelStr });
             }
 
-            // Parse DB
             Object.keys(orderHistory).forEach(id => {
                 const order = orderHistory[id];
                 const ts = parseInt(id);
@@ -558,13 +613,11 @@
                 
                 if(ts >= startOfToday) todayOrdersCount++;
 
-                // Distribution
                 let type = order.orderType || "Unknown";
                 if(type.includes("Delivery") || type.includes("Web")) orderTypes["Delivery"]++;
                 else if(type.includes("Takeaway")) orderTypes["Takeaway"]++;
                 else orderTypes["Dine-in"]++;
 
-                // Top Items (Strip modifiers for clean counting)
                 if(order.items) {
                     for(let item in order.items) {
                         let baseName = item.split(" (")[0];
@@ -572,7 +625,6 @@
                     }
                 }
 
-                // Map to 7 Days
                 let orderDate = new Date(ts);
                 let dateKey = orderDate.getFullYear() + '-' + orderDate.getMonth() + '-' + orderDate.getDate();
                 if(dailyRevMap[dateKey] !== undefined) {
@@ -580,10 +632,8 @@
                 }
             });
 
-            // Populate Chart Arrays
             labels7Days.forEach(day => { data7Days.push(dailyRevMap[day.key]); });
 
-            // Sort Top Items
             let sortedItems = Object.keys(itemCounts).sort((a,b) => itemCounts[b] - itemCounts[a]).slice(0, 5);
             let topListHTML = "";
             sortedItems.forEach(item => {
@@ -592,12 +642,10 @@
             if(topListHTML === "") topListHTML = "<p style='opacity:0.5; text-align:center;'>Not enough data.</p>";
             document.getElementById('top-items-list').innerHTML = topListHTML;
 
-            // Metrics
             let aov = totalLifetimeOrders > 0 ? Math.round(totalLifetimeRev / totalLifetimeOrders) : 0;
             document.getElementById('stat-aov').innerText = "₹" + aov;
             document.getElementById('stat-orders').innerText = todayOrdersCount;
 
-            // Draw Charts
             drawRevenueChart(labels7Days.map(l => l.label), data7Days);
             drawTypeChart(orderTypes);
         }
@@ -606,7 +654,6 @@
             const ctx = document.getElementById('revenueChart').getContext('2d');
             if(revChartInstance) revChartInstance.destroy();
 
-            // Gradient Fill
             let gradient = ctx.createLinearGradient(0, 0, 0, 220);
             gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
             gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
@@ -622,7 +669,7 @@
                         borderWidth: 2,
                         backgroundColor: gradient,
                         fill: true,
-                        tension: 0.4, // Smooth curves
+                        tension: 0.4, 
                         pointRadius: 3,
                         pointBackgroundColor: '#8c7255'
                     }]
@@ -668,7 +715,6 @@
             });
         }
 
-        // === SECURITY LOGS (VOIDS) ===
         db.ref('security/voids').limitToLast(50).on('value', snap => {
             const container = document.getElementById('voids-container');
             const voidsData = snap.val() || {};
