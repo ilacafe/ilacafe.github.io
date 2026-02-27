@@ -14,7 +14,7 @@
         :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
-        header { text-align: center; margin-bottom: 20px; }
+        header { text-align: center; margin-bottom: 25px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
         .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
@@ -54,37 +54,10 @@
 
         #notification-area { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; z-index: 3000; pointer-events: none; }
         
-        .toast-card { 
-            background: white; 
-            color: #8c7255; 
-            padding: 20px; 
-            border-radius: 4px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4); 
-            margin-bottom: 10px; 
-            font-family: 'Quicksand', sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            pointer-events: auto; 
-            animation: slideDown 0.3s ease-out; 
-            border-left: 5px solid #8c7255;
-        }
-        
+        .toast-card { background: white; color: #8c7255; padding: 20px; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); margin-bottom: 10px; font-family: 'Quicksand', sans-serif; display: flex; flex-direction: column; pointer-events: auto; animation: slideDown 0.3s ease-out; border-left: 5px solid #8c7255; }
         .toast-header { font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
         .toast-details { font-size: 0.95rem; opacity: 0.9; margin-bottom: 15px; font-weight: 500; line-height: 1.4; }
-        
-        .toast-btn {
-            background: transparent;
-            color: #8c7255;
-            border: 1px solid #8c7255;
-            padding: 8px 0;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 0.8rem;
-            cursor: pointer;
-            text-transform: uppercase;
-            width: 100%;
-            transition: background 0.2s;
-        }
+        .toast-btn { background: transparent; color: #8c7255; border: 1px solid #8c7255; padding: 8px 0; border-radius: 4px; font-weight: bold; font-size: 0.8rem; cursor: pointer; text-transform: uppercase; width: 100%; transition: background 0.2s; }
         .toast-btn:active { background: #f0f0f0; }
 
         @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -140,7 +113,11 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo">
-            <div id="offline-indicator" style="display:none; background:transparent; border: 1px solid white; color:white; padding:5px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
+            <div style="margin-top: 12px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; opacity: 0.7; cursor: pointer; display: inline-block; border-bottom: 1px dashed rgba(255,255,255,0.3); padding-bottom: 2px;" onclick="openPastBills()">
+                Today's Shots: <span id="cups-display" style="font-weight: bold; color: white;">0</span>
+            </div>
+            
+            <div id="offline-indicator" style="display:none; background:transparent; border: 1px solid rgba(255,255,255,0.5); color:white; opacity: 0.8; padding:5px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
         </header>
 
         <div id="notification-area"></div>
@@ -153,8 +130,6 @@
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">Cash</span><span class="dash-value" id="cash-display">₹0</span></div>
             <div class="dash-divider"></div>
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">UPI</span><span class="dash-value" id="upi-display">₹0</span></div>
-            <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">Shots</span><span class="dash-value" id="cups-display">0</span></div>
         </div>
 
         <div id="live-menu-container">
@@ -360,7 +335,7 @@
         window.currentModifierName = ""; window.currentModifierPrice = 0;
 
         window.itemRoutingMap = {};
-        window.coffeeItemsMap = {}; // Tracks which items are coffees for the cup count
+        window.coffeeItemsMap = {}; 
 
         db.ref('orders/ready').limitToLast(1).on('child_added', snap => {
             const data = snap.val();
@@ -421,7 +396,7 @@
                     for(let itemName in o.items) {
                         itemsHTML += `<div style="margin-bottom: 3px;">${o.items[itemName].qty}x ${itemName}</div>`;
                     }
-                    if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; color:#ffdd99;">Notes: ${o.notes}</div>`;
+                    if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; opacity:0.8;">Notes: ${o.notes}</div>`;
                     itemsHTML += "</div>";
 
                     list.innerHTML += `<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left;">
@@ -560,33 +535,34 @@
             }
         });
 
-        // === 100% SAFE CUPS CALCULATION LOGIC ===
+        // === 100% SAFE SHOTS CALCULATION ===
         function calculateDailyCups() {
             let cupTotal = 0;
-            const todayStr = new Date().toLocaleDateString();
             
-            // Sort keys by length so "Filter Coffee (Large)" is checked before "Filter Coffee"
+            // Generate Timestamp for start of today (Midnight)
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const startOfTodayMs = startOfToday.getTime();
+            
             let coffeeKeys = Object.keys(window.coffeeItemsMap).sort((a,b) => b.length - a.length);
 
             window.pastBills.forEach(bill => {
-                // Ensure bill.date exists before checking includes()
-                if(bill.date && bill.date.includes(todayStr) && bill.items) {
+                // Safely check if bill is from today using its ID timestamp! (Bypasses date string format issues)
+                if(bill.id >= startOfTodayMs && bill.items) {
                     for(let itemName in bill.items) {
-                        // Safely check if the item name begins with any of our known coffee items
                         let matchedCoffee = coffeeKeys.find(key => itemName.startsWith(key));
                         
                         if(matchedCoffee) {
                             let qty = bill.items[itemName].qty || 0;
                             if(itemName.includes("(Large)")) {
-                                cupTotal += (qty * 3); // UPDATED: Large = 3 Shots
+                                cupTotal += (qty * 3); 
                             } else {
-                                cupTotal += (qty * 2); // UPDATED: Regular = 2 Shots
+                                cupTotal += (qty * 2); 
                             }
                         }
                     }
                 }
             });
-            // Update the UI label to reflect "Shots" so your staff understands the metric
             document.getElementById('cups-display').innerText = cupTotal;
         }
 
@@ -630,11 +606,14 @@
             localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
             
             window.itemRoutingMap = {};
-            window.coffeeItemsMap = {}; // Reset coffee map
+            window.coffeeItemsMap = {}; 
+
+            // Extended keyword list to ensure it catches your drink categories
+            const coffeeKeywords = ['coffee', 'beverage', 'espresso', 'hot', 'cold', 'drink', 'brew', 'frappe', 'classic', 'signature'];
 
             for(let cat in currentMenuData) {
-                // Ensure category names like "Coffee", "Hot Coffee", "Beverages" count towards cups
-                let isCoffeeCat = cat.toLowerCase().includes('coffee') || cat.toLowerCase().includes('beverage');
+                let catLower = cat.toLowerCase();
+                let isCoffeeCat = coffeeKeywords.some(kw => catLower.includes(kw));
 
                 for(let item in currentMenuData[cat]) {
                     let route = currentMenuData[cat][item].routing || 'barista';
@@ -651,7 +630,7 @@
                 }
             }
             renderPOSMenu(currentMenuData, liveCategoryOrder); 
-            calculateDailyCups(); // Recalculate on load
+            calculateDailyCups(); 
         });
 
         function renderPOSMenu(menuData, categoryOrder) {
