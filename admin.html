@@ -30,7 +30,7 @@
         input[type="text"], input[type="number"], input[type="password"], select { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; background: rgba(255,255,255,0.9); color: #333; }
         .checkbox-group { display: flex; align-items: center; gap: 10px; font-weight: bold; margin-top: 10px; }
         
-        .btn { padding: 12px 20px; border-radius: 6px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 1px; }
+        .btn { padding: 12px 20px; border-radius: 6px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; transition: opacity 0.2s; text-transform: uppercase; letter-spacing: 1px; }
         .btn:active { opacity: 0.7; }
         
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
@@ -58,12 +58,14 @@
         .item-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;}
         .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; border: 1px solid rgba(255,255,255,0.3); }
 
+        /* LEDGER STYLES */
         .dash-row { display: flex; justify-content: space-between; margin-bottom: 15px; text-align: center;}
         .dash-box { flex: 1; }
         .dash-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
         .dash-val { font-size: 1.3rem; font-weight: bold; }
         .history-card { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 15px; margin-bottom: 10px; }
 
+        /* TOGGLE SWITCH STYLES */
         .toggle-switch { position: relative; display: inline-block; width: 50px; height: 26px; margin: 0; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.4); transition: .4s; border-radius: 34px; border: 1px solid rgba(255,255,255,0.2); }
@@ -72,6 +74,7 @@
         input:checked + .slider:before { transform: translateX(24px); background-color: var(--brand-bg); }
         .control-row { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; flex: 1; }
 
+        /* ANALYTICS UI */
         .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
         .analytics-pill { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; text-align: center; }
         .pill-val { font-size: 1.5rem; font-weight: bold; }
@@ -97,6 +100,7 @@
 
         <div class="admin-card">
             <h2>Insights</h2>
+            
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                 <div class="analytics-pill" style="flex: 1;">
                     <div class="pill-val" id="stat-aov">₹0</div>
@@ -214,8 +218,7 @@
                 <input type="checkbox" id="add-sweetness" style="width: 18px; height: 18px;">
                 <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Requires Sweetness Level</label>
             </div>
-            
-            <button id="save-item-btn" class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
+            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
         </div>
 
         <div class="admin-card" style="border: none; background: transparent; padding: 0; margin-top: 30px;">
@@ -251,9 +254,15 @@
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
         let orderHistory = {};
 
-        let revChartInstance = null; let typeChartInstance = null;
-        Chart.defaults.color = 'rgba(255, 255, 255, 0.7)'; Chart.defaults.font.family = "'Quicksand', sans-serif";
+        // Chart.js Instances (Global to allow redrawing)
+        let revChartInstance = null;
+        let typeChartInstance = null;
 
+        // Configuration for minimal charts
+        Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
+        Chart.defaults.font.family = "'Quicksand', sans-serif";
+
+        // === MASTER SWITCH ===
         db.ref('settings/isOpen').on('value', (snapshot) => {
             isCafeOpen = snapshot.val() === null ? true : snapshot.val(); 
             const btn = document.getElementById('master-status-btn');
@@ -262,6 +271,7 @@
         });
         window.toggleCafeStatus = function() { db.ref('settings/isOpen').set(!isCafeOpen); };
 
+        // === SERVICE CONTROLS ===
         db.ref('settings/storeStatus').on('value', snap => {
             const status = snap.val() || { delivery: true, takeaway: true };
             document.getElementById('toggle-delivery').checked = status.delivery;
@@ -275,6 +285,7 @@
             });
         };
 
+        // === MENU LOGIC ===
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderAllViews(); });
         db.ref('settings/itemOrder').on('value', snap => { currentItemOrder = snap.val() || {}; renderAllViews(); });
 
@@ -301,14 +312,8 @@
             db.ref('settings/itemOrder/' + category).set(validItems);
         };
 
-        // --- THE BULLETPROOF RENDER ENGINE ---
         function renderAllViews() {
-            let activeCats = Object.keys(currentMenuData);
-            let sortedCats = currentCategoryOrder.filter(cat => activeCats.includes(cat));
-            
-            // Force missing categories to display at the bottom
-            activeCats.forEach(cat => { if (!sortedCats.includes(cat)) sortedCats.push(cat); });
-
+            let sortedCats = getSortedCategories();
             let sorterContainer = document.getElementById('category-order-container');
             if (sortedCats.length === 0) sorterContainer.innerHTML = "<p style='opacity:0.5;'>No categories.</p>";
             else {
@@ -322,25 +327,17 @@
             }
 
             let menuContainer = document.getElementById('live-menu-container');
-            if (activeCats.length === 0) { menuContainer.innerHTML = "<p style='opacity:0.5;'>No items.</p>"; return; }
+            if (Object.keys(currentMenuData).length === 0) { menuContainer.innerHTML = "<p style='opacity:0.5;'>No items.</p>"; return; }
 
             let menuHTML = "";
             sortedCats.forEach(category => {
                 menuHTML += `<div class="category-block"><div class="category-title">${category}</div>`;
-                
-                let activeItems = Object.keys(currentMenuData[category] || {});
                 let itemsInOrder = currentItemOrder[category] || [];
-                let validItems = itemsInOrder.filter(item => activeItems.includes(item));
-                
-                // Force missing items to display at the bottom regardless of race conditions
-                activeItems.forEach(item => {
-                    if (!validItems.includes(item)) validItems.push(item);
-                });
+                let validItems = itemsInOrder.filter(item => currentMenuData[category][item]);
 
                 validItems.forEach((itemName, index) => {
                     const item = currentMenuData[category][itemName];
-                    const safeCategory = category.replace(/'/g, "\\'").replace(/"/g, '&quot;'); 
-                    const safeName = itemName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    const safeCategory = category.replace(/'/g, "\\'"); const safeName = itemName.replace(/'/g, "\\'");
                     const safeVisibility = item.visibility ? item.visibility : 'both';
                     const safeRouting = item.routing ? item.routing : 'barista';
                     
@@ -389,11 +386,8 @@
         };
 
         window.addMenuItem = function() {
-            const btn = document.getElementById('save-item-btn');
-            // Remove invalid characters to prevent silent Firebase failures
-            const category = document.getElementById('add-category').value.trim().replace(/[.#$\[\]]/g, '');
-            const name = document.getElementById('add-name').value.trim().replace(/[.#$\[\]]/g, '');
-            
+            const category = document.getElementById('add-category').value.trim();
+            const name = document.getElementById('add-name').value.trim();
             const visibility = document.getElementById('add-visibility').value;
             const routing = document.getElementById('add-routing').value;
             const requiresSweetness = document.getElementById('add-sweetness').checked;
@@ -414,28 +408,13 @@
                 updateData.price = price; updateData.priceReg = null; updateData.priceLrg = null;
             }
 
-            btn.innerText = "SAVING...";
-            btn.disabled = true;
-
             db.ref('menu/' + category + '/' + name).update(updateData).then(() => {
                 db.ref('menu/' + category + '/' + name + '/inStock').once('value').then(snap => {
                     if(!snap.exists()) db.ref('menu/' + category + '/' + name + '/inStock').set(true);
                 });
-                
                 document.getElementById('add-name').value = ""; document.getElementById('add-price').value = "";
                 document.getElementById('add-price-reg').value = ""; document.getElementById('add-price-lrg').value = "";
                 document.getElementById('add-name').focus();
-
-                btn.innerText = "✅ SAVED";
-                btn.style.backgroundColor = "#4caf50";
-                btn.style.color = "white";
-
-                setTimeout(() => {
-                    btn.innerText = "Save Item";
-                    btn.style.backgroundColor = "var(--brand-text)";
-                    btn.style.color = "var(--brand-bg)";
-                    btn.disabled = false;
-                }, 1500);
             });
         };
 
@@ -477,78 +456,243 @@
         };
         window.removeStaff = function(pin, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); };
 
-        db.ref('orders/history').on('value', snap => { orderHistory = snap.val() || {}; renderLedger(); processAnalytics(); });
+        // === HISTORY & ANALYTICS LISTENER ===
+        db.ref('orders/history').on('value', snap => {
+            orderHistory = snap.val() || {};
+            renderLedger();
+            processAnalytics();
+        });
 
         function renderLedger() {
             const container = document.getElementById('history-container');
             const sortedIds = Object.keys(orderHistory).sort((a, b) => b - a); 
-            if (sortedIds.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No orders in history.</p>"; return; }
+            
+            if (sortedIds.length === 0) {
+                container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No orders in history.</p>";
+                return;
+            }
 
-            let todayTotal = 0; let todayUPI = 0; let todayCash = 0; let listHTML = "";
-            const now = new Date(); const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            let todayTotal = 0; let todayUPI = 0; let todayCash = 0;
+            let listHTML = "";
+
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
             sortedIds.forEach(id => {
-                const order = orderHistory[id]; const orderTime = parseInt(id); const amt = order.payment ? (order.payment.total || 0) : 0;
-                if (orderTime >= startOfToday) { todayTotal += amt; if (order.payment && order.payment.method === "UPI") todayUPI += amt; else todayCash += amt; }
+                const order = orderHistory[id];
+                const orderTime = parseInt(id);
+                const amt = order.payment ? (order.payment.total || 0) : 0;
+
+                if (orderTime >= startOfToday) {
+                    todayTotal += amt;
+                    if (order.payment && order.payment.method === "UPI") todayUPI += amt;
+                    else todayCash += amt;
+                }
 
                 let itemsHTML = "";
-                if(order.items) { for(let itemName in order.items) { const item = order.items[itemName]; itemsHTML += `<div style="font-size: 0.9rem; margin-bottom: 2px;">${item.qty}x ${itemName} - ₹${item.qty * item.price}</div>`; } }
+                if(order.items) {
+                    for(let itemName in order.items) {
+                        const item = order.items[itemName];
+                        itemsHTML += `<div style="font-size: 0.9rem; margin-bottom: 2px;">${item.qty}x ${itemName} - ₹${item.qty * item.price}</div>`;
+                    }
+                }
 
-                listHTML += `<div class="history-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px;"><div><strong style="font-size: 1.1rem;">${order.tableOrAddress || "Order"}</strong><div style="font-size: 0.75rem; opacity: 0.7;">${order.timestamp || ""} • ${order.source || "POS"}</div></div><div style="text-align:right;"><strong style="font-size: 1.1rem;">₹${amt}</strong><div style="font-size: 0.75rem; opacity: 0.7;">${order.payment ? order.payment.method : ""}</div></div></div>${itemsHTML}${order.notes ? `<div style="font-size: 0.85rem; opacity:0.8; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}</div>`;
+                listHTML += `
+                <div class="history-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px;">
+                        <div>
+                            <strong style="font-size: 1.1rem;">${order.tableOrAddress || "Order"}</strong>
+                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.timestamp || ""} • ${order.source || "POS"}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <strong style="font-size: 1.1rem;">₹${amt}</strong>
+                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.payment ? order.payment.method : ""}</div>
+                        </div>
+                    </div>
+                    ${itemsHTML}
+                    ${order.notes ? `<div style="font-size: 0.85rem; opacity:0.8; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}
+                </div>`;
             });
-            container.innerHTML = listHTML; document.getElementById('ledger-total').innerText = '₹' + todayTotal; document.getElementById('ledger-upi').innerText = '₹' + todayUPI; document.getElementById('ledger-cash').innerText = '₹' + todayCash;
+
+            container.innerHTML = listHTML;
+            document.getElementById('ledger-total').innerText = '₹' + todayTotal;
+            document.getElementById('ledger-upi').innerText = '₹' + todayUPI;
+            document.getElementById('ledger-cash').innerText = '₹' + todayCash;
         }
 
+        // === ADVANCED ANALYTICS LOGIC ===
         function processAnalytics() {
-            const now = new Date(); const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-            let totalLifetimeRev = 0; let totalLifetimeOrders = 0; let todayOrdersCount = 0;
-            let orderTypes = { "Dine-in": 0, "Takeaway": 0, "Delivery": 0 }; let itemCounts = {};
-            let dailyRevMap = {}; let labels7Days = []; let data7Days = [];
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
             
-            for(let i=6; i>=0; i--) { let d = new Date(); d.setDate(d.getDate() - i); let dateKey = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); let labelStr = d.toLocaleDateString('en-US', {weekday: 'short'}); if(i===0) labelStr = "Today"; dailyRevMap[dateKey] = 0; labels7Days.push({ key: dateKey, label: labelStr }); }
+            let totalLifetimeRev = 0;
+            let totalLifetimeOrders = 0;
+            let todayOrdersCount = 0;
+            
+            let orderTypes = { "Dine-in": 0, "Takeaway": 0, "Delivery": 0 };
+            let itemCounts = {};
+            
+            // Prepare 7-day structure
+            let dailyRevMap = {};
+            let labels7Days = [];
+            let data7Days = [];
+            
+            for(let i=6; i>=0; i--) {
+                let d = new Date();
+                d.setDate(d.getDate() - i);
+                let dateKey = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+                let labelStr = d.toLocaleDateString('en-US', {weekday: 'short'}); // Mon, Tue
+                if(i===0) labelStr = "Today";
+                dailyRevMap[dateKey] = 0;
+                labels7Days.push({ key: dateKey, label: labelStr });
+            }
 
+            // Parse DB
             Object.keys(orderHistory).forEach(id => {
-                const order = orderHistory[id]; const ts = parseInt(id); const amt = order.payment ? (order.payment.total || 0) : 0;
-                totalLifetimeRev += amt; totalLifetimeOrders++; if(ts >= startOfToday) todayOrdersCount++;
+                const order = orderHistory[id];
+                const ts = parseInt(id);
+                const amt = order.payment ? (order.payment.total || 0) : 0;
+                
+                totalLifetimeRev += amt;
+                totalLifetimeOrders++;
+                
+                if(ts >= startOfToday) todayOrdersCount++;
 
+                // Distribution
                 let type = order.orderType || "Unknown";
-                if(type.includes("Delivery") || type.includes("Web")) orderTypes["Delivery"]++; else if(type.includes("Takeaway")) orderTypes["Takeaway"]++; else orderTypes["Dine-in"]++;
+                if(type.includes("Delivery") || type.includes("Web")) orderTypes["Delivery"]++;
+                else if(type.includes("Takeaway")) orderTypes["Takeaway"]++;
+                else orderTypes["Dine-in"]++;
 
-                if(order.items) { for(let item in order.items) { let baseName = item.split(" (")[0]; itemCounts[baseName] = (itemCounts[baseName] || 0) + order.items[item].qty; } }
+                // Top Items (Strip modifiers for clean counting)
+                if(order.items) {
+                    for(let item in order.items) {
+                        let baseName = item.split(" (")[0];
+                        itemCounts[baseName] = (itemCounts[baseName] || 0) + order.items[item].qty;
+                    }
+                }
 
-                let orderDate = new Date(ts); let dateKey = orderDate.getFullYear() + '-' + orderDate.getMonth() + '-' + orderDate.getDate();
-                if(dailyRevMap[dateKey] !== undefined) { dailyRevMap[dateKey] += amt; }
+                // Map to 7 Days
+                let orderDate = new Date(ts);
+                let dateKey = orderDate.getFullYear() + '-' + orderDate.getMonth() + '-' + orderDate.getDate();
+                if(dailyRevMap[dateKey] !== undefined) {
+                    dailyRevMap[dateKey] += amt;
+                }
             });
 
+            // Populate Chart Arrays
             labels7Days.forEach(day => { data7Days.push(dailyRevMap[day.key]); });
 
-            let sortedItems = Object.keys(itemCounts).sort((a,b) => itemCounts[b] - itemCounts[a]).slice(0, 5); let topListHTML = "";
-            sortedItems.forEach(item => { topListHTML += `<div class="top-item-row"><span>${item}</span><span style="font-weight:bold;">${itemCounts[item]} sold</span></div>`; });
+            // Sort Top Items
+            let sortedItems = Object.keys(itemCounts).sort((a,b) => itemCounts[b] - itemCounts[a]).slice(0, 5);
+            let topListHTML = "";
+            sortedItems.forEach(item => {
+                topListHTML += `<div class="top-item-row"><span>${item}</span><span style="font-weight:bold;">${itemCounts[item]} sold</span></div>`;
+            });
             if(topListHTML === "") topListHTML = "<p style='opacity:0.5; text-align:center;'>Not enough data.</p>";
             document.getElementById('top-items-list').innerHTML = topListHTML;
 
+            // Metrics
             let aov = totalLifetimeOrders > 0 ? Math.round(totalLifetimeRev / totalLifetimeOrders) : 0;
-            document.getElementById('stat-aov').innerText = "₹" + aov; document.getElementById('stat-orders').innerText = todayOrdersCount;
+            document.getElementById('stat-aov').innerText = "₹" + aov;
+            document.getElementById('stat-orders').innerText = todayOrdersCount;
 
-            drawRevenueChart(labels7Days.map(l => l.label), data7Days); drawTypeChart(orderTypes);
+            // Draw Charts
+            drawRevenueChart(labels7Days.map(l => l.label), data7Days);
+            drawTypeChart(orderTypes);
         }
 
         function drawRevenueChart(labels, data) {
-            const ctx = document.getElementById('revenueChart').getContext('2d'); if(revChartInstance) revChartInstance.destroy();
-            let gradient = ctx.createLinearGradient(0, 0, 0, 220); gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)'); gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
-            revChartInstance = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: 'Revenue (₹)', data: data, borderColor: '#ffffff', borderWidth: 2, backgroundColor: gradient, fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#8c7255' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.6)', maxTicksLimit: 5 }, beginAtZero: true } } } });
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            if(revChartInstance) revChartInstance.destroy();
+
+            // Gradient Fill
+            let gradient = ctx.createLinearGradient(0, 0, 0, 220);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+
+            revChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Revenue (₹)',
+                        data: data,
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4, // Smooth curves
+                        pointRadius: 3,
+                        pointBackgroundColor: '#8c7255'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)' } },
+                        y: { 
+                            grid: { color: 'rgba(255,255,255,0.05)' }, 
+                            ticks: { color: 'rgba(255,255,255,0.6)', maxTicksLimit: 5 },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
         }
 
         function drawTypeChart(types) {
-            const ctx = document.getElementById('typeChart').getContext('2d'); if(typeChartInstance) typeChartInstance.destroy();
-            typeChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['Dine-in', 'Takeaway', 'Delivery'], datasets: [{ data: [types["Dine-in"], types["Takeaway"], types["Delivery"]], backgroundColor: ['#ffffff', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.2)'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 12, font: { size: 10 } } } } });
+            const ctx = document.getElementById('typeChart').getContext('2d');
+            if(typeChartInstance) typeChartInstance.destroy();
+
+            typeChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Dine-in', 'Takeaway', 'Delivery'],
+                    datasets: [{
+                        data: [types["Dine-in"], types["Takeaway"], types["Delivery"]],
+                        backgroundColor: ['#ffffff', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.2)'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: {
+                        legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 12, font: { size: 10 } } }
+                    }
+                }
+            });
         }
 
+        // === SECURITY LOGS (VOIDS) ===
         db.ref('security/voids').limitToLast(50).on('value', snap => {
-            const container = document.getElementById('voids-container'); const voidsData = snap.val() || {}; const sortedIds = Object.keys(voidsData).sort((a, b) => b.localeCompare(a)); 
-            if (sortedIds.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No voids recorded.</p>"; return; }
+            const container = document.getElementById('voids-container');
+            const voidsData = snap.val() || {};
+            
+            const sortedIds = Object.keys(voidsData).sort((a, b) => b.localeCompare(a)); 
+            
+            if (sortedIds.length === 0) {
+                container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No voids recorded.</p>";
+                return;
+            }
+
             let listHTML = "";
-            sortedIds.forEach(id => { const v = voidsData[id]; listHTML += `<div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);"><div style="display:flex; justify-content:space-between; margin-bottom: 5px;"><strong style="font-size: 1.05rem;">${v.item}</strong><strong style="opacity: 0.9;">-₹${v.value}</strong></div><div style="font-size: 0.8rem; opacity: 0.6; margin-bottom: 5px;">Table/Order: ${v.table} • ${v.time}</div><div style="font-size: 0.85rem; font-style: italic; opacity: 0.8;">Reason: "${v.reason}"</div></div>`; });
+            sortedIds.forEach(id => {
+                const v = voidsData[id];
+                listHTML += `
+                <div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
+                        <strong style="font-size: 1.05rem;">${v.item}</strong>
+                        <strong style="opacity: 0.9;">-₹${v.value}</strong>
+                    </div>
+                    <div style="font-size: 0.8rem; opacity: 0.6; margin-bottom: 5px;">Table/Order: ${v.table} • ${v.time}</div>
+                    <div style="font-size: 0.85rem; font-style: italic; opacity: 0.8;">Reason: "${v.reason}"</div>
+                </div>`;
+            });
             container.innerHTML = listHTML;
         });
     </script>
