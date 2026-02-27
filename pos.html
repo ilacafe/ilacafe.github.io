@@ -546,7 +546,7 @@
             let coffeeKeys = Object.keys(window.coffeeItemsMap).sort((a,b) => b.length - a.length);
 
             window.pastBills.forEach(bill => {
-                // Safely check if bill is from today using its ID timestamp! (Bypasses date string format issues)
+                // Safely check if bill is from today using its ID timestamp!
                 if(bill.id >= startOfTodayMs && bill.items) {
                     for(let itemName in bill.items) {
                         let matchedCoffee = coffeeKeys.find(key => itemName.startsWith(key));
@@ -607,12 +607,9 @@
             window.itemRoutingMap = {};
             window.coffeeItemsMap = {}; 
 
-            // Extended keyword list to ensure it catches your drink categories
-            const coffeeKeywords = ['coffee', 'beverage', 'espresso', 'hot', 'cold', 'drink', 'brew', 'frappe', 'classic', 'signature'];
-
             for(let cat in currentMenuData) {
-                let catLower = cat.toLowerCase();
-                let isCoffeeCat = coffeeKeywords.some(kw => catLower.includes(kw));
+                // SURGICAL FIX: ONLY scan categories with the word "Coffee" in the title
+                let isCoffeeCat = cat.toLowerCase().includes('coffee');
 
                 for(let item in currentMenuData[cat]) {
                     let route = currentMenuData[cat][item].routing || 'barista';
