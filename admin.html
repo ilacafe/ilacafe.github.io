@@ -74,14 +74,21 @@
         input:checked + .slider:before { transform: translateX(24px); background-color: var(--brand-bg); }
         .control-row { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; flex: 1; }
 
-        /* ANALYTICS UI */
+        /* ADVANCED ANALYTICS UI */
         .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
         .analytics-pill { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; text-align: center; }
         .pill-val { font-size: 1.5rem; font-weight: bold; }
         .pill-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.6; letter-spacing: 1px; margin-top: 5px; }
         .chart-container { background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-top: 15px; position: relative; height: 220px; width: 100%; box-sizing: border-box;}
-        .top-item-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed rgba(255,255,255,0.1); font-size: 0.9rem;}
+        
+        .chart-box { background: rgba(0,0,0,0.15); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; }
+        .chart-box h4 { margin: 0 0 10px 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; text-align: center; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 5px;}
+        .chart-box-canvas-wrapper { position: relative; flex-grow: 1; min-height: 140px; width: 100%; }
+        
+        .top-item-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,0.1); font-size: 0.85rem;}
         .top-item-row:last-child { border-bottom: none; }
+        .trend-up { color: #4caf50; }
+        .trend-down { color: #f44336; }
         
         @media(max-width: 500px) { .analytics-grid { grid-template-columns: 1fr; } }
     </style>
@@ -99,16 +106,28 @@
         </div>
 
         <div class="admin-card">
-            <h2>Insights</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; margin-bottom: 15px;">
+                <h2 style="border: none; padding: 0; margin: 0;">Insights</h2>
+                <select id="analytics-filter" style="width: auto; padding: 6px 12px; font-weight: bold; font-size: 0.9rem; margin: 0; background: rgba(255,255,255,0.95); cursor: pointer;" onchange="processAnalytics()">
+                    <option value="today" selected>Today</option>
+                    <option value="week">Past 7 Days</option>
+                    <option value="month">Past 30 Days</option>
+                    <option value="year">Past 365 Days</option>
+                </select>
+            </div>
             
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <div class="analytics-pill" style="flex: 1;">
-                    <div class="pill-val" id="stat-aov">₹0</div>
-                    <div class="pill-label">Avg Order Value</div>
+                <div class="analytics-pill" style="flex: 1.2;">
+                    <div class="pill-val" id="stat-rev">₹0</div>
+                    <div class="pill-label" style="display: flex; flex-direction: column; align-items: center;">Revenue <span id="stat-trend" style="font-weight: bold; margin-top: 2px;">--</span></div>
                 </div>
-                <div class="analytics-pill" style="flex: 1;">
+                <div class="analytics-pill" style="flex: 0.9;">
                     <div class="pill-val" id="stat-orders">0</div>
-                    <div class="pill-label">Orders Today</div>
+                    <div class="pill-label">Orders</div>
+                </div>
+                <div class="analytics-pill" style="flex: 0.9;">
+                    <div class="pill-val" id="stat-aov">₹0</div>
+                    <div class="pill-label">Avg Order</div>
                 </div>
             </div>
 
@@ -117,22 +136,46 @@
             </div>
 
             <div class="analytics-grid">
-                <div style="background: rgba(0,0,0,0.15); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
-                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 10px; text-align: center;">Order Types</div>
-                    <div style="position: relative; height: 140px; width: 100%;">
-                        <canvas id="typeChart"></canvas>
-                    </div>
+                <div class="chart-box">
+                    <h4>Peak Hours</h4>
+                    <div class="chart-box-canvas-wrapper"><canvas id="peakChart"></canvas></div>
                 </div>
+                <div class="chart-box">
+                    <h4>Revenue by Category</h4>
+                    <div class="chart-box-canvas-wrapper"><canvas id="categoryChart"></canvas></div>
+                </div>
+            </div>
 
-                <div style="background: rgba(0,0,0,0.15); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
-                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 10px; text-align: center;">Top Sellers</div>
-                    <div id="top-items-list">
-                        <p style="opacity: 0.5; text-align: center; font-size: 0.8rem;">Loading...</p>
-                    </div>
+            <div class="analytics-grid">
+                <div class="chart-box">
+                    <h4>Order Types</h4>
+                    <div class="chart-box-canvas-wrapper"><canvas id="typeChart"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h4>Size Upsell Ratio</h4>
+                    <div class="chart-box-canvas-wrapper"><canvas id="upsellChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="analytics-grid">
+                <div class="chart-box">
+                    <h4>Overall Top Sellers</h4>
+                    <div id="top-overall"><p style="opacity:0.5; text-align:center; font-size:0.8rem;">Loading...</p></div>
+                </div>
+                <div class="chart-box">
+                    <h4>Top Coffees</h4>
+                    <div id="top-coffee"><p style="opacity:0.5; text-align:center; font-size:0.8rem;">Loading...</p></div>
+                </div>
+                <div class="chart-box">
+                    <h4>Top Pizzas / Food</h4>
+                    <div id="top-pizza"><p style="opacity:0.5; text-align:center; font-size:0.8rem;">Loading...</p></div>
+                </div>
+                <div class="chart-box" style="border-color: rgba(244, 67, 54, 0.4);">
+                    <h4 style="color: #ffcccc; border-color: rgba(244, 67, 54, 0.3);">Dead Stock Radar</h4>
+                    <div id="dead-stock"><p style="opacity:0.5; text-align:center; font-size:0.8rem;">Loading...</p></div>
                 </div>
             </div>
         </div>
-
         <div class="admin-card">
             <h2>Service Availability</h2>
             <div class="row-group">
@@ -219,7 +262,7 @@
                 <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Requires Sweetness Level</label>
             </div>
             
-            <button class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
+            <button id="save-item-btn" class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
         </div>
 
         <div class="admin-card" style="border: none; background: transparent; padding: 0; margin-top: 30px;">
@@ -255,15 +298,12 @@
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
         let orderHistory = {};
 
-        // Chart.js Instances (Global to allow redrawing)
-        let revChartInstance = null;
-        let typeChartInstance = null;
+        // Chart.js Instances
+        let charts = { revenue: null, peak: null, category: null, type: null, upsell: null };
 
-        // Configuration for minimal charts
         Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
         Chart.defaults.font.family = "'Quicksand', sans-serif";
 
-        // === MASTER SWITCH ===
         db.ref('settings/isOpen').on('value', (snapshot) => {
             isCafeOpen = snapshot.val() === null ? true : snapshot.val(); 
             const btn = document.getElementById('master-status-btn');
@@ -272,21 +312,15 @@
         });
         window.toggleCafeStatus = function() { db.ref('settings/isOpen').set(!isCafeOpen); };
 
-        // === SERVICE CONTROLS ===
         db.ref('settings/storeStatus').on('value', snap => {
             const status = snap.val() || { delivery: true, takeaway: true };
             document.getElementById('toggle-delivery').checked = status.delivery;
             document.getElementById('toggle-takeaway').checked = status.takeaway;
         });
-
         window.updateStoreStatus = function() {
-            db.ref('settings/storeStatus').set({
-                delivery: document.getElementById('toggle-delivery').checked,
-                takeaway: document.getElementById('toggle-takeaway').checked
-            });
+            db.ref('settings/storeStatus').set({ delivery: document.getElementById('toggle-delivery').checked, takeaway: document.getElementById('toggle-takeaway').checked });
         };
 
-        // === MENU LOGIC ===
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderAllViews(); });
         db.ref('settings/itemOrder').on('value', snap => { currentItemOrder = snap.val() || {}; renderAllViews(); });
 
@@ -295,10 +329,7 @@
             let requiresCategorySave = false; let requiresItemSave = false;
             let categoriesInMenu = Object.keys(currentMenuData);
 
-            categoriesInMenu.forEach(cat => {
-                if (!currentCategoryOrder.includes(cat)) { currentCategoryOrder.push(cat); requiresCategorySave = true; }
-            });
-
+            categoriesInMenu.forEach(cat => { if (!currentCategoryOrder.includes(cat)) { currentCategoryOrder.push(cat); requiresCategorySave = true; } });
             categoriesInMenu.forEach(cat => {
                 if (!currentItemOrder[cat]) { currentItemOrder[cat] = []; requiresItemSave = true; }
                 let itemsInCat = Object.keys(currentMenuData[cat]);
@@ -310,6 +341,7 @@
             if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
             if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
             renderAllViews();
+            processAnalytics(); // Update analytics when menu changes (for dead stock)
         });
 
         function getSortedCategories() { return currentCategoryOrder.filter(cat => Object.keys(currentMenuData).includes(cat)); }
@@ -350,15 +382,8 @@
             let menuHTML = "";
             sortedCats.forEach(category => {
                 menuHTML += `<div class="category-block"><div class="category-title">${category}</div>`;
-                
                 let itemsInOrder = currentItemOrder[category] || [];
-                
-                // --- SURGICAL FIX: Force missing items to appear (Bypasses Firebase race condition) ---
-                Object.keys(currentMenuData[category] || {}).forEach(item => {
-                    if(!itemsInOrder.includes(item)) itemsInOrder.push(item);
-                });
-                // --------------------------------------------------------------------------------------
-
+                Object.keys(currentMenuData[category] || {}).forEach(item => { if(!itemsInOrder.includes(item)) itemsInOrder.push(item); });
                 let validItems = itemsInOrder.filter(item => currentMenuData[category][item]);
 
                 validItems.forEach((itemName, index) => {
@@ -379,22 +404,7 @@
                     let routeHTML = `<span class="badge">${routeLabel}</span>`;
                     let priceDisplay = item.hasSizes ? `₹${item.priceReg} / ₹${item.priceLrg}` : `₹${item.price}`;
 
-                    menuHTML += `
-                        <div class="list-item" style="${statusStyle}">
-                            <div style="display:flex; flex-direction:column; gap:2px;">
-                                <button class="btn-move-item" style="${upDisabled}" onclick="moveItem('${safeCategory}', ${index}, -1)">▲</button>
-                                <button class="btn-move-item" style="${downDisabled}" onclick="moveItem('${safeCategory}', ${index}, 1)">▼</button>
-                            </div>
-                            <div class="item-details">
-                                <div class="item-name">${itemName} ${badgeHTML} ${routeHTML}</div>
-                                <div class="item-meta">${priceDisplay} ${visHTML}</div>
-                            </div>
-                            <div class="item-actions">
-                                <button class="btn-action" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0}, '${safeRouting}')">Edit</button>
-                                <button class="btn-action" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${item.inStock ? "Hide" : "Show"}</button>
-                                <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="deleteItem('${safeCategory}', '${safeName}')">✖</button>
-                            </div>
-                        </div>`;
+                    menuHTML += `<div class="list-item" style="${statusStyle}"><div style="display:flex; flex-direction:column; gap:2px;"><button class="btn-move-item" style="${upDisabled}" onclick="moveItem('${safeCategory}', ${index}, -1)">▲</button><button class="btn-move-item" style="${downDisabled}" onclick="moveItem('${safeCategory}', ${index}, 1)">▼</button></div><div class="item-details"><div class="item-name">${itemName} ${badgeHTML} ${routeHTML}</div><div class="item-meta">${priceDisplay} ${visHTML}</div></div><div class="item-actions"><button class="btn-action" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0}, '${safeRouting}')">Edit</button><button class="btn-action" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${item.inStock ? "Hide" : "Show"}</button><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="deleteItem('${safeCategory}', '${safeName}')">✖</button></div></div>`;
                 });
                 menuHTML += `</div>`;
             });
@@ -403,35 +413,26 @@
 
         window.toggleSizeInputs = function() {
             if(document.getElementById('add-has-sizes').checked) {
-                document.getElementById('single-price-group').style.display = 'none';
-                document.getElementById('multi-price-group').style.display = 'flex';
+                document.getElementById('single-price-group').style.display = 'none'; document.getElementById('multi-price-group').style.display = 'flex';
             } else {
-                document.getElementById('single-price-group').style.display = 'flex';
-                document.getElementById('multi-price-group').style.display = 'none';
+                document.getElementById('single-price-group').style.display = 'flex'; document.getElementById('multi-price-group').style.display = 'none';
             }
         };
 
-        // --- SURGICAL FIX: Visual Feedback & Firebase Sanitation ---
         window.addMenuItem = function() {
             let category = document.getElementById('add-category').value.trim();
             let name = document.getElementById('add-name').value.trim();
-            
-            // Clean invalid Firebase characters that cause silent crashes
-            category = category.replace(/[.#$\[\]]/g, '');
-            name = name.replace(/[.#$\[\]]/g, '');
+            category = category.replace(/[.#$\[\]]/g, ''); name = name.replace(/[.#$\[\]]/g, '');
 
             if (!category || !name) { alert("Please fill in Category and Name."); return; }
 
-            const visibility = document.getElementById('add-visibility').value;
-            const routing = document.getElementById('add-routing').value;
-            const requiresSweetness = document.getElementById('add-sweetness').checked;
-            const hasSizes = document.getElementById('add-has-sizes').checked;
+            const visibility = document.getElementById('add-visibility').value; const routing = document.getElementById('add-routing').value;
+            const requiresSweetness = document.getElementById('add-sweetness').checked; const hasSizes = document.getElementById('add-has-sizes').checked;
 
             let updateData = { requiresSweetness: requiresSweetness, visibility: visibility, routing: routing, hasSizes: hasSizes };
 
             if(hasSizes) {
-                const pReg = parseFloat(document.getElementById('add-price-reg').value);
-                const pLrg = parseFloat(document.getElementById('add-price-lrg').value);
+                const pReg = parseFloat(document.getElementById('add-price-reg').value); const pLrg = parseFloat(document.getElementById('add-price-lrg').value);
                 if(isNaN(pReg) || isNaN(pLrg)) { alert("Enter both prices."); return; }
                 updateData.priceReg = pReg; updateData.priceLrg = pLrg; updateData.price = pReg; 
             } else {
@@ -440,52 +441,20 @@
                 updateData.price = price; updateData.priceReg = null; updateData.priceLrg = null;
             }
 
-            // Visual Feedback setup
-            const btn = document.querySelector('#menu-form-section .btn-primary');
-            const originalText = btn.innerText;
-            btn.innerText = "SAVING...";
-            btn.disabled = true;
+            const btn = document.getElementById('save-item-btn'); const originalText = btn.innerText;
+            btn.innerText = "SAVING..."; btn.disabled = true;
 
             db.ref('menu/' + category + '/' + name).update(updateData).then(() => {
-                db.ref('menu/' + category + '/' + name + '/inStock').once('value').then(snap => {
-                    if(!snap.exists()) db.ref('menu/' + category + '/' + name + '/inStock').set(true);
-                });
-                
-                // Clear fields but leave Category for rapid entry
-                document.getElementById('add-name').value = ""; 
-                document.getElementById('add-price').value = "";
-                document.getElementById('add-price-reg').value = ""; 
-                document.getElementById('add-price-lrg').value = "";
-                document.getElementById('add-name').focus();
-
-                btn.innerText = "✅ SAVED";
-                btn.style.backgroundColor = "#4caf50"; // Success Green
-                btn.style.color = "white";
-
-                setTimeout(() => {
-                    btn.innerText = originalText;
-                    btn.style.backgroundColor = ""; // Reset to CSS default
-                    btn.style.color = ""; // Reset to CSS default
-                    btn.disabled = false;
-                }, 1500);
-
-            }).catch(error => {
-                alert("Error saving item: " + error.message);
-                btn.innerText = originalText;
-                btn.disabled = false;
-            });
+                db.ref('menu/' + category + '/' + name + '/inStock').once('value').then(snap => { if(!snap.exists()) db.ref('menu/' + category + '/' + name + '/inStock').set(true); });
+                document.getElementById('add-name').value = ""; document.getElementById('add-price').value = ""; document.getElementById('add-price-reg').value = ""; document.getElementById('add-price-lrg').value = ""; document.getElementById('add-name').focus();
+                btn.innerText = "✅ SAVED"; btn.style.backgroundColor = "#4caf50"; btn.style.color = "white";
+                setTimeout(() => { btn.innerText = originalText; btn.style.backgroundColor = ""; btn.style.color = ""; btn.disabled = false; }, 1500);
+            }).catch(error => { alert("Error saving item: " + error.message); btn.innerText = originalText; btn.disabled = false; });
         };
 
         window.editItem = function(category, name, price, visibility, requiresSweetness, hasSizes, priceReg, priceLrg, routing) {
-            document.getElementById('add-category').value = category; 
-            document.getElementById('add-name').value = name; 
-            document.getElementById('add-visibility').value = visibility || "both";
-            document.getElementById('add-routing').value = routing || "barista";
-            document.getElementById('add-sweetness').checked = !!requiresSweetness; 
-            document.getElementById('add-has-sizes').checked = !!hasSizes; 
-            window.toggleSizeInputs();
-            if (hasSizes) { document.getElementById('add-price-reg').value = priceReg; document.getElementById('add-price-lrg').value = priceLrg; } 
-            else { document.getElementById('add-price').value = price; }
+            document.getElementById('add-category').value = category; document.getElementById('add-name').value = name; document.getElementById('add-visibility').value = visibility || "both"; document.getElementById('add-routing').value = routing || "barista"; document.getElementById('add-sweetness').checked = !!requiresSweetness; document.getElementById('add-has-sizes').checked = !!hasSizes; window.toggleSizeInputs();
+            if (hasSizes) { document.getElementById('add-price-reg').value = priceReg; document.getElementById('add-price-lrg').value = priceLrg; } else { document.getElementById('add-price').value = price; }
             document.getElementById('menu-form-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
 
@@ -493,17 +462,11 @@
         window.deleteItem = function(cat, name) { if (confirm(`Delete ${name}?`)) db.ref('menu/' + cat + '/' + name).remove(); };
         
         db.ref('staff').on('value', (snapshot) => {
-            const staffData = snapshot.val();
-            const container = document.getElementById('staff-list-container');
-            container.innerHTML = "";
+            const staffData = snapshot.val(); const container = document.getElementById('staff-list-container'); container.innerHTML = "";
             if (!staffData) return;
             for (let pin in staffData) {
                 const name = staffData[pin];
-                container.innerHTML += `
-                    <div class="list-item">
-                        <div><strong>${name}</strong> <span style="opacity: 0.6; margin-left: 10px; font-size: 0.9rem;">PIN: ${pin}</span></div>
-                        <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${pin}', '${name}')">✖</button>
-                    </div>`;
+                container.innerHTML += `<div class="list-item"><div><strong>${name}</strong> <span style="opacity: 0.6; margin-left: 10px; font-size: 0.9rem;">PIN: ${pin}</span></div><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${pin}', '${name}')">✖</button></div>`;
             }
         });
 
@@ -514,7 +477,6 @@
         };
         window.removeStaff = function(pin, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); };
 
-        // === HISTORY & ANALYTICS LISTENER ===
         db.ref('orders/history').on('value', snap => {
             orderHistory = snap.val() || {};
             renderLedger();
@@ -524,220 +486,275 @@
         function renderLedger() {
             const container = document.getElementById('history-container');
             const sortedIds = Object.keys(orderHistory).sort((a, b) => b - a); 
-            
-            if (sortedIds.length === 0) {
-                container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No orders in history.</p>";
-                return;
-            }
+            if (sortedIds.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No orders in history.</p>"; return; }
 
-            let todayTotal = 0; let todayUPI = 0; let todayCash = 0;
-            let listHTML = "";
-
-            const now = new Date();
-            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            let todayTotal = 0; let todayUPI = 0; let todayCash = 0; let listHTML = "";
+            const now = new Date(); const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
             sortedIds.forEach(id => {
-                const order = orderHistory[id];
-                const orderTime = parseInt(id);
-                const amt = order.payment ? (order.payment.total || 0) : 0;
-
+                const order = orderHistory[id]; const orderTime = parseInt(id); const amt = order.payment ? (order.payment.total || 0) : 0;
                 if (orderTime >= startOfToday) {
                     todayTotal += amt;
-                    if (order.payment && order.payment.method === "UPI") todayUPI += amt;
-                    else todayCash += amt;
+                    if (order.payment && order.payment.method === "UPI") todayUPI += amt; else todayCash += amt;
                 }
 
                 let itemsHTML = "";
                 if(order.items) {
-                    for(let itemName in order.items) {
-                        const item = order.items[itemName];
-                        itemsHTML += `<div style="font-size: 0.9rem; margin-bottom: 2px;">${item.qty}x ${itemName} - ₹${item.qty * item.price}</div>`;
-                    }
+                    for(let itemName in order.items) { const item = order.items[itemName]; itemsHTML += `<div style="font-size: 0.9rem; margin-bottom: 2px;">${item.qty}x ${itemName} - ₹${item.qty * item.price}</div>`; }
                 }
 
-                listHTML += `
-                <div class="history-card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px;">
-                        <div>
-                            <strong style="font-size: 1.1rem;">${order.tableOrAddress || "Order"}</strong>
-                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.timestamp || ""} • ${order.source || "POS"}</div>
-                        </div>
-                        <div style="text-align:right;">
-                            <strong style="font-size: 1.1rem;">₹${amt}</strong>
-                            <div style="font-size: 0.75rem; opacity: 0.7;">${order.payment ? order.payment.method : ""}</div>
-                        </div>
-                    </div>
-                    ${itemsHTML}
-                    ${order.notes ? `<div style="font-size: 0.85rem; opacity:0.8; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}
-                </div>`;
+                listHTML += `<div class="history-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px;"><div><strong style="font-size: 1.1rem;">${order.tableOrAddress || "Order"}</strong><div style="font-size: 0.75rem; opacity: 0.7;">${order.timestamp || ""} • ${order.source || "POS"}</div></div><div style="text-align:right;"><strong style="font-size: 1.1rem;">₹${amt}</strong><div style="font-size: 0.75rem; opacity: 0.7;">${order.payment ? order.payment.method : ""}</div></div></div>${itemsHTML}${order.notes ? `<div style="font-size: 0.85rem; opacity:0.8; margin-top: 8px; font-style: italic;">Notes: ${order.notes}</div>` : ''}</div>`;
             });
 
-            container.innerHTML = listHTML;
-            document.getElementById('ledger-total').innerText = '₹' + todayTotal;
-            document.getElementById('ledger-upi').innerText = '₹' + todayUPI;
-            document.getElementById('ledger-cash').innerText = '₹' + todayCash;
+            container.innerHTML = listHTML; document.getElementById('ledger-total').innerText = '₹' + todayTotal; document.getElementById('ledger-upi').innerText = '₹' + todayUPI; document.getElementById('ledger-cash').innerText = '₹' + todayCash;
         }
 
-        function processAnalytics() {
+        // --- NEW ADVANCED ANALYTICS ENGINE ---
+        window.processAnalytics = function() {
+            const filter = document.getElementById('analytics-filter').value;
             const now = new Date();
-            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            let startTs, prevStartTs;
             
-            let totalLifetimeRev = 0;
-            let totalLifetimeOrders = 0;
-            let todayOrdersCount = 0;
-            
-            let orderTypes = { "Dine-in": 0, "Takeaway": 0, "Delivery": 0 };
-            let itemCounts = {};
-            
-            let dailyRevMap = {};
-            let labels7Days = [];
-            let data7Days = [];
-            
-            for(let i=6; i>=0; i--) {
-                let d = new Date();
-                d.setDate(d.getDate() - i);
-                let dateKey = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
-                let labelStr = d.toLocaleDateString('en-US', {weekday: 'short'}); 
-                if(i===0) labelStr = "Today";
-                dailyRevMap[dateKey] = 0;
-                labels7Days.push({ key: dateKey, label: labelStr });
+            // Calculate Timeframes
+            if (filter === 'today') {
+                startTs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                prevStartTs = startTs - (24 * 60 * 60 * 1000); // Yesterday
+            } else if (filter === 'week') {
+                startTs = now.getTime() - (7 * 24 * 60 * 60 * 1000);
+                prevStartTs = startTs - (7 * 24 * 60 * 60 * 1000); // Prev 7 days
+            } else if (filter === 'month') {
+                startTs = now.getTime() - (30 * 24 * 60 * 60 * 1000);
+                prevStartTs = startTs - (30 * 24 * 60 * 60 * 1000); // Prev 30 days
+            } else if (filter === 'year') {
+                startTs = now.getTime() - (365 * 24 * 60 * 60 * 1000);
+                prevStartTs = startTs - (365 * 24 * 60 * 60 * 1000); // Prev Year
             }
 
+            // Build Item -> Category Map for cross-referencing
+            let itemCatMap = {};
+            for (let cat in currentMenuData) {
+                for (let item in currentMenuData[cat]) {
+                    itemCatMap[item] = cat;
+                    if(currentMenuData[cat][item].hasSizes) {
+                        itemCatMap[item + " (Regular)"] = cat;
+                        itemCatMap[item + " (Large)"] = cat;
+                    }
+                }
+            }
+
+            // Tracking Variables
+            let currRev = 0; let prevRev = 0; let currOrders = 0;
+            let orderTypes = { "Dine-in": 0, "Takeaway": 0, "Delivery": 0 };
+            let catRevMap = {}; let itemQtyMap = {};
+            let sizeMap = { reg: 0, lrg: 0 };
+            let hourlyMap = {}; for(let i=0; i<24; i++) hourlyMap[i] = 0;
+            
+            // Time Series Logic (for main revenue chart)
+            let timeSeriesMap = {}; let tsLabels = [];
+            if(filter === 'today') {
+                for(let i=8; i<=22; i+=2) { let key = (i>12?i-12:i)+(i>=12?'pm':'am'); timeSeriesMap[key]=0; tsLabels.push(key); }
+            } else if(filter === 'week' || filter === 'month') {
+                let days = filter === 'week' ? 7 : 30;
+                for(let i=days-1; i>=0; i--) {
+                    let d = new Date(now.getTime() - (i*24*60*60*1000));
+                    let key = d.getDate() + '/' + (d.getMonth()+1);
+                    timeSeriesMap[key] = 0; tsLabels.push(key);
+                }
+            } else {
+                for(let i=11; i>=0; i--) {
+                    let d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+                    let key = d.toLocaleString('default', { month: 'short' });
+                    timeSeriesMap[key] = 0; tsLabels.push(key);
+                }
+            }
+
+            // Core Parsing Loop
             Object.keys(orderHistory).forEach(id => {
                 const order = orderHistory[id];
                 const ts = parseInt(id);
                 const amt = order.payment ? (order.payment.total || 0) : 0;
                 
-                totalLifetimeRev += amt;
-                totalLifetimeOrders++;
+                // Track Previous Period for Growth Math
+                if (ts >= prevStartTs && ts < startTs) prevRev += amt;
                 
-                if(ts >= startOfToday) todayOrdersCount++;
+                // Track Current Period
+                if (ts >= startTs) {
+                    currRev += amt; currOrders++;
+                    
+                    // Order Type
+                    let type = order.orderType || "Unknown";
+                    if(type.includes("Delivery") || type.includes("Web")) orderTypes["Delivery"]++;
+                    else if(type.includes("Takeaway")) orderTypes["Takeaway"]++;
+                    else orderTypes["Dine-in"]++;
 
-                let type = order.orderType || "Unknown";
-                if(type.includes("Delivery") || type.includes("Web")) orderTypes["Delivery"]++;
-                else if(type.includes("Takeaway")) orderTypes["Takeaway"]++;
-                else orderTypes["Dine-in"]++;
+                    // Hourly Heatmap
+                    hourlyMap[new Date(ts).getHours()]++;
 
-                if(order.items) {
-                    for(let item in order.items) {
-                        let baseName = item.split(" (")[0];
-                        itemCounts[baseName] = (itemCounts[baseName] || 0) + order.items[item].qty;
+                    // Map to Time Series Chart
+                    let orderDate = new Date(ts);
+                    let tsKey = "";
+                    if(filter === 'today') {
+                        let h = orderDate.getHours();
+                        h = h % 2 !== 0 ? h - 1 : h; // bucket into 2hr windows
+                        tsKey = (h>12?h-12:h)+(h>=12?'pm':'am');
+                    } else if(filter === 'week' || filter === 'month') {
+                        tsKey = orderDate.getDate() + '/' + (orderDate.getMonth()+1);
+                    } else {
+                        tsKey = orderDate.toLocaleString('default', { month: 'short' });
                     }
-                }
+                    if(timeSeriesMap[tsKey] !== undefined) timeSeriesMap[tsKey] += amt;
 
-                let orderDate = new Date(ts);
-                let dateKey = orderDate.getFullYear() + '-' + orderDate.getMonth() + '-' + orderDate.getDate();
-                if(dailyRevMap[dateKey] !== undefined) {
-                    dailyRevMap[dateKey] += amt;
-                }
-            });
+                    // Items, Categories, Sizes
+                    if(order.items) {
+                        for(let itemName in order.items) {
+                            let qty = order.items[itemName].qty;
+                            let price = order.items[itemName].price;
+                            
+                            // Clean modifiers from name for accurate counting
+                            let baseName = itemName.split(" (")[0];
+                            let sizeCleanedName = itemName;
+                            // Re-attach size if it was stripped
+                            if(itemName.includes("(Large)")) { sizeCleanedName = baseName + " (Large)"; sizeMap.lrg += qty; }
+                            else if(itemName.includes("(Regular)")) { sizeCleanedName = baseName + " (Regular)"; sizeMap.reg += qty; }
+                            else { sizeCleanedName = baseName; }
 
-            labels7Days.forEach(day => { data7Days.push(dailyRevMap[day.key]); });
+                            itemQtyMap[sizeCleanedName] = (itemQtyMap[sizeCleanedName] || 0) + qty;
 
-            let sortedItems = Object.keys(itemCounts).sort((a,b) => itemCounts[b] - itemCounts[a]).slice(0, 5);
-            let topListHTML = "";
-            sortedItems.forEach(item => {
-                topListHTML += `<div class="top-item-row"><span>${item}</span><span style="font-weight:bold;">${itemCounts[item]} sold</span></div>`;
-            });
-            if(topListHTML === "") topListHTML = "<p style='opacity:0.5; text-align:center;'>Not enough data.</p>";
-            document.getElementById('top-items-list').innerHTML = topListHTML;
-
-            let aov = totalLifetimeOrders > 0 ? Math.round(totalLifetimeRev / totalLifetimeOrders) : 0;
-            document.getElementById('stat-aov').innerText = "₹" + aov;
-            document.getElementById('stat-orders').innerText = todayOrdersCount;
-
-            drawRevenueChart(labels7Days.map(l => l.label), data7Days);
-            drawTypeChart(orderTypes);
-        }
-
-        function drawRevenueChart(labels, data) {
-            const ctx = document.getElementById('revenueChart').getContext('2d');
-            if(revChartInstance) revChartInstance.destroy();
-
-            let gradient = ctx.createLinearGradient(0, 0, 0, 220);
-            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
-            gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
-
-            revChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Revenue (₹)',
-                        data: data,
-                        borderColor: '#ffffff',
-                        borderWidth: 2,
-                        backgroundColor: gradient,
-                        fill: true,
-                        tension: 0.4, 
-                        pointRadius: 3,
-                        pointBackgroundColor: '#8c7255'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)' } },
-                        y: { 
-                            grid: { color: 'rgba(255,255,255,0.05)' }, 
-                            ticks: { color: 'rgba(255,255,255,0.6)', maxTicksLimit: 5 },
-                            beginAtZero: true
+                            // Category Revenue
+                            let cat = itemCatMap[sizeCleanedName] || "Other";
+                            catRevMap[cat] = (catRevMap[cat] || 0) + (price * qty);
                         }
                     }
                 }
             });
+
+            // 1. Dashboard Metrics & Growth Indicator
+            let aov = currOrders > 0 ? Math.round(currRev / currOrders) : 0;
+            document.getElementById('stat-rev').innerText = "₹" + currRev.toLocaleString('en-IN');
+            document.getElementById('stat-orders').innerText = currOrders;
+            document.getElementById('stat-aov').innerText = "₹" + aov;
+
+            let growthEl = document.getElementById('stat-trend');
+            if (prevRev === 0 && currRev === 0) { growthEl.innerText = "--"; growthEl.className = ""; }
+            else if (prevRev === 0) { growthEl.innerText = "(↑ 100%)"; growthEl.className = "trend-up"; }
+            else {
+                let diff = ((currRev - prevRev) / prevRev) * 100;
+                if (diff >= 0) { growthEl.innerText = `(↑ ${Math.round(diff)}%)`; growthEl.className = "trend-up"; }
+                else { growthEl.innerText = `(↓ ${Math.round(Math.abs(diff))}%)`; growthEl.className = "trend-down"; }
+            }
+
+            // 2. Build Lists (Top Sellers & Dead Stock)
+            function generateListHtml(itemsObj, limit = 5, filterFn = null) {
+                let sorted = Object.keys(itemsObj).sort((a,b) => itemsObj[b] - itemsObj[a]);
+                if(filterFn) sorted = sorted.filter(filterFn);
+                sorted = sorted.slice(0, limit);
+                if(sorted.length === 0) return "<p style='opacity:0.5; text-align:center; font-size:0.8rem; margin:10px 0;'>No data.</p>";
+                let html = "";
+                sorted.forEach(item => { html += `<div class="top-item-row"><span>${item}</span><span style="font-weight:bold;">${itemsObj[item]} sold</span></div>`; });
+                return html;
+            }
+
+            document.getElementById('top-overall').innerHTML = generateListHtml(itemQtyMap);
+            
+            document.getElementById('top-coffee').innerHTML = generateListHtml(itemQtyMap, 5, (item) => {
+                let cat = itemCatMap[item] || ""; return cat.toLowerCase().includes('coffee');
+            });
+            
+            document.getElementById('top-pizza').innerHTML = generateListHtml(itemQtyMap, 5, (item) => {
+                let cat = itemCatMap[item] || ""; return cat.toLowerCase().includes('pizza') || cat.toLowerCase().includes('food');
+            });
+
+            // Dead Stock Finder
+            let activeMenuItems = Object.keys(itemCatMap); // all currently existing items
+            let deadStockArr = [];
+            activeMenuItems.forEach(item => {
+                // Ignore sized variants logic for simplicity, stick to base names
+                if(item.includes("(Regular)") || item.includes("(Large)")) return;
+                
+                let qtySold = itemQtyMap[item] || 0;
+                // Add regular/large sales to base name sales for a fair check
+                qtySold += (itemQtyMap[item + " (Regular)"] || 0);
+                qtySold += (itemQtyMap[item + " (Large)"] || 0);
+                
+                if(qtySold <= 1) deadStockArr.push({name: item, qty: qtySold});
+            });
+            deadStockArr.sort((a,b) => a.qty - b.qty);
+            let deadStockHtml = "";
+            if(deadStockArr.length === 0) deadStockHtml = "<p style='opacity:0.5; text-align:center; font-size:0.8rem; margin:10px 0;'>All items selling well!</p>";
+            else {
+                deadStockArr.slice(0, 5).forEach(obj => {
+                    let alertColor = obj.qty === 0 ? '#ffcccc' : 'white';
+                    deadStockHtml += `<div class="top-item-row" style="color: ${alertColor};"><span>${obj.name}</span><span style="font-weight:bold;">${obj.qty} sold</span></div>`;
+                });
+            }
+            document.getElementById('dead-stock').innerHTML = deadStockHtml;
+
+            // 3. Draw All Charts
+            let tsData = tsLabels.map(l => timeSeriesMap[l]);
+            drawMainChart(tsLabels, tsData);
+            drawTypeChart(orderTypes);
+            drawUpsellChart(sizeMap);
+            
+            let sortedCats = Object.keys(catRevMap).sort((a,b) => catRevMap[b] - catRevMap[a]).slice(0,5);
+            let catData = sortedCats.map(c => catRevMap[c]);
+            drawCategoryChart(sortedCats, catData);
+
+            // Peak Hours Formatting (8am to 10pm)
+            let peakLabels = ['8am', '10am', '12pm', '2pm', '4pm', '6pm', '8pm', '10pm'];
+            let peakData = [
+                hourlyMap[8]+hourlyMap[9], hourlyMap[10]+hourlyMap[11], hourlyMap[12]+hourlyMap[13], 
+                hourlyMap[14]+hourlyMap[15], hourlyMap[16]+hourlyMap[17], hourlyMap[18]+hourlyMap[19], 
+                hourlyMap[20]+hourlyMap[21], hourlyMap[22]+hourlyMap[23]
+            ];
+            drawPeakChart(peakLabels, peakData);
         }
 
-        function drawTypeChart(types) {
-            const ctx = document.getElementById('typeChart').getContext('2d');
-            if(typeChartInstance) typeChartInstance.destroy();
+        // CHART DRAWING HELPERS
+        const brandColors = ['#ffffff', 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0.4)', 'rgba(255,255,255,0.2)', 'rgba(0,0,0,0.2)'];
 
-            typeChartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Dine-in', 'Takeaway', 'Delivery'],
-                    datasets: [{
-                        data: [types["Dine-in"], types["Takeaway"], types["Delivery"]],
-                        backgroundColor: ['#ffffff', 'rgba(255,255,255,0.5)', 'rgba(255,255,255,0.2)'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '75%',
-                    plugins: {
-                        legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 12, font: { size: 10 } } }
-                    }
-                }
+        function drawMainChart(labels, data) {
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            if(charts.revenue) charts.revenue.destroy();
+            let gradient = ctx.createLinearGradient(0, 0, 0, 220);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)'); gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+            charts.revenue = new Chart(ctx, {
+                type: 'line', data: { labels: labels, datasets: [{ data: data, borderColor: '#ffffff', borderWidth: 2, backgroundColor: gradient, fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#8c7255' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.6)', maxTicksLimit: 5 }, beginAtZero: true } } }
             });
         }
 
+        function drawTypeChart(types) {
+            const ctx = document.getElementById('typeChart').getContext('2d'); if(charts.type) charts.type.destroy();
+            charts.type = new Chart(ctx, { type: 'doughnut', data: { labels: ['Dine-in', 'Takeaway', 'Delivery'], datasets: [{ data: [types["Dine-in"], types["Takeaway"], types["Delivery"]], backgroundColor: brandColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } });
+        }
+
+        function drawUpsellChart(sizes) {
+            const ctx = document.getElementById('upsellChart').getContext('2d'); if(charts.upsell) charts.upsell.destroy();
+            if(sizes.reg === 0 && sizes.lrg === 0) { sizes.reg = 1; sizes.lrg = 0; } // Prevent blank chart if no data
+            charts.upsell = new Chart(ctx, { type: 'doughnut', data: { labels: ['Regular', 'Large'], datasets: [{ data: [sizes.reg, sizes.lrg], backgroundColor: ['rgba(255,255,255,0.4)', '#ffffff'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } });
+        }
+
+        function drawCategoryChart(labels, data) {
+            const ctx = document.getElementById('categoryChart').getContext('2d'); if(charts.category) charts.category.destroy();
+            charts.category = new Chart(ctx, { type: 'doughnut', data: { labels: labels, datasets: [{ data: data, backgroundColor: brandColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } });
+        }
+
+        function drawPeakChart(labels, data) {
+            const ctx = document.getElementById('peakChart').getContext('2d'); if(charts.peak) charts.peak.destroy();
+            charts.peak = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ data: data, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)', font: {size: 9} } }, y: { display: false, beginAtZero: true } } } });
+        }
+
+        // === SECURITY LOGS (VOIDS) ===
         db.ref('security/voids').limitToLast(50).on('value', snap => {
             const container = document.getElementById('voids-container');
             const voidsData = snap.val() || {};
-            
             const sortedIds = Object.keys(voidsData).sort((a, b) => b.localeCompare(a)); 
-            
-            if (sortedIds.length === 0) {
-                container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No voids recorded.</p>";
-                return;
-            }
+            if (sortedIds.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No voids recorded.</p>"; return; }
 
             let listHTML = "";
             sortedIds.forEach(id => {
                 const v = voidsData[id];
-                listHTML += `
-                <div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);">
-                    <div style="display:flex; justify-content:space-between; margin-bottom: 5px;">
-                        <strong style="font-size: 1.05rem;">${v.item}</strong>
-                        <strong style="opacity: 0.9;">-₹${v.value}</strong>
-                    </div>
-                    <div style="font-size: 0.8rem; opacity: 0.6; margin-bottom: 5px;">Table/Order: ${v.table} • ${v.time}</div>
-                    <div style="font-size: 0.85rem; font-style: italic; opacity: 0.8;">Reason: "${v.reason}"</div>
-                </div>`;
+                listHTML += `<div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);"><div style="display:flex; justify-content:space-between; margin-bottom: 5px;"><strong style="font-size: 1.05rem;">${v.item}</strong><strong style="opacity: 0.9;">-₹${v.value}</strong></div><div style="font-size: 0.8rem; opacity: 0.6; margin-bottom: 5px;">Table/Order: ${v.table} • ${v.time}</div><div style="font-size: 0.85rem; font-style: italic; opacity: 0.8;">Reason: "${v.reason}"</div></div>`;
             });
             container.innerHTML = listHTML;
         });
