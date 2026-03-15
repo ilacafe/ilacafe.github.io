@@ -17,7 +17,8 @@
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
         header { text-align: center; margin-bottom: 20px; }
         
-        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        /* Updated Logo Class: Added touch-action: manipulation to prevent iOS double-tap zoom */
+        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
@@ -95,6 +96,14 @@
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
         .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; transition: all 0.2s;}
         .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
+
+        /* --- SECRET MENU EASTER EGG STYLES --- */
+        .logo.centrifuge-pop { transform: scale(1.15) !important; box-shadow: 0 0 25px rgba(255, 255, 255, 0.5); border-radius: 50%; transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important; }
+        #secret-menu { max-height: 0; opacity: 0; overflow: hidden; background-color: rgba(0, 0, 0, 0.15); border-radius: 12px; transition: max-height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease, margin 0.4s ease; margin: 0; width: 100%; box-sizing: border-box; }
+        #secret-menu.visible { max-height: 800px; opacity: 1; margin-top: 10px; margin-bottom: 25px; border: 1px solid rgba(255, 255, 255, 0.2); }
+        .secret-menu-content { padding: 25px 20px; text-align: left; }
+        .secret-menu-content h3 { margin-top: 0; letter-spacing: 2px; text-transform: uppercase; text-align: center; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); padding-bottom: 10px; font-size: 1.1rem; margin-bottom: 5px; }
+        .secret-item-subtext { font-size: 0.75rem; opacity: 0.7; width: 100%; display: block; line-height: 1.2; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -107,9 +116,26 @@
 
     <div class="container">
         <header>
-            <img src="logo.png" alt="ILA Logo" class="logo" onclick="this.style.transform = `rotate(${this.rotation = (this.rotation || 0) + 360}deg)`">
+            <img src="logo.png" id="ila-logo" alt="ILA Logo" class="logo">
             <div id="table-badge"></div>
         </header>
+
+        <div id="secret-menu">
+            <div class="secret-menu-content">
+                <h3>✨ The Geomagnetic Menu ✨</h3>
+                <p style="text-align: center; opacity: 0.7; font-size: 0.85rem; margin-top: 0; margin-bottom: 25px;">You found the night shift.</p>
+                
+                <div class="menu-row">
+                    <span class="item-name">Marc's Fav (Secret)<span class="secret-item-subtext">The off-menu legend.</span></span>
+                    <div class="swap-container" data-item="Marc's Fav (Secret)" data-price="550" data-sweet="false"></div>
+                </div>
+                
+                <div class="menu-row">
+                    <span class="item-name">The Apricot Secret<span class="secret-item-subtext">If you know, you know.</span></span>
+                    <div class="swap-container" data-item="The Apricot Secret" data-price="220" data-sweet="false"></div>
+                </div>
+            </div>
+        </div>
 
         <div id="usual-order-container" style="display: none;">
             <div class="usual-box" onclick="window.loadUsualOrder()">
@@ -481,24 +507,15 @@
             window.renderInlineControls();
         }
 
+        /* --- UPDATED VALIDATION FIX --- */
+        const originalValidate = window.validateAndSyncCart;
         window.validateAndSyncCart = function(cartObj) {
-            let validCart = {}; let newTotal = 0; let newCount = 0; let changed = false; let removed = [];
-            let menuKeys = Object.keys(window.flatMenu).sort((a,b) => b.length - a.length);
-
-            for(let cartKey in cartObj) {
-                let matchedMenuKey = menuKeys.find(key => cartKey.startsWith(key));
-                let liveData = window.flatMenu[matchedMenuKey];
-
-                if(liveData && liveData.inStock) {
-                    if(cartObj[cartKey].price !== liveData.price) changed = true;
-                    validCart[cartKey] = { price: liveData.price, qty: cartObj[cartKey].qty };
-                    newTotal += (liveData.price * cartObj[cartKey].qty);
-                    newCount += cartObj[cartKey].qty;
-                } else {
-                    changed = true; removed.push(cartKey);
-                }
-            }
-            return { cart: validCart, total: newTotal, count: newCount, changed: changed, removed: removed };
+            // Forces the secret items into the menu list right before checkout validation
+            window.flatMenu["Marc's Fav (Secret)"] = { price: 550, inStock: true };
+            window.flatMenu["The Apricot Secret"] = { price: 220, inStock: true };
+            
+            // Runs your original logic normally
+            return originalValidate(cartObj);
         };
 
         window.loadUsualOrder = function() {
@@ -688,6 +705,65 @@
         };
 
         updateCartUI(); 
+
+        /* =================================================================
+           EASTER EGG LOGIC: "The Centrifuge" Hidden Menu 
+        ================================================================= */
+        const mainLogo = document.getElementById('ila-logo');
+        const secretMenuDiv = document.getElementById('secret-menu');
+
+        let logoClickCount = 0;
+        let logoSpinTimeout;
+        let logoCurrentRotation = 0;
+        let isSecretMenuOpen = false;
+
+        mainLogo.addEventListener('click', () => {
+            if (isSecretMenuOpen) {
+                closeSecretMenu();
+                return;
+            }
+
+            logoClickCount++;
+            logoCurrentRotation += (360 + (logoClickCount * 180)); 
+            
+            mainLogo.style.transition = `transform ${1.5 / logoClickCount}s cubic-bezier(0.25, 0.1, 0.25, 1)`;
+            mainLogo.style.transform = `rotate(${logoCurrentRotation}deg)`;
+
+            clearTimeout(logoSpinTimeout);
+
+            if (logoClickCount >= 5) {
+                triggerCentrifugeReveal();
+            } else {
+                logoSpinTimeout = setTimeout(() => {
+                    logoClickCount = 0;
+                    mainLogo.style.transition = 'transform 0.5s ease-in-out'; 
+                }, 1200);
+            }
+        });
+
+        function triggerCentrifugeReveal() {
+            logoClickCount = 0;
+            isSecretMenuOpen = true;
+            clearTimeout(logoSpinTimeout);
+
+            mainLogo.classList.add('centrifuge-pop');
+            secretMenuDiv.classList.add('visible');
+            
+            if (navigator.vibrate) { navigator.vibrate([100, 50, 100]); }
+            
+            // Wire up the new swap-containers dynamically
+            if (window.renderInlineControls) window.renderInlineControls();
+        }
+
+        function closeSecretMenu() {
+            isSecretMenuOpen = false;
+            logoCurrentRotation -= 720; 
+            mainLogo.style.transition = 'all 0.6s cubic-bezier(0.25, 0.1, 0.25, 1)';
+            mainLogo.style.transform = `rotate(${logoCurrentRotation}deg)`;
+            
+            mainLogo.classList.remove('centrifuge-pop');
+            secretMenuDiv.classList.remove('visible');
+        }
     </script>
 </body>
 </html>
