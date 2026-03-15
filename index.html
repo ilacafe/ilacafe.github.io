@@ -13,11 +13,11 @@
 
     <style>
         :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
-        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; overscroll-behavior-y: contain; /* Prevents whole-browser bounce on some devices so our script can catch it cleanly */ }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
         header { text-align: center; margin-bottom: 20px; }
         
-        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; transition: transform 0.7s cubic-bezier(0.25, 1, 0.5, 1); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
@@ -61,6 +61,7 @@
 
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         
+        /* ORDER TYPE TOGGLES */
         .type-row { display: flex; gap: 8px; margin-top: 8px; justify-content: center; }
         .type-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 10px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1; }
         .type-btn.selected { background: white; color: var(--brand-bg); border-color: white; }
@@ -90,6 +91,7 @@
 
         #table-badge { display: none; background: rgba(255,255,255,0.15); padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); }
         
+        /* Table Grid Logic */
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
         .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; transition: all 0.2s;}
         .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
@@ -105,7 +107,7 @@
 
     <div class="container">
         <header>
-            <img src="logo.png" id="ila-logo" alt="ILA Logo" class="logo" onclick="this.style.transform = `rotate(${this.rotation = (this.rotation || 0) + 360}deg)`">
+            <img src="logo.png" alt="ILA Logo" class="logo" onclick="this.style.transform = `rotate(${this.rotation = (this.rotation || 0) + 360}deg)`">
             <div id="table-badge"></div>
         </header>
 
@@ -247,22 +249,22 @@
         const OWNER_WHATSAPP = "918882946526"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         
+        // --- URL PARAMS (Table Logic) ---
         const urlParams = new URLSearchParams(window.location.search);
-        const urlTable = urlParams.get('table');
+        const urlTable = urlParams.get('table'); // e.g., ?table=5
 
         if(urlTable) {
             const badge = document.getElementById('table-badge');
             badge.style.display = 'inline-block';
             badge.innerText = "Table " + urlTable;
+            // Pre-fill fixed display logic
             document.getElementById('manual-table-selector').style.display = 'none';
             const fixedDisplay = document.getElementById('fixed-table-display');
             fixedDisplay.style.display = 'block';
             fixedDisplay.innerText = "Ordering for Table " + urlTable;
         }
 
-        // --- GLOBAL STATE FOR THE SECRET MENU ---
-        window.unlockedPOS = localStorage.getItem('ila_pos_unlocked') === 'true';
-
+        // --- STATE & STORAGE ---
         window.cart = JSON.parse(localStorage.getItem('ila_customer_cart')) || {}; 
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
@@ -272,14 +274,17 @@
         window.lastAddress = localStorage.getItem('ila_last_address') || "";
         window.currentOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
         
-        window.storeStatus = { delivery: true, takeaway: true }; 
+        window.storeStatus = { delivery: true, takeaway: true }; // Default
 
         if (window.lastAddress) document.getElementById('delivery-address').value = window.lastAddress;
 
+        // Populate Table Grid for Manual Selection
         const tableGrid = document.getElementById('customer-table-grid');
         for(let i=1; i<=10; i++) { tableGrid.innerHTML += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
 
+        // Show "Usual Order" only if same context
         if (window.lastOrder && Object.keys(window.lastOrder).length > 0) {
+            // Only show usual if not switching from table to delivery, etc.
             document.getElementById('usual-order-container').style.display = 'block';
             let desc = Object.keys(window.lastOrder).map(k => `${window.lastOrder[k].qty}x ${k}`).join(', ');
             document.getElementById('usual-order-desc').innerText = `${desc} — ₹${window.lastAmount}`;
@@ -291,23 +296,29 @@
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
         window.flatMenu = {}; 
 
-        // --- FIREBASE LISTENERS ---
+        // --- LISTENERS ---
+        
+        // 1. Store Availability Listener
         db.ref('settings/storeStatus').on('value', snap => {
             window.storeStatus = snap.val() || { delivery: true, takeaway: true };
             updateCheckoutOptions();
         });
 
+        // 2. Cafe Open/Close
         db.ref('settings/isOpen').on('value', snap => {
             const isOpen = snap.val(); const lockScreen = document.getElementById('closed-screen');
             if (isOpen === false) { lockScreen.style.display = "flex"; document.body.style.overflow = "hidden"; } 
             else { lockScreen.style.display = "none"; document.body.style.overflow = "auto"; }
         });
 
+        // 3. Menu Data
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderCustomerMenu(); });
         db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; renderCustomerMenu(); });
         db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; renderCustomerMenu(); });
 
+
         // --- LOGIC FUNCTIONS ---
+
         function updateCheckoutOptions() {
             const btnDel = document.getElementById('type-delivery');
             const btnTak = document.getElementById('type-takeaway');
@@ -315,6 +326,7 @@
             const scanMsg = document.getElementById('scan-instruction');
             const payBtn = document.getElementById('btn-pay');
             
+            // 1. If URL has Table -> Force Dine-in, Hide others
             if(urlTable) {
                 btnDin.classList.add('selected'); btnDin.style.display = 'block';
                 btnDel.style.display = 'none'; btnTak.style.display = 'none';
@@ -324,10 +336,16 @@
                 return;
             }
 
+            // 2. No Table -> Check Store Status
+            // Hide/Show based on status
             if(window.storeStatus.delivery) btnDel.classList.remove('hidden'); else btnDel.classList.add('hidden');
             if(window.storeStatus.takeaway) btnTak.classList.remove('hidden'); else btnTak.classList.add('hidden');
+
+            // Dine-in button is hidden for remote users (General Link)
+            // Strategy: General Link is for Del/Tak. Table Link is for Dine-in.
             btnDin.classList.add('hidden'); 
 
+            // Logic: If both Del & Tak are OFF, show "Scan" message
             if(!window.storeStatus.delivery && !window.storeStatus.takeaway) {
                 scanMsg.style.display = 'block';
                 document.getElementById('order-type-section').style.display = 'none';
@@ -337,9 +355,11 @@
                 document.getElementById('order-type-section').style.display = 'block';
                 payBtn.disabled = false; payBtn.style.opacity = '1';
                 
+                // Auto-select valid option if current is invalid
                 if (window.currentOrderType === 'Delivery' && !window.storeStatus.delivery) window.setOrderType('Takeaway');
                 else if (window.currentOrderType === 'Takeaway' && !window.storeStatus.takeaway) window.setOrderType('Delivery');
                 else if (window.currentOrderType === 'Dine-in') {
+                    // Reset to available
                      if(window.storeStatus.delivery) window.setOrderType('Delivery');
                      else if(window.storeStatus.takeaway) window.setOrderType('Takeaway');
                 }
@@ -410,34 +430,14 @@
             let sortedCats = currentCategoryOrder.filter(cat => activeCats.includes(cat));
             activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
 
-            let secretStandardItems = [];
-            let secretSizedItems = [];
-
             sortedCats.forEach(category => {
                 let standardItems = []; let sizedItems = []; let hasVisibleItems = false;
                 let itemsInOrder = window.currentItemOrder[category] || Object.keys(currentMenuData[category] || {});
                 
                 itemsInOrder.forEach(itemName => {
                     const item = currentMenuData[category] ? currentMenuData[category][itemName] : null;
-                    if (!item) return; 
-                    
-                    item.originalName = itemName; 
-                    
-                    if (item.visibility === 'pos') {
-                        if (window.unlockedPOS) {
-                            if (item.hasSizes) {
-                                secretSizedItems.push(item);
-                                window.flatMenu[itemName + " (Regular)"] = { price: item.priceReg, inStock: item.inStock };
-                                window.flatMenu[itemName + " (Large)"] = { price: item.priceLrg, inStock: item.inStock };
-                            } else {
-                                secretStandardItems.push(item);
-                                window.flatMenu[itemName] = { price: item.price, inStock: item.inStock };
-                            }
-                        }
-                        return; 
-                    }
-
-                    hasVisibleItems = true; 
+                    if (!item || item.visibility === 'pos') return; 
+                    hasVisibleItems = true; item.originalName = itemName; 
                     if (item.hasSizes) { 
                         sizedItems.push(item);
                         window.flatMenu[itemName + " (Regular)"] = { price: item.priceReg, inStock: item.inStock };
@@ -449,8 +449,8 @@
                 });
 
                 if (!hasVisibleItems) return;
-                
                 let catHTML = `<section><h2>${category}</h2>`;
+
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
@@ -478,40 +478,6 @@
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
             });
-
-            // RENDER TRAPPED POS ITEMS AT THE BOTTOM
-            if (window.unlockedPOS && (secretStandardItems.length > 0 || secretSizedItems.length > 0)) {
-                let secretHTML = `<section style="margin-top: 40px; padding-top: 20px; border-top: 1px dashed rgba(255,255,255,0.2);">
-                                    <h2 style="border: none; opacity: 0.7;">Off-Menu</h2>`;
-                
-                secretStandardItems.forEach(item => {
-                    const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    if (item.inStock) {
-                        secretHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
-                    } else {
-                        secretHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
-                    }
-                });
-
-                if (secretSizedItems.length > 0) {
-                    secretHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
-                    secretSizedItems.forEach(item => {
-                        let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
-                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
-
-                        if (item.inStock) {
-                            if(item.priceReg) regHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '<div style="width:100%; text-align:right;">-</div>';
-                            if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
-                        }
-                        secretHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
-                    });
-                }
-                secretHTML += `</section>`;
-                container.innerHTML += secretHTML;
-            }
-
             window.renderInlineControls();
         }
 
@@ -615,6 +581,7 @@
             document.getElementById('cart-notes').value = "";
             document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             
+            // Check Store Status before opening to ensure valid state
             updateCheckoutOptions();
             document.getElementById('checkout-modal').classList.add('active');
         };
@@ -688,6 +655,7 @@
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo; 
             
+            // Save preferences
             localStorage.setItem('ila_last_order', JSON.stringify(window.cart));
             localStorage.setItem('ila_last_amount', window.totalAmount);
             localStorage.setItem('ila_last_order_type', info.type); 
@@ -695,6 +663,7 @@
                 localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
             }
 
+            // PUSH to DB
             db.ref('orders/pendingWeb').push({
                 orderType: info.type,
                 tableOrAddress: info.details,
@@ -704,6 +673,7 @@
                 paymentMethod: "UPI"
             });
 
+            // WHATSAPP
             let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
             if (info.notes) { message += `Notes: ${info.notes}\n`; }
             message += `\n`;
@@ -718,53 +688,6 @@
         };
 
         updateCartUI(); 
-
-        /* =================================================================
-           THE OVERSCROLL SECRET MENU LISTENER
-        ================================================================= */
-        let touchStartY = 0;
-        let isPullingUp = false;
-
-        // Record the exact point the finger hits the screen
-        window.addEventListener('touchstart', (e) => {
-            touchStartY = e.touches[0].clientY;
-        }, {passive: true});
-
-        // Track the movement
-        window.addEventListener('touchmove', (e) => {
-            if (window.unlockedPOS) return; // If already unlocked, do nothing
-
-            let touchCurrentY = e.touches[0].clientY;
-            let deltaY = touchStartY - touchCurrentY; // Positive number means pulling UP
-
-            // Check if the user is currently at the absolute bottom of the document
-            let isAtBottom = (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 10;
-
-            // If they are at the bottom AND dragging up by at least 80 pixels
-            if (isAtBottom && deltaY > 80) {
-                isPullingUp = true;
-            } else {
-                isPullingUp = false;
-            }
-        }, {passive: true});
-
-        // When the finger leaves the screen, check if the trap was triggered
-        window.addEventListener('touchend', () => {
-            if (isPullingUp && !window.unlockedPOS) {
-                window.unlockedPOS = true;
-                localStorage.setItem('ila_pos_unlocked', 'true');
-                
-                if (navigator.vibrate) navigator.vibrate([30, 30]); // Subtle physical confirmation
-                
-                renderCustomerMenu(); // Re-render the menu to natively append the POS items
-                
-                // Wait a tiny fraction of a second for HTML to build, then smoothly scroll down to show them
-                setTimeout(() => {
-                    window.scrollBy({ top: 180, behavior: 'smooth' });
-                }, 100);
-            }
-            isPullingUp = false;
-        });
     </script>
 </body>
 </html>
