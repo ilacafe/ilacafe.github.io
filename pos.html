@@ -404,7 +404,7 @@
                         <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
                             <button class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept Order</button>
-                            <button class="btn btn-secondary" style="flex: 1; border-color: rgba(255,255,255,0.4); color: rgba(255,255,255,0.8);" onclick="window.rejectWebOrder('${id}')">Reject</button>
+                            <button class="btn btn-secondary" style="flex: 1;" onclick="window.rejectWebOrder('${id}')">Reject</button>
                         </div>
                     </div>`;
                 }
@@ -526,7 +526,6 @@
 
         db.ref('pos/activeTables').on('value', snap => { 
             let data = snap.val() || {};
-            // FIX: Prevent Firebase from silently turning numbered tables into an Array, which deletes the "Takeaway" string key.
             if (Array.isArray(data)) {
                 window.activeTables = {};
                 data.forEach((val, idx) => { if(val) window.activeTables[idx.toString()] = val; });
@@ -895,6 +894,15 @@
                     reason: reason
                 };
                 db.ref('security/voids').push(voidData);
+
+                // --- NEW: SEND CANCELLATION TICKET TO KITCHEN ---
+                let destName = tableID.startsWith('Takeaway') ? tableID : 'Table ' + tableID;
+                let voidCart = {};
+                voidCart[realItemName] = { price: 0, qty: "❌ -1" }; 
+                try {
+                    dispatchToKitchen(voidCart, destName, `VOID / CANCELLED. Reason: ${reason}`, "POS Update");
+                } catch(e) { console.error("Kitchen dispatch error", e); }
+                // ------------------------------------------------
 
                 tableData.total = (parseFloat(tableData.total) || 0) - (parseFloat(tableData.items[realItemName].price) || 0); 
                 tableData.items[realItemName].qty -= 1;
