@@ -402,7 +402,10 @@
                         <strong style="font-size: 1.1rem; text-transform: uppercase;">${o.tableOrAddress}</strong><br>
                         ${itemsHTML}
                         <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
-                        <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.acceptWebOrder('${id}')">Accept & Send to Kitchen</button>
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept Order</button>
+                            <button class="btn btn-secondary" style="flex: 1; border-color: rgba(255,255,255,0.4); color: rgba(255,255,255,0.8);" onclick="window.rejectWebOrder('${id}')">Reject</button>
+                        </div>
                     </div>`;
                 }
             }
@@ -444,6 +447,15 @@
             db.ref('orders/history/' + Date.now()).set(archivePacket);
             db.ref('orders/pendingWeb/' + id).remove();
             closeModal('web-orders-modal');
+        };
+
+        window.rejectWebOrder = function(id) {
+            if(confirm("Reject this web order?")) {
+                db.ref('orders/pendingWeb/' + id).remove();
+                delete window.pendingWebOrders[id];
+                if(Object.keys(window.pendingWebOrders).length === 0) closeModal('web-orders-modal');
+                else window.openWebOrders();
+            }
         };
 
         function saveLocalCart() {
@@ -513,8 +525,17 @@
         }
 
         db.ref('pos/activeTables').on('value', snap => { 
-            window.activeTables = snap.val() || {}; updateDashboards(); refreshActiveModals();
+            let data = snap.val() || {};
+            // FIX: Prevent Firebase from silently turning numbered tables into an Array, which deletes the "Takeaway" string key.
+            if (Array.isArray(data)) {
+                window.activeTables = {};
+                data.forEach((val, idx) => { if(val) window.activeTables[idx.toString()] = val; });
+            } else {
+                window.activeTables = data;
+            }
+            updateDashboards(); refreshActiveModals();
         });
+
         db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
         db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
         db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
@@ -534,11 +555,8 @@
             }
         });
 
-        // === 100% SAFE SHOTS CALCULATION ===
         function calculateDailyCups() {
             let cupTotal = 0;
-            
-            // Generate Timestamp for start of today (Midnight)
             const startOfToday = new Date();
             startOfToday.setHours(0, 0, 0, 0);
             const startOfTodayMs = startOfToday.getTime();
@@ -546,18 +564,13 @@
             let coffeeKeys = Object.keys(window.coffeeItemsMap).sort((a,b) => b.length - a.length);
 
             window.pastBills.forEach(bill => {
-                // Safely check if bill is from today using its ID timestamp!
                 if(bill.id >= startOfTodayMs && bill.items) {
                     for(let itemName in bill.items) {
                         let matchedCoffee = coffeeKeys.find(key => itemName.startsWith(key));
-                        
                         if(matchedCoffee) {
                             let qty = bill.items[itemName].qty || 0;
-                            if(itemName.includes("(Large)")) {
-                                cupTotal += (qty * 3); 
-                            } else {
-                                cupTotal += (qty * 2); 
-                            }
+                            if(itemName.includes("(Large)")) { cupTotal += (qty * 3); } 
+                            else { cupTotal += (qty * 2); }
                         }
                     }
                 }
@@ -608,13 +621,11 @@
             window.coffeeItemsMap = {}; 
 
             for(let cat in currentMenuData) {
-                // SURGICAL FIX: ONLY scan categories with the word "Coffee" in the title
                 let isCoffeeCat = cat.toLowerCase().includes('coffee');
 
                 for(let item in currentMenuData[cat]) {
                     let route = currentMenuData[cat][item].routing || 'barista';
                     window.itemRoutingMap[item] = route;
-                    
                     if(isCoffeeCat) window.coffeeItemsMap[item] = true;
 
                     if(currentMenuData[cat][item].hasSizes) {
@@ -767,17 +778,13 @@
 
         function dispatchToKitchen(cartObj, destination, notes, source) {
             let baristaItems = {}; let chefItems = {};
-            
             for (let itemName in cartObj) {
                 let baseName = itemName.split(" (")[0]; 
                 let routing = window.itemRoutingMap[baseName] || 'barista';
-                
                 if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
                 else { baristaItems[itemName] = cartObj[itemName]; }
             }
-
             const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
             if (Object.keys(baristaItems).length > 0) {
                 db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr });
             }
@@ -819,9 +826,7 @@
 
         window.openTableModal = function() {
             if (window.totalItems === 0) return alert("Cart is empty!");
-            
             document.getElementById('pos-order-notes').value = "";
-            
             const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
             for (let i = 1; i <= 10; i++) {
                 const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
