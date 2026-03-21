@@ -61,7 +61,6 @@
 
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         
-        /* ORDER TYPE TOGGLES */
         .type-row { display: flex; gap: 8px; margin-top: 8px; justify-content: center; }
         .type-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 10px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1; }
         .type-btn.selected { background: white; color: var(--brand-bg); border-color: white; }
@@ -91,7 +90,6 @@
 
         #table-badge { display: none; background: rgba(255,255,255,0.15); padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); }
         
-        /* Table Grid Logic */
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
         .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; transition: all 0.2s;}
         .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
@@ -249,22 +247,28 @@
         const OWNER_WHATSAPP = "918882946526"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         
-        // --- URL PARAMS (Table Logic) ---
+        // --- NEW UPI ROUTING SYSTEM ---
+        window.activeUPIs = [CAFE_UPI_ID];
+        db.ref('settings/upiList').on('value', snap => {
+            if (snap.exists() && snap.val().length > 0) { window.activeUPIs = snap.val(); }
+        });
+        window.getRandomUPI = function() {
+            return window.activeUPIs[Math.floor(Math.random() * window.activeUPIs.length)];
+        };
+        
         const urlParams = new URLSearchParams(window.location.search);
-        const urlTable = urlParams.get('table'); // e.g., ?table=5
+        const urlTable = urlParams.get('table');
 
         if(urlTable) {
             const badge = document.getElementById('table-badge');
             badge.style.display = 'inline-block';
             badge.innerText = "Table " + urlTable;
-            // Pre-fill fixed display logic
             document.getElementById('manual-table-selector').style.display = 'none';
             const fixedDisplay = document.getElementById('fixed-table-display');
             fixedDisplay.style.display = 'block';
             fixedDisplay.innerText = "Ordering for Table " + urlTable;
         }
 
-        // --- STATE & STORAGE ---
         window.cart = JSON.parse(localStorage.getItem('ila_customer_cart')) || {}; 
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
@@ -274,17 +278,14 @@
         window.lastAddress = localStorage.getItem('ila_last_address') || "";
         window.currentOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";
         
-        window.storeStatus = { delivery: true, takeaway: true }; // Default
+        window.storeStatus = { delivery: true, takeaway: true }; 
 
         if (window.lastAddress) document.getElementById('delivery-address').value = window.lastAddress;
 
-        // Populate Table Grid for Manual Selection
         const tableGrid = document.getElementById('customer-table-grid');
         for(let i=1; i<=10; i++) { tableGrid.innerHTML += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
 
-        // Show "Usual Order" only if same context
         if (window.lastOrder && Object.keys(window.lastOrder).length > 0) {
-            // Only show usual if not switching from table to delivery, etc.
             document.getElementById('usual-order-container').style.display = 'block';
             let desc = Object.keys(window.lastOrder).map(k => `${window.lastOrder[k].qty}x ${k}`).join(', ');
             document.getElementById('usual-order-desc').innerText = `${desc} — ₹${window.lastAmount}`;
@@ -296,128 +297,71 @@
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
         window.flatMenu = {}; 
 
-        // --- LISTENERS ---
-        
-        // 1. Store Availability Listener
-        db.ref('settings/storeStatus').on('value', snap => {
-            window.storeStatus = snap.val() || { delivery: true, takeaway: true };
-            updateCheckoutOptions();
-        });
-
-        // 2. Cafe Open/Close
+        db.ref('settings/storeStatus').on('value', snap => { window.storeStatus = snap.val() || { delivery: true, takeaway: true }; updateCheckoutOptions(); });
         db.ref('settings/isOpen').on('value', snap => {
             const isOpen = snap.val(); const lockScreen = document.getElementById('closed-screen');
             if (isOpen === false) { lockScreen.style.display = "flex"; document.body.style.overflow = "hidden"; } 
             else { lockScreen.style.display = "none"; document.body.style.overflow = "auto"; }
         });
-
-        // 3. Menu Data
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderCustomerMenu(); });
         db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; renderCustomerMenu(); });
         db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; renderCustomerMenu(); });
 
-
-        // --- LOGIC FUNCTIONS ---
-
         function updateCheckoutOptions() {
-            const btnDel = document.getElementById('type-delivery');
-            const btnTak = document.getElementById('type-takeaway');
-            const btnDin = document.getElementById('type-dinein');
-            const scanMsg = document.getElementById('scan-instruction');
-            const payBtn = document.getElementById('btn-pay');
+            const btnDel = document.getElementById('type-delivery'); const btnTak = document.getElementById('type-takeaway'); const btnDin = document.getElementById('type-dinein'); const scanMsg = document.getElementById('scan-instruction'); const payBtn = document.getElementById('btn-pay');
             
-            // 1. If URL has Table -> Force Dine-in, Hide others
             if(urlTable) {
-                btnDin.classList.add('selected'); btnDin.style.display = 'block';
-                btnDel.style.display = 'none'; btnTak.style.display = 'none';
-                scanMsg.style.display = 'none';
-                window.currentOrderType = 'Dine-in';
-                window.updateDynamicFields();
-                return;
+                btnDin.classList.add('selected'); btnDin.style.display = 'block'; btnDel.style.display = 'none'; btnTak.style.display = 'none'; scanMsg.style.display = 'none'; window.currentOrderType = 'Dine-in'; window.updateDynamicFields(); return;
             }
 
-            // 2. No Table -> Check Store Status
-            // Hide/Show based on status
             if(window.storeStatus.delivery) btnDel.classList.remove('hidden'); else btnDel.classList.add('hidden');
             if(window.storeStatus.takeaway) btnTak.classList.remove('hidden'); else btnTak.classList.add('hidden');
 
-            // Dine-in button is hidden for remote users (General Link)
-            // Strategy: General Link is for Del/Tak. Table Link is for Dine-in.
             btnDin.classList.add('hidden'); 
 
-            // Logic: If both Del & Tak are OFF, show "Scan" message
             if(!window.storeStatus.delivery && !window.storeStatus.takeaway) {
-                scanMsg.style.display = 'block';
-                document.getElementById('order-type-section').style.display = 'none';
-                payBtn.disabled = true; payBtn.style.opacity = '0.5';
+                scanMsg.style.display = 'block'; document.getElementById('order-type-section').style.display = 'none'; payBtn.disabled = true; payBtn.style.opacity = '0.5';
             } else {
-                scanMsg.style.display = 'none';
-                document.getElementById('order-type-section').style.display = 'block';
-                payBtn.disabled = false; payBtn.style.opacity = '1';
-                
-                // Auto-select valid option if current is invalid
+                scanMsg.style.display = 'none'; document.getElementById('order-type-section').style.display = 'block'; payBtn.disabled = false; payBtn.style.opacity = '1';
                 if (window.currentOrderType === 'Delivery' && !window.storeStatus.delivery) window.setOrderType('Takeaway');
                 else if (window.currentOrderType === 'Takeaway' && !window.storeStatus.takeaway) window.setOrderType('Delivery');
                 else if (window.currentOrderType === 'Dine-in') {
-                    // Reset to available
-                     if(window.storeStatus.delivery) window.setOrderType('Delivery');
-                     else if(window.storeStatus.takeaway) window.setOrderType('Takeaway');
+                     if(window.storeStatus.delivery) window.setOrderType('Delivery'); else if(window.storeStatus.takeaway) window.setOrderType('Takeaway');
                 }
             }
         }
 
-        function saveCart() { 
-            localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); 
-            localStorage.setItem('ila_customer_amount', window.totalAmount); 
-            localStorage.setItem('ila_customer_items', window.totalItems); 
-            updateCartUI(); 
-        }
-        
+        function saveCart() { localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); localStorage.setItem('ila_customer_amount', window.totalAmount); localStorage.setItem('ila_customer_items', window.totalItems); updateCartUI(); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
-            if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } 
-            else { banner.classList.remove('visible'); }
+            if (window.totalItems > 0) { document.getElementById('cart-total-text').innerText = `₹${window.totalAmount}`; banner.classList.add('visible'); } else { banner.classList.remove('visible'); }
             if (window.renderInlineControls) window.renderInlineControls();
         }
 
         window.getCartQty = function(baseName) {
             let qty = 0; let realBaseName = baseName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
-            for (let key in window.cart) {
-                if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; }
-            }
+            for (let key in window.cart) { if (key === realBaseName || key.startsWith(realBaseName + " (")) { qty += window.cart[key].qty; } }
             return qty;
         };
 
         window.renderInlineControls = function() {
             const containers = document.querySelectorAll('.swap-container');
             containers.forEach(container => {
-                let safeName = container.getAttribute('data-item');
-                let price = container.getAttribute('data-price');
-                let reqSweet = container.getAttribute('data-sweet') === 'true';
-                let qty = window.getCartQty(safeName);
-
-                if (qty > 0) {
-                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
-                } else {
-                    container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
-                }
+                let safeName = container.getAttribute('data-item'); let price = container.getAttribute('data-price'); let reqSweet = container.getAttribute('data-sweet') === 'true'; let qty = window.getCartQty(safeName);
+                if (qty > 0) { container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`; } 
+                else { container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`; }
             });
         };
 
         window.decrementInline = function(safeName) {
-            let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
-            let targetKey = null;
-            for (let key in window.cart) {
-                if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; }
-            }
+            let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'"); let targetKey = null;
+            for (let key in window.cart) { if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; } }
             if (targetKey) {
                 window.cart[targetKey].qty -= 1; window.totalAmount -= window.cart[targetKey].price; window.totalItems -= 1;
                 if (window.cart[targetKey].qty <= 0) delete window.cart[targetKey];
-                saveCart(); 
-                if (window.totalItems === 0) closeModal('checkout-modal'); 
-                else if (document.getElementById('checkout-modal').classList.contains('active')) window.openCheckoutModal();
+                saveCart(); if (window.totalItems === 0) closeModal('checkout-modal'); else if (document.getElementById('checkout-modal').classList.contains('active')) window.openCheckoutModal();
             }
         };
 
@@ -426,8 +370,7 @@
             if (Object.keys(currentMenuData).length === 0) { container.innerHTML = "<p style='text-align: center; opacity:0.5;'>Menu updating...</p>"; return; }
             container.innerHTML = ""; window.flatMenu = {};
 
-            let activeCats = Object.keys(currentMenuData);
-            let sortedCats = currentCategoryOrder.filter(cat => activeCats.includes(cat));
+            let activeCats = Object.keys(currentMenuData); let sortedCats = currentCategoryOrder.filter(cat => activeCats.includes(cat));
             activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
 
             sortedCats.forEach(category => {
@@ -436,16 +379,9 @@
                 
                 itemsInOrder.forEach(itemName => {
                     const item = currentMenuData[category] ? currentMenuData[category][itemName] : null;
-                    if (!item || item.visibility === 'pos') return; 
-                    hasVisibleItems = true; item.originalName = itemName; 
-                    if (item.hasSizes) { 
-                        sizedItems.push(item);
-                        window.flatMenu[itemName + " (Regular)"] = { price: item.priceReg, inStock: item.inStock };
-                        window.flatMenu[itemName + " (Large)"] = { price: item.priceLrg, inStock: item.inStock };
-                    } else { 
-                        standardItems.push(item); 
-                        window.flatMenu[itemName] = { price: item.price, inStock: item.inStock };
-                    }
+                    if (!item || item.visibility === 'pos') return; hasVisibleItems = true; item.originalName = itemName; 
+                    if (item.hasSizes) { sizedItems.push(item); window.flatMenu[itemName + " (Regular)"] = { price: item.priceReg, inStock: item.inStock }; window.flatMenu[itemName + " (Large)"] = { price: item.priceLrg, inStock: item.inStock }; } 
+                    else { standardItems.push(item); window.flatMenu[itemName] = { price: item.price, inStock: item.inStock }; }
                 });
 
                 if (!hasVisibleItems) return;
@@ -453,21 +389,15 @@
 
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    if (item.inStock) {
-                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
-                    } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
-                    }
+                    if (item.inStock) { catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`; } 
+                    else { catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`; }
                 });
 
                 if (sizedItems.length > 0) {
                     catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
                     sizedItems.forEach(item => {
-                        let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
-                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
-
+                        let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;"); let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`; let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
                         if (item.inStock) {
                             if(item.priceReg) regHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '<div style="width:100%; text-align:right;">-</div>';
                             if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
@@ -475,8 +405,7 @@
                         catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
                     });
                 }
-                catHTML += `</section>`;
-                container.innerHTML += catHTML;
+                catHTML += `</section>`; container.innerHTML += catHTML;
             });
             window.renderInlineControls();
         }
@@ -484,19 +413,12 @@
         window.validateAndSyncCart = function(cartObj) {
             let validCart = {}; let newTotal = 0; let newCount = 0; let changed = false; let removed = [];
             let menuKeys = Object.keys(window.flatMenu).sort((a,b) => b.length - a.length);
-
             for(let cartKey in cartObj) {
-                let matchedMenuKey = menuKeys.find(key => cartKey.startsWith(key));
-                let liveData = window.flatMenu[matchedMenuKey];
-
+                let matchedMenuKey = menuKeys.find(key => cartKey.startsWith(key)); let liveData = window.flatMenu[matchedMenuKey];
                 if(liveData && liveData.inStock) {
                     if(cartObj[cartKey].price !== liveData.price) changed = true;
-                    validCart[cartKey] = { price: liveData.price, qty: cartObj[cartKey].qty };
-                    newTotal += (liveData.price * cartObj[cartKey].qty);
-                    newCount += cartObj[cartKey].qty;
-                } else {
-                    changed = true; removed.push(cartKey);
-                }
+                    validCart[cartKey] = { price: liveData.price, qty: cartObj[cartKey].qty }; newTotal += (liveData.price * cartObj[cartKey].qty); newCount += cartObj[cartKey].qty;
+                } else { changed = true; removed.push(cartKey); }
             }
             return { cart: validCart, total: newTotal, count: newCount, changed: changed, removed: removed };
         };
@@ -504,113 +426,69 @@
         window.loadUsualOrder = function() {
             if(Object.keys(window.flatMenu).length === 0) return alert("Menu syncing, please try again in a second.");
             let result = window.validateAndSyncCart(window.lastOrder);
-            
             if(result.removed.length > 0) {
                 alert("Sorry, some items in your usual order are currently out of stock:\n- " + result.removed.join("\n- "));
                 if(result.count === 0) return; 
             }
-            
             window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
-            saveCart(); window.setOrderType(window.lastOrderType || 'Dine-in');
-            window.openCheckoutModal();
+            saveCart(); window.setOrderType(window.lastOrderType || 'Dine-in'); window.openCheckoutModal();
         };
 
-        window.selectSweetness = function(val, btn) {
-            window.currentSweetness = val;
-            let siblings = btn.parentNode.children;
-            for(let s of siblings) s.classList.remove('selected');
-            btn.classList.add('selected');
-        };
+        window.selectSweetness = function(val, btn) { window.currentSweetness = val; let siblings = btn.parentNode.children; for(let s of siblings) s.classList.remove('selected'); btn.classList.add('selected'); };
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             let finalName = itemName.replace(/&quot;/g, '"');
-            
             if (!requiresSweetness) {
-                if (window.cart[finalName]) window.cart[finalName].qty += 1; 
-                else window.cart[finalName] = { price: price, qty: 1 };
-                
-                window.totalAmount += price; 
-                window.totalItems += 1;
-                
-                if (navigator.vibrate) navigator.vibrate(50);
-                saveCart(); 
-                return;
+                if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: price, qty: 1 };
+                window.totalAmount += price; window.totalItems += 1;
+                if (navigator.vibrate) navigator.vibrate(50); saveCart(); return;
             }
-
-            window.pendingItemName = itemName; window.pendingItemPrice = price; 
-            document.getElementById('remark-item-title').innerText = finalName; 
-            
-            window.currentSweetness = "Medium sweet";
-            const btns = document.querySelectorAll('#sweetness-grid .choice-btn');
-            btns.forEach(b => b.classList.remove('selected'));
-            if(btns.length > 0) btns[0].classList.add('selected');
-
+            window.pendingItemName = itemName; window.pendingItemPrice = price; document.getElementById('remark-item-title').innerText = finalName; 
+            window.currentSweetness = "Medium sweet"; const btns = document.querySelectorAll('#sweetness-grid .choice-btn');
+            btns.forEach(b => b.classList.remove('selected')); if(btns.length > 0) btns[0].classList.add('selected');
             document.getElementById('remark-modal').classList.add('active');
         };
 
         window.confirmAddItem = function() {
-            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            if (window.currentSweetness !== "") finalName += ` (${window.currentSweetness})`;
-            
+            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); if (window.currentSweetness !== "") finalName += ` (${window.currentSweetness})`;
             if (window.cart[finalName]) window.cart[finalName].qty += 1; else window.cart[finalName] = { price: window.pendingItemPrice, qty: 1 };
-            window.totalAmount += window.pendingItemPrice; window.totalItems += 1;
-            saveCart(); closeModal('remark-modal');
+            window.totalAmount += window.pendingItemPrice; window.totalItems += 1; saveCart(); closeModal('remark-modal');
         };
 
         window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('checkout-modal'); };
 
         window.openCheckoutModal = function() {
             if (window.totalItems === 0) return alert("Your cart is empty!");
-            
             let result = window.validateAndSyncCart(window.cart);
             if(result.changed) {
-                window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
-                saveCart(); 
-                if(result.removed.length > 0) {
-                    alert("Cart updated: Some items are no longer available and were removed.");
-                    if(window.totalItems === 0) return;
-                }
+                window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count; saveCart(); 
+                if(result.removed.length > 0) { alert("Cart updated: Some items are no longer available and were removed."); if(window.totalItems === 0) return; }
             }
-
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
             for (let item in window.cart) {
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
-            
-            document.getElementById('cart-notes').value = "";
-            document.getElementById('modal-checkout-total').innerText = window.totalAmount;
-            
-            // Check Store Status before opening to ensure valid state
-            updateCheckoutOptions();
-            document.getElementById('checkout-modal').classList.add('active');
+            document.getElementById('cart-notes').value = ""; document.getElementById('modal-checkout-total').innerText = window.totalAmount;
+            updateCheckoutOptions(); document.getElementById('checkout-modal').classList.add('active');
         };
 
         window.modifyCartItem = function(item, delta) {
             let realItemName = item.replace(/&quot;/g, '"');
             if (window.cart[realItemName]) {
                 window.cart[realItemName].qty += delta; window.totalAmount += (window.cart[realItemName].price * delta); window.totalItems += delta;
-                if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
-                saveCart(); 
+                if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName]; saveCart(); 
                 if (window.totalItems === 0) closeModal('checkout-modal'); else window.openCheckoutModal(); 
             }
         };
 
         window.setOrderType = function(type) {
             window.currentOrderType = type;
-            document.getElementById('type-dinein').classList.remove('selected');
-            document.getElementById('type-takeaway').classList.remove('selected');
-            document.getElementById('type-delivery').classList.remove('selected');
-            document.getElementById('type-' + type.toLowerCase().replace('-', '')).classList.add('selected');
-            window.updateDynamicFields();
+            document.getElementById('type-dinein').classList.remove('selected'); document.getElementById('type-takeaway').classList.remove('selected'); document.getElementById('type-delivery').classList.remove('selected');
+            document.getElementById('type-' + type.toLowerCase().replace('-', '')).classList.add('selected'); window.updateDynamicFields();
         };
 
-        window.setDineInTable = function(num, btn) {
-            window.currentDineInTable = num;
-            let siblings = btn.parentNode.children;
-            for(let s of siblings) s.classList.remove('selected');
-            btn.classList.add('selected');
-        };
+        window.setDineInTable = function(num, btn) { window.currentDineInTable = num; let siblings = btn.parentNode.children; for(let s of siblings) s.classList.remove('selected'); btn.classList.add('selected'); };
 
         window.updateDynamicFields = function() {
             const type = window.currentOrderType;
@@ -620,69 +498,42 @@
         };
 
         window.proceedToPayment = function() {
-            const type = window.currentOrderType; let details = "";
-            const notes = document.getElementById('cart-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
+            const type = window.currentOrderType; let details = ""; const notes = document.getElementById('cart-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
             if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Address required."); return; } } 
             else if (type === 'Dine-in') { 
-                if(urlTable) details = "Table " + urlTable; 
-                else if (window.currentDineInTable) details = "Table " + window.currentDineInTable;
-                else { alert("Please select a table number."); return; }
+                if(urlTable) details = "Table " + urlTable; else if (window.currentDineInTable) details = "Table " + window.currentDineInTable; else { alert("Please select a table number."); return; }
             } 
             else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup: ${time} min`; }
 
-            window.currentOrderInfo = { type, details, notes };
-            closeModal('checkout-modal');
-            document.getElementById('payment-amount').innerText = window.totalAmount;
+            window.currentOrderInfo = { type, details, notes }; closeModal('checkout-modal'); document.getElementById('payment-amount').innerText = window.totalAmount;
             
-            const upiString = `upi://pay?pa=${CAFE_UPI_ID}&pn=ILA&am=${window.totalAmount}&cu=INR`;
+            const selectedUPI = window.getRandomUPI();
+            const upiString = `upi://pay?pa=${selectedUPI}&pn=ILA&am=${window.totalAmount}&cu=INR`;
+            
             document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
-            
-            document.getElementById('confirm-order-btn').style.display = 'none';
-            document.getElementById('payment-instruction').style.display = 'block';
+            document.getElementById('confirm-order-btn').style.display = 'none'; document.getElementById('payment-instruction').style.display = 'block';
 
             document.getElementById('pay-upi-btn').onclick = () => { 
                 window.location.href = upiString; 
-                setTimeout(() => {
-                    document.getElementById('payment-instruction').style.display = 'none';
-                    document.getElementById('confirm-order-btn').style.display = 'block';
-                }, 1500);
+                setTimeout(() => { document.getElementById('payment-instruction').style.display = 'none'; document.getElementById('confirm-order-btn').style.display = 'block'; }, 1500);
             };
-            
             document.getElementById('payment-modal').classList.add('active');
         };
 
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo; 
-            
-            // Save preferences
-            localStorage.setItem('ila_last_order', JSON.stringify(window.cart));
-            localStorage.setItem('ila_last_amount', window.totalAmount);
-            localStorage.setItem('ila_last_order_type', info.type); 
-            if (info.type === 'Delivery') {
-                localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim());
-            }
+            localStorage.setItem('ila_last_order', JSON.stringify(window.cart)); localStorage.setItem('ila_last_amount', window.totalAmount); localStorage.setItem('ila_last_order_type', info.type); 
+            if (info.type === 'Delivery') { localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim()); }
 
-            // PUSH to DB
-            db.ref('orders/pendingWeb').push({
-                orderType: info.type,
-                tableOrAddress: info.details,
-                notes: info.notes || "",
-                items: window.cart,
-                total: window.totalAmount,
-                paymentMethod: "UPI"
-            });
+            db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI" });
 
-            // WHATSAPP
             let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
-            if (info.notes) { message += `Notes: ${info.notes}\n`; }
-            message += `\n`;
+            if (info.notes) { message += `Notes: ${info.notes}\n`; } message += `\n`;
             for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
             message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
             
             setTimeout(() => { 
-                window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); 
-                closeModal('payment-modal'); 
+                window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('payment-modal'); 
                 window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; 
             }, 100);
         };
