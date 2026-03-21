@@ -17,6 +17,7 @@
         header { text-align: center; margin-bottom: 25px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
+        /* 5-ITEM DASHBOARD - Tuned to fit perfectly on mobile */
         .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1; transition: opacity 0.2s; }
         .dash-stat:active { opacity: 0.5; }
@@ -311,14 +312,15 @@
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "918882946526"; 
         
-        // --- NEW UPI ROUTING SYSTEM ---
-        window.activeUPIs = [CAFE_UPI_ID];
+        // --- LIVE UPI ROUTING ---
+        window.activeUPIs = [CAFE_UPI_ID]; 
         db.ref('settings/upiList').on('value', snap => {
             if (snap.exists() && snap.val().length > 0) { window.activeUPIs = snap.val(); }
         });
         window.getRandomUPI = function() {
             return window.activeUPIs[Math.floor(Math.random() * window.activeUPIs.length)];
         };
+        // ------------------------
 
         window.defaultModifiers = [
             { name: "Medium sweet", price: 0 },
@@ -497,4 +499,646 @@
                 let safeName = container.getAttribute('data-item');
                 let price = container.getAttribute('data-price');
                 let reqSweet = container.getAttribute('data-sweet') === 'true';
-                let qty = window.getCartQty(safeName
+                let qty = window.getCartQty(safeName);
+
+                if (qty > 0) {
+                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
+                } else {
+                    container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
+                }
+            });
+        };
+
+        window.decrementInline = function(safeName) {
+            let realBaseName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            let targetKey = null;
+            for (let key in window.cart) {
+                if (key === realBaseName || key.startsWith(realBaseName + " (")) { targetKey = key; break; }
+            }
+            if (targetKey) {
+                window.cart[targetKey].qty -= 1; window.totalAmount -= window.cart[targetKey].price; window.totalItems -= 1;
+                if (window.cart[targetKey].qty <= 0) delete window.cart[targetKey];
+                saveLocalCart(); 
+                if (window.totalItems === 0) closeModal('review-cart-modal'); 
+                else if (document.getElementById('review-cart-modal').classList.contains('active')) window.openReviewCartModal();
+            }
+        };
+
+        function syncToCloud() {
+            db.ref('pos').update({
+                activeTables: Object.keys(window.activeTables).length > 0 ? window.activeTables : null,
+                cashDrawer: window.cashDrawer || 0,
+                upiTotal: window.upiTotal || 0,
+                salesLedger: window.salesLedger.length > 0 ? window.salesLedger : null,
+                pastBills: window.pastBills.length > 0 ? window.pastBills : null
+            }).catch(e => console.error("Cloud Sync Error: ", e));
+        }
+
+        db.ref('pos/activeTables').on('value', snap => { 
+            let data = snap.val() || {};
+            if (Array.isArray(data)) {
+                window.activeTables = {};
+                data.forEach((val, idx) => { if(val) window.activeTables[idx.toString()] = val; });
+            } else {
+                window.activeTables = data;
+            }
+            updateDashboards(); refreshActiveModals();
+        });
+
+        db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
+        db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
+        db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
+        db.ref('pos/pastBills').on('value', snap => { 
+            window.pastBills = snap.val() || []; 
+            calculateDailyCups();
+        });
+
+        db.ref('orders/pendingWeb').on('value', snap => {
+            window.pendingWebOrders = snap.val() || {};
+            let count = Object.keys(window.pendingWebOrders).length;
+            document.getElementById('web-orders-count').innerText = count;
+            document.getElementById('web-orders-count').style.opacity = count > 0 ? "1" : "0.5";
+            
+            if(document.getElementById('web-orders-modal').classList.contains('active')) {
+                window.openWebOrders();
+            }
+        });
+
+        function calculateDailyCups() {
+            let cupTotal = 0;
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const startOfTodayMs = startOfToday.getTime();
+            
+            let coffeeKeys = Object.keys(window.coffeeItemsMap).sort((a,b) => b.length - a.length);
+
+            window.pastBills.forEach(bill => {
+                if(bill.id >= startOfTodayMs && bill.items) {
+                    for(let itemName in bill.items) {
+                        let matchedCoffee = coffeeKeys.find(key => itemName.startsWith(key));
+                        if(matchedCoffee) {
+                            let qty = bill.items[itemName].qty || 0;
+                            if(itemName.includes("(Large)")) { cupTotal += (qty * 3); } 
+                            else { cupTotal += (qty * 2); }
+                        }
+                    }
+                }
+            });
+            document.getElementById('cups-display').innerText = cupTotal;
+        }
+
+        function updateDashboards() {
+            document.getElementById('cash-display').innerText = `₹${Math.round(window.cashDrawer)}`;
+            document.getElementById('upi-display').innerText = `₹${Math.round(window.upiTotal)}`;
+            document.getElementById('active-bills-count').innerText = Object.keys(window.activeTables).length;
+            document.getElementById('modal-cash-display').innerText = Math.round(window.cashDrawer);
+            document.getElementById('modal-upi-display').innerText = Math.round(window.upiTotal);
+        }
+
+        function refreshActiveModals() {
+            if(document.getElementById('active-bills-modal').classList.contains('active')) openActiveBills();
+            if(document.getElementById('checkout-modal').classList.contains('active') && window.checkoutTableID) {
+                if(!window.activeTables[window.checkoutTableID]) closeModal('checkout-modal'); 
+                else renderCheckoutReceipt(window.checkoutTableID);
+            }
+            if(document.getElementById('table-modal').classList.contains('active')) openTableModal();
+        }
+
+        let currentMenuData = {}; let liveCategoryOrder = []; window.currentItemOrder = {};
+
+        db.ref('.info/connected').on('value', function(snap) {
+            if (snap.val() === true) {
+                document.getElementById('offline-indicator').style.display = 'none';
+            } else {
+                document.getElementById('offline-indicator').style.display = 'block';
+                let cachedMenu = JSON.parse(localStorage.getItem('ila_cached_menu'));
+                let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
+                window.currentItemOrder = JSON.parse(localStorage.getItem('ila_cached_item_order')) || {};
+                if(cachedMenu) renderPOSMenu(cachedMenu, cachedOrder || []);
+            }
+        });
+
+        db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
+        db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
+        
+        db.ref('menu').on('value', snap => { 
+            currentMenuData = snap.val() || {}; 
+            localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
+            
+            window.itemRoutingMap = {};
+            window.coffeeItemsMap = {}; 
+
+            for(let cat in currentMenuData) {
+                let isCoffeeCat = cat.toLowerCase().includes('coffee');
+
+                for(let item in currentMenuData[cat]) {
+                    let route = currentMenuData[cat][item].routing || 'barista';
+                    window.itemRoutingMap[item] = route;
+                    if(isCoffeeCat) window.coffeeItemsMap[item] = true;
+
+                    if(currentMenuData[cat][item].hasSizes) {
+                        window.itemRoutingMap[item + " (Regular)"] = route;
+                        window.itemRoutingMap[item + " (Large)"] = route;
+                        if(isCoffeeCat) window.coffeeItemsMap[item + " (Regular)"] = true;
+                        if(isCoffeeCat) window.coffeeItemsMap[item + " (Large)"] = true;
+                    }
+                }
+            }
+            renderPOSMenu(currentMenuData, liveCategoryOrder); 
+            calculateDailyCups(); 
+        });
+
+        function renderPOSMenu(menuData, categoryOrder) {
+            const container = document.getElementById('live-menu-container');
+            if (!menuData) return;
+            container.innerHTML = "";
+
+            let activeCats = Object.keys(menuData);
+            let sortedCats = categoryOrder.filter(cat => activeCats.includes(cat));
+            activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
+
+            sortedCats.forEach(category => {
+                let standardItems = []; let sizedItems = []; let hasVisibleItems = false;
+                let itemsInOrder = window.currentItemOrder && window.currentItemOrder[category] ? window.currentItemOrder[category] : Object.keys(menuData[category]);
+                
+                itemsInOrder.forEach(itemName => {
+                    const item = menuData[category] ? menuData[category][itemName] : null;
+                    if (!item || item.visibility === 'customer') return; 
+                    hasVisibleItems = true; item.originalName = itemName; 
+                    if (item.hasSizes) { sizedItems.push(item); } else { standardItems.push(item); }
+                });
+
+                if (!hasVisibleItems) return;
+                let catHTML = `<section><h2>${category}</h2>`;
+
+                standardItems.forEach(item => {
+                    const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    if (item.inStock) {
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
+                    } else {
+                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
+                    }
+                });
+
+                if (sizedItems.length > 0) {
+                    catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
+                    sizedItems.forEach(item => {
+                        let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+
+                        if (item.inStock) {
+                            if(item.priceReg) regHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '<div style="width:100%; text-align:right;">-</div>';
+                            if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
+                        }
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
+                    });
+                }
+                catHTML += `</section>`;
+                container.innerHTML += catHTML;
+            });
+            window.renderInlineControls();
+        }
+
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        window.selectSweetness = function(val, price, btn) {
+            window.currentModifierName = val;
+            window.currentModifierPrice = price;
+            let siblings = btn.parentNode.children;
+            for(let s of siblings) s.classList.remove('selected');
+            btn.classList.add('selected');
+        };
+
+        window.promptRemark = function(itemName, price, requiresSweetness = false) {
+            let finalName = itemName.replace(/&quot;/g, '"');
+            
+            if (!requiresSweetness) {
+                if (window.cart[finalName]) window.cart[finalName].qty += 1; 
+                else window.cart[finalName] = { price: price, qty: 1 };
+                window.totalAmount += parseFloat(price) || 0; 
+                window.totalItems += 1;
+                if (navigator.vibrate) navigator.vibrate(50);
+                saveLocalCart();
+                return;
+            }
+
+            const grid = document.getElementById('pos-sweetness-grid');
+            grid.innerHTML = "";
+            window.defaultModifiers.forEach((mod, index) => {
+                let btn = document.createElement("button");
+                btn.className = "choice-btn";
+                let label = mod.price > 0 ? `${mod.name} (+₹${mod.price})` : mod.name;
+                btn.innerText = label;
+                btn.onclick = function() { window.selectSweetness(mod.name, mod.price, this); };
+                if(index === 0) { 
+                    btn.classList.add('selected'); 
+                    window.currentModifierName = mod.name;
+                    window.currentModifierPrice = mod.price;
+                }
+                grid.appendChild(btn);
+            });
+
+            window.pendingItemName = itemName; 
+            window.pendingItemPrice = price; 
+            window.isBeveragePending = requiresSweetness;
+            document.getElementById('remark-item-title').innerText = finalName; 
+            document.getElementById('remark-modal').classList.add('active');
+        };
+
+        window.confirmAddItem = function() {
+            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
+            if (window.currentModifierName !== "") { finalName += ` (${window.currentModifierName})`; }
+            let finalPrice = (parseFloat(window.pendingItemPrice) || 0) + (parseFloat(window.currentModifierPrice) || 0);
+
+            if (window.cart[finalName]) { window.cart[finalName].qty += 1; } 
+            else { window.cart[finalName] = { price: finalPrice, qty: 1 }; }
+            
+            window.totalAmount += finalPrice; 
+            window.totalItems += 1;
+            saveLocalCart(); closeModal('remark-modal');
+        };
+
+        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveLocalCart(); closeModal('review-cart-modal'); };
+
+        window.openReviewCartModal = function() {
+            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
+            if (window.totalItems === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.5;'>Empty</p>"; } 
+            else {
+                for (let item in window.cart) {
+                    const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                }
+            }
+            document.getElementById('review-cart-modal').classList.add('active');
+        };
+
+        window.modifyCartItem = function(item, delta) {
+            let realItemName = item.replace(/&quot;/g, '"');
+            if (window.cart[realItemName]) {
+                window.cart[realItemName].qty += delta; window.totalAmount += (parseFloat(window.cart[realItemName].price) * delta); window.totalItems += delta;
+                if (window.cart[realItemName].qty <= 0) delete window.cart[realItemName];
+                saveLocalCart();
+                if (window.totalItems === 0) closeModal('review-cart-modal'); else window.openReviewCartModal();
+            }
+        };
+
+        function dispatchToKitchen(cartObj, destination, notes, source) {
+            let baristaItems = {}; let chefItems = {};
+            for (let itemName in cartObj) {
+                let baseName = itemName.split(" (")[0]; 
+                let routing = window.itemRoutingMap[baseName] || 'barista';
+                if(routing === 'chef') { chefItems[itemName] = cartObj[itemName]; } 
+                else { baristaItems[itemName] = cartObj[itemName]; }
+            }
+            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            if (Object.keys(baristaItems).length > 0) {
+                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr });
+            }
+            if (Object.keys(chefItems).length > 0) {
+                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr });
+            }
+        }
+
+        window.sendOrder = function(tableID) {
+            if (window.totalItems === 0) return alert("Cart is empty!");
+            
+            const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
+            
+            try {
+                dispatchToKitchen(window.cart, destName, notes, "POS");
+            } catch(e) { console.error("Kitchen dispatch error", e); }
+
+            if (!window.activeTables[tableID]) window.activeTables[tableID] = { items: {}, total: 0, paid: 0, notes: "" };
+            
+            if (notes) {
+                if (window.activeTables[tableID].notes) window.activeTables[tableID].notes += " | " + notes;
+                else window.activeTables[tableID].notes = notes;
+            }
+
+            for (let item in window.cart) {
+                if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
+                else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
+            }
+            
+            let safeTotal = parseFloat(window.totalAmount) || 0;
+            window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + safeTotal;
+            
+            syncToCloud();
+            
+            closeModal('table-modal'); 
+            window.clearCart();
+        };
+
+        window.openTableModal = function() {
+            if (window.totalItems === 0) return alert("Cart is empty!");
+            document.getElementById('pos-order-notes').value = "";
+            const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
+            for (let i = 1; i <= 10; i++) {
+                const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
+                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="window.sendOrder('${i}')">${i}</button>`;
+            }
+            document.getElementById('table-modal').classList.add('active');
+        };
+
+        window.openActiveBills = function() {
+            const list = document.getElementById('active-bills-list'); list.innerHTML = "";
+            if (Object.keys(window.activeTables).length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No active tables.</p>"; } 
+            else {
+                for (let table in window.activeTables) {
+                    list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${table}')"><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span><span>₹${window.activeTables[table].total}</span></div>`;
+                }
+            }
+            document.getElementById('active-bills-modal').classList.add('active');
+        };
+
+        function renderCheckoutReceipt(tableID) {
+            const tableData = window.activeTables[tableID];
+            if(!tableData) return; 
+            
+            let total = parseFloat(tableData.total) || 0; 
+            let paid = parseFloat(tableData.paid) || 0; 
+            let remaining = total - paid;
+            let receiptHTML = "";
+            
+            if (tableData.notes) {
+                receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${tableData.notes}</div>`;
+            }
+
+            for (let item in tableData.items) { 
+                const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
+            }
+            receiptHTML += `<div class="bill-grand-total">Total: ₹${total}</div>`;
+            if (paid > 0) {
+                receiptHTML += `<div style="text-align: right; opacity: 0.8; font-size: 0.9rem; margin-top: 5px;">Paid: ₹${paid}</div>`;
+                receiptHTML += `<div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`;
+            }
+            document.getElementById('checkout-receipt').innerHTML = receiptHTML;
+            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
+        }
+
+        window.openCheckout = function(tableID) {
+            window.checkoutTableID = tableID; 
+            document.getElementById('checkout-phone').value = ""; 
+            renderCheckoutReceipt(tableID);
+            closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
+        };
+
+        window.removeTableItem = function(tableID, itemName) {
+            let realItemName = itemName.replace(/&quot;/g, '"');
+            const tableData = window.activeTables[tableID];
+            
+            if(tableData && tableData.items[realItemName]) {
+                const reason = prompt(`Removing ${realItemName}. Reason?`);
+                if (!reason) return; 
+
+                const voidData = {
+                    time: new Date().toLocaleString(),
+                    table: tableID,
+                    item: realItemName,
+                    value: tableData.items[realItemName].price,
+                    reason: reason
+                };
+                db.ref('security/voids').push(voidData);
+
+                // --- NEW: SEND CANCELLATION TICKET TO KITCHEN ---
+                let destName = tableID.startsWith('Takeaway') ? tableID : 'Table ' + tableID;
+                let voidCart = {};
+                voidCart[realItemName] = { price: 0, qty: "❌ -1" }; 
+                try {
+                    dispatchToKitchen(voidCart, destName, `VOID / CANCELLED. Reason: ${reason}`, "POS Update");
+                } catch(e) { console.error("Kitchen dispatch error", e); }
+                // ------------------------------------------------
+
+                tableData.total = (parseFloat(tableData.total) || 0) - (parseFloat(tableData.items[realItemName].price) || 0); 
+                tableData.items[realItemName].qty -= 1;
+                if(tableData.items[realItemName].qty <= 0) delete tableData.items[realItemName];
+                
+                let paid = parseFloat(tableData.paid) || 0;
+                let newTotal = parseFloat(tableData.total) || 0;
+
+                if(Object.keys(tableData.items).length === 0) { 
+                    delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return; 
+                }
+                if(paid >= newTotal && paid > 0) {
+                     archivePOSTable(tableID, tableData, "Partial/Cleared");
+                     delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return;
+                }
+                syncToCloud();
+            }
+        };
+
+        window.openSplitBill = function() {
+            const tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            document.getElementById('split-total').innerText = total;
+            document.getElementById('split-remaining').innerText = remaining;
+            document.getElementById('partial-pay-amount').value = remaining;
+            closeModal('checkout-modal'); document.getElementById('split-bill-modal').classList.add('active');
+        };
+
+        window.closeSplitBill = function() { closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
+        
+        window.calculateSplit = function(ways) {
+            const tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            document.getElementById('partial-pay-amount').value = Math.ceil(remaining / ways);
+        };
+
+        window.processSplit = function(method) {
+            let amount = parseFloat(document.getElementById('partial-pay-amount').value);
+            let tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            
+            if (isNaN(amount) || amount <= 0) return;
+            if (amount > remaining) amount = remaining; 
+            
+            if (method === 'upi') window.payWithUPI(amount); else window.payWithCash(amount);
+        };
+
+        window.payWithCash = function(customAmount = null) {
+            window.currentPaymentMethod = "Cash";
+            const tableData = window.activeTables[window.checkoutTableID];
+            
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+            
+            let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
+            amountToPay = amountToPay || 0;
+
+            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (Cash)' : `Table ${window.checkoutTableID} (Cash)`;
+            
+            addLedgerEntry('cash_income', amountToPay, reason);
+            tableData.paid = paid + amountToPay;
+            
+            if (tableData.paid >= total) {
+                archivePOSTable(window.checkoutTableID, tableData, "Cash");
+                delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
+                closeModal('checkout-modal'); closeModal('split-bill-modal');
+            } else {
+                syncToCloud(); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
+            }
+        };
+
+        window.payWithUPI = function(customAmount = null) {
+            window.currentPaymentMethod = "UPI";
+            const tableData = window.activeTables[window.checkoutTableID];
+            
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+
+            let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
+            amountToPay = amountToPay || 0;
+            
+            window.pendingUPIAmount = amountToPay;
+            
+            const selectedUPI = window.getRandomUPI();
+            const upiString = `upi://pay?pa=${selectedUPI}&pn=ILA&am=${amountToPay}&cu=INR`;
+            
+            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
+            document.getElementById('upi-amount-text').innerText = `₹${amountToPay}`;
+            
+            closeModal('checkout-modal'); closeModal('split-bill-modal'); document.getElementById('upi-modal').classList.add('active');
+        };
+
+        window.confirmUPIPayment = function() {
+            let amountToPay = parseFloat(window.pendingUPIAmount) || 0;
+            const tableData = window.activeTables[window.checkoutTableID];
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+
+            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (UPI)' : `Table ${window.checkoutTableID} (UPI)`;
+            
+            addLedgerEntry('upi_income', amountToPay, reason); 
+            tableData.paid = paid + amountToPay;
+
+            if (tableData.paid >= total) {
+                archivePOSTable(window.checkoutTableID, tableData, "UPI");
+                delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
+                closeModal('upi-modal'); 
+            } else {
+                syncToCloud(); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
+            }
+        };
+
+        function addLedgerEntry(type, amount, reason) {
+            const parsedAmount = parseFloat(amount) || 0;
+            const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            window.salesLedger.unshift({ date: timeString, type: type, amount: parsedAmount, reason: reason }); 
+            
+            if (type === 'cash_income') {
+                window.cashDrawer = (parseFloat(window.cashDrawer) || 0) + parsedAmount;
+            } else if (type === 'upi_income') {
+                window.upiTotal = (parseFloat(window.upiTotal) || 0) + parsedAmount;
+            } else {
+                window.cashDrawer = (parseFloat(window.cashDrawer) || 0) - parsedAmount;
+            }
+            syncToCloud();
+        }
+
+        function renderLedger() {
+            const list = document.getElementById('ledger-list'); list.innerHTML = "";
+            if (window.salesLedger.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; return; }
+            window.salesLedger.forEach(entry => {
+                let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
+                if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'CASH: '; } 
+                else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
+                
+                let safeAmount = parseFloat(entry.amount) || 0;
+                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
+            });
+        }
+
+        window.openPastBills = function() {
+            const list = document.getElementById('past-bills-list'); list.innerHTML = "";
+            if (window.pastBills.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; } 
+            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
+            document.getElementById('past-bills-modal').classList.add('active');
+        };
+
+        window.viewPastBill = function(id) {
+            const bill = window.pastBills.find(b => b.id === id); if (!bill) return; window.currentPastBillID = id;
+            document.getElementById('past-bill-title').innerText = bill.table;
+            document.getElementById('past-bill-date').innerText = bill.date;
+            let receiptHTML = ""; 
+            if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${bill.notes}</div>`;
+            for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
+            receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
+            document.getElementById('past-bill-receipt').innerHTML = receiptHTML; document.getElementById('past-bill-phone').value = "";
+            closeModal('past-bills-modal'); document.getElementById('view-past-bill-modal').classList.add('active');
+        };
+
+        window.sendPastBillWhatsApp = function() {
+            const phone = document.getElementById('past-bill-phone').value.trim(); if (phone.length < 10) return;
+            const bill = window.pastBills.find(b => b.id === window.currentPastBillID); let billStr = `ILA\n\n`;
+            for (let item in bill.items) { billStr += `${bill.items[item].qty}x ${item} - ₹${bill.items[item].qty * bill.items[item].price}\n`; }
+            billStr += `\nPaid: ₹${bill.total}`; window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
+        };
+
+        window.sendWhatsAppBill = function() {
+            const phone = document.getElementById('checkout-phone').value.trim(); if (phone.length < 10) return;
+            const tableData = window.activeTables[window.checkoutTableID]; let billStr = `ILA\n\n`;
+            for (let item in tableData.items) { billStr += `${tableData.items[item].qty}x ${item} - ₹${tableData.items[item].qty * tableData.items[item].price}\n`; }
+            
+            let total = parseFloat(tableData.total) || 0;
+            let paid = parseFloat(tableData.paid) || 0;
+            let remaining = total - paid;
+
+            billStr += `\nTotal: ₹${total}\n`;
+            if(paid > 0) billStr += `Paid: ₹${paid}\nDue: ₹${remaining}\n\n`;
+            else billStr += `\n`;
+
+            const selectedUPI = window.getRandomUPI();
+            billStr += `Pay via UPI:\n${CAFE_WEBSITE_LINK}/pay.html?am=${remaining}&id=${selectedUPI}`;
+            window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
+        };
+
+        window.openCashManagement = function() { renderLedger(); document.getElementById('cash-modal').classList.add('active'); };
+        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
+        window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
+
+        window.confirmTransaction = function() {
+            const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
+            if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
+            const staffName = window.staffPins[pinStr]; if (!staffName) return;
+            
+            let currentCash = parseFloat(window.cashDrawer) || 0;
+            if (amount > currentCash && !confirm(`Only ₹${currentCash} in drawer. Continue?`)) return;
+            
+            addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (${staffName})`);
+            window.closeTransactionModal();
+        };
+
+        window.promptEOD = function() {
+            const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
+            const staffName = window.staffPins[pinStr]; if (!staffName) return;
+            if (Object.keys(window.activeTables).length > 0) { if(!confirm("Tables open. End day?")) return; }
+            
+            let safeUPI = parseFloat(window.upiTotal) || 0;
+            let safeCash = parseFloat(window.cashDrawer) || 0;
+
+            let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${Math.round(safeUPI)}\nCash: ₹${Math.round(safeCash)}\n\nEXPENSES:\n`;
+            let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
+            if (!exp) report += `None.\n`;
+            if (confirm("Send Report?")) {
+                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; syncToCloud(); closeModal('cash-modal');
+                setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
+            }
+        };
+        updateCartUI();
+    </script>
+</body>
+</html>
