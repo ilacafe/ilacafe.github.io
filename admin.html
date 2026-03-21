@@ -176,6 +176,7 @@
                 </div>
             </div>
         </div>
+        
         <div class="admin-card">
             <h2>Service Availability</h2>
             <div class="row-group">
@@ -208,7 +209,7 @@
             </div>
         </div>
 
-        <div class="admin-card" style="margin-bottom: 60px;">
+        <div class="admin-card">
             <h2>Security Logs (Voids)</h2>
             <div id="voids-container" style="max-height: 300px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
                 <p style="opacity: 0.5; text-align: center;">Loading logs...</p>
@@ -279,6 +280,15 @@
             <button class="btn btn-secondary" onclick="addStaff()">Add Staff</button>
             <div id="staff-list-container" style="margin-top: 20px;"></div>
         </div>
+        
+        <div class="admin-card" style="margin-bottom: 60px;">
+            <h2>UPI Routing</h2>
+            <div class="row-group" style="margin-bottom: 15px;">
+                <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="add-upi-id" placeholder="e.g. cafe@ybl"></div>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="addUPI()">Add UPI</button>
+            </div>
+            <div id="upi-list-container"></div>
+        </div>
 
     </div>
 
@@ -341,7 +351,7 @@
             if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
             if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
             renderAllViews();
-            processAnalytics(); // Update analytics when menu changes (for dead stock)
+            processAnalytics(); 
         });
 
         function getSortedCategories() { return currentCategoryOrder.filter(cat => Object.keys(currentMenuData).includes(cat)); }
@@ -477,6 +487,33 @@
         };
         window.removeStaff = function(pin, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + pin).remove(); };
 
+        // --- NEW UPI ROUTING SYSTEM ---
+        let currentUPIs = ["sraveen.chirania-1@okaxis"]; 
+        
+        db.ref('settings/upiList').on('value', snap => {
+            currentUPIs = snap.val() || ["sraveen.chirania-1@okaxis"];
+            const container = document.getElementById('upi-list-container');
+            container.innerHTML = "";
+            currentUPIs.forEach((upi, index) => {
+                container.innerHTML += `<div class="list-item"><div><strong>${upi}</strong></div><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeUPI(${index})">✖</button></div>`;
+            });
+        });
+
+        window.addUPI = function() {
+            const val = document.getElementById('add-upi-id').value.trim();
+            if(val && !currentUPIs.includes(val)) {
+                currentUPIs.push(val);
+                db.ref('settings/upiList').set(currentUPIs);
+                document.getElementById('add-upi-id').value = "";
+            }
+        };
+
+        window.removeUPI = function(index) {
+            if(currentUPIs.length <= 1) return alert("You must have at least one active UPI ID.");
+            currentUPIs.splice(index, 1);
+            db.ref('settings/upiList').set(currentUPIs);
+        };
+
         db.ref('orders/history').on('value', snap => {
             orderHistory = snap.val() || {};
             renderLedger();
@@ -509,28 +546,16 @@
             container.innerHTML = listHTML; document.getElementById('ledger-total').innerText = '₹' + todayTotal; document.getElementById('ledger-upi').innerText = '₹' + todayUPI; document.getElementById('ledger-cash').innerText = '₹' + todayCash;
         }
 
-        // --- NEW ADVANCED ANALYTICS ENGINE ---
         window.processAnalytics = function() {
             const filter = document.getElementById('analytics-filter').value;
             const now = new Date();
             let startTs, prevStartTs;
             
-            // Calculate Timeframes
-            if (filter === 'today') {
-                startTs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-                prevStartTs = startTs - (24 * 60 * 60 * 1000); // Yesterday
-            } else if (filter === 'week') {
-                startTs = now.getTime() - (7 * 24 * 60 * 60 * 1000);
-                prevStartTs = startTs - (7 * 24 * 60 * 60 * 1000); // Prev 7 days
-            } else if (filter === 'month') {
-                startTs = now.getTime() - (30 * 24 * 60 * 60 * 1000);
-                prevStartTs = startTs - (30 * 24 * 60 * 60 * 1000); // Prev 30 days
-            } else if (filter === 'year') {
-                startTs = now.getTime() - (365 * 24 * 60 * 60 * 1000);
-                prevStartTs = startTs - (365 * 24 * 60 * 60 * 1000); // Prev Year
-            }
+            if (filter === 'today') { startTs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); prevStartTs = startTs - (24 * 60 * 60 * 1000); } 
+            else if (filter === 'week') { startTs = now.getTime() - (7 * 24 * 60 * 60 * 1000); prevStartTs = startTs - (7 * 24 * 60 * 60 * 1000); } 
+            else if (filter === 'month') { startTs = now.getTime() - (30 * 24 * 60 * 60 * 1000); prevStartTs = startTs - (30 * 24 * 60 * 60 * 1000); } 
+            else if (filter === 'year') { startTs = now.getTime() - (365 * 24 * 60 * 60 * 1000); prevStartTs = startTs - (365 * 24 * 60 * 60 * 1000); }
 
-            // Build Item -> Category Map for cross-referencing
             let itemCatMap = {};
             for (let cat in currentMenuData) {
                 for (let item in currentMenuData[cat]) {
@@ -542,14 +567,12 @@
                 }
             }
 
-            // Tracking Variables
             let currRev = 0; let prevRev = 0; let currOrders = 0;
             let orderTypes = { "Dine-in": 0, "Takeaway": 0, "Delivery": 0 };
             let catRevMap = {}; let itemQtyMap = {};
             let sizeMap = { reg: 0, lrg: 0 };
             let hourlyMap = {}; for(let i=0; i<24; i++) hourlyMap[i] = 0;
             
-            // Time Series Logic (for main revenue chart)
             let timeSeriesMap = {}; let tsLabels = [];
             if(filter === 'today') {
                 for(let i=8; i<=22; i+=2) { let key = (i>12?i-12:i)+(i>=12?'pm':'am'); timeSeriesMap[key]=0; tsLabels.push(key); }
@@ -568,59 +591,31 @@
                 }
             }
 
-            // Core Parsing Loop
             Object.keys(orderHistory).forEach(id => {
-                const order = orderHistory[id];
-                const ts = parseInt(id);
-                const amt = order.payment ? (order.payment.total || 0) : 0;
-                
-                // Track Previous Period for Growth Math
+                const order = orderHistory[id]; const ts = parseInt(id); const amt = order.payment ? (order.payment.total || 0) : 0;
                 if (ts >= prevStartTs && ts < startTs) prevRev += amt;
-                
-                // Track Current Period
                 if (ts >= startTs) {
                     currRev += amt; currOrders++;
-                    
-                    // Order Type
                     let type = order.orderType || "Unknown";
                     if(type.includes("Delivery") || type.includes("Web")) orderTypes["Delivery"]++;
                     else if(type.includes("Takeaway")) orderTypes["Takeaway"]++;
                     else orderTypes["Dine-in"]++;
-
-                    // Hourly Heatmap
                     hourlyMap[new Date(ts).getHours()]++;
-
-                    // Map to Time Series Chart
-                    let orderDate = new Date(ts);
-                    let tsKey = "";
+                    let orderDate = new Date(ts); let tsKey = "";
                     if(filter === 'today') {
-                        let h = orderDate.getHours();
-                        h = h % 2 !== 0 ? h - 1 : h; // bucket into 2hr windows
-                        tsKey = (h>12?h-12:h)+(h>=12?'pm':'am');
+                        let h = orderDate.getHours(); h = h % 2 !== 0 ? h - 1 : h; tsKey = (h>12?h-12:h)+(h>=12?'pm':'am');
                     } else if(filter === 'week' || filter === 'month') {
                         tsKey = orderDate.getDate() + '/' + (orderDate.getMonth()+1);
-                    } else {
-                        tsKey = orderDate.toLocaleString('default', { month: 'short' });
-                    }
+                    } else { tsKey = orderDate.toLocaleString('default', { month: 'short' }); }
                     if(timeSeriesMap[tsKey] !== undefined) timeSeriesMap[tsKey] += amt;
-
-                    // Items, Categories, Sizes
                     if(order.items) {
                         for(let itemName in order.items) {
-                            let qty = order.items[itemName].qty;
-                            let price = order.items[itemName].price;
-                            
-                            // Clean modifiers from name for accurate counting
-                            let baseName = itemName.split(" (")[0];
-                            let sizeCleanedName = itemName;
-                            // Re-attach size if it was stripped
+                            let qty = order.items[itemName].qty; let price = order.items[itemName].price;
+                            let baseName = itemName.split(" (")[0]; let sizeCleanedName = itemName;
                             if(itemName.includes("(Large)")) { sizeCleanedName = baseName + " (Large)"; sizeMap.lrg += qty; }
                             else if(itemName.includes("(Regular)")) { sizeCleanedName = baseName + " (Regular)"; sizeMap.reg += qty; }
                             else { sizeCleanedName = baseName; }
-
                             itemQtyMap[sizeCleanedName] = (itemQtyMap[sizeCleanedName] || 0) + qty;
-
-                            // Category Revenue
                             let cat = itemCatMap[sizeCleanedName] || "Other";
                             catRevMap[cat] = (catRevMap[cat] || 0) + (price * qty);
                         }
@@ -628,7 +623,6 @@
                 }
             });
 
-            // 1. Dashboard Metrics & Growth Indicator
             let aov = currOrders > 0 ? Math.round(currRev / currOrders) : 0;
             document.getElementById('stat-rev').innerText = "₹" + currRev.toLocaleString('en-IN');
             document.getElementById('stat-orders').innerText = currOrders;
@@ -643,7 +637,6 @@
                 else { growthEl.innerText = `(↓ ${Math.round(Math.abs(diff))}%)`; growthEl.className = "trend-down"; }
             }
 
-            // 2. Build Lists (Top Sellers & Dead Stock)
             function generateListHtml(itemsObj, limit = 5, filterFn = null) {
                 let sorted = Object.keys(itemsObj).sort((a,b) => itemsObj[b] - itemsObj[a]);
                 if(filterFn) sorted = sorted.filter(filterFn);
@@ -655,27 +648,16 @@
             }
 
             document.getElementById('top-overall').innerHTML = generateListHtml(itemQtyMap);
-            
-            document.getElementById('top-coffee').innerHTML = generateListHtml(itemQtyMap, 5, (item) => {
-                let cat = itemCatMap[item] || ""; return cat.toLowerCase().includes('coffee');
-            });
-            
-            document.getElementById('top-pizza').innerHTML = generateListHtml(itemQtyMap, 5, (item) => {
-                let cat = itemCatMap[item] || ""; return cat.toLowerCase().includes('pizza') || cat.toLowerCase().includes('food');
-            });
+            document.getElementById('top-coffee').innerHTML = generateListHtml(itemQtyMap, 5, (item) => { let cat = itemCatMap[item] || ""; return cat.toLowerCase().includes('coffee'); });
+            document.getElementById('top-pizza').innerHTML = generateListHtml(itemQtyMap, 5, (item) => { let cat = itemCatMap[item] || ""; return cat.toLowerCase().includes('pizza') || cat.toLowerCase().includes('food'); });
 
-            // Dead Stock Finder
-            let activeMenuItems = Object.keys(itemCatMap); // all currently existing items
+            let activeMenuItems = Object.keys(itemCatMap);
             let deadStockArr = [];
             activeMenuItems.forEach(item => {
-                // Ignore sized variants logic for simplicity, stick to base names
                 if(item.includes("(Regular)") || item.includes("(Large)")) return;
-                
                 let qtySold = itemQtyMap[item] || 0;
-                // Add regular/large sales to base name sales for a fair check
                 qtySold += (itemQtyMap[item + " (Regular)"] || 0);
                 qtySold += (itemQtyMap[item + " (Large)"] || 0);
-                
                 if(qtySold <= 1) deadStockArr.push({name: item, qty: qtySold});
             });
             deadStockArr.sort((a,b) => a.qty - b.qty);
@@ -689,68 +671,37 @@
             }
             document.getElementById('dead-stock').innerHTML = deadStockHtml;
 
-            // 3. Draw All Charts
             let tsData = tsLabels.map(l => timeSeriesMap[l]);
             drawMainChart(tsLabels, tsData);
             drawTypeChart(orderTypes);
             drawUpsellChart(sizeMap);
-            
             let sortedCats = Object.keys(catRevMap).sort((a,b) => catRevMap[b] - catRevMap[a]).slice(0,5);
             let catData = sortedCats.map(c => catRevMap[c]);
             drawCategoryChart(sortedCats, catData);
 
-            // Peak Hours Formatting (8am to 10pm)
             let peakLabels = ['8am', '10am', '12pm', '2pm', '4pm', '6pm', '8pm', '10pm'];
-            let peakData = [
-                hourlyMap[8]+hourlyMap[9], hourlyMap[10]+hourlyMap[11], hourlyMap[12]+hourlyMap[13], 
-                hourlyMap[14]+hourlyMap[15], hourlyMap[16]+hourlyMap[17], hourlyMap[18]+hourlyMap[19], 
-                hourlyMap[20]+hourlyMap[21], hourlyMap[22]+hourlyMap[23]
-            ];
+            let peakData = [ hourlyMap[8]+hourlyMap[9], hourlyMap[10]+hourlyMap[11], hourlyMap[12]+hourlyMap[13], hourlyMap[14]+hourlyMap[15], hourlyMap[16]+hourlyMap[17], hourlyMap[18]+hourlyMap[19], hourlyMap[20]+hourlyMap[21], hourlyMap[22]+hourlyMap[23] ];
             drawPeakChart(peakLabels, peakData);
         }
 
-        // CHART DRAWING HELPERS
         const brandColors = ['#ffffff', 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0.4)', 'rgba(255,255,255,0.2)', 'rgba(0,0,0,0.2)'];
-
         function drawMainChart(labels, data) {
             const ctx = document.getElementById('revenueChart').getContext('2d');
             if(charts.revenue) charts.revenue.destroy();
             let gradient = ctx.createLinearGradient(0, 0, 0, 220);
             gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)'); gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
-            charts.revenue = new Chart(ctx, {
-                type: 'line', data: { labels: labels, datasets: [{ data: data, borderColor: '#ffffff', borderWidth: 2, backgroundColor: gradient, fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#8c7255' }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.6)', maxTicksLimit: 5 }, beginAtZero: true } } }
-            });
+            charts.revenue = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ data: data, borderColor: '#ffffff', borderWidth: 2, backgroundColor: gradient, fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#8c7255' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.6)', maxTicksLimit: 5 }, beginAtZero: true } } } });
         }
+        function drawTypeChart(types) { const ctx = document.getElementById('typeChart').getContext('2d'); if(charts.type) charts.type.destroy(); charts.type = new Chart(ctx, { type: 'doughnut', data: { labels: ['Dine-in', 'Takeaway', 'Delivery'], datasets: [{ data: [types["Dine-in"], types["Takeaway"], types["Delivery"]], backgroundColor: brandColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } }); }
+        function drawUpsellChart(sizes) { const ctx = document.getElementById('upsellChart').getContext('2d'); if(charts.upsell) charts.upsell.destroy(); if(sizes.reg === 0 && sizes.lrg === 0) { sizes.reg = 1; sizes.lrg = 0; } charts.upsell = new Chart(ctx, { type: 'doughnut', data: { labels: ['Regular', 'Large'], datasets: [{ data: [sizes.reg, sizes.lrg], backgroundColor: ['rgba(255,255,255,0.4)', '#ffffff'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } }); }
+        function drawCategoryChart(labels, data) { const ctx = document.getElementById('categoryChart').getContext('2d'); if(charts.category) charts.category.destroy(); charts.category = new Chart(ctx, { type: 'doughnut', data: { labels: labels, datasets: [{ data: data, backgroundColor: brandColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } }); }
+        function drawPeakChart(labels, data) { const ctx = document.getElementById('peakChart').getContext('2d'); if(charts.peak) charts.peak.destroy(); charts.peak = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ data: data, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)', font: {size: 9} } }, y: { display: false, beginAtZero: true } } } }); }
 
-        function drawTypeChart(types) {
-            const ctx = document.getElementById('typeChart').getContext('2d'); if(charts.type) charts.type.destroy();
-            charts.type = new Chart(ctx, { type: 'doughnut', data: { labels: ['Dine-in', 'Takeaway', 'Delivery'], datasets: [{ data: [types["Dine-in"], types["Takeaway"], types["Delivery"]], backgroundColor: brandColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } });
-        }
-
-        function drawUpsellChart(sizes) {
-            const ctx = document.getElementById('upsellChart').getContext('2d'); if(charts.upsell) charts.upsell.destroy();
-            if(sizes.reg === 0 && sizes.lrg === 0) { sizes.reg = 1; sizes.lrg = 0; } // Prevent blank chart if no data
-            charts.upsell = new Chart(ctx, { type: 'doughnut', data: { labels: ['Regular', 'Large'], datasets: [{ data: [sizes.reg, sizes.lrg], backgroundColor: ['rgba(255,255,255,0.4)', '#ffffff'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } });
-        }
-
-        function drawCategoryChart(labels, data) {
-            const ctx = document.getElementById('categoryChart').getContext('2d'); if(charts.category) charts.category.destroy();
-            charts.category = new Chart(ctx, { type: 'doughnut', data: { labels: labels, datasets: [{ data: data, backgroundColor: brandColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } });
-        }
-
-        function drawPeakChart(labels, data) {
-            const ctx = document.getElementById('peakChart').getContext('2d'); if(charts.peak) charts.peak.destroy();
-            charts.peak = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ data: data, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)', font: {size: 9} } }, y: { display: false, beginAtZero: true } } } });
-        }
-
-        // === SECURITY LOGS (VOIDS) ===
         db.ref('security/voids').limitToLast(50).on('value', snap => {
             const container = document.getElementById('voids-container');
             const voidsData = snap.val() || {};
             const sortedIds = Object.keys(voidsData).sort((a, b) => b.localeCompare(a)); 
             if (sortedIds.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No voids recorded.</p>"; return; }
-
             let listHTML = "";
             sortedIds.forEach(id => {
                 const v = voidsData[id];
