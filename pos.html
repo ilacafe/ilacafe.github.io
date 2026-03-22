@@ -524,15 +524,21 @@
             }
         };
 
+        // --- NEW DEBOUNCED CLOUD SYNC ---
+        let syncTimeout = null;
         function syncToCloud() {
-            db.ref('pos').update({
-                activeTables: Object.keys(window.activeTables).length > 0 ? window.activeTables : null,
-                cashDrawer: window.cashDrawer || 0,
-                upiTotal: window.upiTotal || 0,
-                salesLedger: window.salesLedger.length > 0 ? window.salesLedger : null,
-                pastBills: window.pastBills.length > 0 ? window.pastBills : null
-            }).catch(e => console.error("Cloud Sync Error: ", e));
+            if (syncTimeout) clearTimeout(syncTimeout);
+            syncTimeout = setTimeout(() => {
+                db.ref('pos').update({
+                    activeTables: Object.keys(window.activeTables).length > 0 ? window.activeTables : null,
+                    cashDrawer: window.cashDrawer || 0,
+                    upiTotal: window.upiTotal || 0,
+                    salesLedger: window.salesLedger.length > 0 ? window.salesLedger : null,
+                    pastBills: window.pastBills.length > 0 ? window.pastBills : null
+                }).catch(e => console.error("Cloud Sync Error: ", e));
+            }, 600); 
         }
+        // ---------------------------------
 
         db.ref('pos/activeTables').on('value', snap => { 
             let data = snap.val() || {};
