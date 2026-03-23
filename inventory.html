@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>ILA | Inventory</title>
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 60px; }
+        .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 15px; box-sizing: border-box; }
+        
+        header { text-align: center; margin-bottom: 20px; margin-top: 10px; }
+        .logo { max-width: 250px; height: auto; display: block; margin: 0 auto; }
+        h1 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 3px; margin: 10px 0 0 0; }
+        
+        /* TABS NAV */
+        .tab-bar { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.2); margin-bottom: 25px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; }
+        .tab-bar::-webkit-scrollbar { display: none; }
+        .tab-btn { background: transparent; color: white; border: none; font-family: 'Quicksand', sans-serif; font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 10px 15px; cursor: pointer; opacity: 0.4; transition: opacity 0.2s, border-bottom 0.2s; white-space: nowrap; }
+        .tab-btn.active { opacity: 1; border-bottom: 3px solid white; }
+
+        .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        h2 { font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-top: 0; margin-bottom: 15px; opacity: 0.9; }
+
+        /* GRID BUTTONS */
+        .grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 35px; }
+        .action-btn { background-color: var(--brand-text); color: var(--brand-bg); border: none; padding: 15px 10px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: transform 0.1s; min-height: 80px;}
+        .action-btn:active { transform: scale(0.97); }
+        .action-btn.outline { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); box-shadow: none; }
+        
+        .stock-badge { font-size: 0.75rem; font-weight: normal; opacity: 0.8; margin-top: 5px; background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 12px; }
+
+        /* MODAL */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: flex-start; padding-top: 10vh; box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); }
+        
+        .modal-title { font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 0; margin-bottom: 5px; }
+        .modal-subtitle { font-size: 0.85rem; opacity: 0.7; margin-bottom: 20px; font-style: italic; }
+
+        .remark-input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1.1rem; background-color: rgba(0,0,0,0.1); color: white; display: block; box-sizing: border-box; outline: none; text-align: center; font-weight: bold;}
+        .remark-input::placeholder { color: rgba(255,255,255,0.4); font-weight: normal; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        .btn { flex: 1; padding: 15px; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; text-transform: uppercase; border: none; letter-spacing: 1px;}
+        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
+        .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); }
+
+        #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: white; color: var(--brand-bg); padding: 12px 25px; border-radius: 30px; font-weight: bold; font-size: 0.9rem; transition: transform 0.3s ease; z-index: 3000; box-shadow: 0 5px 15px rgba(0,0,0,0.3); white-space: nowrap; pointer-events: none;}
+        #toast.show { transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Kitchen & Prep</h1>
+            <p style="opacity: 0.7; font-size: 0.8rem; margin-top: 5px; text-transform: uppercase; letter-spacing: 1px;">Live Inventory Log</p>
+        </header>
+
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('bar')">Bar</button>
+            <button class="tab-btn" onclick="switchTab('creamery')">Creamery</button>
+            <button class="tab-btn" onclick="switchTab('kitchen')">Kitchen</button>
+            <button class="tab-btn" onclick="switchTab('bakery')">Bakery</button>
+            <button class="tab-btn" onclick="switchTab('packaging')">Packaging</button>
+        </div>
+
+        <div id="dynamic-tabs-container">
+            <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading Database...</p>
+        </div>
+
+    </div>
+
+    <div id="action-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modal-title" class="modal-title">Log Action</h3>
+            <div id="modal-subtitle" class="modal-subtitle">Details</div>
+            
+            <input type="number" id="modal-qty" class="remark-input" placeholder="Amount (Units / Kg / L)" step="any">
+            <input type="password" id="modal-pin" class="remark-input" placeholder="Staff PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
+            
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" id="modal-confirm-btn" onclick="confirmAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast">Log Saved!</div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
+            authDomain: "ila-cafe.firebaseapp.com",
+            databaseURL: "https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "ila-cafe",
+            storageBucket: "ila-cafe.firebasestorage.app",
+            messagingSenderId: "473595092965",
+            appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // --- THE MASTER INVENTORY MAP ---
+        const INVENTORY_MAP = {
+            bar: {
+                prepped: ["Simple Syrup", "Lavender Syrup", "Rose Syrup", "Saffron Syrup", "Cold Brew Batches", "Roasted Espresso Blend"],
+                raw: ["Matcha Powder", "Brown Sugar", "Sugar Sachets", "Saffron", "Lavender", "Rose", "Teas", "Green Coffee Beans", "Commercial Milk", "Alternative Milks"]
+            },
+            creamery: {
+                prepped: ["Feta", "Burrata", "Fresh Mozzarella"],
+                raw: ["Cream", "Curd", "Vegan Rennet", "Citric Acid", "Raw Milk"]
+            },
+            kitchen: {
+                prepped: ["Mushroom Sauce", "Vodka Sauce", "Pesto", "Chilli Oil", "Basil Oil", "Hot Sauce", "Pizza Dough", "House Tomato Sauce"],
+                raw: ["Yeast", "Salt", "Moldovan Salt", "Balsamic Vinegar", "Beetroot", "Mushroom", "Butter", "Onion", "Garlic", "Ghost Pepper", "Basil", "Cashew", "Parmesan", "Cheddar", "Capsicum", "Olive", "Olive Oil", "Red Paprika", "Green Olives", "Black Olives", "Jalapeño", "Oregano (Bulk)", "Chilli Flakes (Bulk)", "Oregano Sachets", "Chilli Flakes Sachets", "Flour", "Fresh Tomatoes"]
+            },
+            bakery: {
+                prepped: ["Rose Cake", "Banana Bread", "Carrot Cake"],
+                raw: ["Whole Wheat Flour", "Almond Flour", "Semolina", "Baking Powder", "Baking Soda", "Neutral Oil", "Chocolate", "Pistachios", "Carrot", "Cinnamon", "Banana", "Castor Sugar", "Vanilla"]
+            },
+            packaging: {
+                prepped: [],
+                raw: ["Coffee Cups & Lids", "Pizza Boxes", "Cake Boxes"]
+            }
+        };
+
+        let currentStock = {};
+        let recipeData = {};
+        let staffPins = {};
+        let activeAction = { type: "", itemName: "" };
+
+        // Real-time Listeners
+        db.ref('inventory/stock').on('value', snap => { currentStock = snap.val() || {}; renderUI(); });
+        db.ref('inventory/recipes').on('value', snap => { recipeData = snap.val() || {}; });
+        db.ref('staff').on('value', snap => { staffPins = snap.val() || {}; });
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+        }
+
+        function renderUI() {
+            const container = document.getElementById('dynamic-tabs-container');
+            container.innerHTML = "";
+            let isFirst = true;
+
+            for (let tab in INVENTORY_MAP) {
+                let tabHtml = `<div id="tab-${tab}" class="tab-content ${isFirst ? 'active' : ''}">`;
+                
+                // Prepped Section (Yield Outputs)
+                if (INVENTORY_MAP[tab].prepped.length > 0) {
+                    tabHtml += `<h2>Log New Prep</h2><div class="grid-layout">`;
+                    INVENTORY_MAP[tab].prepped.sort().forEach(item => {
+                        let stockLevel = currentStock[item] ? parseFloat(currentStock[item]).toFixed(1) : "0";
+                        tabHtml += `<button class="action-btn" onclick="openModal('prep', '${item}')">
+                                        + ${item}
+                                        <span class="stock-badge">Stock: ${stockLevel}</span>
+                                    </button>`;
+                    });
+                    tabHtml += `</div>`;
+                }
+
+                // Raw Section (Deliveries Inputs)
+                if (INVENTORY_MAP[tab].raw.length > 0) {
+                    tabHtml += `<h2>Receive Delivery</h2><div class="grid-layout">`;
+                    INVENTORY_MAP[tab].raw.sort().forEach(item => {
+                        let stockLevel = currentStock[item] ? parseFloat(currentStock[item]).toFixed(1) : "0";
+                        tabHtml += `<button class="action-btn outline" onclick="openModal('receive', '${item}')">
+                                        + ${item}
+                                        <span class="stock-badge">Stock: ${stockLevel}</span>
+                                    </button>`;
+                    });
+                    tabHtml += `</div>`;
+                }
+
+                tabHtml += `</div>`;
+                container.innerHTML += tabHtml;
+                isFirst = false;
+            }
+            
+            // Re-apply active class based on currently active tab button to prevent reset jump
+            const activeBtn = document.querySelector('.tab-btn.active');
+            if(activeBtn) {
+                const tabId = activeBtn.innerText.toLowerCase();
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                const tgt = document.getElementById(`tab-${tabId}`);
+                if(tgt) tgt.classList.add('active');
+            }
+        }
+
+        function openModal(type, itemName) {
+            activeAction = { type, itemName };
+            document.getElementById('modal-qty').value = "";
+            document.getElementById('modal-pin').value = "";
+            
+            if (type === 'prep') {
+                document.getElementById('modal-title').innerText = `Log Prep: ${itemName}`;
+                document.getElementById('modal-subtitle').innerText = "This will automatically deduct raw ingredients.";
+            } else {
+                document.getElementById('modal-title').innerText = `Receive: ${itemName}`;
+                document.getElementById('modal-subtitle').innerText = "Add incoming supplier deliveries to stock.";
+            }
+            
+            document.getElementById('action-modal').classList.add('active');
+            setTimeout(() => document.getElementById('modal-qty').focus(), 100);
+        }
+
+        function closeModal() {
+            document.getElementById('action-modal').classList.remove('active');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.add('show');
+            if(navigator.vibrate) navigator.vibrate(50);
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        async function confirmAction() {
+            const qtyInput = parseFloat(document.getElementById('modal-qty').value);
+            const pinStr = document.getElementById('modal-pin').value.trim();
+            const btn = document.getElementById('modal-confirm-btn');
+
+            if (isNaN(qtyInput) || qtyInput <= 0) return alert("Please enter a valid amount.");
+            if (!staffPins[pinStr]) return alert("Invalid PIN.");
+            
+            const staffName = staffPins[pinStr];
+            const timestamp = Date.now();
+            let updates = {};
+
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+
+            try {
+                // Fetch absolute latest stock to prevent race conditions
+                let snap = await db.ref('inventory/stock').once('value');
+                let liveStock = snap.val() || {};
+
+                if (activeAction.type === 'receive') {
+                    // Simple Addition for raw goods
+                    let currentAmt = parseFloat(liveStock[activeAction.itemName]) || 0;
+                    updates[`inventory/stock/${activeAction.itemName}`] = currentAmt + qtyInput;
+                    
+                    // Log the event
+                    updates[`inventory/logs/${timestamp}`] = {
+                        action: "Delivery Received", item: activeAction.itemName, amount: qtyInput, staff: staffName, time: new Date().toLocaleString()
+                    };
+
+                } else if (activeAction.type === 'prep') {
+                    // Complex: Add Prepped Stock, Deduct Raw Ingredients
+                    const recipe = recipeData[activeAction.itemName];
+                    if (!recipe) {
+                        btn.innerText = "Confirm"; btn.disabled = false;
+                        return alert(`No Recipe found for ${activeAction.itemName}. Tell the Admin to set it up in the dashboard before logging prep.`);
+                    }
+
+                    // 1. Add to Prepped Stock
+                    let currentPrepAmt = parseFloat(liveStock[activeAction.itemName]) || 0;
+                    updates[`inventory/stock/${activeAction.itemName}`] = currentPrepAmt + qtyInput;
+
+                    // 2. Deduct all raw ingredients based on recipe multiplier
+                    let deductionLog = [];
+                    for (let rawItem in recipe) {
+                        let requiredPerUnit = parseFloat(recipe[rawItem]);
+                        let totalDeduction = requiredPerUnit * qtyInput;
+                        
+                        let currentRawAmt = parseFloat(liveStock[rawItem]) || 0;
+                        updates[`inventory/stock/${rawItem}`] = currentRawAmt - totalDeduction;
+                        deductionLog.push(`${totalDeduction} of ${rawItem}`);
+                    }
+
+                    // 3. Log the event
+                    updates[`inventory/logs/${timestamp}`] = {
+                        action: "Prepped Batch", item: activeAction.itemName, yieldAmount: qtyInput, staff: staffName, deductions: deductionLog.join(" | "), time: new Date().toLocaleString()
+                    };
+                }
+
+                // Push entire payload to Firebase simultaneously
+                await db.ref().update(updates);
+                
+                closeModal();
+                showToast(`Successfully logged ${qtyInput} ${activeAction.itemName}`);
+            } catch (error) {
+                alert("Database Error: " + error.message);
+            } finally {
+                btn.innerText = "Confirm";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
