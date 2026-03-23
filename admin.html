@@ -281,13 +281,31 @@
             <div id="staff-list-container" style="margin-top: 20px;"></div>
         </div>
         
-        <div class="admin-card" style="margin-bottom: 60px;">
+        <div class="admin-card" style="margin-bottom: 25px;">
             <h2>UPI Routing</h2>
             <div class="row-group" style="margin-bottom: 15px;">
                 <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="add-upi-id" placeholder="e.g. cafe@ybl"></div>
                 <button class="btn btn-secondary" style="flex: 1;" onclick="addUPI()">Add UPI</button>
             </div>
             <div id="upi-list-container"></div>
+        </div>
+
+        <div class="admin-card" style="margin-bottom: 60px;">
+            <h2>Recipe Builder</h2>
+            <div style="margin-bottom: 20px; text-align: left;">
+                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; display: block; margin-bottom: 5px;">Prepped Item (Output)</label>
+                <select id="recipe-target" class="remark-input" onchange="loadExistingRecipe()"></select>
+            </div>
+
+            <div style="text-align: left; margin-bottom: 10px;">
+                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase; font-weight: bold;">Raw Ingredients Needed</label>
+            </div>
+            <div id="ingredient-list"></div>
+            
+            <div class="row-group" style="margin-top: 20px;">
+                <button class="btn btn-secondary" style="flex: 1; margin-right: 10px;" onclick="addIngredientRow()">+ Ingredient</button>
+                <button class="btn btn-primary" style="flex: 1;" onclick="saveRecipe()">Save Recipe</button>
+            </div>
         </div>
 
     </div>
@@ -709,6 +727,91 @@
             });
             container.innerHTML = listHTML;
         });
+
+        // --- RECIPE ENGINE LOGIC ---
+        const RAW_ITEMS = [
+            "Almond Flour", "Baking Powder", "Baking Soda", "Balsamic Vinegar", "Banana", "Basil", 
+            "Beetroot", "Black Olives", "Brown Sugar", "Butter", "Cake Boxes", "Capsicum", "Carrot", 
+            "Cashew", "Castor Sugar", "Cheddar", "Chilli Flakes (Bulk)", "Chilli Flakes Sachets", 
+            "Chocolate", "Cinnamon", "Citric Acid", "Coffee Cups & Lids", "Commercial Milk", "Cream", 
+            "Curd", "Flour", "Fresh Tomatoes", "Garlic", "Ghost Pepper", "Green Coffee Beans", 
+            "Green Olives", "Jalapeño", "Lavender", "Matcha Powder", "Moldovan Salt", "Mushroom", 
+            "Neutral Oil", "Olive", "Olive Oil", "Onion", "Oregano (Bulk)", "Oregano Sachets", 
+            "Parmesan", "Pistachios", "Pizza Boxes", "Raw Milk", "Red Paprika", "Rose", "Saffron", 
+            "Salt", "Semolina", "Sugar Sachets", "Teas", "Vegan Rennet", "Vanilla", "Whole Wheat Flour", "Yeast"
+        ];
+
+        const PREPPED_ITEMS = [
+            "Banana Bread", "Basil Oil", "Burrata", "Carrot Cake", "Chilli Oil", "Cold Brew Batches", 
+            "Feta", "Fresh Mozzarella", "Hot Sauce", "House Tomato Sauce", "Lavender Syrup", 
+            "Mushroom Sauce", "Pesto", "Pizza Dough", "Roasted Espresso Blend", "Rose Cake", 
+            "Rose Syrup", "Saffron Syrup", "Simple Syrup", "Vodka Sauce"
+        ];
+
+        const targetSelect = document.getElementById('recipe-target');
+        PREPPED_ITEMS.sort().forEach(item => { 
+            targetSelect.innerHTML += `<option value="${item}">${item}</option>`; 
+        });
+
+        window.addIngredientRow = function(selectedItem = "", qty = "") {
+            const list = document.getElementById('ingredient-list');
+            const row = document.createElement('div');
+            row.className = 'row-group';
+            row.style.marginBottom = '10px';
+            
+            let optionsHtml = '<option value="" disabled selected>Select Raw Item...</option>';
+            RAW_ITEMS.sort().forEach(item => {
+                optionsHtml += `<option value="${item}" ${selectedItem === item ? 'selected' : ''}>${item}</option>`;
+            });
+
+            row.innerHTML = `
+                <select class="remark-input ing-name" style="flex: 2; margin: 0; padding: 12px;">${optionsHtml}</select>
+                <input type="number" class="remark-input ing-qty" placeholder="Qty" value="${qty}" style="flex: 1; margin: 0; padding: 12px;">
+                <button class="btn-action" style="height: 44px; width: 44px;" onclick="this.parentElement.remove()">✖</button>
+            `;
+            list.appendChild(row);
+        };
+
+        window.saveRecipe = function() {
+            const target = document.getElementById('recipe-target').value;
+            const rows = document.querySelectorAll('#ingredient-list .row-group');
+            let recipeData = {};
+            
+            rows.forEach(row => {
+                const name = row.querySelector('.ing-name').value;
+                const qty = parseFloat(row.querySelector('.ing-qty').value);
+                if (name && !isNaN(qty)) { recipeData[name] = qty; }
+            });
+
+            if (Object.keys(recipeData).length === 0) {
+                return alert("Please add at least one valid ingredient with a quantity.");
+            }
+
+            db.ref('inventory/recipes/' + target).set(recipeData).then(() => {
+                alert(`Success: ${target} recipe is locked into the database.`);
+            }).catch(e => {
+                alert("Error saving recipe: " + e.message);
+            });
+        };
+
+        window.loadExistingRecipe = function() {
+            const target = document.getElementById('recipe-target').value;
+            const list = document.getElementById('ingredient-list');
+            list.innerHTML = ""; 
+            
+            db.ref('inventory/recipes/' + target).once('value', snap => {
+                if (snap.exists()) {
+                    const recipe = snap.val();
+                    for (let ing in recipe) { addIngredientRow(ing, recipe[ing]); }
+                } else {
+                    addIngredientRow(); 
+                }
+            });
+        };
+
+        setTimeout(() => { loadExistingRecipe(); }, 500);
+        // --- END RECIPE ENGINE LOGIC ---
+
     </script>
 </body>
 </html>
