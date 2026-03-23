@@ -111,39 +111,22 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // --- THE MASTER INVENTORY MAP ---
-        const INVENTORY_MAP = {
-            bar: {
-                prepped: ["Simple Syrup", "Lavender Syrup", "Rose Syrup", "Saffron Syrup", "Cold Brew Batches", "Roasted Espresso Blend"],
-                raw: ["Matcha Powder", "Brown Sugar", "Sugar Sachets", "Saffron", "Lavender", "Rose", "Teas", "Green Coffee Beans", "Commercial Milk", "Alternative Milks"]
-            },
-            creamery: {
-                prepped: ["Feta", "Burrata", "Fresh Mozzarella"],
-                raw: ["Cream", "Curd", "Vegan Rennet", "Citric Acid", "Raw Milk"]
-            },
-            kitchen: {
-                prepped: ["Mushroom Sauce", "Vodka Sauce", "Pesto", "Chilli Oil", "Basil Oil", "Hot Sauce", "Pizza Dough", "House Tomato Sauce"],
-                raw: ["Yeast", "Salt", "Moldovan Salt", "Balsamic Vinegar", "Beetroot", "Mushroom", "Butter", "Onion", "Garlic", "Ghost Pepper", "Basil", "Cashew", "Parmesan", "Cheddar", "Capsicum", "Olive", "Olive Oil", "Red Paprika", "Green Olives", "Black Olives", "Jalapeño", "Oregano (Bulk)", "Chilli Flakes (Bulk)", "Oregano Sachets", "Chilli Flakes Sachets", "Flour", "Fresh Tomatoes"]
-            },
-            bakery: {
-                prepped: ["Rose Cake", "Banana Bread", "Carrot Cake"],
-                raw: ["Whole Wheat Flour", "Almond Flour", "Semolina", "Baking Powder", "Baking Soda", "Neutral Oil", "Chocolate", "Pistachios", "Carrot", "Cinnamon", "Banana", "Castor Sugar", "Vanilla"]
-            },
-            packaging: {
-                prepped: [],
-                raw: ["Coffee Cups & Lids", "Pizza Boxes", "Cake Boxes"]
-            }
-        };
-
         let currentStock = {};
         let recipeData = {};
         let staffPins = {};
         let activeAction = { type: "", itemName: "" };
+        let dynamicInventoryMap = {};
 
         // Real-time Listeners
         db.ref('inventory/stock').on('value', snap => { currentStock = snap.val() || {}; renderUI(); });
         db.ref('inventory/recipes').on('value', snap => { recipeData = snap.val() || {}; });
         db.ref('staff').on('value', snap => { staffPins = snap.val() || {}; });
+        
+        // Listen to the new dynamic config set by Admin
+        db.ref('inventory/config/items').on('value', snap => { 
+            dynamicInventoryMap = snap.val() || {}; 
+            renderUI(); 
+        });
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -153,17 +136,25 @@
         }
 
         function renderUI() {
+            if(Object.keys(dynamicInventoryMap).length === 0) return;
+            
             const container = document.getElementById('dynamic-tabs-container');
             container.innerHTML = "";
             let isFirst = true;
+            
+            // Define standard tab order for consistency
+            const tabOrder = ['bar', 'creamery', 'kitchen', 'bakery', 'packaging'];
 
-            for (let tab in INVENTORY_MAP) {
+            tabOrder.forEach(tab => {
+                if(!dynamicInventoryMap[tab]) return;
+                
                 let tabHtml = `<div id="tab-${tab}" class="tab-content ${isFirst ? 'active' : ''}">`;
                 
-                // Prepped Section (Yield Outputs)
-                if (INVENTORY_MAP[tab].prepped.length > 0) {
+                // Prepped Section (Yield Outputs) - Ordered exactly as set in Admin
+                let preppedArr = dynamicInventoryMap[tab].prepped || [];
+                if (preppedArr.length > 0) {
                     tabHtml += `<h2>Log New Prep</h2><div class="grid-layout">`;
-                    INVENTORY_MAP[tab].prepped.sort().forEach(item => {
+                    preppedArr.forEach(item => {
                         let stockLevel = currentStock[item] ? parseFloat(currentStock[item]).toFixed(1) : "0";
                         tabHtml += `<button class="action-btn" onclick="openModal('prep', '${item}')">
                                         + ${item}
@@ -173,10 +164,11 @@
                     tabHtml += `</div>`;
                 }
 
-                // Raw Section (Deliveries Inputs)
-                if (INVENTORY_MAP[tab].raw.length > 0) {
+                // Raw Section (Deliveries Inputs) - Ordered exactly as set in Admin
+                let rawArr = dynamicInventoryMap[tab].raw || [];
+                if (rawArr.length > 0) {
                     tabHtml += `<h2>Receive Delivery</h2><div class="grid-layout">`;
-                    INVENTORY_MAP[tab].raw.sort().forEach(item => {
+                    rawArr.forEach(item => {
                         let stockLevel = currentStock[item] ? parseFloat(currentStock[item]).toFixed(1) : "0";
                         tabHtml += `<button class="action-btn outline" onclick="openModal('receive', '${item}')">
                                         + ${item}
@@ -189,9 +181,9 @@
                 tabHtml += `</div>`;
                 container.innerHTML += tabHtml;
                 isFirst = false;
-            }
+            });
             
-            // Re-apply active class based on currently active tab button to prevent reset jump
+            // Maintain active tab
             const activeBtn = document.querySelector('.tab-btn.active');
             if(activeBtn) {
                 const tabId = activeBtn.innerText.toLowerCase();
