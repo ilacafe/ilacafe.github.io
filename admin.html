@@ -290,6 +290,28 @@
             <div id="upi-list-container"></div>
         </div>
 
+        <div class="admin-card" style="margin-bottom: 25px;">
+            <h2>Inventory Manager</h2>
+            <div class="row-group">
+                <select id="inv-tab-select" class="remark-input" style="flex: 1;" onchange="renderInventoryManager()">
+                    <option value="bar">Bar</option>
+                    <option value="creamery">Creamery</option>
+                    <option value="kitchen">Kitchen</option>
+                    <option value="bakery">Bakery</option>
+                    <option value="packaging">Packaging</option>
+                </select>
+                <select id="inv-type-select" class="remark-input" style="flex: 1;" onchange="renderInventoryManager()">
+                    <option value="raw">Raw Inputs</option>
+                    <option value="prepped">Prepped Yields</option>
+                </select>
+            </div>
+            <div class="row-group" style="margin-top: 15px;">
+                <input type="text" id="inv-new-item" class="remark-input" style="flex: 2; margin: 0;" placeholder="New Item Name">
+                <button class="btn btn-secondary" style="flex: 1;" onclick="addInventoryItem()">Add Item</button>
+            </div>
+            <div id="inv-manager-list" style="margin-top: 20px;"></div>
+        </div>
+
         <div class="admin-card" style="margin-bottom: 60px;">
             <h2>Recipe Builder</h2>
             <div style="margin-bottom: 20px; text-align: left;">
@@ -728,30 +750,137 @@
             container.innerHTML = listHTML;
         });
 
-        // --- RECIPE ENGINE LOGIC ---
-        const RAW_ITEMS = [
-            "Almond Flour", "Baking Powder", "Baking Soda", "Balsamic Vinegar", "Banana", "Basil", 
-            "Beetroot", "Black Olives", "Brown Sugar", "Butter", "Cake Boxes", "Capsicum", "Carrot", 
-            "Cashew", "Castor Sugar", "Cheddar", "Chilli Flakes (Bulk)", "Chilli Flakes Sachets", 
-            "Chocolate", "Cinnamon", "Citric Acid", "Coffee Cups & Lids", "Commercial Milk", "Cream", 
-            "Curd", "Flour", "Fresh Tomatoes", "Garlic", "Ghost Pepper", "Green Coffee Beans", 
-            "Green Olives", "Jalapeño", "Lavender", "Matcha Powder", "Moldovan Salt", "Mushroom", 
-            "Neutral Oil", "Olive", "Olive Oil", "Onion", "Oregano (Bulk)", "Oregano Sachets", 
-            "Parmesan", "Pistachios", "Pizza Boxes", "Raw Milk", "Red Paprika", "Rose", "Saffron", 
-            "Salt", "Semolina", "Sugar Sachets", "Teas", "Vegan Rennet", "Vanilla", "Whole Wheat Flour", "Yeast"
-        ];
+        // --- DYNAMIC INVENTORY & RECIPE ENGINE ---
+        let masterInventoryConfig = {};
 
-        const PREPPED_ITEMS = [
-            "Banana Bread", "Basil Oil", "Burrata", "Carrot Cake", "Chilli Oil", "Cold Brew Batches", 
-            "Feta", "Fresh Mozzarella", "Hot Sauce", "House Tomato Sauce", "Lavender Syrup", 
-            "Mushroom Sauce", "Pesto", "Pizza Dough", "Roasted Espresso Blend", "Rose Cake", 
-            "Rose Syrup", "Saffron Syrup", "Simple Syrup", "Vodka Sauce"
-        ];
-
-        const targetSelect = document.getElementById('recipe-target');
-        PREPPED_ITEMS.sort().forEach(item => { 
-            targetSelect.innerHTML += `<option value="${item}">${item}</option>`; 
+        // 1. Auto-Seeder: Runs only once if the database is completely empty
+        db.ref('inventory/config/items').once('value', snap => {
+            if (!snap.exists()) {
+                const seedData = {
+                    bar: {
+                        prepped: ["Simple Syrup", "Lavender Syrup", "Rose Syrup", "Saffron Syrup", "Cold Brew Batches", "Roasted Espresso Blend"],
+                        raw: ["Matcha Powder", "Brown Sugar", "Sugar Sachets", "Saffron", "Lavender", "Rose", "Teas", "Green Coffee Beans", "Commercial Milk", "Alternative Milks"]
+                    },
+                    creamery: {
+                        prepped: ["Feta", "Burrata", "Fresh Mozzarella"],
+                        raw: ["Cream", "Curd", "Vegan Rennet", "Citric Acid", "Raw Milk"]
+                    },
+                    kitchen: {
+                        prepped: ["Mushroom Sauce", "Vodka Sauce", "Pesto", "Chilli Oil", "Basil Oil", "Hot Sauce", "Pizza Dough", "House Tomato Sauce"],
+                        raw: ["Yeast", "Salt", "Moldovan Salt", "Balsamic Vinegar", "Beetroot", "Mushroom", "Butter", "Onion", "Garlic", "Ghost Pepper", "Basil", "Cashew", "Parmesan", "Cheddar", "Capsicum", "Olive", "Olive Oil", "Red Paprika", "Green Olives", "Black Olives", "Jalapeño", "Oregano (Bulk)", "Chilli Flakes (Bulk)", "Oregano Sachets", "Chilli Flakes Sachets", "Flour", "Fresh Tomatoes"]
+                    },
+                    bakery: {
+                        prepped: ["Rose Cake", "Banana Bread", "Carrot Cake"],
+                        raw: ["Whole Wheat Flour", "Almond Flour", "Semolina", "Baking Powder", "Baking Soda", "Neutral Oil", "Chocolate", "Pistachios", "Carrot", "Cinnamon", "Banana", "Castor Sugar", "Vanilla"]
+                    },
+                    packaging: {
+                        prepped: [],
+                        raw: ["Coffee Cups & Lids", "Pizza Boxes", "Cake Boxes"]
+                    }
+                };
+                db.ref('inventory/config/items').set(seedData);
+            }
         });
+
+        // 2. Listen to dynamic config
+        db.ref('inventory/config/items').on('value', snap => {
+            masterInventoryConfig = snap.val() || { bar:{raw:[], prepped:[]}, creamery:{raw:[], prepped:[]}, kitchen:{raw:[], prepped:[]}, bakery:{raw:[], prepped:[]}, packaging:{raw:[], prepped:[]} };
+            renderInventoryManager();
+            populateRecipeDropdowns();
+        });
+
+        // 3. Inventory Manager Logic
+        window.renderInventoryManager = function() {
+            const tab = document.getElementById('inv-tab-select').value;
+            const type = document.getElementById('inv-type-select').value;
+            const container = document.getElementById('inv-manager-list');
+            
+            if (!masterInventoryConfig[tab] || !masterInventoryConfig[tab][type]) {
+                container.innerHTML = "<p style='opacity:0.5;'>No items.</p>"; return;
+            }
+
+            let items = masterInventoryConfig[tab][type];
+            if (items.length === 0) { container.innerHTML = "<p style='opacity:0.5;'>No items.</p>"; return; }
+
+            let html = "";
+            items.forEach((item, index) => {
+                let upDisabled = index === 0 ? 'opacity:0.2; pointer-events:none;' : '';
+                let downDisabled = index === items.length - 1 ? 'opacity:0.2; pointer-events:none;' : '';
+                
+                html += `
+                <div class="list-item">
+                    <div style="display:flex; flex-direction:column; gap:2px; margin-right: 15px;">
+                        <button class="btn-move-item" style="${upDisabled}" onclick="moveInventoryItem('${tab}', '${type}', ${index}, -1)">▲</button>
+                        <button class="btn-move-item" style="${downDisabled}" onclick="moveInventoryItem('${tab}', '${type}', ${index}, 1)">▼</button>
+                    </div>
+                    <strong style="flex-grow: 1;">${item}</strong>
+                    <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeInventoryItem('${tab}', '${type}', ${index})">✖</button>
+                </div>`;
+            });
+            container.innerHTML = html;
+        };
+
+        window.addInventoryItem = function() {
+            const tab = document.getElementById('inv-tab-select').value;
+            const type = document.getElementById('inv-type-select').value;
+            const name = document.getElementById('inv-new-item').value.trim();
+            
+            if (!name) return;
+            
+            if (!masterInventoryConfig[tab]) masterInventoryConfig[tab] = { raw: [], prepped: [] };
+            if (!masterInventoryConfig[tab][type]) masterInventoryConfig[tab][type] = [];
+            
+            if (!masterInventoryConfig[tab][type].includes(name)) {
+                masterInventoryConfig[tab][type].push(name);
+                db.ref(`inventory/config/items/${tab}/${type}`).set(masterInventoryConfig[tab][type]);
+                document.getElementById('inv-new-item').value = "";
+            } else {
+                alert("Item already exists in this tab.");
+            }
+        };
+
+        window.removeInventoryItem = function(tab, type, index) {
+            if (confirm("Delete this item? It will remove it from the staff's tablet.")) {
+                masterInventoryConfig[tab][type].splice(index, 1);
+                db.ref(`inventory/config/items/${tab}/${type}`).set(masterInventoryConfig[tab][type]);
+            }
+        };
+
+        window.moveInventoryItem = function(tab, type, index, direction) {
+            let items = masterInventoryConfig[tab][type];
+            let targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= items.length) return;
+            
+            let temp = items[index];
+            items[index] = items[targetIndex];
+            items[targetIndex] = temp;
+            
+            db.ref(`inventory/config/items/${tab}/${type}`).set(items);
+        };
+
+        // 4. Recipe Engine Logic Update
+        window.populateRecipeDropdowns = function() {
+            let allRaw = [];
+            let allPrepped = [];
+            
+            for (let tab in masterInventoryConfig) {
+                if(masterInventoryConfig[tab].raw) allRaw = allRaw.concat(masterInventoryConfig[tab].raw);
+                if(masterInventoryConfig[tab].prepped) allPrepped = allPrepped.concat(masterInventoryConfig[tab].prepped);
+            }
+            
+            window.DYNAMIC_RAW_ITEMS = [...new Set(allRaw)].sort();
+            window.DYNAMIC_PREPPED_ITEMS = [...new Set(allPrepped)].sort();
+
+            const targetSelect = document.getElementById('recipe-target');
+            let currentVal = targetSelect.value;
+            targetSelect.innerHTML = "";
+            window.DYNAMIC_PREPPED_ITEMS.forEach(item => { 
+                targetSelect.innerHTML += `<option value="${item}" ${currentVal === item ? 'selected' : ''}>${item}</option>`; 
+            });
+            
+            // Re-render the ingredient rows to update their dropdown options
+            loadExistingRecipe();
+        };
 
         window.addIngredientRow = function(selectedItem = "", qty = "") {
             const list = document.getElementById('ingredient-list');
@@ -760,9 +889,11 @@
             row.style.marginBottom = '10px';
             
             let optionsHtml = '<option value="" disabled selected>Select Raw Item...</option>';
-            RAW_ITEMS.sort().forEach(item => {
-                optionsHtml += `<option value="${item}" ${selectedItem === item ? 'selected' : ''}>${item}</option>`;
-            });
+            if(window.DYNAMIC_RAW_ITEMS) {
+                window.DYNAMIC_RAW_ITEMS.forEach(item => {
+                    optionsHtml += `<option value="${item}" ${selectedItem === item ? 'selected' : ''}>${item}</option>`;
+                });
+            }
 
             row.innerHTML = `
                 <select class="remark-input ing-name" style="flex: 2; margin: 0; padding: 12px;">${optionsHtml}</select>
@@ -796,6 +927,7 @@
 
         window.loadExistingRecipe = function() {
             const target = document.getElementById('recipe-target').value;
+            if(!target) return;
             const list = document.getElementById('ingredient-list');
             list.innerHTML = ""; 
             
@@ -808,9 +940,6 @@
                 }
             });
         };
-
-        setTimeout(() => { loadExistingRecipe(); }, 500);
-        // --- END RECIPE ENGINE LOGIC ---
 
     </script>
 </body>
