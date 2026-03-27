@@ -25,6 +25,17 @@
         .dash-value { font-size: 1rem; font-weight: 700; }
         .dash-divider { width: 1px; height: 25px; background-color: rgba(255, 255, 255, 0.2); }
 
+        /* NEW: Classy Web Order Pulse Alert */
+        @keyframes subtlePulse {
+            0% { background-color: transparent; box-shadow: 0 0 0 rgba(255,255,255,0); }
+            50% { background-color: rgba(255, 255, 255, 0.2); box-shadow: 0 0 15px rgba(255,255,255,0.4); border-radius: 6px; }
+            100% { background-color: transparent; box-shadow: 0 0 0 rgba(255,255,255,0); }
+        }
+        .pulse-alert {
+            animation: subtlePulse 1.8s infinite ease-in-out;
+            border-bottom: 2px solid #ffffff;
+        }
+
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
@@ -122,7 +133,7 @@
         <div class="dashboard-bar">
             <div class="dash-stat" onclick="openActiveBills()"><span class="dash-label">Bills</span><span class="dash-value" id="active-bills-count">0</span></div>
             <div class="dash-divider"></div>
-            <div class="dash-stat" onclick="openWebOrders()"><span class="dash-label">Web</span><span class="dash-value" id="web-orders-count">0</span></div>
+            <div class="dash-stat" id="web-dash-stat" onclick="openWebOrders()"><span class="dash-label">Web</span><span class="dash-value" id="web-orders-count">0</span></div>
             <div class="dash-divider"></div>
             <div class="dash-stat" onclick="openCashManagement()"><span class="dash-label">Cash</span><span class="dash-value" id="cash-display">₹0</span></div>
             <div class="dash-divider"></div>
@@ -305,6 +316,40 @@
     </div>
 
     <script>
+        // --- NEW: AUDIO CHIME ENGINE ---
+        // Browsers require a user interaction before playing audio.
+        // We initialize it on the first tap the cashier makes.
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+            if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+        }
+        document.addEventListener('click', initAudio, { once: true });
+        document.addEventListener('touchstart', initAudio, { once: true });
+
+        function playClassyChime() {
+            if (!audioCtx) return;
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                // Creates a soft, pleasant "bell" frequency
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1046.50, audioCtx.currentTime); // C6 Note
+                
+                // Fades out gently over 0.8 seconds so it isn't jarring
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.8);
+            } catch(e) { console.error("Chime failed", e); }
+        }
+        // -------------------------------
+
         const firebaseConfig = {
             apiKey: "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ",
             authDomain: "ila-cafe.firebaseapp.com",
@@ -566,16 +611,39 @@
             calculateDailyCups();
         });
 
+        // --- NEW: WEB ORDER ALARM SYSTEM ---
+        let previousWebOrderCount = 0;
+        let isInitialWebOrderLoad = true;
+
         db.ref('orders/pendingWeb').on('value', snap => {
             window.pendingWebOrders = snap.val() || {};
             let count = Object.keys(window.pendingWebOrders).length;
-            document.getElementById('web-orders-count').innerText = count;
-            document.getElementById('web-orders-count').style.opacity = count > 0 ? "1" : "0.5";
+            
+            let countEl = document.getElementById('web-orders-count');
+            countEl.innerText = count;
+            countEl.style.opacity = count > 0 ? "1" : "0.5";
+            
+            // Trigger Visual Pulse
+            let dashStat = document.getElementById('web-dash-stat');
+            if (count > 0) {
+                if (dashStat) dashStat.classList.add('pulse-alert');
+            } else {
+                if (dashStat) dashStat.classList.remove('pulse-alert');
+            }
+
+            // Trigger Audio Chime only if a NEW order arrives
+            if (!isInitialWebOrderLoad && count > previousWebOrderCount) {
+                playClassyChime();
+            }
+            
+            previousWebOrderCount = count;
+            isInitialWebOrderLoad = false;
             
             if(document.getElementById('web-orders-modal').classList.contains('active')) {
                 window.openWebOrders();
             }
         });
+        // -----------------------------------
 
         function calculateDailyCups() {
             let cupTotal = 0;
@@ -891,8 +959,6 @@
                 receiptHTML += `<div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`;
             }
             document.getElementById('checkout-receipt').innerHTML = receiptHTML;
-            
-            // NEW MOVE TABLE BUTTON IMPLEMENTATION
             let titleText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
             document.getElementById('checkout-title').innerHTML = `${titleText} <button class="mini-btn" style="display:inline-flex; width:auto; padding:0 10px; font-size:0.7rem; font-weight:bold; letter-spacing:1px; vertical-align:middle; border-color:rgba(255,255,255,0.6);" onclick="window.openMoveTable()">MOVE</button>`;
         }
@@ -1153,7 +1219,6 @@
             }
         };
 
-        // --- MOVE TABLE LOGIC ---
         window.openMoveTable = function() {
             const grid = document.getElementById('move-table-grid');
             grid.innerHTML = "";
