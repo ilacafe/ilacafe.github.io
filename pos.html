@@ -25,16 +25,17 @@
         .dash-value { font-size: 1rem; font-weight: 700; }
         .dash-divider { width: 1px; height: 25px; background-color: rgba(255, 255, 255, 0.2); }
 
-        /* NEW: Classy Web Order Pulse Alert */
-        @keyframes subtlePulse {
-            0% { background-color: transparent; box-shadow: 0 0 0 rgba(255,255,255,0); }
-            50% { background-color: rgba(255, 255, 255, 0.2); box-shadow: 0 0 15px rgba(255,255,255,0.4); border-radius: 6px; }
-            100% { background-color: transparent; box-shadow: 0 0 0 rgba(255,255,255,0); }
+                /* NEW: Crisp Web Order Border Pulse */
+        @keyframes crispBorderPulse {
+            0% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0); background-color: transparent; }
+            50% { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 1); background-color: rgba(255, 255, 255, 0.05); }
+            100% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0); background-color: transparent; }
         }
         .pulse-alert {
-            animation: subtlePulse 1.8s infinite ease-in-out;
-            border-bottom: 2px solid #ffffff;
+            animation: crispBorderPulse 1.5s infinite ease-in-out;
+            border-radius: 6px;
         }
+
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
