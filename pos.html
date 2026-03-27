@@ -211,6 +211,15 @@
         </div>
     </div>
 
+    <div id="move-table-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Move To</h3>
+            <div class="table-grid" id="move-table-grid"></div>
+            <button class="takeaway-btn" onclick="window.confirmMoveTable('Takeaway')">Takeaway</button><br>
+            <button class="close-modal" onclick="closeModal('move-table-modal')">✖ CANCEL</button>
+        </div>
+    </div>
+
     <div id="checkout-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="checkout-title">Bill</h3>
@@ -524,7 +533,6 @@
             }
         };
 
-        // --- NEW DEBOUNCED CLOUD SYNC ---
         let syncTimeout = null;
         function syncToCloud() {
             if (syncTimeout) clearTimeout(syncTimeout);
@@ -538,7 +546,6 @@
                 }).catch(e => console.error("Cloud Sync Error: ", e));
             }, 600); 
         }
-        // ---------------------------------
 
         db.ref('pos/activeTables').on('value', snap => { 
             let data = snap.val() || {};
@@ -884,7 +891,10 @@
                 receiptHTML += `<div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`;
             }
             document.getElementById('checkout-receipt').innerHTML = receiptHTML;
-            document.getElementById('checkout-title').innerText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
+            
+            // NEW MOVE TABLE BUTTON IMPLEMENTATION
+            let titleText = tableID === 'Takeaway' ? 'Takeaway' : `Table ${tableID}`;
+            document.getElementById('checkout-title').innerHTML = `${titleText} <button class="mini-btn" style="display:inline-flex; width:auto; padding:0 10px; font-size:0.7rem; font-weight:bold; letter-spacing:1px; vertical-align:middle; border-color:rgba(255,255,255,0.6);" onclick="window.openMoveTable()">MOVE</button>`;
         }
 
         window.openCheckout = function(tableID) {
@@ -911,14 +921,12 @@
                 };
                 db.ref('security/voids').push(voidData);
 
-                // --- NEW: SEND CANCELLATION TICKET TO KITCHEN ---
                 let destName = tableID.startsWith('Takeaway') ? tableID : 'Table ' + tableID;
                 let voidCart = {};
                 voidCart[realItemName] = { price: 0, qty: "❌ -1" }; 
                 try {
                     dispatchToKitchen(voidCart, destName, `VOID / CANCELLED. Reason: ${reason}`, "POS Update");
                 } catch(e) { console.error("Kitchen dispatch error", e); }
-                // ------------------------------------------------
 
                 tableData.total = (parseFloat(tableData.total) || 0) - (parseFloat(tableData.items[realItemName].price) || 0); 
                 tableData.items[realItemName].qty -= 1;
@@ -1144,6 +1152,67 @@
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
         };
+
+        // --- MOVE TABLE LOGIC ---
+        window.openMoveTable = function() {
+            const grid = document.getElementById('move-table-grid');
+            grid.innerHTML = "";
+            for (let i = 1; i <= 10; i++) {
+                const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
+                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="window.confirmMoveTable('${i}')">${i}</button>`;
+            }
+            closeModal('checkout-modal'); 
+            document.getElementById('move-table-modal').classList.add('active');
+        };
+
+        window.confirmMoveTable = function(newTableID) {
+            const oldTableID = window.checkoutTableID;
+            if (newTableID === oldTableID) {
+                closeModal('move-table-modal'); window.openCheckout(oldTableID); return;
+            }
+            
+            if (window.activeTables[newTableID] && !confirm(`Table ${newTableID} is already occupied. Merge bills?`)) return;
+
+            // 1. Shift the POS Data
+            const tableData = window.activeTables[oldTableID];
+            if (window.activeTables[newTableID]) {
+                let existing = window.activeTables[newTableID];
+                existing.total = (parseFloat(existing.total) || 0) + (parseFloat(tableData.total) || 0);
+                existing.paid = (parseFloat(existing.paid) || 0) + (parseFloat(tableData.paid) || 0);
+                if (tableData.notes) existing.notes = existing.notes ? existing.notes + " | " + tableData.notes : tableData.notes;
+                
+                for (let item in tableData.items) {
+                    if (existing.items[item]) existing.items[item].qty += tableData.items[item].qty;
+                    else existing.items[item] = tableData.items[item];
+                }
+            } else {
+                window.activeTables[newTableID] = tableData;
+            }
+            delete window.activeTables[oldTableID];
+            syncToCloud();
+
+            // 2. Silently Hunt and Update KDS Tickets
+            const oldDest = oldTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + oldTableID;
+            const newDest = newTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + newTableID;
+
+            ['chef', 'barista'].forEach(station => {
+                db.ref(`orders/active/${station}`).once('value', snap => {
+                    const tickets = snap.val();
+                    if (tickets) {
+                        for (let id in tickets) {
+                            if (tickets[id].destination === oldDest) {
+                                db.ref(`orders/active/${station}/${id}`).update({ destination: newDest });
+                            }
+                        }
+                    }
+                });
+            });
+
+            // 3. Reset the visual state
+            closeModal('move-table-modal');
+            window.openCheckout(newTableID);
+        };
+
         updateCartUI();
     </script>
 </body>
