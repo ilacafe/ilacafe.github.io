@@ -9,9 +9,17 @@
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
     <style>
-        :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
+        #login-overlay { position: fixed; inset: 0; background: var(--brand-bg); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        #login-overlay.hidden { display: none; }
+        #login-box { width: 100%; max-width: 320px; text-align: center; }
+        #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
+        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
         header { text-align: center; margin-bottom: 25px; }
@@ -67,10 +75,10 @@
 
         #notification-area { position: fixed; top: 15px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; z-index: 3000; pointer-events: none; }
         
-        .toast-card { background: white; color: #8c7255; padding: 20px; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); margin-bottom: 10px; font-family: 'Quicksand', sans-serif; display: flex; flex-direction: column; pointer-events: auto; animation: slideDown 0.3s ease-out; border-left: 5px solid #8c7255; }
+        .toast-card { background: white; color: #8D6E52; padding: 20px; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); margin-bottom: 10px; font-family: 'Quicksand', sans-serif; display: flex; flex-direction: column; pointer-events: auto; animation: slideDown 0.3s ease-out; border-left: 5px solid #8D6E52; }
         .toast-header { font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
         .toast-details { font-size: 0.95rem; opacity: 0.9; margin-bottom: 15px; font-weight: 500; line-height: 1.4; }
-        .toast-btn { background: transparent; color: #8c7255; border: 1px solid #8c7255; padding: 8px 0; border-radius: 4px; font-weight: bold; font-size: 0.8rem; cursor: pointer; text-transform: uppercase; width: 100%; transition: background 0.2s; }
+        .toast-btn { background: transparent; color: #8D6E52; border: 1px solid #8D6E52; padding: 8px 0; border-radius: 4px; font-weight: bold; font-size: 0.8rem; cursor: pointer; text-transform: uppercase; width: 100%; transition: background 0.2s; }
         .toast-btn:active { background: #f0f0f0; }
 
         @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -89,7 +97,7 @@
         
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; }
         .table-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
-        .table-btn.occupied { background-color: #ffffff; color: #8c7255; border: none;}
+        .table-btn.occupied { background-color: #ffffff; color: #8D6E52; border: none;}
         .takeaway-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px; text-transform: uppercase; transition: all 0.2s;}
         .takeaway-btn:active { background: white; color: var(--brand-bg); }
 
@@ -122,6 +130,15 @@
     </style>
 </head>
 <body>
+    <div id="login-overlay">
+        <div id="login-box">
+            <h2>ILA Staff</h2>
+            <input type="email" id="login-email" placeholder="Email" autocomplete="username">
+            <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+            <button onclick="window.signInStaff()">Sign In</button>
+            <div id="login-error"></div>
+        </div>
+    </div>
 
     <div class="container">
         <header>
@@ -297,6 +314,7 @@
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                 <button class="btn btn-dark" style="flex: 1;" onclick="closeModal('cash-modal'); openPastBills()">History</button>
                 <button class="btn btn-dark" style="flex: 1;" onclick="promptEOD()">End of Day</button>
+                <button class="btn btn-dark" style="flex: 1;" onclick="signOutPOS()">Sign Out</button>
             </div>
             
             <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; font-size: 0.8rem; letter-spacing: 1px; opacity: 0.7;">LOGS</h4>
@@ -363,6 +381,82 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        const auth = firebase.auth();
+        window.currentStaff = { uid: null, name: null, role: null };
+        function showLogin(msg) {
+            document.getElementById('login-overlay').classList.remove('hidden');
+            if (msg) document.getElementById('login-error').innerText = msg;
+        }
+        function hideLogin() {
+            document.getElementById('login-overlay').classList.add('hidden');
+            document.getElementById('login-error').innerText = "";
+        }
+        window.signInStaff = function() {
+            const email = document.getElementById('login-email').value.trim();
+            const pw = document.getElementById('login-password').value;
+            document.getElementById('login-error').innerText = "Signing in...";
+            auth.signInWithEmailAndPassword(email, pw)
+                .catch(() => { document.getElementById('login-error').innerText = "Sign-in failed. Check email and password."; });
+        };
+        window.signOutPOS = function() {
+            if (confirm("Sign out of the POS?")) auth.signOut().then(() => location.reload());
+        };
+        let authedListenersStarted = false;
+        auth.onAuthStateChanged(async (user) => {
+            if (!user) { showLogin(); return; }
+            try {
+                const prof = (await db.ref('users/' + user.uid).once('value')).val();
+                if (!prof || !prof.role) { await auth.signOut(); showLogin("This account has no staff access. Ask the admin."); return; }
+                window.currentStaff = { uid: user.uid, name: prof.name || user.email, role: prof.role };
+                hideLogin();
+                if (!authedListenersStarted) { authedListenersStarted = true; startAuthedListeners(); }
+            } catch (e) { showLogin("Could not verify access. Check connection and retry."); }
+        });
+
+        function startAuthedListeners() {
+            db.ref('pos/activeTables').on('value', snap => {
+                let data = snap.val() || {};
+                if (Array.isArray(data)) {
+                    window.activeTables = {};
+                    data.forEach((val, idx) => { if(val) window.activeTables[idx.toString()] = val; });
+                } else {
+                    window.activeTables = data;
+                }
+                updateDashboards(); refreshActiveModals();
+            });
+            db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
+            db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
+            db.ref('pos/ledgerEntries').on('value', snap => {
+                const data = snap.val() || {};
+                window.salesLedger = Object.values(data).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+                renderLedger();
+            });
+            db.ref('pos/bills').on('value', snap => {
+                const data = snap.val() || {};
+                window.pastBills = Object.values(data).sort((a, b) => (b.id || 0) - (a.id || 0));
+                calculateDailyCups();
+            });
+
+            let previousWebOrderCount = 0;
+            let isInitialWebOrderLoad = true;
+            db.ref('orders/pendingWeb').on('value', snap => {
+                window.pendingWebOrders = snap.val() || {};
+                let count = Object.keys(window.pendingWebOrders).length;
+                let countEl = document.getElementById('web-orders-count');
+                countEl.innerText = count;
+                countEl.style.opacity = count > 0 ? "1" : "0.5";
+                let dashStat = document.getElementById('web-dash-stat');
+                if (count > 0) { if (dashStat) dashStat.classList.add('pulse-alert'); }
+                else { if (dashStat) dashStat.classList.remove('pulse-alert'); }
+                if (!isInitialWebOrderLoad && count > previousWebOrderCount) { playClassyChime(); }
+                previousWebOrderCount = count;
+                isInitialWebOrderLoad = false;
+                if(document.getElementById('web-orders-modal').classList.contains('active')) { window.openWebOrders(); }
+            });
+
+            db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
+        }
+
         const CAFE_WEBSITE_LINK = "https://ilacafe.github.io"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "918882946526"; 
@@ -391,6 +485,20 @@
         
         window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
         window.salesLedger = []; window.pastBills = []; window.pendingWebOrders = {};
+
+        // Escape any customer/staff free-text before it goes into innerHTML.
+        function escapeHTML(str) {
+            return String(str == null ? "" : str).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+        // PIN_SALT must be byte-identical in pos, admin, and inventory — or PINs won't match.
+        const PIN_SALT = "ila-cafe-pin-v1::8D6E52";
+        async function hashPin(pin) {
+            const data = new TextEncoder().encode(PIN_SALT + String(pin).trim());
+            const buf = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
         
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
@@ -431,8 +539,7 @@
                 total: tableData.total, 
                 notes: tableData.notes || "" 
             };
-            window.pastBills.unshift(localBill);
-            if(window.pastBills.length > 50) window.pastBills.pop();
+            db.ref('pos/bills').push(localBill);
 
             const archivePacket = {
                 timestamp: new Date().toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}),
@@ -443,7 +550,7 @@
                 payment: { method: method, total: tableData.total },
                 items: tableData.items
             };
-            db.ref('orders/history/' + Date.now()).set(archivePacket);
+            db.ref('orders/history/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)).set(archivePacket);
             syncToCloud();
             calculateDailyCups();
         }
@@ -458,13 +565,13 @@
                     const o = window.pendingWebOrders[id];
                     let itemsHTML = "<div style='margin: 10px 0; font-size: 0.9rem; opacity: 0.8; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.3);'>";
                     for(let itemName in o.items) {
-                        itemsHTML += `<div style="margin-bottom: 3px;">${o.items[itemName].qty}x ${itemName}</div>`;
+                        itemsHTML += `<div style="margin-bottom: 3px;">${o.items[itemName].qty}x ${escapeHTML(itemName)}</div>`;
                     }
-                    if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; opacity:0.8;">Notes: ${o.notes}</div>`;
+                    if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; opacity:0.8;">Notes: ${escapeHTML(o.notes)}</div>`;
                     itemsHTML += "</div>";
 
                     list.innerHTML += `<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left;">
-                        <strong style="font-size: 1.1rem; text-transform: uppercase;">${o.tableOrAddress}</strong><br>
+                        <strong style="font-size: 1.1rem; text-transform: uppercase;">${escapeHTML(o.tableOrAddress)}</strong><br>
                         ${itemsHTML}
                         <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
@@ -495,9 +602,7 @@
                 total: order.total, 
                 notes: order.notes || "" 
             };
-            window.pastBills.unshift(localBill);
-            if(window.pastBills.length > 50) window.pastBills.pop();
-            syncToCloud();
+            db.ref('pos/bills').push(localBill);
             calculateDailyCups();
             
             const archivePacket = {
@@ -509,7 +614,7 @@
                 payment: { method: "UPI", total: order.total },
                 items: order.items
             };
-            db.ref('orders/history/' + Date.now()).set(archivePacket);
+            db.ref('orders/history/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)).set(archivePacket);
             db.ref('orders/pendingWeb/' + id).remove();
             closeModal('web-orders-modal');
         };
@@ -583,68 +688,14 @@
         function syncToCloud() {
             if (syncTimeout) clearTimeout(syncTimeout);
             syncTimeout = setTimeout(() => {
-                db.ref('pos').update({
-                    activeTables: Object.keys(window.activeTables).length > 0 ? window.activeTables : null,
-                    cashDrawer: window.cashDrawer || 0,
-                    upiTotal: window.upiTotal || 0,
-                    salesLedger: window.salesLedger.length > 0 ? window.salesLedger : null,
-                    pastBills: window.pastBills.length > 0 ? window.pastBills : null
-                }).catch(e => console.error("Cloud Sync Error: ", e));
+                // Only activeTables syncs here now. cashDrawer/upiTotal use atomic increment()
+                // and ledger/bills use push() — overwriting them from a local copy is exactly
+                // what zeroed your data, so they are gone from this write.
+                db.ref('pos/activeTables').set(
+                    Object.keys(window.activeTables).length > 0 ? window.activeTables : null
+                ).catch(e => console.error("Cloud Sync Error: ", e));
             }, 600); 
         }
-
-        db.ref('pos/activeTables').on('value', snap => { 
-            let data = snap.val() || {};
-            if (Array.isArray(data)) {
-                window.activeTables = {};
-                data.forEach((val, idx) => { if(val) window.activeTables[idx.toString()] = val; });
-            } else {
-                window.activeTables = data;
-            }
-            updateDashboards(); refreshActiveModals();
-        });
-
-        db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
-        db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
-        db.ref('pos/salesLedger').on('value', snap => { window.salesLedger = snap.val() || []; renderLedger(); });
-        db.ref('pos/pastBills').on('value', snap => { 
-            window.pastBills = snap.val() || []; 
-            calculateDailyCups();
-        });
-
-        // --- NEW: WEB ORDER ALARM SYSTEM ---
-        let previousWebOrderCount = 0;
-        let isInitialWebOrderLoad = true;
-
-        db.ref('orders/pendingWeb').on('value', snap => {
-            window.pendingWebOrders = snap.val() || {};
-            let count = Object.keys(window.pendingWebOrders).length;
-            
-            let countEl = document.getElementById('web-orders-count');
-            countEl.innerText = count;
-            countEl.style.opacity = count > 0 ? "1" : "0.5";
-            
-            // Trigger Visual Pulse
-            let dashStat = document.getElementById('web-dash-stat');
-            if (count > 0) {
-                if (dashStat) dashStat.classList.add('pulse-alert');
-            } else {
-                if (dashStat) dashStat.classList.remove('pulse-alert');
-            }
-
-            // Trigger Audio Chime only if a NEW order arrives
-            if (!isInitialWebOrderLoad && count > previousWebOrderCount) {
-                playClassyChime();
-            }
-            
-            previousWebOrderCount = count;
-            isInitialWebOrderLoad = false;
-            
-            if(document.getElementById('web-orders-modal').classList.contains('active')) {
-                window.openWebOrders();
-            }
-        });
-        // -----------------------------------
 
         function calculateDailyCups() {
             let cupTotal = 0;
@@ -700,7 +751,7 @@
             }
         });
 
-        db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
+
         db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
         db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
         
@@ -851,7 +902,7 @@
             else {
                 for (let item in window.cart) {
                     const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                    list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${escapeHTML(item)}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
                 }
             }
             document.getElementById('review-cart-modal').classList.add('active');
@@ -947,12 +998,12 @@
             let receiptHTML = "";
             
             if (tableData.notes) {
-                receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${tableData.notes}</div>`;
+                receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${escapeHTML(tableData.notes)}</div>`;
             }
 
             for (let item in tableData.items) { 
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${tableData.items[item].qty}x ${item}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
+                receiptHTML += `<div class="bill-receipt-row"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${tableData.items[item].qty}x ${escapeHTML(item)}</span><span>₹${tableData.items[item].qty * tableData.items[item].price}</span></div>`; 
             }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${total}</div>`;
             if (paid > 0) {
@@ -1117,17 +1168,23 @@
         function addLedgerEntry(type, amount, reason) {
             const parsedAmount = parseFloat(amount) || 0;
             const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
-            window.salesLedger.unshift({ date: timeString, type: type, amount: parsedAmount, reason: reason }); 
-            
+
+            // Each entry is its own child — push() never touches siblings and merges cleanly
+            // after an offline spell.
+            db.ref('pos/ledgerEntries').push({
+                date: timeString, type: type, amount: parsedAmount, reason: reason,
+                ts: firebase.database.ServerValue.TIMESTAMP
+            });
+
+            // Running totals via atomic increment — concurrent sales can't lose each other,
+            // it shows instantly, and reconciles correctly after reconnect.
             if (type === 'cash_income') {
-                window.cashDrawer = (parseFloat(window.cashDrawer) || 0) + parsedAmount;
+                db.ref('pos/cashDrawer').set(firebase.database.ServerValue.increment(parsedAmount));
             } else if (type === 'upi_income') {
-                window.upiTotal = (parseFloat(window.upiTotal) || 0) + parsedAmount;
+                db.ref('pos/upiTotal').set(firebase.database.ServerValue.increment(parsedAmount));
             } else {
-                window.cashDrawer = (parseFloat(window.cashDrawer) || 0) - parsedAmount;
+                db.ref('pos/cashDrawer').set(firebase.database.ServerValue.increment(-parsedAmount));
             }
-            syncToCloud();
         }
 
         function renderLedger() {
@@ -1139,14 +1196,14 @@
                 else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
                 
                 let safeAmount = parseFloat(entry.amount) || 0;
-                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${entry.reason}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
+                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${escapeHTML(entry.reason)}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
             });
         }
 
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list'); list.innerHTML = "";
             if (window.pastBills.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; } 
-            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${bill.table}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
+            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${escapeHTML(bill.table)}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
             document.getElementById('past-bills-modal').classList.add('active');
         };
 
@@ -1155,8 +1212,8 @@
             document.getElementById('past-bill-title').innerText = bill.table;
             document.getElementById('past-bill-date').innerText = bill.date;
             let receiptHTML = ""; 
-            if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${bill.notes}</div>`;
-            for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${item}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
+            if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${escapeHTML(bill.notes)}</div>`;
+            for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${escapeHTML(item)}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
             document.getElementById('past-bill-receipt').innerHTML = receiptHTML; document.getElementById('past-bill-phone').value = "";
             closeModal('past-bills-modal'); document.getElementById('view-past-bill-modal').classList.add('active');
@@ -1191,10 +1248,10 @@
         window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
         window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
 
-        window.confirmTransaction = function() {
+        window.confirmTransaction = async function() {
             const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
             if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
-            const staffName = window.staffPins[pinStr]; if (!staffName) return;
+            const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
             
             let currentCash = parseFloat(window.cashDrawer) || 0;
             if (amount > currentCash && !confirm(`Only ₹${currentCash} in drawer. Continue?`)) return;
@@ -1203,9 +1260,9 @@
             window.closeTransactionModal();
         };
 
-        window.promptEOD = function() {
+        window.promptEOD = async function() {
             const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
-            const staffName = window.staffPins[pinStr]; if (!staffName) return;
+            const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
             if (Object.keys(window.activeTables).length > 0) { if(!confirm("Tables open. End day?")) return; }
             
             let safeUPI = parseFloat(window.upiTotal) || 0;
@@ -1215,7 +1272,22 @@
             let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
             if (!exp) report += `None.\n`;
             if (confirm("Send Report?")) {
-                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = []; syncToCloud(); closeModal('cash-modal');
+                const todayKey = new Date().toISOString().slice(0, 10);
+                // Snapshot the whole day BEFORE wiping, so nothing is lost if the WhatsApp
+                // hand-off fails. Then clear the live nodes for the new day.
+                db.ref('pos/eodArchive/' + todayKey).set({
+                    report: report, upi: safeUPI, cash: safeCash,
+                    bills: window.pastBills, ledger: window.salesLedger,
+                    closedBy: staffName, closedAt: firebase.database.ServerValue.TIMESTAMP
+                }).then(() => {
+                    db.ref('pos/ledgerEntries').remove();
+                    db.ref('pos/bills').remove();
+                    db.ref('pos/cashDrawer').set(0);
+                    db.ref('pos/upiTotal').set(0);
+                    db.ref('pos/activeTables').remove();
+                });
+                window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = [];
+                closeModal('cash-modal');
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
             }
         };
