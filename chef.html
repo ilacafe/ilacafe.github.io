@@ -4,48 +4,55 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>ILA | Chef Display</title>
-    <link rel="apple-touch-icon" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon-chef.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
-    
+
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
     <style>
-        :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; }
-        
         header { text-align: center; padding: 20px 0; border-bottom: 1px solid rgba(255,255,255,0.2); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; padding: 20px 5%;}
         .logo { max-width: 150px; height: auto; display: block; }
-        
         .header-title { font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin: 0;}
         .clock { font-size: 1.2rem; font-weight: bold; opacity: 0.8; }
-
         .kds-container { padding: 0 5%; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; align-items: start; padding-bottom: 50px;}
-        
         .ticket-card { background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; animation: fadeIn 0.3s ease-out; }
-        
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
         .ticket-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px dashed rgba(255,255,255,0.3); padding-bottom: 15px; margin-bottom: 15px; }
         .ticket-dest { font-size: 1.6rem; font-weight: 700; text-transform: uppercase; line-height: 1; }
         .ticket-meta { text-align: right; font-size: 0.85rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px;}
         .ticket-time { font-size: 1.1rem; font-weight: bold; display: block; margin-bottom: 2px; color: #fff;}
-
         .ticket-items { flex-grow: 1; margin-bottom: 20px; }
         .item-row { display: flex; font-size: 1.3rem; margin-bottom: 10px; font-weight: 500; line-height: 1.3; align-items: flex-start;}
         .item-qty { font-weight: 700; width: 35px; flex-shrink: 0; }
         .item-name { flex-grow: 1; }
-
         .ticket-notes { background: rgba(255, 204, 0, 0.1); border-left: 3px solid #ffcc00; padding: 10px; margin-bottom: 20px; font-size: 0.95rem; color: #ffcc00; font-style: italic; border-radius: 0 4px 4px 0;}
-
         .btn-done { background-color: var(--brand-text); color: var(--brand-bg); border: none; padding: 15px; border-radius: 8px; font-weight: 700; font-size: 1.2rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; text-transform: uppercase; letter-spacing: 2px; transition: opacity 0.2s;}
         .btn-done:active { opacity: 0.7; }
-
         .empty-state { text-align: center; grid-column: 1 / -1; margin-top: 50px; opacity: 0.5; }
         .empty-state h2 { font-size: 2rem; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 5px; }
+        #login-overlay { position: fixed; inset: 0; background: var(--brand-bg); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        #login-overlay.hidden { display: none; }
+        #login-box { width: 100%; max-width: 320px; text-align: center; }
+        #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
+        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
     </style>
 </head>
 <body>
+    <div id="login-overlay">
+        <div id="login-box">
+            <h2>Kitchen Display</h2>
+            <input type="email" id="login-email" placeholder="Email" autocomplete="username">
+            <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+            <button onclick="window.signInDisplay()">Sign In</button>
+            <div id="login-error"></div>
+        </div>
+    </div>
 
     <header>
         <img src="logo.png" alt="ILA Logo" class="logo">
@@ -72,70 +79,67 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        const auth = firebase.auth();
+        let displayStarted = false;
+
+        function escapeHTML(str) {
+            return String(str == null ? "" : str).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+        function showLogin(msg) { document.getElementById('login-overlay').classList.remove('hidden'); if (msg) document.getElementById('login-error').innerText = msg; }
+        function hideLogin() { document.getElementById('login-overlay').classList.add('hidden'); document.getElementById('login-error').innerText = ""; }
+        window.signInDisplay = function() {
+            const email = document.getElementById('login-email').value.trim();
+            const pw = document.getElementById('login-password').value;
+            document.getElementById('login-error').innerText = "Signing in...";
+            auth.signInWithEmailAndPassword(email, pw).catch(() => { document.getElementById('login-error').innerText = "Sign-in failed. Check email and password."; });
+        };
 
         setInterval(() => {
             document.getElementById('live-clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         }, 1000);
 
-        // LISTEN: Chef Channel
-        db.ref('orders/active/chef').on('value', snap => {
-            const orders = snap.val();
-            const board = document.getElementById('ticket-board');
-            board.innerHTML = "";
-
-            if (!orders) {
-                board.innerHTML = `<div class="empty-state"><h2>No Orders</h2><p>Waiting for tickets...</p></div>`;
-                return;
-            }
-
-            for (let id in orders) {
-                const order = orders[id];
-                let itemsHTML = "";
-                
-                if(order.items) {
-                    for (let itemName in order.items) {
-                        itemsHTML += `
-                            <div class="item-row">
-                                <span class="item-qty">${order.items[itemName].qty}x</span>
-                                <span class="item-name">${itemName}</span>
-                            </div>`;
-                    }
-                }
-
-                let notesHTML = order.notes ? `<div class="ticket-notes">Notes: ${order.notes}</div>` : "";
-
-                board.innerHTML += `
-                    <div class="ticket-card" id="ticket-${id}">
-                        <div class="ticket-header">
-                            <div class="ticket-dest">${order.destination}</div>
-                            <div class="ticket-meta">
-                                <span class="ticket-time">${order.time}</span>
-                                <span>${order.source}</span>
-                            </div>
-                        </div>
-                        <div class="ticket-items">${itemsHTML}</div>
-                        ${notesHTML}
-                        <button class="btn-done" onclick="markOrderDone('${id}')">DONE</button>
-                    </div>`;
-            }
+        auth.onAuthStateChanged(async (user) => {
+            if (!user) { showLogin(); return; }
+            try {
+                const prof = (await db.ref('users/' + user.uid).once('value')).val();
+                if (!prof || !prof.role) { await auth.signOut(); showLogin("This account has no access."); return; }
+                hideLogin();
+                if (!displayStarted) { displayStarted = true; startDisplay(); }
+            } catch (e) { showLogin("Could not verify access. Check connection and retry."); }
         });
 
-        // ACTION: Send Signal & Archive
+        function startDisplay() {
+            db.ref('orders/active/chef').on('value', snap => {
+                const orders = snap.val();
+                const board = document.getElementById('ticket-board');
+                board.innerHTML = "";
+                if (!orders) {
+                    board.innerHTML = `<div class="empty-state"><h2>No Orders</h2><p>Waiting for tickets...</p></div>`;
+                    return;
+                }
+                for (let id in orders) {
+                    const order = orders[id];
+                    let itemsHTML = "";
+                    if (order.items) {
+                        for (let itemName in order.items) {
+                            itemsHTML += `<div class="item-row"><span class="item-qty">${escapeHTML(order.items[itemName].qty)}x</span><span class="item-name">${escapeHTML(itemName)}</span></div>`;
+                        }
+                    }
+                    let notesHTML = order.notes ? `<div class="ticket-notes">Notes: ${escapeHTML(order.notes)}</div>` : "";
+                    board.innerHTML += `<div class="ticket-card" id="ticket-${id}"><div class="ticket-header"><div class="ticket-dest">${escapeHTML(order.destination)}</div><div class="ticket-meta"><span class="ticket-time">${escapeHTML(order.time)}</span><span>${escapeHTML(order.source)}</span></div></div><div class="ticket-items">${itemsHTML}</div>${notesHTML}<button class="btn-done" onclick="markOrderDone('${id}')">DONE</button></div>`;
+                }
+            });
+        }
+
         window.markOrderDone = function(id) {
             db.ref('orders/active/chef/' + id).once('value').then(snapshot => {
                 const order = snapshot.val();
-                if (!order) return; 
-
-                // 1. Create Summary (e.g. "1x Pasta, 1x Burger")
+                if (!order) return;
                 let summaryList = [];
-                if(order.items) {
-                    for(let item in order.items) {
-                        summaryList.push(`${order.items[item].qty}x ${item}`);
-                    }
-                }
+                if(order.items) { for(let item in order.items) { summaryList.push(`${order.items[item].qty}x ${item}`); } }
                 let summaryString = summaryList.join(", ");
-
-                // 2. Send Signal to POS
                 const readySignal = {
                     table: order.destination,
                     items: summaryString,
@@ -143,18 +147,10 @@
                     timestamp: Date.now()
                 };
                 db.ref('orders/ready').push(readySignal);
-
-                // 3. Archive & Delete
                 db.ref('orders/completed/chef/' + id).set(order);
                 const ticket = document.getElementById('ticket-' + id);
-                if(ticket) {
-                    ticket.style.opacity = '0';
-                    ticket.style.transform = 'scale(0.95)';
-                    ticket.style.transition = 'all 0.2s';
-                }
-                setTimeout(() => {
-                    db.ref('orders/active/chef/' + id).remove();
-                }, 200);
+                if(ticket) { ticket.style.opacity = '0'; ticket.style.transform = 'scale(0.95)'; ticket.style.transition = 'all 0.2s'; }
+                setTimeout(() => { db.ref('orders/active/chef/' + id).remove(); }, 200);
             });
         };
     </script>
