@@ -9,9 +9,17 @@
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
     <style>
-        :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
+        #login-overlay { position: fixed; inset: 0; background: var(--brand-bg); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        #login-overlay.hidden { display: none; }
+        #login-box { width: 100%; max-width: 320px; text-align: center; }
+        #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
+        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 60px; }
         .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 15px; box-sizing: border-box; }
         
@@ -60,6 +68,15 @@
     </style>
 </head>
 <body>
+    <div id="login-overlay">
+        <div id="login-box">
+            <h2>ILA Inventory</h2>
+            <input type="email" id="login-email" placeholder="Email" autocomplete="username">
+            <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+            <button onclick="window.signInInventory()">Sign In</button>
+            <div id="login-error"></div>
+        </div>
+    </div>
 
     <div class="container">
         <header>
@@ -111,6 +128,38 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        const auth = firebase.auth();
+        let inventoryStarted = false;
+        const PIN_SALT = "ila-cafe-pin-v1::8D6E52";
+        async function hashPin(pin) {
+            const data = new TextEncoder().encode(PIN_SALT + String(pin).trim());
+            const buf = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+        function showLogin(msg) { document.getElementById('login-overlay').classList.remove('hidden'); if (msg) document.getElementById('login-error').innerText = msg; }
+        function hideLogin() { document.getElementById('login-overlay').classList.add('hidden'); document.getElementById('login-error').innerText = ""; }
+        window.signInInventory = function() {
+            const email = document.getElementById('login-email').value.trim();
+            const pw = document.getElementById('login-password').value;
+            document.getElementById('login-error').innerText = "Signing in...";
+            auth.signInWithEmailAndPassword(email, pw).catch(() => { document.getElementById('login-error').innerText = "Sign-in failed. Check email and password."; });
+        };
+        auth.onAuthStateChanged(async (user) => {
+            if (!user) { showLogin(); return; }
+            try {
+                const prof = (await db.ref('users/' + user.uid).once('value')).val();
+                if (!prof || !prof.role) { await auth.signOut(); showLogin("This account has no access."); return; }
+                hideLogin();
+                if (!inventoryStarted) { inventoryStarted = true; startInventory(); }
+            } catch (e) { showLogin("Could not verify access. Check connection and retry."); }
+        });
+        function startInventory() {
+            db.ref('inventory/stock').on('value', snap => { currentStock = snap.val() || {}; renderUI(); });
+            db.ref('inventory/recipes').on('value', snap => { recipeData = snap.val() || {}; });
+            db.ref('staff').on('value', snap => { staffPins = snap.val() || {}; });
+            db.ref('inventory/config/items').on('value', snap => { dynamicInventoryMap = snap.val() || {}; renderUI(); });
+        }
+
         let currentStock = {};
         let recipeData = {};
         let staffPins = {};
@@ -118,15 +167,12 @@
         let dynamicInventoryMap = {};
 
         // Real-time Listeners
-        db.ref('inventory/stock').on('value', snap => { currentStock = snap.val() || {}; renderUI(); });
-        db.ref('inventory/recipes').on('value', snap => { recipeData = snap.val() || {}; });
-        db.ref('staff').on('value', snap => { staffPins = snap.val() || {}; });
+
+
+
         
         // Listen to the new dynamic config set by Admin
-        db.ref('inventory/config/items').on('value', snap => { 
-            dynamicInventoryMap = snap.val() || {}; 
-            renderUI(); 
-        });
+
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -228,9 +274,10 @@
             const btn = document.getElementById('modal-confirm-btn');
 
             if (isNaN(qtyInput) || qtyInput <= 0) return alert("Please enter a valid amount.");
-            if (!staffPins[pinStr]) return alert("Invalid PIN.");
+            const pinHash = await hashPin(pinStr);
+            if (!staffPins[pinHash]) return alert("Invalid PIN.");
             
-            const staffName = staffPins[pinStr];
+            const staffName = staffPins[pinHash];
             const timestamp = Date.now();
             let updates = {};
 
@@ -238,52 +285,37 @@
             btn.disabled = true;
 
             try {
-                // Fetch absolute latest stock to prevent race conditions
-                let snap = await db.ref('inventory/stock').once('value');
-                let liveStock = snap.val() || {};
-
+                // Atomic increments — no read first, so two logs at once can't clobber
+                // each other, and each delta is replay-safe if it happens offline.
                 if (activeAction.type === 'receive') {
-                    // Simple Addition for raw goods
-                    let currentAmt = parseFloat(liveStock[activeAction.itemName]) || 0;
-                    updates[`inventory/stock/${activeAction.itemName}`] = currentAmt + qtyInput;
-                    
-                    // Log the event
+                    updates[`inventory/stock/${activeAction.itemName}`] = firebase.database.ServerValue.increment(qtyInput);
                     updates[`inventory/logs/${timestamp}`] = {
                         action: "Delivery Received", item: activeAction.itemName, amount: qtyInput, staff: staffName, time: new Date().toLocaleString()
                     };
 
                 } else if (activeAction.type === 'prep') {
-                    // Complex: Add Prepped Stock, Deduct Raw Ingredients
                     const recipe = recipeData[activeAction.itemName];
                     if (!recipe) {
                         btn.innerText = "Confirm"; btn.disabled = false;
                         return alert(`No Recipe found for ${activeAction.itemName}. Tell the Admin to set it up in the dashboard before logging prep.`);
                     }
 
-                    // 1. Add to Prepped Stock
-                    let currentPrepAmt = parseFloat(liveStock[activeAction.itemName]) || 0;
-                    updates[`inventory/stock/${activeAction.itemName}`] = currentPrepAmt + qtyInput;
+                    updates[`inventory/stock/${activeAction.itemName}`] = firebase.database.ServerValue.increment(qtyInput);
 
-                    // 2. Deduct all raw ingredients based on recipe multiplier
                     let deductionLog = [];
                     for (let rawItem in recipe) {
-                        let requiredPerUnit = parseFloat(recipe[rawItem]);
-                        let totalDeduction = requiredPerUnit * qtyInput;
-                        
-                        let currentRawAmt = parseFloat(liveStock[rawItem]) || 0;
-                        updates[`inventory/stock/${rawItem}`] = currentRawAmt - totalDeduction;
+                        let totalDeduction = parseFloat(recipe[rawItem]) * qtyInput;
+                        updates[`inventory/stock/${rawItem}`] = firebase.database.ServerValue.increment(-totalDeduction);
                         deductionLog.push(`${totalDeduction} of ${rawItem}`);
                     }
 
-                    // 3. Log the event
                     updates[`inventory/logs/${timestamp}`] = {
                         action: "Prepped Batch", item: activeAction.itemName, yieldAmount: qtyInput, staff: staffName, deductions: deductionLog.join(" | "), time: new Date().toLocaleString()
                     };
                 }
 
-                // Push entire payload to Firebase simultaneously
                 await db.ref().update(updates);
-                
+
                 closeModal();
                 showToast(`Successfully logged ${qtyInput} ${activeAction.itemName}`);
             } catch (error) {
