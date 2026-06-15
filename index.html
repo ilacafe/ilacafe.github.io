@@ -10,9 +10,10 @@
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
     <style>
-        :root { --brand-bg: #8c7255; --brand-text: #ffffff; }
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
         header { text-align: center; margin-bottom: 20px; }
@@ -166,7 +167,7 @@
             <div style="text-align: left; margin-top: 15px;">
                 <div style="margin-bottom: 15px;">
                     <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Special Requests</label>
-                    <textarea id="cart-notes" class="remark-input" placeholder="e.g. Oat milk, extra napkins..." style="height: 50px; resize: none; margin-top: 5px;"></textarea>
+                    <textarea id="cart-notes" maxlength="200" class="remark-input" placeholder="e.g. Oat milk, extra napkins..." style="height: 50px; resize: none; margin-top: 5px;"></textarea>
                 </div>
 
                 <div id="order-type-section">
@@ -185,7 +186,7 @@
                 
                 <div id="dynamic-fields" style="margin-top: 15px;">
                     <div id="field-delivery" style="display: none;">
-                        <textarea id="delivery-address" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
+                        <textarea id="delivery-address" maxlength="300" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
                     </div>
                     <div id="field-dinein" style="display: none;">
                         <div id="manual-table-selector">
@@ -243,6 +244,23 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+
+        // Anonymous auth is only needed to WRITE the order. Keep it lazy and crash-proof so a
+        // missing/slow auth library can never stop the menu (which reads public data) from rendering.
+        let _auth = null;
+        function getAuth() { if (!_auth) _auth = firebase.auth(); return _auth; }
+        try { getAuth().signInAnonymously().catch(e => console.error("Anon auth:", e)); }
+        catch (e) { console.error("Auth init deferred:", e); }
+        function ensureAuth() {
+            let a;
+            try { a = getAuth(); } catch (e) { return Promise.reject(e); }
+            return a.currentUser ? Promise.resolve(a.currentUser) : a.signInAnonymously().then(c => c.user);
+        }
+        function escapeHTML(str) {
+            return String(str == null ? "" : str).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
 
         const OWNER_WHATSAPP = "918882946526"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -467,7 +485,7 @@
             const list = document.getElementById('review-cart-list'); list.innerHTML = "";
             for (let item in window.cart) {
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${item}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${escapeHTML(item)}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
             document.getElementById('cart-notes').value = ""; document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             updateCheckoutOptions(); document.getElementById('checkout-modal').classList.add('active');
@@ -498,7 +516,7 @@
         };
 
         window.proceedToPayment = function() {
-            const type = window.currentOrderType; let details = ""; const notes = document.getElementById('cart-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const type = window.currentOrderType; let details = ""; const notes = document.getElementById('cart-notes').value.trim().slice(0, 200);
             if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Address required."); return; } } 
             else if (type === 'Dine-in') { 
                 if(urlTable) details = "Table " + urlTable; else if (window.currentDineInTable) details = "Table " + window.currentDineInTable; else { alert("Please select a table number."); return; }
@@ -525,7 +543,9 @@
             localStorage.setItem('ila_last_order', JSON.stringify(window.cart)); localStorage.setItem('ila_last_amount', window.totalAmount); localStorage.setItem('ila_last_order_type', info.type); 
             if (info.type === 'Delivery') { localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim()); }
 
-            db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI" });
+            ensureAuth().then(() => {
+                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI" });
+            }).catch(() => alert("Couldn't place the order — check your connection and try again."));
 
             let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
             if (info.notes) { message += `Notes: ${info.notes}\n`; } message += `\n`;
