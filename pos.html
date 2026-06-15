@@ -1287,7 +1287,7 @@
                 const todayKey = new Date().toISOString().slice(0, 10);
                 // Snapshot the whole day BEFORE wiping, so nothing is lost if the WhatsApp
                 // hand-off fails. Then clear the live nodes for the new day.
-                db.ref('pos/eodArchive/' + todayKey).set({
+                db.ref('pos/eodArchive/' + todayKey + '-' + Date.now()).set({
                     report: report, upi: safeUPI, cash: safeCash,
                     bills: window.pastBills, ledger: window.salesLedger,
                     closedBy: staffName, closedAt: firebase.database.ServerValue.TIMESTAMP
