@@ -227,6 +227,13 @@
         </div>
 
         <div class="admin-card">
+            <h2>End-of-Day History</h2>
+            <div id="eod-container" style="max-height: 400px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                <p style="opacity: 0.5; text-align: center;">Loading EOD history...</p>
+            </div>
+        </div>
+
+        <div class="admin-card">
             <h2>Security Logs (Voids)</h2>
             <div id="voids-container" style="max-height: 300px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
                 <p style="opacity: 0.5; text-align: center;">Loading logs...</p>
@@ -443,6 +450,32 @@
                 renderLedger();
                 processAnalytics();
             });
+
+        window.toggleEodReport = function(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = (el.style.display === 'none' ? 'block' : 'none');
+        };
+        db.ref('pos/eodArchive').limitToLast(60).on('value', snap => {
+            const container = document.getElementById('eod-container');
+            if (!container) return;
+            const data = snap.val() || {};
+            const days = Object.keys(data).sort((a, b) => b.localeCompare(a));
+            if (days.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No EOD closings yet.</p>"; return; }
+            let html = "";
+            days.forEach(day => {
+                const d = data[day] || {};
+                const cash = (d.cash != null) ? d.cash : 0;
+                const upi = (d.upi != null) ? d.upi : 0;
+                const total = (parseFloat(cash) || 0) + (parseFloat(upi) || 0);
+                const billCount = d.bills ? (Array.isArray(d.bills) ? d.bills.filter(Boolean).length : Object.keys(d.bills).length) : 0;
+                const closedBy = d.closedBy ? escapeHTML(String(d.closedBy)) : "—";
+                let closedAt = "";
+                if (d.closedAt) { try { closedAt = new Date(d.closedAt).toLocaleString('en-IN'); } catch(e){} }
+                const rid = 'eodrep-' + day.replace(/[^0-9]/g, '');
+                html += `<div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);"><div style="display:flex; justify-content:space-between; margin-bottom: 5px;"><strong style="font-size: 1.05rem;">${escapeHTML(day)}</strong><strong style="opacity: 0.9;">₹${total}</strong></div><div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 4px;">Cash ₹${cash} • UPI ₹${upi} • ${billCount} bill(s)</div><div style="font-size: 0.78rem; opacity: 0.55;">Closed by ${closedBy}${closedAt ? ' • ' + closedAt : ''}</div>` + (d.report ? `<button onclick="window.toggleEodReport('${rid}')" style="margin-top:8px; background:rgba(255,255,255,0.12); color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:0.78rem; cursor:pointer;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.8rem; opacity:0.85; margin-top:8px; background:rgba(0,0,0,0.15); padding:10px; border-radius:6px;">${escapeHTML(String(d.report))}</pre>` : '') + `</div>`;
+            });
+            container.innerHTML = html;
+        });
 
         db.ref('security/voids').limitToLast(50).on('value', snap => {
             const container = document.getElementById('voids-container');
