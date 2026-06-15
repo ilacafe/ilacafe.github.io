@@ -551,7 +551,7 @@
                 items: tableData.items
             };
             db.ref('orders/history/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)).set(archivePacket);
-            syncToCloud();
+            syncToCloud(tableID);
             calculateDailyCups();
         }
 
@@ -685,12 +685,16 @@
         };
 
         let syncTimeout = null;
-        function syncToCloud() {
+        function syncToCloud(tableID) {
+            // Per-table write: two devices editing DIFFERENT tables touch different paths and
+            // can't overwrite each other. (The old whole-map .set() is what lost orders.)
+            if (typeof tableID !== 'undefined') {
+                const t = window.activeTables[tableID];
+                db.ref('pos/activeTables/' + tableID).set(t ? t : null).catch(e => console.error("Cloud Sync Error: ", e));
+                return;
+            }
             if (syncTimeout) clearTimeout(syncTimeout);
             syncTimeout = setTimeout(() => {
-                // Only activeTables syncs here now. cashDrawer/upiTotal use atomic increment()
-                // and ledger/bills use push() — overwriting them from a local copy is exactly
-                // what zeroed your data, so they are gone from this write.
                 db.ref('pos/activeTables').set(
                     Object.keys(window.activeTables).length > 0 ? window.activeTables : null
                 ).catch(e => console.error("Cloud Sync Error: ", e));
@@ -959,8 +963,16 @@
             
             let safeTotal = parseFloat(window.totalAmount) || 0;
             window.activeTables[tableID].total = (parseFloat(window.activeTables[tableID].total) || 0) + safeTotal;
-            
-            syncToCloud();
+
+            // Atomic per-item writes: if two devices add to the SAME table at once, qty and total
+            // INCREMENT (both orders kept) instead of one overwriting the other. The local update
+            // above is just instant on-screen feedback; the listener reconciles to the cloud value.
+            for (let it in window.cart) {
+                db.ref('pos/activeTables/' + tableID + '/items/' + it + '/price').set(window.cart[it].price);
+                db.ref('pos/activeTables/' + tableID + '/items/' + it + '/qty').set(firebase.database.ServerValue.increment(window.cart[it].qty));
+            }
+            db.ref('pos/activeTables/' + tableID + '/total').set(firebase.database.ServerValue.increment(safeTotal));
+            if (notes) db.ref('pos/activeTables/' + tableID + '/notes').transaction(c => c ? c + " | " + notes : notes);
             
             closeModal('table-modal'); 
             window.clearCart();
@@ -1054,13 +1066,13 @@
                 let newTotal = parseFloat(tableData.total) || 0;
 
                 if(Object.keys(tableData.items).length === 0) { 
-                    delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return; 
+                    delete window.activeTables[tableID]; syncToCloud(tableID); closeModal('checkout-modal'); return; 
                 }
                 if(paid >= newTotal && paid > 0) {
                      archivePOSTable(tableID, tableData, "Partial/Cleared");
-                     delete window.activeTables[tableID]; syncToCloud(); closeModal('checkout-modal'); return;
+                     delete window.activeTables[tableID]; syncToCloud(tableID); closeModal('checkout-modal'); return;
                 }
-                syncToCloud();
+                syncToCloud(tableID);
             }
         };
 
@@ -1116,10 +1128,10 @@
             
             if (tableData.paid >= total) {
                 archivePOSTable(window.checkoutTableID, tableData, "Cash");
-                delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
+                delete window.activeTables[window.checkoutTableID]; syncToCloud(window.checkoutTableID); 
                 closeModal('checkout-modal'); closeModal('split-bill-modal');
             } else {
-                syncToCloud(); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
+                syncToCloud(window.checkoutTableID); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
             }
         };
 
@@ -1158,10 +1170,10 @@
 
             if (tableData.paid >= total) {
                 archivePOSTable(window.checkoutTableID, tableData, "UPI");
-                delete window.activeTables[window.checkoutTableID]; syncToCloud(); 
+                delete window.activeTables[window.checkoutTableID]; syncToCloud(window.checkoutTableID); 
                 closeModal('upi-modal'); 
             } else {
-                syncToCloud(); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
+                syncToCloud(window.checkoutTableID); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
             }
         };
 
@@ -1282,7 +1294,7 @@
                 }).then(() => {
                     db.ref('pos/ledgerEntries').remove();
                     db.ref('pos/bills').remove();
-                    db.ref('pos/cashDrawer').set(0);
+                    // cashDrawer is NOT reset — physical cash carries forward to the next day.
                     db.ref('pos/upiTotal').set(0);
                     db.ref('pos/activeTables').remove();
                 });
@@ -1327,7 +1339,7 @@
                 window.activeTables[newTableID] = tableData;
             }
             delete window.activeTables[oldTableID];
-            syncToCloud();
+            syncToCloud(oldTableID);
 
             // 2. Silently Hunt and Update KDS Tickets
             const oldDest = oldTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + oldTableID;
