@@ -25,10 +25,8 @@
 
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0 0 80px 0; line-height: 1.6; }
         .container { width: 92%; max-width: 1100px; margin: 0 auto; padding: 20px; }
-        header { position: relative; text-align: center; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 18px; }
-        .logo { max-width: 180px; height: auto; display: block; margin: 4px auto 8px auto; }
-        .sub { font-size: 0.8rem; letter-spacing: 4px; text-transform: uppercase; opacity: 0.65; font-weight: 500; }
-        .signout { position: absolute; top: 0; right: 0; }
+        header { text-align: center; margin-bottom: 18px; }
+        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
         .lnk { text-decoration: none; background: rgba(255,255,255,0.12); color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; border: none; }
         .lnk:active { opacity: 0.7; }
 
@@ -79,8 +77,7 @@
 <body>
     <div id="login-overlay">
         <div id="login-box">
-            <img src="logo.png" alt="ILA" style="max-width: 160px; margin: 0 auto 10px auto; display:block;">
-            <div style="letter-spacing:4px; text-transform:uppercase; font-size:0.8rem; opacity:0.7; margin-bottom: 22px;">Analytics</div>
+            <img src="logo.png" alt="ILA" style="max-width: 180px; margin: 0 auto 22px auto; display:block;">
             <input type="email" id="login-email" placeholder="Email" autocomplete="username">
             <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
             <button onclick="window.signIn()">Sign In</button>
@@ -90,9 +87,7 @@
 
     <div class="container">
         <header>
-            <img src="logo.png" alt="ILA" class="logo">
-            <div class="sub">Analytics</div>
-            <button class="lnk signout" onclick="window.signOutA()">Sign Out</button>
+            <img src="logo.png" alt="ILA Logo" class="logo">
         </header>
 
         <!-- DATE RANGE -->
@@ -186,6 +181,12 @@
             </div>
         </div>
 
+        <!-- EOD HISTORY -->
+        <div class="card">
+            <h2>End-of-Day History</h2>
+            <div id="eod-container" class="scroll" style="margin-top:4px;"><p class="muted">Loading…</p></div>
+        </div>
+
         <!-- SECURITY / VOID LOG -->
         <div class="card" style="border-color: rgba(244,67,54,0.35);">
             <h2 style="color:#ffd2d2;">Security · Void Log</h2>
@@ -229,7 +230,6 @@
             document.getElementById('login-error').innerText = "Signing in…";
             auth.signInWithEmailAndPassword(email, pw).catch(() => { document.getElementById('login-error').innerText = "Sign-in failed. Check email and password."; });
         };
-        window.signOutA = function(){ if(confirm("Sign out?")) auth.signOut().then(() => location.reload()); };
 
         let loaded = false;
         auth.onAuthStateChanged(async (user) => {
@@ -250,6 +250,7 @@
         let charts = {};
         let LAST = null;     // last computed result (for sub-renderers)
         let VOID_ROWS = [];
+        let EOD = {};
         const PALETTE = ['#ffffff','#f4c542','#6cd07f','#5b9bd5','#ff8a80','#b39ddb','#ffb74d','#4dd0e1','#f06292','#a1887f','#90caf9','#dce775'];
         let _rzT; window.addEventListener('resize', () => { clearTimeout(_rzT); _rzT = setTimeout(() => { for(const k in charts){ try{ if(charts[k]) charts[k].resize(); }catch(e){} } }, 200); });
 
@@ -259,6 +260,7 @@
             db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); render(); });
             db.ref('orders/history').on('value', s => { DATA = s.val()||{}; render(); });
             db.ref('security/voids').on('value', s => { VOIDS = s.val()||{}; render(); });
+            db.ref('pos/eodArchive').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
         }
 
         function buildCatMap(menu){
@@ -389,6 +391,7 @@
             LAST = { itemAgg, txns, totalRev: rev };
             renderTop(); renderTxns(); refreshDrillOptions();
             computeVoids(start, end, key);
+            renderEod();
         }
 
         function cmp(elId, cur, prev, prevStart){
@@ -560,6 +563,33 @@
             rows.forEach(r => out.push([r.time, r.by, r.device, r.table, r.item, Math.round(r.value), r.reason]));
             downloadCSV(out, 'ila-voids-' + stamp() + '.csv');
         };
+
+        function renderEod(){
+            if(!RANGE) return;
+            const container = document.getElementById('eod-container');
+            if(!container) return;
+            const { start, end, key } = RANGE;
+            const data = EOD || {};
+            const keys = Object.keys(data).filter(k => {
+                const d = data[k] || {};
+                const ts = (typeof d.closedAt === 'number') ? d.closedAt : null;
+                if(key === 'all' || ts == null) return true;   // undated closings always shown
+                return ts >= start && ts < end;
+            }).sort((a,b) => b.localeCompare(a));
+            if(!keys.length){ container.innerHTML = "<p class='muted'>No closings in this range.</p>"; return; }
+            container.innerHTML = keys.map(k => {
+                const d = data[k] || {};
+                const cash = (d.cash != null) ? d.cash : 0;
+                const upi = (d.upi != null) ? d.upi : 0;
+                const total = (parseFloat(cash)||0) + (parseFloat(upi)||0);
+                const billCount = d.bills ? (Array.isArray(d.bills) ? d.bills.filter(Boolean).length : Object.keys(d.bills).length) : 0;
+                const closedBy = d.closedBy ? escapeHTML(String(d.closedBy)) : '—';
+                let closedAt = ''; if(d.closedAt){ try { closedAt = new Date(d.closedAt).toLocaleString('en-IN'); } catch(e){} }
+                const rid = 'eodrep-' + String(k).replace(/[^0-9]/g, '');
+                return `<div style="background:rgba(0,0,0,0.15); border-left:2px solid rgba(255,255,255,0.4); border-radius:8px; padding:10px 12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${escapeHTML(String(k).slice(0,10))}</strong><strong style="opacity:0.9;">${rupee(total)}</strong></div><div style="font-size:0.82rem; opacity:0.8;">Cash ${rupee(cash)} · UPI ${rupee(upi)} · ${billCount} bill(s)</div><div style="font-size:0.76rem; opacity:0.55; margin-top:2px;">Closed by ${closedBy}${closedAt ? ' · ' + closedAt : ''}</div>` + (d.report ? `<button onclick="window.toggleEodReport('${rid}')" class="lnk" style="margin-top:8px; padding:4px 10px; font-size:0.72rem;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.78rem; opacity:0.85; margin-top:8px; background:rgba(0,0,0,0.2); padding:10px; border-radius:6px;">${escapeHTML(String(d.report))}</pre>` : '') + `</div>`;
+            }).join('');
+        }
+        window.toggleEodReport = function(id){ const el = document.getElementById(id); if(el) el.style.display = (el.style.display === 'none' ? 'block' : 'none'); };
     </script>
 </body>
 </html>
