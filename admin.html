@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ILA Admin">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>ILA | Admin</title>
     <link rel="apple-touch-icon" href="/icon.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
@@ -295,6 +299,13 @@
                 <button class="btn btn-secondary" style="flex: 1; margin-right: 10px;" onclick="addIngredientRow()">+ Ingredient</button>
                 <button class="btn btn-primary" style="flex: 1;" onclick="saveRecipe()">Save Recipe</button>
             </div>
+        </div>
+
+        <div class="admin-card">
+            <h2>Notifications</h2>
+            <p class="rec-note">Get order-delay alerts on this device — even when the app is closed. Do this once on each device (each iPad or phone separately), from the admin app opened via its Home Screen icon.</p>
+            <button class="btn btn-primary" style="width:auto;" id="notif-enable" onclick="notifEnable()">Enable alerts on this device</button>
+            <div id="notif-status" class="rec-note" style="margin-top:12px;"></div>
         </div>
 
         <div class="admin-card">
@@ -801,6 +812,56 @@
             });
         };
 
+
+        // ===== device push notifications =====
+        const VAPID_PUBLIC = 'BGghzKe8sBiO764Kti2SSkg2Kpvr_ODBza-EONxJzri5IcIcAH956KNw2SO6TTTUKrXp8f4d-RmopfN1eU-pgGM';
+        function notifB64ToUint8(base64){
+            const pad = '='.repeat((4 - base64.length % 4) % 4);
+            const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+            const raw = atob(b64); const arr = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+            return arr;
+        }
+        function notifHash(str){ let h = 5381; for (let i = 0; i < str.length; i++) { h = ((h << 5) + h + str.charCodeAt(i)) >>> 0; } return h.toString(36); }
+        function notifSupported(){ return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window); }
+        let notifReg = null;
+        async function notifInit(){
+            const status = document.getElementById('notif-status'); const btn = document.getElementById('notif-enable');
+            if (!notifSupported()) { if (btn) btn.style.display = 'none'; if (status) status.innerText = 'This device cannot receive web push. On iPhone or iPad, open this app from its Home Screen icon (not a Safari tab).'; return; }
+            try { notifReg = await navigator.serviceWorker.register('/sw.js'); }
+            catch (e) { if (status) status.innerText = 'Could not start the notification service: ' + (e && e.message ? e.message : e); return; }
+            await notifRefresh();
+        }
+        async function notifRefresh(){
+            const status = document.getElementById('notif-status'); const btn = document.getElementById('notif-enable');
+            const perm = Notification.permission;
+            let sub = null; try { sub = notifReg ? await notifReg.pushManager.getSubscription() : null; } catch (e) {}
+            if (perm === 'denied') { if (btn) btn.style.display = 'none'; if (status) status.innerText = 'Notifications are blocked for this app. Turn them on in iOS Settings \u2192 Notifications \u2192 ILA Admin, then reopen the app.'; return; }
+            if (perm === 'granted' && sub) { if (btn) { btn.style.display = ''; btn.innerText = 'Send test notification'; } if (status) status.innerHTML = '<span style="color:#7CFC9A;">\u2713 Alerts enabled on this device.</span>'; return; }
+            if (btn) { btn.style.display = ''; btn.innerText = 'Enable alerts on this device'; }
+            if (status) status.innerText = '';
+        }
+        window.notifEnable = async function(){
+            const status = document.getElementById('notif-status');
+            if (!notifSupported()) { return; }
+            try {
+                if (!notifReg) notifReg = await navigator.serviceWorker.register('/sw.js');
+                if (Notification.permission === 'granted' && (await notifReg.pushManager.getSubscription())) {
+                    await notifReg.showNotification('Caf\u00e9 Ila', { body: 'Test alert \u2014 notifications are working on this device.', icon: '/icon.png', tag: 'ila-test' });
+                    return;
+                }
+                const perm = await Notification.requestPermission();
+                if (perm !== 'granted') { status.innerText = (perm === 'denied') ? 'Permission was blocked. Turn it on in iOS Settings \u2192 Notifications \u2192 ILA Admin.' : 'Permission was not granted.'; return; }
+                let sub = await notifReg.pushManager.getSubscription();
+                if (!sub) sub = await notifReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: notifB64ToUint8(VAPID_PUBLIC) });
+                const u = firebase.auth().currentUser; const json = sub.toJSON();
+                const key = 'sub_' + notifHash(sub.endpoint);
+                await db.ref('pushSubscriptions/' + key).set({ subscription: json, uid: u ? u.uid : null, name: u ? (u.displayName || u.email || '') : '', at: Date.now() });
+                await notifReg.showNotification('Caf\u00e9 Ila', { body: 'Alerts enabled. You will be notified here when an order runs late.', icon: '/icon.png', tag: 'ila-enabled' });
+                await notifRefresh();
+            } catch (e) { console.error(e); status.innerText = 'Could not enable alerts: ' + (e && e.message ? e.message : e); }
+        };
+        notifInit();
 
         // ===== UPI Reconciliation =====
         pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
