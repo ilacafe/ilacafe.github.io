@@ -143,25 +143,6 @@
         </div>
 
         <div class="admin-card">
-            <h2>Order Ledger & Revenue</h2>
-            <div class="dash-row">
-                <div class="dash-box"><div class="dash-label">Today's Total</div><div class="dash-val" id="ledger-total">₹0</div></div>
-                <div class="dash-box"><div class="dash-label">UPI</div><div class="dash-val" id="ledger-upi">₹0</div></div>
-                <div class="dash-box"><div class="dash-label">Cash</div><div class="dash-val" id="ledger-cash">₹0</div></div>
-            </div>
-            <div id="history-container" style="max-height: 400px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                <p style="opacity: 0.5; text-align: center;">Waiting for orders...</p>
-            </div>
-        </div>
-
-        <div class="admin-card">
-            <h2>End-of-Day History</h2>
-            <div id="eod-container" style="max-height: 400px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                <p style="opacity: 0.5; text-align: center;">Loading EOD history...</p>
-            </div>
-        </div>
-
-        <div class="admin-card">
             <h2>Category Order</h2>
             <div id="category-order-container"><p style="opacity: 0.5; font-size: 0.9rem;">Loading...</p></div>
         </div>
@@ -366,37 +347,6 @@
                 });
             });
 
-            db.ref('orders/history').orderByKey().startAt(String(Date.now() - (366 * 24 * 60 * 60 * 1000))).on('value', snap => {
-                orderHistory = snap.val() || {};
-                renderLedger();
-            });
-
-        window.toggleEodReport = function(id) {
-            const el = document.getElementById(id);
-            if (el) el.style.display = (el.style.display === 'none' ? 'block' : 'none');
-        };
-        db.ref('pos/eodArchive').limitToLast(60).on('value', snap => {
-            const container = document.getElementById('eod-container');
-            if (!container) return;
-            const data = snap.val() || {};
-            const days = Object.keys(data).sort((a, b) => b.localeCompare(a));
-            if (days.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No EOD closings yet.</p>"; return; }
-            let html = "";
-            days.forEach(day => {
-                const d = data[day] || {};
-                const cash = (d.cash != null) ? d.cash : 0;
-                const upi = (d.upi != null) ? d.upi : 0;
-                const total = (parseFloat(cash) || 0) + (parseFloat(upi) || 0);
-                const billCount = d.bills ? (Array.isArray(d.bills) ? d.bills.filter(Boolean).length : Object.keys(d.bills).length) : 0;
-                const closedBy = d.closedBy ? escapeHTML(String(d.closedBy)) : "—";
-                let closedAt = "";
-                if (d.closedAt) { try { closedAt = new Date(d.closedAt).toLocaleString('en-IN'); } catch(e){} }
-                const rid = 'eodrep-' + day.replace(/[^0-9]/g, '');
-                html += `<div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);"><div style="display:flex; justify-content:space-between; margin-bottom: 5px;"><strong style="font-size: 1.05rem;">${escapeHTML(day.slice(0, 10))}</strong><strong style="opacity: 0.9;">₹${total}</strong></div><div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 4px;">Cash ₹${cash} • UPI ₹${upi} • ${billCount} bill(s)</div><div style="font-size: 0.78rem; opacity: 0.55;">Closed by ${closedBy}${closedAt ? ' • ' + closedAt : ''}</div>` + (d.report ? `<button onclick="window.toggleEodReport('${rid}')" style="margin-top:8px; background:rgba(255,255,255,0.12); color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:0.78rem; cursor:pointer;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.8rem; opacity:0.85; margin-top:8px; background:rgba(0,0,0,0.15); padding:10px; border-radius:6px;">${escapeHTML(String(d.report))}</pre>` : '') + `</div>`;
-            });
-            container.innerHTML = html;
-        });
-
         db.ref('inventory/config/items').once('value', snap => {
             if (!snap.exists()) {
                 const seedData = {
@@ -433,7 +383,6 @@
         }
 
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
-        let orderHistory = {};
 
         // Chart.js Instances
 
@@ -648,35 +597,6 @@
             currentUPIs.splice(index, 1);
             db.ref('settings/upiList').set(currentUPIs);
         };
-
-        function renderLedger() {
-            const container = document.getElementById('history-container');
-            const sortedIds = Object.keys(orderHistory).sort((a, b) => parseInt(b) - parseInt(a)); 
-            if (sortedIds.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No orders in history.</p>"; return; }
-
-            let todayTotal = 0; let todayUPI = 0; let todayCash = 0; let listHTML = "";
-            const now = new Date(); const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-            let rendered = 0;
-            sortedIds.forEach(id => {
-                const order = orderHistory[id]; const orderTime = parseInt(id); const amt = order.payment ? (order.payment.total || 0) : 0;
-                if (orderTime >= startOfToday) {
-                    todayTotal += amt;
-                    if (order.payment && order.payment.method === "UPI") todayUPI += amt; else todayCash += amt;
-                }
-                if (rendered >= 200) return;
-                rendered++;
-
-                let itemsHTML = "";
-                if(order.items) {
-                    for(let itemName in order.items) { const item = order.items[itemName]; itemsHTML += `<div style="font-size: 0.9rem; margin-bottom: 2px;">${item.qty}x ${escapeHTML(itemName)} - ₹${item.qty * item.price}</div>`; }
-                }
-
-                listHTML += `<div class="history-card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px;"><div><strong style="font-size: 1.1rem;">${escapeHTML(order.tableOrAddress || "Order")}</strong><div style="font-size: 0.75rem; opacity: 0.7;">${escapeHTML(order.timestamp || "")} • ${escapeHTML(order.source || "POS")}</div></div><div style="text-align:right;"><strong style="font-size: 1.1rem;">₹${amt}</strong><div style="font-size: 0.75rem; opacity: 0.7;">${order.payment ? escapeHTML(order.payment.method) : ""}</div></div></div>${itemsHTML}${order.notes ? `<div style="font-size: 0.85rem; opacity:0.8; margin-top: 8px; font-style: italic;">Notes: ${escapeHTML(order.notes)}</div>` : ''}</div>`;
-            });
-
-            container.innerHTML = listHTML; document.getElementById('ledger-total').innerText = '₹' + todayTotal; document.getElementById('ledger-upi').innerText = '₹' + todayUPI; document.getElementById('ledger-cash').innerText = '₹' + todayCash;
-        }
 
         // --- DYNAMIC INVENTORY & RECIPE ENGINE ---
         let masterInventoryConfig = {};
