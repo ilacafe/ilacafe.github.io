@@ -123,80 +123,6 @@
         </div>
 
         <div class="admin-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; margin-bottom: 15px;">
-                <h2 style="border: none; padding: 0; margin: 0;">Insights</h2>
-                <select id="analytics-filter" style="width: auto; padding: 6px 12px; font-weight: bold; font-size: 0.9rem; margin: 0; background: rgba(255,255,255,0.95); cursor: pointer;" onchange="processAnalytics()">
-                    <option value="today" selected>Today</option>
-                    <option value="week">Past 7 Days</option>
-                    <option value="month">Past 30 Days</option>
-                    <option value="year">Past 365 Days</option>
-                </select>
-            </div>
-
-            <a href="analytics.html" class="btn" style="display:block; text-decoration:none; text-align:center; background: rgba(255,255,255,0.12); color:#fff; margin-bottom: 15px; letter-spacing:1px;">Open Full Analytics Suite ↗</a>
-            
-            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <div class="analytics-pill" style="flex: 1.2;">
-                    <div class="pill-val" id="stat-rev">₹0</div>
-                    <div class="pill-label" style="display: flex; flex-direction: column; align-items: center;">Revenue <span id="stat-trend" style="font-weight: bold; margin-top: 2px;">--</span></div>
-                </div>
-                <div class="analytics-pill" style="flex: 0.9;">
-                    <div class="pill-val" id="stat-orders">0</div>
-                    <div class="pill-label">Orders</div>
-                </div>
-                <div class="analytics-pill" style="flex: 0.9;">
-                    <div class="pill-val" id="stat-aov">₹0</div>
-                    <div class="pill-label">Avg Order</div>
-                </div>
-            </div>
-
-            <div class="chart-container">
-                <canvas id="revenueChart"></canvas>
-            </div>
-
-            <div class="analytics-grid">
-                <div class="chart-box">
-                    <h4>Peak Hours</h4>
-                    <div class="chart-box-canvas-wrapper"><canvas id="peakChart"></canvas></div>
-                </div>
-                <div class="chart-box">
-                    <h4>Revenue by Category</h4>
-                    <div class="chart-box-canvas-wrapper"><canvas id="categoryChart"></canvas></div>
-                </div>
-            </div>
-
-            <div class="analytics-grid">
-                <div class="chart-box">
-                    <h4>Order Types</h4>
-                    <div class="chart-box-canvas-wrapper"><canvas id="typeChart"></canvas></div>
-                </div>
-                <div class="chart-box">
-                    <h4>Size Upsell Ratio</h4>
-                    <div class="chart-box-canvas-wrapper"><canvas id="upsellChart"></canvas></div>
-                </div>
-            </div>
-
-            <div class="analytics-grid">
-                <div class="chart-box">
-                    <h4>Overall Top Sellers</h4>
-                    <div id="top-overall"><p style="opacity:0.5; text-align:center; font-size:0.8rem;">Loading...</p></div>
-                </div>
-                <div class="chart-box">
-                    <h4>Top Coffees</h4>
-                    <div id="top-coffee"><p style="opacity:0.5; text-align:center; font-size:0.8rem;">Loading...</p></div>
-                </div>
-                <div class="chart-box">
-                    <h4>Top Pizzas / Food</h4>
-                    <div id="top-pizza"><p style="opacity:0.5; text-align:center; font-size:0.8rem;">Loading...</p></div>
-                </div>
-                <div class="chart-box" style="border-color: rgba(244, 67, 54, 0.4);">
-                    <h4 style="color: #ffcccc; border-color: rgba(244, 67, 54, 0.3);">Dead Stock Radar</h4>
-                    <div id="dead-stock"><p style="opacity:0.5; text-align:center; font-size:0.8rem;">Loading...</p></div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="admin-card">
             <h2>Service Availability</h2>
             <div class="row-group">
                 <div class="control-row">
@@ -232,13 +158,6 @@
             <h2>End-of-Day History</h2>
             <div id="eod-container" style="max-height: 400px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
                 <p style="opacity: 0.5; text-align: center;">Loading EOD history...</p>
-            </div>
-        </div>
-
-        <div class="admin-card">
-            <h2>Security Logs (Voids)</h2>
-            <div id="voids-container" style="max-height: 300px; overflow-y: auto; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                <p style="opacity: 0.5; text-align: center;">Loading logs...</p>
             </div>
         </div>
 
@@ -450,7 +369,6 @@
             db.ref('orders/history').orderByKey().startAt(String(Date.now() - (366 * 24 * 60 * 60 * 1000))).on('value', snap => {
                 orderHistory = snap.val() || {};
                 renderLedger();
-                processAnalytics();
             });
 
         window.toggleEodReport = function(id) {
@@ -477,19 +395,6 @@
                 html += `<div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);"><div style="display:flex; justify-content:space-between; margin-bottom: 5px;"><strong style="font-size: 1.05rem;">${escapeHTML(day.slice(0, 10))}</strong><strong style="opacity: 0.9;">₹${total}</strong></div><div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 4px;">Cash ₹${cash} • UPI ₹${upi} • ${billCount} bill(s)</div><div style="font-size: 0.78rem; opacity: 0.55;">Closed by ${closedBy}${closedAt ? ' • ' + closedAt : ''}</div>` + (d.report ? `<button onclick="window.toggleEodReport('${rid}')" style="margin-top:8px; background:rgba(255,255,255,0.12); color:#fff; border:none; padding:5px 10px; border-radius:6px; font-size:0.78rem; cursor:pointer;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.8rem; opacity:0.85; margin-top:8px; background:rgba(0,0,0,0.15); padding:10px; border-radius:6px;">${escapeHTML(String(d.report))}</pre>` : '') + `</div>`;
             });
             container.innerHTML = html;
-        });
-
-        db.ref('security/voids').limitToLast(50).on('value', snap => {
-            const container = document.getElementById('voids-container');
-            const voidsData = snap.val() || {};
-            const sortedIds = Object.keys(voidsData).sort((a, b) => b.localeCompare(a)); 
-            if (sortedIds.length === 0) { container.innerHTML = "<p style='opacity:0.5; text-align:center;'>No voids recorded.</p>"; return; }
-            let listHTML = "";
-            sortedIds.forEach(id => {
-                const v = voidsData[id];
-                listHTML += `<div class="history-card" style="border-left: 2px solid rgba(255,255,255,0.4);"><div style="display:flex; justify-content:space-between; margin-bottom: 5px;"><strong style="font-size: 1.05rem;">${escapeHTML(v.item)}</strong><strong style="opacity: 0.9;">-₹${v.value}</strong></div><div style="font-size: 0.8rem; opacity: 0.6; margin-bottom: 5px;">Table/Order: ${escapeHTML(v.table)} • ${v.time}</div><div style="font-size: 0.85rem; font-style: italic; opacity: 0.8;">Reason: "${escapeHTML(v.reason)}"</div></div>`;
-            });
-            container.innerHTML = listHTML;
         });
 
         db.ref('inventory/config/items').once('value', snap => {
@@ -531,7 +436,6 @@
         let orderHistory = {};
 
         // Chart.js Instances
-        let charts = { revenue: null, peak: null, category: null, type: null, upsell: null };
 
         Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
         Chart.defaults.font.family = "'Quicksand', sans-serif";
@@ -573,7 +477,6 @@
             if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
             if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
             renderAllViews();
-            processAnalytics(); 
         });
 
         function getSortedCategories() { return currentCategoryOrder.filter(cat => Object.keys(currentMenuData).includes(cat)); }
@@ -774,157 +677,6 @@
 
             container.innerHTML = listHTML; document.getElementById('ledger-total').innerText = '₹' + todayTotal; document.getElementById('ledger-upi').innerText = '₹' + todayUPI; document.getElementById('ledger-cash').innerText = '₹' + todayCash;
         }
-
-        window.processAnalytics = function() {
-            const filter = document.getElementById('analytics-filter').value;
-            const now = new Date();
-            let startTs, prevStartTs;
-            
-            if (filter === 'today') { startTs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); prevStartTs = startTs - (24 * 60 * 60 * 1000); } 
-            else if (filter === 'week') { startTs = now.getTime() - (7 * 24 * 60 * 60 * 1000); prevStartTs = startTs - (7 * 24 * 60 * 60 * 1000); } 
-            else if (filter === 'month') { startTs = now.getTime() - (30 * 24 * 60 * 60 * 1000); prevStartTs = startTs - (30 * 24 * 60 * 60 * 1000); } 
-            else if (filter === 'year') { startTs = now.getTime() - (365 * 24 * 60 * 60 * 1000); prevStartTs = startTs - (365 * 24 * 60 * 60 * 1000); }
-
-            let itemCatMap = {};
-            for (let cat in currentMenuData) {
-                for (let item in currentMenuData[cat]) {
-                    itemCatMap[item] = cat;
-                    if(currentMenuData[cat][item].hasSizes) {
-                        itemCatMap[item + " (Regular)"] = cat;
-                        itemCatMap[item + " (Large)"] = cat;
-                    }
-                }
-            }
-
-            let currRev = 0; let prevRev = 0; let currOrders = 0;
-            let orderTypes = { "Dine-in": 0, "Takeaway": 0, "Delivery": 0 };
-            let catRevMap = {}; let itemQtyMap = {};
-            let sizeMap = { reg: 0, lrg: 0 };
-            let hourlyMap = {}; for(let i=0; i<24; i++) hourlyMap[i] = 0;
-            
-            let timeSeriesMap = {}; let tsLabels = [];
-            if(filter === 'today') {
-                for(let i=8; i<=22; i+=2) { let key = (i>12?i-12:i)+(i>=12?'pm':'am'); timeSeriesMap[key]=0; tsLabels.push(key); }
-            } else if(filter === 'week' || filter === 'month') {
-                let days = filter === 'week' ? 7 : 30;
-                for(let i=days-1; i>=0; i--) {
-                    let d = new Date(now.getTime() - (i*24*60*60*1000));
-                    let key = d.getDate() + '/' + (d.getMonth()+1);
-                    timeSeriesMap[key] = 0; tsLabels.push(key);
-                }
-            } else {
-                for(let i=11; i>=0; i--) {
-                    let d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-                    let key = d.toLocaleString('default', { month: 'short' });
-                    timeSeriesMap[key] = 0; tsLabels.push(key);
-                }
-            }
-
-            Object.keys(orderHistory).forEach(id => {
-                const order = orderHistory[id]; const ts = parseInt(id); const amt = order.payment ? (order.payment.total || 0) : 0;
-                if (ts >= prevStartTs && ts < startTs) prevRev += amt;
-                if (ts >= startTs) {
-                    currRev += amt; currOrders++;
-                    let type = order.orderType || "Unknown";
-                    if(type.includes("Delivery") || type.includes("Web")) orderTypes["Delivery"]++;
-                    else if(type.includes("Takeaway")) orderTypes["Takeaway"]++;
-                    else orderTypes["Dine-in"]++;
-                    hourlyMap[new Date(ts).getHours()]++;
-                    let orderDate = new Date(ts); let tsKey = "";
-                    if(filter === 'today') {
-                        let h = orderDate.getHours(); h = h % 2 !== 0 ? h - 1 : h; tsKey = (h>12?h-12:h)+(h>=12?'pm':'am');
-                    } else if(filter === 'week' || filter === 'month') {
-                        tsKey = orderDate.getDate() + '/' + (orderDate.getMonth()+1);
-                    } else { tsKey = orderDate.toLocaleString('default', { month: 'short' }); }
-                    if(timeSeriesMap[tsKey] !== undefined) timeSeriesMap[tsKey] += amt;
-                    if(order.items) {
-                        for(let itemName in order.items) {
-                            let qty = order.items[itemName].qty; let price = order.items[itemName].price;
-                            let baseName = itemName.split(" (")[0]; let sizeCleanedName = itemName;
-                            if(itemName.includes("(Large)")) { sizeCleanedName = baseName + " (Large)"; sizeMap.lrg += qty; }
-                            else if(itemName.includes("(Regular)")) { sizeCleanedName = baseName + " (Regular)"; sizeMap.reg += qty; }
-                            else { sizeCleanedName = baseName; }
-                            itemQtyMap[sizeCleanedName] = (itemQtyMap[sizeCleanedName] || 0) + qty;
-                            let cat = itemCatMap[sizeCleanedName] || "Other";
-                            catRevMap[cat] = (catRevMap[cat] || 0) + (price * qty);
-                        }
-                    }
-                }
-            });
-
-            let aov = currOrders > 0 ? Math.round(currRev / currOrders) : 0;
-            document.getElementById('stat-rev').innerText = "₹" + currRev.toLocaleString('en-IN');
-            document.getElementById('stat-orders').innerText = currOrders;
-            document.getElementById('stat-aov').innerText = "₹" + aov;
-
-            let growthEl = document.getElementById('stat-trend');
-            if (prevRev === 0 && currRev === 0) { growthEl.innerText = "--"; growthEl.className = ""; }
-            else if (prevRev === 0) { growthEl.innerText = "(↑ 100%)"; growthEl.className = "trend-up"; }
-            else {
-                let diff = ((currRev - prevRev) / prevRev) * 100;
-                if (diff >= 0) { growthEl.innerText = `(↑ ${Math.round(diff)}%)`; growthEl.className = "trend-up"; }
-                else { growthEl.innerText = `(↓ ${Math.round(Math.abs(diff))}%)`; growthEl.className = "trend-down"; }
-            }
-
-            function generateListHtml(itemsObj, limit = 5, filterFn = null) {
-                let sorted = Object.keys(itemsObj).sort((a,b) => itemsObj[b] - itemsObj[a]);
-                if(filterFn) sorted = sorted.filter(filterFn);
-                sorted = sorted.slice(0, limit);
-                if(sorted.length === 0) return "<p style='opacity:0.5; text-align:center; font-size:0.8rem; margin:10px 0;'>No data.</p>";
-                let html = "";
-                sorted.forEach(item => { html += `<div class="top-item-row"><span>${escapeHTML(item)}</span><span style="font-weight:bold;">${itemsObj[item]} sold</span></div>`; });
-                return html;
-            }
-
-            document.getElementById('top-overall').innerHTML = generateListHtml(itemQtyMap);
-            document.getElementById('top-coffee').innerHTML = generateListHtml(itemQtyMap, 5, (item) => { let cat = itemCatMap[item] || ""; return cat.toLowerCase().includes('coffee'); });
-            document.getElementById('top-pizza').innerHTML = generateListHtml(itemQtyMap, 5, (item) => { let cat = itemCatMap[item] || ""; return cat.toLowerCase().includes('pizza') || cat.toLowerCase().includes('food'); });
-
-            let activeMenuItems = Object.keys(itemCatMap);
-            let deadStockArr = [];
-            activeMenuItems.forEach(item => {
-                if(item.includes("(Regular)") || item.includes("(Large)")) return;
-                let qtySold = itemQtyMap[item] || 0;
-                qtySold += (itemQtyMap[item + " (Regular)"] || 0);
-                qtySold += (itemQtyMap[item + " (Large)"] || 0);
-                if(qtySold <= 1) deadStockArr.push({name: item, qty: qtySold});
-            });
-            deadStockArr.sort((a,b) => a.qty - b.qty);
-            let deadStockHtml = "";
-            if(deadStockArr.length === 0) deadStockHtml = "<p style='opacity:0.5; text-align:center; font-size:0.8rem; margin:10px 0;'>All items selling well!</p>";
-            else {
-                deadStockArr.slice(0, 5).forEach(obj => {
-                    let alertColor = obj.qty === 0 ? '#ffcccc' : 'white';
-                    deadStockHtml += `<div class="top-item-row" style="color: ${alertColor};"><span>${obj.name}</span><span style="font-weight:bold;">${obj.qty} sold</span></div>`;
-                });
-            }
-            document.getElementById('dead-stock').innerHTML = deadStockHtml;
-
-            let tsData = tsLabels.map(l => timeSeriesMap[l]);
-            drawMainChart(tsLabels, tsData);
-            drawTypeChart(orderTypes);
-            drawUpsellChart(sizeMap);
-            let sortedCats = Object.keys(catRevMap).sort((a,b) => catRevMap[b] - catRevMap[a]).slice(0,5);
-            let catData = sortedCats.map(c => catRevMap[c]);
-            drawCategoryChart(sortedCats, catData);
-
-            let peakLabels = ['8am', '10am', '12pm', '2pm', '4pm', '6pm', '8pm', '10pm'];
-            let peakData = [ hourlyMap[8]+hourlyMap[9], hourlyMap[10]+hourlyMap[11], hourlyMap[12]+hourlyMap[13], hourlyMap[14]+hourlyMap[15], hourlyMap[16]+hourlyMap[17], hourlyMap[18]+hourlyMap[19], hourlyMap[20]+hourlyMap[21], hourlyMap[22]+hourlyMap[23] ];
-            drawPeakChart(peakLabels, peakData);
-        }
-
-        const brandColors = ['#ffffff', 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0.4)', 'rgba(255,255,255,0.2)', 'rgba(0,0,0,0.2)'];
-        function drawMainChart(labels, data) {
-            const ctx = document.getElementById('revenueChart').getContext('2d');
-            if(charts.revenue) charts.revenue.destroy();
-            let gradient = ctx.createLinearGradient(0, 0, 0, 220);
-            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)'); gradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
-            charts.revenue = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ data: data, borderColor: '#ffffff', borderWidth: 2, backgroundColor: gradient, fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#8D6E52' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)' } }, y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.6)', maxTicksLimit: 5 }, beginAtZero: true } } } });
-        }
-        function drawTypeChart(types) { const ctx = document.getElementById('typeChart').getContext('2d'); if(charts.type) charts.type.destroy(); charts.type = new Chart(ctx, { type: 'doughnut', data: { labels: ['Dine-in', 'Takeaway', 'Delivery'], datasets: [{ data: [types["Dine-in"], types["Takeaway"], types["Delivery"]], backgroundColor: brandColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } }); }
-        function drawUpsellChart(sizes) { const ctx = document.getElementById('upsellChart').getContext('2d'); if(charts.upsell) charts.upsell.destroy(); if(sizes.reg === 0 && sizes.lrg === 0) { sizes.reg = 1; sizes.lrg = 0; } charts.upsell = new Chart(ctx, { type: 'doughnut', data: { labels: ['Regular', 'Large'], datasets: [{ data: [sizes.reg, sizes.lrg], backgroundColor: ['rgba(255,255,255,0.4)', '#ffffff'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } }); }
-        function drawCategoryChart(labels, data) { const ctx = document.getElementById('categoryChart').getContext('2d'); if(charts.category) charts.category.destroy(); charts.category = new Chart(ctx, { type: 'doughnut', data: { labels: labels, datasets: [{ data: data, backgroundColor: brandColors, borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: 'rgba(255,255,255,0.8)', boxWidth: 10, font: { size: 10 } } } } } }); }
-        function drawPeakChart(labels, data) { const ctx = document.getElementById('peakChart').getContext('2d'); if(charts.peak) charts.peak.destroy(); charts.peak = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ data: data, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.6)', font: {size: 9} } }, y: { display: false, beginAtZero: true } } } }); }
 
         // --- DYNAMIC INVENTORY & RECIPE ENGINE ---
         let masterInventoryConfig = {};
