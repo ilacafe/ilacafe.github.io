@@ -11,7 +11,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
@@ -99,6 +99,25 @@
         .trend-down { color: #f44336; }
         
         @media(max-width: 500px) { .analytics-grid { grid-template-columns: 1fr; } }
+        .rec-note { opacity: 0.6; font-size: 0.85rem; margin: 6px 0 10px 0; }
+        #rec-files { width: 100%; margin: 12px 0; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; }
+        #rec-files::file-selector-button { background: rgba(255,255,255,0.12); color: #fff; border: none; padding: 9px 14px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-weight: 700; margin-right: 12px; cursor: pointer; }
+        .rec-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .rec-kpi { background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+        .rec-kpi .lbl { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; font-weight: 700; }
+        .rec-kpi .val { font-size: 1.45rem; font-weight: 700; line-height: 1.2; margin-top: 2px; }
+        .rec-kpi .sub { font-size: 0.72rem; opacity: 0.6; }
+        .rec-kpi.bad { border-color: rgba(244,67,54,0.55); background: rgba(244,67,54,0.10); }
+        .rec-kpi.warn { border-color: rgba(255,193,7,0.45); }
+        .rec-kpi.good { border-color: rgba(76,175,80,0.45); }
+        .rec-scroll { overflow-x: auto; margin-top: 6px; }
+        .rec-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+        .rec-table th { text-align: left; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.55; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.15); white-space: nowrap; }
+        .rec-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .rec-table td.num, .rec-table th.num { text-align: right; white-space: nowrap; }
+        .rec-table tr:last-child td { border-bottom: none; }
+        .rec-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 18px; }
+        @media(max-width: 500px) { .rec-kpis { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -276,6 +295,28 @@
             </div>
         </div>
 
+        <div class="admin-card">
+            <h2>UPI Reconciliation</h2>
+            <p class="rec-note">Upload the GooglePay statement PDF(s) for a period — the "Money Received" export is fine, one per account. Each credit is matched to the UPI orders recorded in the POS, by amount and day. PDFs are read on this device; nothing is uploaded.</p>
+            <input type="file" id="rec-files" accept="application/pdf,.pdf" multiple>
+            <button class="btn btn-primary" style="width:auto;" onclick="recRun()">Run Reconciliation</button>
+            <div id="rec-status" class="rec-note" style="margin-top:12px;"></div>
+            <div id="rec-results" style="display:none; margin-top:20px;">
+                <div id="rec-period" class="rec-note" style="margin-bottom:12px;"></div>
+                <div class="rec-kpis" id="rec-kpis"></div>
+                <div class="rec-head"><strong>Recorded UPI — no matching credit</strong><button class="btn-action" onclick="recExportLeak()">Export</button></div>
+                <p class="rec-note">Marked UPI in the POS, but no GPay credit matched the amount that day. Worth checking: cash mismarked as UPI, an unpaid order, or money sent to a different QR.</p>
+                <div id="rec-leak" class="rec-scroll"></div>
+                <div class="rec-head"><strong>Credits — no matching order</strong><button class="btn-action" onclick="recExportExtra()">Export</button></div>
+                <p class="rec-note">Money received with no order to match. Expected: personal transfers, tips, overpayments, or unrecorded sales. Scan for anything that should have been a sale.</p>
+                <div id="rec-extra" class="rec-scroll"></div>
+                <details style="margin-top:16px;">
+                    <summary id="rec-matched-summary" style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Matched</summary>
+                    <div id="rec-matched" class="rec-scroll" style="margin-top:10px;"></div>
+                </details>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -383,11 +424,6 @@
         }
 
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
-
-        // Chart.js Instances
-
-        Chart.defaults.color = 'rgba(255, 255, 255, 0.7)';
-        Chart.defaults.font.family = "'Quicksand', sans-serif";
 
         db.ref('settings/isOpen').on('value', (snapshot) => {
             isCafeOpen = snapshot.val() === null ? true : snapshot.val(); 
@@ -755,6 +791,125 @@
             });
         };
 
+
+        // ===== UPI Reconciliation =====
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        function recReconstructRows(items){
+            const ne = items.filter(it => it.str && it.str.trim() !== '');
+            const sorted = ne.slice().sort((a,b)=> b.y - a.y);
+            const rows = []; let cur = null;
+            for (const it of sorted){
+                if (cur && Math.abs(it.y - cur.y) <= 3) cur.items.push(it);
+                else { cur = { y: it.y, items: [it] }; rows.push(cur); }
+            }
+            return rows.map(r => r.items.sort((a,b)=>a.x-b.x).map(i=>i.str).join(' ').replace(/\s+/g,' ').trim());
+        }
+        const REC_DATE_AMT = /^(\d{1,2}\s+[A-Za-z]{3},?\s+\d{4})\s+(.*?)\s+\u20B9\s*([\d,]+(?:\.\d+)?)$/;
+        const REC_TIME = /(\d{1,2}:\d{2}\s*[AP]M)/;
+        const REC_MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+        function recToTs(dateStr, time){
+            const d = dateStr.match(/(\d{1,2})\s+([A-Za-z]{3}),?\s+(\d{4})/); if(!d) return null;
+            let h=12, mi=0; const t=(time||'').match(/(\d{1,2}):(\d{2})\s*([AP])M/);
+            if(t){ h=(+t[1])%12; if(t[3]==='P') h+=12; mi=+t[2]; }
+            return new Date(+d[3], REC_MON[d[2]], +d[1], h, mi).getTime();
+        }
+        function recParseCredits(rows){
+            const out=[];
+            for(let i=0;i<rows.length;i++){
+                const m=rows[i].match(REC_DATE_AMT); if(!m) continue;
+                const details=m[2]; if(!/^Received from/i.test(details)) continue;
+                let time=''; if(i+1<rows.length){ const tm=rows[i+1].match(REC_TIME); if(tm) time=tm[1].replace(/\s+/g,''); }
+                out.push({ dateStr:m[1], time, payer:details.replace(/^Received from\s*/i,'').trim(), amount:parseFloat(m[3].replace(/,/g,'')), ts:recToTs(m[1],time) });
+            }
+            return out;
+        }
+        async function recCreditsFromFile(file){
+            const buf=await file.arrayBuffer();
+            const doc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+            let rows=[];
+            for(let p=1;p<=doc.numPages;p++){
+                const tc=await (await doc.getPage(p)).getTextContent();
+                rows=rows.concat(recReconstructRows(tc.items.map(it=>({str:it.str,x:it.transform[4],y:it.transform[5]}))));
+            }
+            return recParseCredits(rows);
+        }
+        function recDayKey(ts){ const d=new Date(ts); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+        function recReconcile(orders, credits){
+            const O=orders.map((o,i)=>({...o,_i:i,amt:Math.round(o.amount),day:recDayKey(o.ts)}));
+            const C=credits.map((c,i)=>({...c,_i:i,amt:Math.round(c.amount),day:recDayKey(c.ts)}));
+            const idx=new Map();
+            for(const c of C){ const k=c.amt+'|'+c.day; if(!idx.has(k)) idx.set(k,[]); idx.get(k).push(c); }
+            const matched=[], unmatchedOrders=[], usedC=new Set();
+            for(const o of O.slice().sort((a,b)=>a.ts-b.ts)){
+                const pool=(idx.get(o.amt+'|'+o.day)||[]).filter(c=>!usedC.has(c._i));
+                if(pool.length){ pool.sort((a,b)=>Math.abs(a.ts-o.ts)-Math.abs(b.ts-o.ts)); usedC.add(pool[0]._i); matched.push({order:o,credit:pool[0]}); }
+                else unmatchedOrders.push(o);
+            }
+            const unmatchedCredits=C.filter(c=>!usedC.has(c._i));
+            return { matched, unmatchedOrders, unmatchedCredits, posTotal:O.reduce((a,o)=>a+o.amount,0), gpayTotal:C.reduce((a,c)=>a+c.amount,0), matchedValue:matched.reduce((a,m)=>a+m.order.amount,0) };
+        }
+        const recRupee = n => '\u20B9' + Math.round(n||0).toLocaleString('en-IN');
+        function recFmtDT(ts){ try{ return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+        function recFmtD(ts){ try{ return new Date(ts).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return ''; } }
+        function recDownloadCSV(name, rows){
+            const csv=rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')).join('\n');
+            const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=name; a.click(); URL.revokeObjectURL(a.href);
+        }
+        let recLAST=null;
+        window.recRun = async function(){
+            const status=document.getElementById('rec-status');
+            const fileList=document.getElementById('rec-files').files;
+            if(!fileList.length){ status.innerText="Pick at least one GPay statement PDF first."; return; }
+            document.getElementById('rec-results').style.display='none';
+            try{
+                status.innerText="Reading statement(s)\u2026";
+                let credits=[]; for(const f of fileList){ credits=credits.concat(await recCreditsFromFile(f)); }
+                credits=credits.filter(c=>c.ts);
+                if(!credits.length){ status.innerText="No 'Received' credits found. Are these GooglePay statements?"; return; }
+                const minTs=Math.min.apply(null,credits.map(c=>c.ts)), maxTs=Math.max.apply(null,credits.map(c=>c.ts));
+                const ps=new Date(minTs); ps.setHours(0,0,0,0); const pe=new Date(maxTs); pe.setHours(23,59,59,999);
+                const periodStart=ps.getTime(), periodEnd=pe.getTime();
+                status.innerText="Loading POS orders\u2026";
+                const snap=await db.ref('orders/history').once('value');
+                const all=snap.val()||{}; const orders=[];
+                for(const key in all){
+                    const o=all[key]; if(!o) continue;
+                    const method=(o.payment&&o.payment.method!=null)?String(o.payment.method):'';
+                    if(!/upi/i.test(method)) continue;
+                    const ts=parseInt(key,10); if(isNaN(ts)) continue;
+                    if(ts<periodStart||ts>periodEnd) continue;
+                    const amount=(o.payment&&o.payment.total!=null)?parseFloat(o.payment.total):0;
+                    orders.push({id:key, amount, ts, type:o.orderType||'', where:o.tableOrAddress||''});
+                }
+                const r=recReconcile(orders, credits);
+                recLAST={r, credits, orders, periodStart, periodEnd, files:fileList.length};
+                recRender(recLAST); status.innerText="";
+            }catch(e){ console.error(e); status.innerText="Something went wrong: "+(e&&e.message?e.message:e); }
+        };
+        function recKpi(lbl,val,sub,cls){ return '<div class="rec-kpi'+(cls?' '+cls:'')+'"><div class="lbl">'+escapeHTML(lbl)+'</div><div class="val">'+val+'</div><div class="sub">'+escapeHTML(sub)+'</div></div>'; }
+        function recRender(L){
+            const r=L.r;
+            document.getElementById('rec-results').style.display='block';
+            document.getElementById('rec-period').innerHTML='Period <strong>'+recFmtD(L.periodStart)+' \u2013 '+recFmtD(L.periodEnd)+'</strong> \u00B7 '+L.files+' statement'+(L.files>1?'s':'')+' \u00B7 '+L.credits.length+' credits, '+recRupee(r.gpayTotal)+' received';
+            const leakVal=r.unmatchedOrders.reduce((a,o)=>a+o.amount,0), extraVal=r.unmatchedCredits.reduce((a,c)=>a+c.amount,0);
+            const k=[];
+            k.push(recKpi('POS UPI recorded', recRupee(r.posTotal), L.orders.length+' orders'));
+            k.push(recKpi('GPay received', recRupee(r.gpayTotal), L.credits.length+' credits'));
+            k.push(recKpi('Matched', recRupee(r.matchedValue), r.matched.length+' orders','good'));
+            k.push(recKpi('Recorded UPI, no credit', recRupee(leakVal), r.unmatchedOrders.length+' orders', r.unmatchedOrders.length?'bad':'good'));
+            k.push(recKpi('Credits, no order', recRupee(extraVal), r.unmatchedCredits.length+' credits','warn'));
+            document.getElementById('rec-kpis').innerHTML=k.join('');
+            const leak=r.unmatchedOrders.slice().sort((a,b)=>a.ts-b.ts);
+            document.getElementById('rec-leak').innerHTML=leak.length?'<table class="rec-table"><thead><tr><th>When</th><th>Order</th><th>Type</th><th class="num">Amount</th></tr></thead><tbody>'+leak.map(o=>'<tr><td>'+escapeHTML(recFmtDT(o.ts))+'</td><td style="opacity:0.55;font-size:0.78rem;">'+escapeHTML(String(o.id).slice(0,16))+'</td><td>'+escapeHTML(o.where||o.type)+'</td><td class="num">'+recRupee(o.amount)+'</td></tr>').join('')+'</tbody></table>':'<p class="rec-note">Nothing \u2014 every recorded UPI order has a matching credit. Clean.</p>';
+            const extra=r.unmatchedCredits.slice().sort((a,b)=>a.ts-b.ts);
+            document.getElementById('rec-extra').innerHTML=extra.length?'<table class="rec-table"><thead><tr><th>When</th><th>From</th><th class="num">Amount</th></tr></thead><tbody>'+extra.map(c=>'<tr><td>'+escapeHTML(recFmtDT(c.ts))+'</td><td>'+escapeHTML(c.payer)+'</td><td class="num">'+recRupee(c.amount)+'</td></tr>').join('')+'</tbody></table>':'<p class="rec-note">Nothing \u2014 every credit maps to a recorded order.</p>';
+            document.getElementById('rec-matched-summary').innerText='Matched ('+r.matched.length+')';
+            const mt=r.matched.slice().sort((a,b)=>a.order.ts-b.order.ts);
+            document.getElementById('rec-matched').innerHTML=mt.length?'<table class="rec-table"><thead><tr><th>When</th><th>From</th><th>Type</th><th class="num">Amount</th></tr></thead><tbody>'+mt.map(m=>'<tr><td>'+escapeHTML(recFmtDT(m.order.ts))+'</td><td>'+escapeHTML(m.credit.payer)+'</td><td>'+escapeHTML(m.order.where||m.order.type)+'</td><td class="num">'+recRupee(m.order.amount)+'</td></tr>').join('')+'</tbody></table>':'<p class="rec-note">No matches.</p>';
+        }
+        window.recExportLeak=function(){ if(!recLAST) return; const rows=[['When','OrderKey','Type/Where','Amount']]; recLAST.r.unmatchedOrders.slice().sort((a,b)=>a.ts-b.ts).forEach(o=>rows.push([recFmtDT(o.ts),o.id,o.where||o.type,o.amount])); recDownloadCSV('recorded-upi-no-credit.csv',rows); };
+        window.recExportExtra=function(){ if(!recLAST) return; const rows=[['When','From','Amount']]; recLAST.r.unmatchedCredits.slice().sort((a,b)=>a.ts-b.ts).forEach(c=>rows.push([recFmtDT(c.ts),c.payer,c.amount])); recDownloadCSV('credits-no-order.csv',rows); };
+        // ===== end reconciliation =====
     </script>
 </body>
 </html>
