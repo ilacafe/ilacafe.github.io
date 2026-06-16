@@ -932,10 +932,10 @@
             }
             const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             if (Object.keys(baristaItems).length > 0) {
-                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr });
+                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr, createdAt: firebase.database.ServerValue.TIMESTAMP });
             }
             if (Object.keys(chefItems).length > 0) {
-                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr });
+                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr, createdAt: firebase.database.ServerValue.TIMESTAMP });
             }
         }
 
