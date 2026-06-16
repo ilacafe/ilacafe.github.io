@@ -1348,7 +1348,17 @@
                 window.activeTables[newTableID] = tableData;
             }
             delete window.activeTables[oldTableID];
-            syncToCloud(oldTableID);
+
+            // Persist BOTH sides of the move in ONE atomic write: save the moved/merged
+            // table AND remove the old one together, so the live 'pos/activeTables' listener
+            // always rebuilds from a consistent state. (The previous code synced only the
+            // removed table, so the moved order was never written to the cloud and the
+            // listener then wiped it from this device too.)
+            const movedData = window.activeTables[newTableID] || null;
+            const moveUpdates = {};
+            moveUpdates['pos/activeTables/' + newTableID] = movedData;
+            moveUpdates['pos/activeTables/' + oldTableID] = null;
+            db.ref().update(moveUpdates).catch(e => console.error("Move sync error: ", e));
 
             // 2. Silently Hunt and Update KDS Tickets
             const oldDest = oldTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + oldTableID;
