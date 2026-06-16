@@ -37,7 +37,9 @@
         .range-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .range-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 7px 13px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit; }
         .range-btn.active { background: #fff; color: var(--brand-bg); }
-        .range-custom { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+        .range-custom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .rc-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.55; font-weight: 700; }
+        .rc-to { opacity: 0.6; font-size: 0.85rem; }
         .range-custom input { padding: 7px 9px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
         #range-label { font-size: 0.8rem; opacity: 0.75; margin-top: 10px; }
 
@@ -51,9 +53,9 @@
 
         .chart-full { background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; height: 250px; position: relative; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
-        .chart-box { background: rgba(0,0,0,0.15); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; height: 260px; }
+        .chart-box { background: rgba(0,0,0,0.15); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); }
         .chart-box h4 { margin: 0 0 10px 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; text-align: center; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 6px; }
-        .chart-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
+        .chart-wrap { position: relative; height: 200px; }
 
         /* tables */
         .tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
@@ -70,7 +72,6 @@
         @media(max-width: 720px) {
             .kpi-row { grid-template-columns: 1fr 1fr; }
             .grid2 { grid-template-columns: 1fr; }
-            .range-custom { margin-left: 0; }
         }
     </style>
 </head>
@@ -103,10 +104,11 @@
                 <button class="range-btn" data-range="lastMonth">Last Month</button>
                 <button class="range-btn" data-range="thisYear">This Year</button>
                 <button class="range-btn" data-range="all">All Time</button>
-                <div class="range-custom">
-                    <input type="date" id="date-from"><span style="opacity:0.6;">to</span><input type="date" id="date-to">
-                    <button class="lnk" onclick="window.applyCustom()">Apply</button>
-                </div>
+            </div>
+            <div class="range-custom">
+                <span class="rc-label">Custom</span>
+                <input type="date" id="date-from"><span class="rc-to">to</span><input type="date" id="date-to">
+                <button class="lnk" onclick="window.applyCustom()">Apply</button>
             </div>
             <div id="range-label">&nbsp;</div>
         </div>
@@ -204,6 +206,7 @@
                 </table>
             </div>
         </div>
+        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-06-16</div>
     </div>
 
     <script>
@@ -252,7 +255,8 @@
         let VOID_ROWS = [];
         let EOD = {};
         const PALETTE = ['#ffffff','#f4c542','#6cd07f','#5b9bd5','#ff8a80','#b39ddb','#ffb74d','#4dd0e1','#f06292','#a1887f','#90caf9','#dce775'];
-        let _rzT; window.addEventListener('resize', () => { clearTimeout(_rzT); _rzT = setTimeout(() => { for(const k in charts){ try{ if(charts[k]) charts[k].resize(); }catch(e){} } }, 200); });
+        let _rzT; const _rz = () => { clearTimeout(_rzT); _rzT = setTimeout(() => { for(const k in charts){ try{ if(charts[k]) charts[k].resize(); }catch(e){} } }, 200); };
+        window.addEventListener('resize', _rz); window.addEventListener('orientationchange', _rz);
 
         function init(){
             document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.range)));
