@@ -1034,7 +1034,7 @@
             closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
         };
 
-        window.removeTableItem = function(tableID, itemName) {
+        window.removeTableItem = async function(tableID, itemName) {
             let realItemName = itemName.replace(/&quot;/g, '"');
             const tableData = window.activeTables[tableID];
             
@@ -1042,12 +1042,21 @@
                 const reason = prompt(`Removing ${realItemName}. Reason?`);
                 if (!reason) return; 
 
+                const voidPin = prompt("Staff PIN to authorize this void:");
+                if (!voidPin) return;
+                const authName = window.staffPins[await hashPin(voidPin)];
+                if (!authName) { alert("Invalid PIN — void cancelled."); return; }
+
                 const voidData = {
                     time: new Date().toLocaleString(),
+                    ts: Date.now(),
                     table: tableID,
                     item: realItemName,
                     value: tableData.items[realItemName].price,
-                    reason: reason
+                    reason: reason,
+                    by: authName,
+                    device: (window.currentStaff && window.currentStaff.name) ? window.currentStaff.name : "Unknown",
+                    deviceUid: (window.currentStaff && window.currentStaff.uid) ? window.currentStaff.uid : ""
                 };
                 db.ref('security/voids').push(voidData);
 
