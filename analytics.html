@@ -25,9 +25,10 @@
 
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0 0 80px 0; line-height: 1.6; }
         .container { width: 92%; max-width: 1100px; margin: 0 auto; padding: 20px; }
-        header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 16px; flex-wrap: wrap; }
-        header h1 { font-size: 1.3rem; letter-spacing: 3px; text-transform: uppercase; margin: 0; font-weight: 700; }
-        .top-links { display: flex; gap: 8px; }
+        header { position: relative; text-align: center; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 18px; }
+        .logo { max-width: 180px; height: auto; display: block; margin: 4px auto 8px auto; }
+        .sub { font-size: 0.8rem; letter-spacing: 4px; text-transform: uppercase; opacity: 0.65; font-weight: 500; }
+        .signout { position: absolute; top: 0; right: 0; }
         .lnk { text-decoration: none; background: rgba(255,255,255,0.12); color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; border: none; }
         .lnk:active { opacity: 0.7; }
 
@@ -52,9 +53,9 @@
 
         .chart-full { background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; height: 250px; position: relative; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
-        .chart-box { background: rgba(0,0,0,0.15); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; }
+        .chart-box { background: rgba(0,0,0,0.15); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; height: 260px; }
         .chart-box h4 { margin: 0 0 10px 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; text-align: center; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 6px; }
-        .chart-wrap { position: relative; flex-grow: 1; min-height: 180px; }
+        .chart-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
 
         /* tables */
         .tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
@@ -62,7 +63,7 @@
         .tbl td { padding: 8px 6px; border-bottom: 1px dashed rgba(255,255,255,0.08); vertical-align: top; }
         .tbl tr:last-child td { border-bottom: none; }
         .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .scroll { max-height: 460px; overflow-y: auto; margin-top: 8px; }
+        .scroll { max-height: 460px; overflow-y: auto; overflow-x: auto; margin-top: 8px; }
         select, input[type="text"] { padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
         .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
         .muted { opacity: 0.55; text-align: center; padding: 20px 0; font-size: 0.85rem; }
@@ -78,7 +79,8 @@
 <body>
     <div id="login-overlay">
         <div id="login-box">
-            <h2>ILA Analytics</h2>
+            <img src="logo.png" alt="ILA" style="max-width: 160px; margin: 0 auto 10px auto; display:block;">
+            <div style="letter-spacing:4px; text-transform:uppercase; font-size:0.8rem; opacity:0.7; margin-bottom: 22px;">Analytics</div>
             <input type="email" id="login-email" placeholder="Email" autocomplete="username">
             <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
             <button onclick="window.signIn()">Sign In</button>
@@ -88,11 +90,9 @@
 
     <div class="container">
         <header>
-            <h1>ILA &middot; Analytics</h1>
-            <div class="top-links">
-                <a class="lnk" href="admin.html">&larr; Admin</a>
-                <button class="lnk" onclick="window.signOutA()">Sign Out</button>
-            </div>
+            <img src="logo.png" alt="ILA" class="logo">
+            <div class="sub">Analytics</div>
+            <button class="lnk signout" onclick="window.signOutA()">Sign Out</button>
         </header>
 
         <!-- DATE RANGE -->
@@ -135,7 +135,7 @@
                 <div class="chart-box"><h4>Sales by Day of Week</h4><div class="chart-wrap"><canvas id="chart-weekday"></canvas></div></div>
             </div>
             <div class="grid2" style="grid-template-columns:1fr;">
-                <div class="chart-box"><h4>Peak Hours</h4><div class="chart-wrap" style="min-height:200px;"><canvas id="chart-hours"></canvas></div></div>
+                <div class="chart-box"><h4>Peak Hours</h4><div class="chart-wrap"><canvas id="chart-hours"></canvas></div></div>
             </div>
         </div>
 
@@ -186,11 +186,22 @@
             </div>
         </div>
 
-        <!-- VOIDS -->
+        <!-- SECURITY / VOID LOG -->
         <div class="card" style="border-color: rgba(244,67,54,0.35);">
-            <h2 style="color:#ffd2d2;">Voids / Waste</h2>
+            <h2 style="color:#ffd2d2;">Security · Void Log</h2>
             <div id="voids-summary" style="font-size:0.9rem; margin-bottom:10px;"></div>
-            <div id="voids-list"></div>
+            <div id="voids-bystaff" style="margin-bottom:14px;"></div>
+            <div class="controls">
+                <input type="text" id="void-search" placeholder="Search staff, item, table, reason…" oninput="window.renderVoidLog()" style="flex:1; min-width:180px;">
+                <button class="lnk" onclick="window.exportVoids()">Export CSV</button>
+            </div>
+            <div id="void-count" style="font-size:0.78rem; opacity:0.6; margin:6px 0;"></div>
+            <div class="scroll">
+                <table class="tbl">
+                    <thead><tr><th>Time</th><th>By</th><th>Table</th><th>Item</th><th class="num">Value</th><th>Reason</th></tr></thead>
+                    <tbody id="void-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -238,7 +249,9 @@
         let RANGE = null;    // {start, end, key, label}
         let charts = {};
         let LAST = null;     // last computed result (for sub-renderers)
+        let VOID_ROWS = [];
         const PALETTE = ['#ffffff','#f4c542','#6cd07f','#5b9bd5','#ff8a80','#b39ddb','#ffb74d','#4dd0e1','#f06292','#a1887f','#90caf9','#dce775'];
+        let _rzT; window.addEventListener('resize', () => { clearTimeout(_rzT); _rzT = setTimeout(() => { for(const k in charts){ try{ if(charts[k]) charts[k].resize(); }catch(e){} } }, 200); });
 
         function init(){
             document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.range)));
@@ -375,7 +388,7 @@
 
             LAST = { itemAgg, txns, totalRev: rev };
             renderTop(); renderTxns(); refreshDrillOptions();
-            renderVoids(start, end, key);
+            computeVoids(start, end, key);
         }
 
         function cmp(elId, cur, prev, prevStart){
@@ -496,20 +509,57 @@
         };
         function stamp(){ return new Date().toISOString().slice(0,10); }
 
-        // ---------- voids ----------
-        function renderVoids(start, end, key){
-            const sum = document.getElementById('voids-summary'); const list = document.getElementById('voids-list');
-            const all = Object.keys(VOIDS||{});
-            // void keys may be epoch (push from POS uses Date.now()); range-filter when numeric
-            const inRange = all.filter(k => { const ts=parseInt(k); return isNaN(ts) ? true : (ts>=start && ts<end); });
-            if(!inRange.length){ sum.textContent = 'No voids in this range.'; list.innerHTML=''; return; }
-            let totVal=0; const byItem={};
-            inRange.forEach(k => { const v=VOIDS[k]||{}; const val=Number(v.value)||0; totVal+=val; const it=v.item||'Unknown'; byItem[it]=(byItem[it]||0)+1; });
-            sum.innerHTML = `<strong>${inRange.length}</strong> voids &middot; <strong>${rupee(totVal)}</strong> value`;
-            const top = Object.keys(byItem).sort((a,b)=>byItem[b]-byItem[a]).slice(0,12);
-            list.innerHTML = '<table class="tbl"><thead><tr><th>Voided Item</th><th class="num">Times</th></tr></thead><tbody>' +
-                top.map(i=>`<tr><td>${escapeHTML(i)}</td><td class="num">${byItem[i]}</td></tr>`).join('') + '</tbody></table>';
+        // ---------- security / void log ----------
+        function computeVoids(start, end, key){
+            const rows = [];
+            for(const k in (VOIDS||{})){
+                const v = VOIDS[k] || {};
+                const dated = (typeof v.ts === 'number');
+                // dated voids respect the range; legacy undated voids only surface under All Time
+                if(key !== 'all'){ if(!dated) continue; if(v.ts < start || v.ts >= end) continue; }
+                rows.push({
+                    ts: dated ? v.ts : 0,
+                    time: v.time || (dated ? new Date(v.ts).toLocaleString('en-GB') : '—'),
+                    by: v.by || 'Unknown', role: v.byRole || '', device: v.device || '',
+                    table: (v.table != null) ? String(v.table) : '-',
+                    item: v.item || '-', value: Number(v.value) || 0, reason: v.reason || ''
+                });
+            }
+            rows.sort((a,b) => b.ts - a.ts);
+            VOID_ROWS = rows;
+            const totVal = rows.reduce((s,r) => s + r.value, 0);
+            document.getElementById('voids-summary').innerHTML = rows.length
+                ? `<strong>${rows.length}</strong> voids · <strong>${rupee(totVal)}</strong> total value${key==='all' ? ' (all time)' : ''}`
+                : 'No voids in this range.';
+            const byStaff = {};
+            rows.forEach(r => { if(!byStaff[r.by]) byStaff[r.by] = {count:0, val:0}; byStaff[r.by].count++; byStaff[r.by].val += r.value; });
+            const staff = Object.keys(byStaff).sort((a,b) => byStaff[b].count - byStaff[a].count);
+            document.getElementById('voids-bystaff').innerHTML = staff.length
+                ? '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.55; margin-bottom:6px;">Voids by staff</div>' +
+                  staff.map(st => `<div class="top-item-row"><span>${escapeHTML(st)}</span><span style="font-weight:bold;">${byStaff[st].count} · ${rupee(byStaff[st].val)}</span></div>`).join('')
+                : '';
+            renderVoidLog();
         }
+        function voidFilter(){
+            const q = (document.getElementById('void-search').value || '').toLowerCase().trim();
+            if(!q) return VOID_ROWS;
+            return VOID_ROWS.filter(r => (r.by + ' ' + r.item + ' ' + r.table + ' ' + r.reason + ' ' + r.role + ' ' + r.device).toLowerCase().includes(q));
+        }
+        window.renderVoidLog = function(){
+            const body = document.getElementById('void-body'); const cnt = document.getElementById('void-count');
+            if(!body) return;
+            const rows = voidFilter();
+            cnt.textContent = rows.length + (rows.length === VOID_ROWS.length ? '' : ' of ' + VOID_ROWS.length) + ' voids' + (rows.length > 500 ? ' (showing first 500)' : '');
+            if(!rows.length){ body.innerHTML = '<tr><td colspan="6" class="muted">No voids.</td></tr>'; return; }
+            body.innerHTML = rows.slice(0,500).map(r => `<tr><td style="white-space:nowrap;">${escapeHTML(r.time)}</td><td>${escapeHTML(r.by)}${r.role ? ` <span style="opacity:0.5; font-size:0.72rem;">(${escapeHTML(r.role)})</span>` : ''}${(r.device && r.device !== r.by) ? `<div style="opacity:0.45; font-size:0.7rem;">on ${escapeHTML(r.device)}'s device</div>` : ''}</td><td>${escapeHTML(r.table)}</td><td>${escapeHTML(r.item)}</td><td class="num">${rupee(r.value)}</td><td style="opacity:0.85;">${escapeHTML(r.reason)}</td></tr>`).join('');
+        };
+        window.exportVoids = function(){
+            const rows = voidFilter();
+            if(!rows.length){ alert('Nothing to export.'); return; }
+            const out = [['Time','By','Device','Table','Item','Value','Reason']];
+            rows.forEach(r => out.push([r.time, r.by, r.device, r.table, r.item, Math.round(r.value), r.reason]));
+            downloadCSV(out, 'ila-voids-' + stamp() + '.csv');
+        };
     </script>
 </body>
 </html>
