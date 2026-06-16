@@ -117,6 +117,8 @@
         .rec-table td.num, .rec-table th.num { text-align: right; white-space: nowrap; }
         .rec-table tr:last-child td { border-bottom: none; }
         .rec-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 18px; }
+        .rec-mini { background: rgba(255,255,255,0.10); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 4px 10px; border-radius: 5px; font-family: 'Quicksand', sans-serif; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+        .rec-mini:active { background: rgba(255,255,255,0.2); }
         @media(max-width: 500px) { .rec-kpis { grid-template-columns: 1fr; } }
     </style>
 </head>
@@ -297,22 +299,30 @@
 
         <div class="admin-card">
             <h2>UPI Reconciliation</h2>
-            <p class="rec-note">Upload the GooglePay statement PDF(s) for a period — the "Money Received" export is fine, one per account. Each credit is matched to the UPI orders recorded in the POS, by amount and day. PDFs are read on this device; nothing is uploaded.</p>
+            <p class="rec-note">Upload the GooglePay statement PDF(s) for a period — the "Money Received" export is fine, one per account. Matched payments are saved permanently; unmatched orders stay <strong>pending</strong> until a later statement clears them or you ignore them. PDFs are read on this device.</p>
             <input type="file" id="rec-files" accept="application/pdf,.pdf" multiple>
             <button class="btn btn-primary" style="width:auto;" onclick="recRun()">Run Reconciliation</button>
             <div id="rec-status" class="rec-note" style="margin-top:12px;"></div>
             <div id="rec-results" style="display:none; margin-top:20px;">
                 <div id="rec-period" class="rec-note" style="margin-bottom:12px;"></div>
                 <div class="rec-kpis" id="rec-kpis"></div>
-                <div class="rec-head"><strong>Recorded UPI — no matching credit</strong><button class="btn-action" onclick="recExportLeak()">Export</button></div>
-                <p class="rec-note">Marked UPI in the POS, but no GPay credit matched the amount that day. Worth checking: cash mismarked as UPI, an unpaid order, or money sent to a different QR.</p>
-                <div id="rec-leak" class="rec-scroll"></div>
-                <div class="rec-head"><strong>Credits — no matching order</strong><button class="btn-action" onclick="recExportExtra()">Export</button></div>
-                <p class="rec-note">Money received with no order to match. Expected: personal transfers, tips, overpayments, or unrecorded sales. Scan for anything that should have been a sale.</p>
+
+                <div class="rec-head"><strong>Pending — needs a matching credit</strong><span id="rec-pending-count" style="opacity:0.6; font-size:0.8rem;"></span></div>
+                <p class="rec-note">Marked UPI in the POS but not matched to a credit yet. Upload the other account's statement to clear them, or ignore ones you know were cash or exceptions.</p>
+                <div id="rec-pending" class="rec-scroll"></div>
+
+                <div class="rec-head"><strong>Extra credits — no order</strong><button class="btn-action" onclick="recIgnoreAllExtra()">Ignore all</button></div>
+                <p class="rec-note">Money received with no matching order — personal transfers, tips, overpayments. Ignore them to clear; ignored credits won't come back.</p>
                 <div id="rec-extra" class="rec-scroll"></div>
+
                 <details style="margin-top:16px;">
-                    <summary id="rec-matched-summary" style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Matched</summary>
-                    <div id="rec-matched" class="rec-scroll" style="margin-top:10px;"></div>
+                    <summary id="rec-reconciled-summary" style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Reconciled</summary>
+                    <div style="text-align:right; margin:6px 0;"><button class="btn-action" onclick="recExportReconciled()">Export</button></div>
+                    <div id="rec-reconciled" class="rec-scroll"></div>
+                </details>
+                <details style="margin-top:6px;">
+                    <summary id="rec-ignored-summary" style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Ignored</summary>
+                    <div id="rec-ignored" class="rec-scroll" style="margin-top:8px;"></div>
                 </details>
             </div>
         </div>
@@ -806,6 +816,7 @@
         }
         const REC_DATE_AMT = /^(\d{1,2}\s+[A-Za-z]{3},?\s+\d{4})\s+(.*?)\s+\u20B9\s*([\d,]+(?:\.\d+)?)$/;
         const REC_TIME = /(\d{1,2}:\d{2}\s*[AP]M)/;
+        const REC_TID = /UPI Transaction ID:\s*(\d+)/;
         const REC_MON = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
         function recToTs(dateStr, time){
             const d = dateStr.match(/(\d{1,2})\s+([A-Za-z]{3}),?\s+(\d{4})/); if(!d) return null;
@@ -818,8 +829,9 @@
             for(let i=0;i<rows.length;i++){
                 const m=rows[i].match(REC_DATE_AMT); if(!m) continue;
                 const details=m[2]; if(!/^Received from/i.test(details)) continue;
-                let time=''; if(i+1<rows.length){ const tm=rows[i+1].match(REC_TIME); if(tm) time=tm[1].replace(/\s+/g,''); }
-                out.push({ dateStr:m[1], time, payer:details.replace(/^Received from\s*/i,'').trim(), amount:parseFloat(m[3].replace(/,/g,'')), ts:recToTs(m[1],time) });
+                let time='', txnId=null;
+                if(i+1<rows.length){ const nx=rows[i+1]; const tm=nx.match(REC_TIME); if(tm) time=tm[1].replace(/\s+/g,''); const ti=nx.match(REC_TID); if(ti) txnId=ti[1]; }
+                out.push({ dateStr:m[1], time, txnId, payer:details.replace(/^Received from\s*/i,'').trim(), amount:parseFloat(m[3].replace(/,/g,'')), ts:recToTs(m[1],time) });
             }
             return out;
         }
@@ -839,14 +851,12 @@
             const C=credits.map((c,i)=>({...c,_i:i,amt:Math.round(c.amount),day:recDayKey(c.ts)}));
             const idx=new Map();
             for(const c of C){ const k=c.amt+'|'+c.day; if(!idx.has(k)) idx.set(k,[]); idx.get(k).push(c); }
-            const matched=[], unmatchedOrders=[], usedC=new Set();
+            const matched=[], usedC=new Set();
             for(const o of O.slice().sort((a,b)=>a.ts-b.ts)){
                 const pool=(idx.get(o.amt+'|'+o.day)||[]).filter(c=>!usedC.has(c._i));
                 if(pool.length){ pool.sort((a,b)=>Math.abs(a.ts-o.ts)-Math.abs(b.ts-o.ts)); usedC.add(pool[0]._i); matched.push({order:o,credit:pool[0]}); }
-                else unmatchedOrders.push(o);
             }
-            const unmatchedCredits=C.filter(c=>!usedC.has(c._i));
-            return { matched, unmatchedOrders, unmatchedCredits, posTotal:O.reduce((a,o)=>a+o.amount,0), gpayTotal:C.reduce((a,c)=>a+c.amount,0), matchedValue:matched.reduce((a,m)=>a+m.order.amount,0) };
+            return { matched };
         }
         const recRupee = n => '\u20B9' + Math.round(n||0).toLocaleString('en-IN');
         function recFmtDT(ts){ try{ return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
@@ -855,6 +865,7 @@
             const csv=rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')).join('\n');
             const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=name; a.click(); URL.revokeObjectURL(a.href);
         }
+        function recKpi(lbl,val,sub,cls){ return '<div class="rec-kpi'+(cls?' '+cls:'')+'"><div class="lbl">'+escapeHTML(lbl)+'</div><div class="val">'+val+'</div><div class="sub">'+escapeHTML(sub)+'</div></div>'; }
         let recLAST=null;
         window.recRun = async function(){
             const status=document.getElementById('rec-status');
@@ -864,14 +875,16 @@
             try{
                 status.innerText="Reading statement(s)\u2026";
                 let credits=[]; for(const f of fileList){ credits=credits.concat(await recCreditsFromFile(f)); }
-                credits=credits.filter(c=>c.ts);
+                credits=credits.filter(c=>c.ts && c.txnId);
+                const seen=new Set(); credits=credits.filter(c=> seen.has(c.txnId)?false:(seen.add(c.txnId),true));
                 if(!credits.length){ status.innerText="No 'Received' credits found. Are these GooglePay statements?"; return; }
                 const minTs=Math.min.apply(null,credits.map(c=>c.ts)), maxTs=Math.max.apply(null,credits.map(c=>c.ts));
                 const ps=new Date(minTs); ps.setHours(0,0,0,0); const pe=new Date(maxTs); pe.setHours(23,59,59,999);
                 const periodStart=ps.getTime(), periodEnd=pe.getTime();
+
                 status.innerText="Loading POS orders\u2026";
                 const snap=await db.ref('orders/history').once('value');
-                const all=snap.val()||{}; const orders=[];
+                const all=snap.val()||{}; const periodOrders=[];
                 for(const key in all){
                     const o=all[key]; if(!o) continue;
                     const method=(o.payment&&o.payment.method!=null)?String(o.payment.method):'';
@@ -879,36 +892,101 @@
                     const ts=parseInt(key,10); if(isNaN(ts)) continue;
                     if(ts<periodStart||ts>periodEnd) continue;
                     const amount=(o.payment&&o.payment.total!=null)?parseFloat(o.payment.total):0;
-                    orders.push({id:key, amount, ts, type:o.orderType||'', where:o.tableOrAddress||''});
+                    periodOrders.push({key, amount, ts, type:o.orderType||'', where:o.tableOrAddress||''});
                 }
-                const r=recReconcile(orders, credits);
-                recLAST={r, credits, orders, periodStart, periodEnd, files:fileList.length};
-                recRender(recLAST); status.innerText="";
+
+                status.innerText="Loading saved reconciliation\u2026";
+                const recOrders=(await db.ref('reconciliation/orders').once('value')).val()||{};
+                const recCredits=(await db.ref('reconciliation/credits').once('value')).val()||{};
+
+                const usedCreditIds=new Set();
+                for(const k in recOrders){ const r=recOrders[k]; if(r&&r.status==='reconciled'&&r.creditId) usedCreditIds.add(String(r.creditId)); }
+                const pendingOrders=periodOrders.filter(o=>{ const r=recOrders[o.key]; return !r||(r.status!=='reconciled'&&r.status!=='ignored'); });
+                const availCredits=credits.filter(c=> !usedCreditIds.has(c.txnId) && !(recCredits[c.txnId]&&recCredits[c.txnId].status==='ignored'));
+
+                const res=recReconcile(pendingOrders, availCredits);
+                const updates={}; const newly=new Set();
+                res.matched.forEach(m=>{
+                    const rec={ status:'reconciled', amount:m.order.amount, orderTs:m.order.ts, creditId:m.credit.txnId, creditTs:m.credit.ts, payer:m.credit.payer, at:Date.now() };
+                    recOrders[m.order.key]=rec; updates['orders/'+m.order.key]=rec; newly.add(m.order.key);
+                });
+                if(Object.keys(updates).length){ status.innerText="Saving\u2026"; await db.ref('reconciliation').update(updates); }
+
+                recLAST={ credits, periodOrders,
+                    ordersByKey:Object.fromEntries(periodOrders.map(o=>[o.key,o])),
+                    creditsById:Object.fromEntries(credits.map(c=>[c.txnId,c])),
+                    recOrders, recCredits, periodStart, periodEnd, files:fileList.length, newly };
+                recComputeAndRender();
+                status.innerText = res.matched.length ? (res.matched.length+" newly reconciled and saved.") : "Nothing new to reconcile.";
             }catch(e){ console.error(e); status.innerText="Something went wrong: "+(e&&e.message?e.message:e); }
         };
-        function recKpi(lbl,val,sub,cls){ return '<div class="rec-kpi'+(cls?' '+cls:'')+'"><div class="lbl">'+escapeHTML(lbl)+'</div><div class="val">'+val+'</div><div class="sub">'+escapeHTML(sub)+'</div></div>'; }
-        function recRender(L){
-            const r=L.r;
+        function recComputeAndRender(){
+            const L=recLAST; if(!L) return;
             document.getElementById('rec-results').style.display='block';
-            document.getElementById('rec-period').innerHTML='Period <strong>'+recFmtD(L.periodStart)+' \u2013 '+recFmtD(L.periodEnd)+'</strong> \u00B7 '+L.files+' statement'+(L.files>1?'s':'')+' \u00B7 '+L.credits.length+' credits, '+recRupee(r.gpayTotal)+' received';
-            const leakVal=r.unmatchedOrders.reduce((a,o)=>a+o.amount,0), extraVal=r.unmatchedCredits.reduce((a,c)=>a+c.amount,0);
+            const usedCreditIds=new Set();
+            for(const k in L.recOrders){ const r=L.recOrders[k]; if(r&&r.status==='reconciled'&&r.creditId) usedCreditIds.add(String(r.creditId)); }
+            const reconciled=[], pending=[], ignoredOrders=[];
+            L.periodOrders.forEach(o=>{ const r=L.recOrders[o.key];
+                if(r&&r.status==='reconciled') reconciled.push({order:o,rec:r});
+                else if(r&&r.status==='ignored') ignoredOrders.push(o);
+                else pending.push(o);
+            });
+            const extraCredits=[], ignoredCredits=[];
+            L.credits.forEach(c=>{ if(usedCreditIds.has(c.txnId)) return;
+                const ig=L.recCredits[c.txnId]&&L.recCredits[c.txnId].status==='ignored';
+                if(ig) ignoredCredits.push(c); else extraCredits.push(c);
+            });
+
+            const recVal=reconciled.reduce((a,x)=>a+x.order.amount,0);
+            const pendVal=pending.reduce((a,o)=>a+o.amount,0);
+            const extraVal=extraCredits.reduce((a,c)=>a+c.amount,0);
+            document.getElementById('rec-period').innerHTML='Period <strong>'+recFmtD(L.periodStart)+' \u2013 '+recFmtD(L.periodEnd)+'</strong> \u00B7 '+L.files+' statement'+(L.files>1?'s':'')+' \u00B7 '+L.credits.length+' credits, '+recRupee(L.credits.reduce((a,c)=>a+c.amount,0))+' received';
             const k=[];
-            k.push(recKpi('POS UPI recorded', recRupee(r.posTotal), L.orders.length+' orders'));
-            k.push(recKpi('GPay received', recRupee(r.gpayTotal), L.credits.length+' credits'));
-            k.push(recKpi('Matched', recRupee(r.matchedValue), r.matched.length+' orders','good'));
-            k.push(recKpi('Recorded UPI, no credit', recRupee(leakVal), r.unmatchedOrders.length+' orders', r.unmatchedOrders.length?'bad':'good'));
-            k.push(recKpi('Credits, no order', recRupee(extraVal), r.unmatchedCredits.length+' credits','warn'));
+            k.push(recKpi('Reconciled', recRupee(recVal), reconciled.length+' orders','good'));
+            k.push(recKpi('Pending', recRupee(pendVal), pending.length+' orders', pending.length?'bad':'good'));
+            k.push(recKpi('Extra credits', recRupee(extraVal), extraCredits.length+' credits','warn'));
+            k.push(recKpi('Ignored', String(ignoredOrders.length+ignoredCredits.length), 'items'));
             document.getElementById('rec-kpis').innerHTML=k.join('');
-            const leak=r.unmatchedOrders.slice().sort((a,b)=>a.ts-b.ts);
-            document.getElementById('rec-leak').innerHTML=leak.length?'<table class="rec-table"><thead><tr><th>When</th><th>Order</th><th>Type</th><th class="num">Amount</th></tr></thead><tbody>'+leak.map(o=>'<tr><td>'+escapeHTML(recFmtDT(o.ts))+'</td><td style="opacity:0.55;font-size:0.78rem;">'+escapeHTML(String(o.id).slice(0,16))+'</td><td>'+escapeHTML(o.where||o.type)+'</td><td class="num">'+recRupee(o.amount)+'</td></tr>').join('')+'</tbody></table>':'<p class="rec-note">Nothing \u2014 every recorded UPI order has a matching credit. Clean.</p>';
-            const extra=r.unmatchedCredits.slice().sort((a,b)=>a.ts-b.ts);
-            document.getElementById('rec-extra').innerHTML=extra.length?'<table class="rec-table"><thead><tr><th>When</th><th>From</th><th class="num">Amount</th></tr></thead><tbody>'+extra.map(c=>'<tr><td>'+escapeHTML(recFmtDT(c.ts))+'</td><td>'+escapeHTML(c.payer)+'</td><td class="num">'+recRupee(c.amount)+'</td></tr>').join('')+'</tbody></table>':'<p class="rec-note">Nothing \u2014 every credit maps to a recorded order.</p>';
-            document.getElementById('rec-matched-summary').innerText='Matched ('+r.matched.length+')';
-            const mt=r.matched.slice().sort((a,b)=>a.order.ts-b.order.ts);
-            document.getElementById('rec-matched').innerHTML=mt.length?'<table class="rec-table"><thead><tr><th>When</th><th>From</th><th>Type</th><th class="num">Amount</th></tr></thead><tbody>'+mt.map(m=>'<tr><td>'+escapeHTML(recFmtDT(m.order.ts))+'</td><td>'+escapeHTML(m.credit.payer)+'</td><td>'+escapeHTML(m.order.where||m.order.type)+'</td><td class="num">'+recRupee(m.order.amount)+'</td></tr>').join('')+'</tbody></table>':'<p class="rec-note">No matches.</p>';
+
+            document.getElementById('rec-pending-count').innerText = pending.length?(pending.length+' pending'):'';
+            const pend=pending.slice().sort((a,b)=>a.ts-b.ts);
+            document.getElementById('rec-pending').innerHTML = pend.length
+                ? '<table class="rec-table"><thead><tr><th>When</th><th>Order</th><th>Type</th><th class="num">Amount</th><th></th></tr></thead><tbody>'+pend.map(o=>'<tr><td>'+escapeHTML(recFmtDT(o.ts))+'</td><td style="opacity:0.55;font-size:0.78rem;">'+escapeHTML(String(o.key).slice(0,16))+'</td><td>'+escapeHTML(o.where||o.type)+'</td><td class="num">'+recRupee(o.amount)+'</td><td class="num"><button class="rec-mini" onclick="recIgnoreOrder(\''+o.key+'\')">Ignore</button></td></tr>').join('')+'</tbody></table>'
+                : '<p class="rec-note">Nothing pending \u2014 every UPI order in this period is reconciled or ignored.</p>';
+
+            const extra=extraCredits.slice().sort((a,b)=>a.ts-b.ts);
+            document.getElementById('rec-extra').innerHTML = extra.length
+                ? '<table class="rec-table"><thead><tr><th>When</th><th>From</th><th class="num">Amount</th><th></th></tr></thead><tbody>'+extra.map(c=>'<tr><td>'+escapeHTML(recFmtDT(c.ts))+'</td><td>'+escapeHTML(c.payer)+'</td><td class="num">'+recRupee(c.amount)+'</td><td class="num"><button class="rec-mini" onclick="recIgnoreCredit(\''+c.txnId+'\')">Ignore</button></td></tr>').join('')+'</tbody></table>'
+                : '<p class="rec-note">No extra credits \u2014 every credit maps to an order.</p>';
+
+            document.getElementById('rec-reconciled-summary').innerText='Reconciled ('+reconciled.length+')';
+            const rec=reconciled.slice().sort((a,b)=>a.order.ts-b.order.ts);
+            document.getElementById('rec-reconciled').innerHTML = rec.length
+                ? '<table class="rec-table"><thead><tr><th>When</th><th>From</th><th>Type</th><th class="num">Amount</th></tr></thead><tbody>'+rec.map(x=>'<tr'+(L.newly.has(x.order.key)?' style="background:rgba(76,175,80,0.10);"':'')+'><td>'+escapeHTML(recFmtDT(x.order.ts))+'</td><td>'+escapeHTML(x.rec.payer||'')+'</td><td>'+escapeHTML(x.order.where||x.order.type)+'</td><td class="num">'+recRupee(x.order.amount)+'</td></tr>').join('')+'</tbody></table>'
+                : '<p class="rec-note">None yet.</p>';
+
+            document.getElementById('rec-ignored-summary').innerText='Ignored ('+(ignoredOrders.length+ignoredCredits.length)+')';
+            let ih='';
+            if(ignoredOrders.length){ ih+='<p class="rec-note" style="margin-top:4px;">Ignored orders</p><table class="rec-table"><tbody>'+ignoredOrders.slice().sort((a,b)=>a.ts-b.ts).map(o=>'<tr><td>'+escapeHTML(recFmtDT(o.ts))+'</td><td>'+escapeHTML(o.where||o.type)+'</td><td class="num">'+recRupee(o.amount)+'</td><td class="num"><button class="rec-mini" onclick="recUnignoreOrder(\''+o.key+'\')">Un-ignore</button></td></tr>').join('')+'</tbody></table>'; }
+            if(ignoredCredits.length){ ih+='<p class="rec-note" style="margin-top:10px;">Ignored credits</p><table class="rec-table"><tbody>'+ignoredCredits.slice().sort((a,b)=>a.ts-b.ts).map(c=>'<tr><td>'+escapeHTML(recFmtDT(c.ts))+'</td><td>'+escapeHTML(c.payer)+'</td><td class="num">'+recRupee(c.amount)+'</td><td class="num"><button class="rec-mini" onclick="recUnignoreCredit(\''+c.txnId+'\')">Un-ignore</button></td></tr>').join('')+'</tbody></table>'; }
+            document.getElementById('rec-ignored').innerHTML = ih || '<p class="rec-note">Nothing ignored.</p>';
         }
-        window.recExportLeak=function(){ if(!recLAST) return; const rows=[['When','OrderKey','Type/Where','Amount']]; recLAST.r.unmatchedOrders.slice().sort((a,b)=>a.ts-b.ts).forEach(o=>rows.push([recFmtDT(o.ts),o.id,o.where||o.type,o.amount])); recDownloadCSV('recorded-upi-no-credit.csv',rows); };
-        window.recExportExtra=function(){ if(!recLAST) return; const rows=[['When','From','Amount']]; recLAST.r.unmatchedCredits.slice().sort((a,b)=>a.ts-b.ts).forEach(c=>rows.push([recFmtDT(c.ts),c.payer,c.amount])); recDownloadCSV('credits-no-order.csv',rows); };
+        window.recIgnoreOrder=async function(key){ const o=recLAST.ordersByKey[key]; if(!o) return; const rec={status:'ignored', amount:o.amount, orderTs:o.ts, at:Date.now()}; recLAST.recOrders[key]=rec; recComputeAndRender(); try{ await db.ref('reconciliation/orders/'+key).set(rec); }catch(e){ console.error(e); } };
+        window.recUnignoreOrder=async function(key){ delete recLAST.recOrders[key]; recComputeAndRender(); try{ await db.ref('reconciliation/orders/'+key).remove(); }catch(e){ console.error(e); } };
+        window.recIgnoreCredit=async function(txnId){ const c=recLAST.creditsById[txnId]; if(!c) return; const rec={status:'ignored', amount:c.amount, ts:c.ts, payer:c.payer, at:Date.now()}; recLAST.recCredits[txnId]=rec; recComputeAndRender(); try{ await db.ref('reconciliation/credits/'+txnId).set(rec); }catch(e){ console.error(e); } };
+        window.recUnignoreCredit=async function(txnId){ delete recLAST.recCredits[txnId]; recComputeAndRender(); try{ await db.ref('reconciliation/credits/'+txnId).remove(); }catch(e){ console.error(e); } };
+        window.recIgnoreAllExtra=async function(){
+            if(!recLAST) return;
+            const usedCreditIds=new Set(); for(const k in recLAST.recOrders){ const r=recLAST.recOrders[k]; if(r&&r.status==='reconciled'&&r.creditId) usedCreditIds.add(String(r.creditId)); }
+            const updates={};
+            recLAST.credits.forEach(c=>{ if(usedCreditIds.has(c.txnId)) return; if(recLAST.recCredits[c.txnId]&&recLAST.recCredits[c.txnId].status==='ignored') return;
+                const rec={status:'ignored', amount:c.amount, ts:c.ts, payer:c.payer, at:Date.now()}; recLAST.recCredits[c.txnId]=rec; updates[c.txnId]=rec; });
+            recComputeAndRender();
+            if(Object.keys(updates).length){ try{ await db.ref('reconciliation/credits').update(updates); }catch(e){ console.error(e); } }
+        };
+        window.recExportReconciled=function(){ if(!recLAST) return; const rows=[['When','From','Type/Where','Amount','CreditTxnId','ReconciledAt']];
+            recLAST.periodOrders.slice().sort((a,b)=>a.ts-b.ts).forEach(o=>{ const r=recLAST.recOrders[o.key]; if(r&&r.status==='reconciled') rows.push([recFmtDT(o.ts), r.payer||'', o.where||o.type, o.amount, r.creditId||'', r.at?recFmtDT(r.at):'']); });
+            recDownloadCSV('reconciled.csv', rows); };
         // ===== end reconciliation =====
     </script>
 </body>
