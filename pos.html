@@ -1059,6 +1059,7 @@
                     deviceUid: (window.currentStaff && window.currentStaff.uid) ? window.currentStaff.uid : ""
                 };
                 db.ref('security/voids').push(voidData);
+                posSendPush({ title: '\u26a0\ufe0f Void', body: voidData.item + ' \u20b9' + Math.round(voidData.value) + ' \u00b7 ' + (tableID.startsWith('Takeaway') ? tableID : 'Table ' + tableID) + ' \u00b7 by ' + voidData.by + (reason ? ' \u2014 ' + reason : ''), tag: 'void-' + voidData.ts, url: '/admin.html' });
 
                 let destName = tableID.startsWith('Takeaway') ? tableID : 'Table ' + tableID;
                 let voidCart = {};
@@ -1281,6 +1282,17 @@
             window.closeTransactionModal();
         };
 
+        const ALERT_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';
+        const ALERT_SECRET = '60765ac4763b2df758331f5dea3a145862078c27b72d3efb';
+        async function posSendPush(notification){
+            if (!ALERT_WORKER_URL) return;
+            try {
+                const snap = await db.ref('pushSubscriptions').once('value');
+                const subscriptions = Object.values(snap.val() || {}).map(function(x){ return x && x.subscription; }).filter(Boolean);
+                if (!subscriptions.length) return;
+                await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ secret: ALERT_SECRET, notification: notification, subscriptions: subscriptions }) });
+            } catch (e) { console.error('push failed', e); }
+        }
         window.promptEOD = async function() {
             const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
             const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
@@ -1292,7 +1304,7 @@
             let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${Math.round(safeUPI)}\nCash: ₹${Math.round(safeCash)}\n\nEXPENSES:\n`;
             let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
             if (!exp) report += `None.\n`;
-            if (confirm("Send Report?")) {
+            if (confirm("Close the day? Today's sales will be archived and the till reset for tomorrow.")) {
                 const todayKey = new Date().toISOString().slice(0, 10);
                 // Snapshot the whole day BEFORE wiping, so nothing is lost if the WhatsApp
                 // hand-off fails. Then clear the live nodes for the new day.
@@ -1307,6 +1319,9 @@
                     db.ref('pos/upiTotal').set(0);
                     db.ref('pos/activeTables').remove();
                 });
+                var _eodBills = Array.isArray(window.pastBills) ? window.pastBills.length : 0;
+                var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income') _eodExp += (parseFloat(e.amount) || 0); });
+                posSendPush({ title: '\ud83d\udccb EOD \u2014 ' + staffName, body: 'UPI \u20b9' + Math.round(safeUPI) + ' \u00b7 Cash \u20b9' + Math.round(safeCash) + ' \u00b7 ' + _eodBills + ' bills' + (_eodExp ? ' \u00b7 Exp \u20b9' + Math.round(_eodExp) : ''), tag: 'eod', url: '/admin.html' });
                 window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = [];
                 closeModal('cash-modal');
                 setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
