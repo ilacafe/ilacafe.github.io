@@ -305,6 +305,7 @@
             <h2>Notifications</h2>
             <p class="rec-note">Get order-delay alerts on this device — even when the app is closed. Do this once on each device (each iPad or phone separately), from the admin app opened via its Home Screen icon.</p>
             <button class="btn btn-primary" style="width:auto;" id="notif-enable" onclick="notifEnable()">Enable alerts on this device</button>
+            <button class="btn-action" style="width:auto; margin-top:8px;" id="notif-testpush" onclick="notifTestPush()">Send test push (all devices)</button>
             <div id="notif-status" class="rec-note" style="margin-top:12px;"></div>
         </div>
 
@@ -860,6 +861,19 @@
                 await notifReg.showNotification('Caf\u00e9 Ila', { body: 'Alerts enabled. You will be notified here when an order runs late.', icon: '/icon.png', tag: 'ila-enabled' });
                 await notifRefresh();
             } catch (e) { console.error(e); status.innerText = 'Could not enable alerts: ' + (e && e.message ? e.message : e); }
+        };
+        const ALERT_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';
+        const ALERT_SECRET = '60765ac4763b2df758331f5dea3a145862078c27b72d3efb';
+        window.notifTestPush = async function(){
+            const status = document.getElementById('notif-status');
+            try {
+                const snap = await db.ref('pushSubscriptions').once('value');
+                const subscriptions = Object.values(snap.val() || {}).map(function(x){ return x && x.subscription; }).filter(Boolean);
+                if (!subscriptions.length) { status.innerText = 'No devices registered yet \u2014 tap "Enable alerts on this device" first.'; return; }
+                const res = await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ secret: ALERT_SECRET, notification: { title: '\u23f0 Test alert', body: 'If you can read this, closed-app alerts work on this device.', tag: 'test-push', url: '/admin.html' }, subscriptions: subscriptions }) });
+                const out = await res.json().catch(function(){ return {}; });
+                status.innerHTML = '<span style="color:#7CFC9A;">Test push sent to ' + (out.sent != null ? out.sent : subscriptions.length) + ' device(s). Lock the screen \u2014 it should still arrive.</span>';
+            } catch (e) { console.error(e); status.innerText = 'Test push failed: ' + (e && e.message ? e.message : e); }
         };
         notifInit();
 
