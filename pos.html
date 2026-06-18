@@ -102,6 +102,10 @@
         .takeaway-btn:active { background: white; color: var(--brand-bg); }
 
         .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 15px; }
+        .upi-status { min-height: 22px; font-size: 0.95rem; font-weight: 700; margin: 6px 0 2px; text-align: center; }
+        .upi-status.waiting { color: #8a6d3b; animation: upiPulse 1.2s ease-in-out infinite; }
+        .upi-status.verified { color: #1b7f3b; }
+        @keyframes upiPulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
         .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; text-transform: uppercase; letter-spacing: 1px; border: none;}
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
@@ -294,8 +298,9 @@
             <h3>Scan</h3>
             <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">₹0</p>
             <img id="qr-image" src="" alt="QR">
+            <div id="upi-status" class="upi-status"></div>
             <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Confirm Payment</button></div>
-            <button class="close-modal" onclick="closeModal('upi-modal')">✖ CANCEL</button>
+            <button class="close-modal" onclick="cancelUPI()">✖ CANCEL</button>
         </div>
     </div>
 
@@ -457,7 +462,7 @@
             db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
         }
 
-        const CAFE_WEBSITE_LINK = "https://ilacafe.github.io"; 
+        const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "918882946526"; 
         
@@ -503,6 +508,7 @@
         window.pendingItemName = ""; window.pendingItemPrice = 0; window.isBeveragePending = false; 
         window.checkoutTableID = ""; window.currentTransactionType = ""; window.currentPastBillID = null;
         window.pendingUPIAmount = 0; window.currentPaymentMethod = "UPI"; 
+        window.upiWatchSince = 0; window.upiWatchRef = null; window.upiSettling = false; window.upiMatchedInfo = null;
         
         window.currentModifierName = ""; window.currentModifierPrice = 0;
 
@@ -547,7 +553,7 @@
                 orderType: tableID === 'Takeaway' ? 'Takeaway' : 'Dine-in',
                 tableOrAddress: tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID,
                 notes: tableData.notes || "",
-                payment: { method: method, total: tableData.total },
+                payment: { method: method, total: tableData.total, verified: !!(tableData._lastPay), ref: (tableData._lastPay && tableData._lastPay.ref) || null, payer: (tableData._lastPay && tableData._lastPay.payer) || null },
                 items: tableData.items
             };
             db.ref('orders/history/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)).set(archivePacket);
@@ -1137,7 +1143,7 @@
             tableData.paid = paid + amountToPay;
             
             if (tableData.paid >= total) {
-                archivePOSTable(window.checkoutTableID, tableData, "Cash");
+                tableData._lastPay = null; archivePOSTable(window.checkoutTableID, tableData, "Cash");
                 delete window.activeTables[window.checkoutTableID]; syncToCloud(window.checkoutTableID); 
                 closeModal('checkout-modal'); closeModal('split-bill-modal');
             } else {
@@ -1165,26 +1171,93 @@
             document.getElementById('upi-amount-text').innerText = `₹${amountToPay}`;
             
             closeModal('checkout-modal'); closeModal('split-bill-modal'); document.getElementById('upi-modal').classList.add('active');
+            startUPIWatch(amountToPay);
         };
 
-        window.confirmUPIPayment = function() {
-            let amountToPay = parseFloat(window.pendingUPIAmount) || 0;
-            const tableData = window.activeTables[window.checkoutTableID];
-            let total = parseFloat(tableData.total) || 0;
-            let paid = parseFloat(tableData.paid) || 0;
-
-            const reason = window.checkoutTableID === 'Takeaway' ? 'Takeaway (UPI)' : `Table ${window.checkoutTableID} (UPI)`;
-            
-            addLedgerEntry('upi_income', amountToPay, reason); 
+        // ---- UPI auto-verification ------------------------------------------
+        // While the QR is on screen we watch payments/incoming for a credit of
+        // the exact amount that landed in this window. The first device to CLAIM
+        // a credit (atomic transaction on payments/claims/{ref}) owns it, so one
+        // payment can never confirm two orders. Manual "Confirm Payment" stays as
+        // the fallback for the slow tail and accounts that don't alert in time.
+        function setUPIStatus(state, info){
+            const el = document.getElementById('upi-status'); if(!el) return;
+            if (state === 'waiting'){ el.className = 'upi-status waiting'; el.innerText = '● Waiting for payment…'; }
+            else if (state === 'verified'){ el.className = 'upi-status verified'; el.innerText = '✓ Received' + (info && info.payer ? ' — ' + info.payer : '') + ' · ₹' + (info ? info.amount : ''); }
+            else { el.className = 'upi-status'; el.innerText = ''; }
+        }
+        function stopUPIWatch(){
+            if (window.upiWatchRef){ try { window.upiWatchRef.q.off('child_added', window.upiWatchRef.handler); } catch(e){} window.upiWatchRef = null; }
+        }
+        function startUPIWatch(amount){
+            stopUPIWatch();
+            window.upiSettling = false; window.upiMatchedInfo = null;
+            window.upiWatchSince = Date.now() - 90000;   // accept a credit up to 90s before the QR opened
+            setUPIStatus('waiting');
+            const q = db.ref('payments/incoming').orderByChild('at').startAt(window.upiWatchSince);
+            const handler = snap => {
+                if (window.upiSettling) return;
+                const p = snap.val(); if(!p) return;
+                if (Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5) return;   // amount must match
+                claimPayment(snap.key, p, won => { if (won && !window.upiSettling) autoConfirmUPI({ ref:snap.key, payer:p.payer||null, amount:p.amount, source:p.source||null }); });
+            };
+            q.on('child_added', handler);
+            window.upiWatchRef = { q, handler };
+        }
+        function claimPayment(ref, p, cb){
+            const token = 'pos-' + (window.checkoutTableID||'?') + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+            db.ref('payments/claims/' + ref).transaction(
+                curr => (curr === null ? token : undefined),   // claim only if unclaimed, else abort
+                (err, committed, snap) => { cb(!err && committed && snap && snap.val() === token); }
+            );
+        }
+        function autoConfirmUPI(info){
+            if (window.upiSettling) return;
+            window.upiSettling = true; stopUPIWatch();
+            window.upiMatchedInfo = info;
+            setUPIStatus('verified', info);
+            if (navigator.vibrate) navigator.vibrate([60,40,120]);
+            setTimeout(() => settleUPI(info), 900);   // let the cashier see the tick before the modal closes
+        }
+        function settleUPI(info){
+            const tableID = window.checkoutTableID;
+            const tableData = window.activeTables[tableID];
+            if (!tableData){ closeModal('upi-modal'); return; }
+            const amountToPay = parseFloat(window.pendingUPIAmount) || 0;
+            const total = parseFloat(tableData.total) || 0;
+            const paid = parseFloat(tableData.paid) || 0;
+            const reason = tableID === 'Takeaway' ? 'Takeaway (UPI)' : `Table ${tableID} (UPI)`;
+            addLedgerEntry('upi_income', amountToPay, reason);
             tableData.paid = paid + amountToPay;
-
-            if (tableData.paid >= total) {
-                archivePOSTable(window.checkoutTableID, tableData, "UPI");
-                delete window.activeTables[window.checkoutTableID]; syncToCloud(window.checkoutTableID); 
-                closeModal('upi-modal'); 
+            tableData._lastPay = info || null;   // archive records verification provenance
+            if (tableData.paid >= total){
+                archivePOSTable(tableID, tableData, "UPI");
+                delete window.activeTables[tableID]; syncToCloud(tableID);
+                closeModal('upi-modal');
             } else {
-                syncToCloud(window.checkoutTableID); closeModal('upi-modal'); window.openCheckout(window.checkoutTableID);
+                syncToCloud(tableID); closeModal('upi-modal'); window.openCheckout(tableID);
             }
+        }
+        window.cancelUPI = function(){ stopUPIWatch(); window.upiSettling = false; setUPIStatus(null); closeModal('upi-modal'); };
+        // Manual fallback: claim a matching credit if one is already in, otherwise
+        // settle as an un-verified manual confirm (the cashier is vouching for it).
+        window.confirmUPIPayment = function(){
+            if (window.upiSettling) return;
+            const amount = parseFloat(window.pendingUPIAmount) || 0;
+            const since = window.upiWatchSince || (Date.now() - 600000);
+            db.ref('payments/incoming').orderByChild('at').startAt(since).once('value', snap => {
+                if (window.upiSettling) return;
+                const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5) cand.push({ key:ch.key, p }); });
+                const tryNext = i => {
+                    if (window.upiSettling) return;
+                    if (i >= cand.length){ window.upiSettling = true; stopUPIWatch(); settleUPI(null); return; }   // nothing claimable → manual unverified
+                    claimPayment(cand[i].key, cand[i].p, won => {
+                        if (won && !window.upiSettling){ window.upiSettling = true; stopUPIWatch(); const p = cand[i].p; settleUPI({ ref:cand[i].key, payer:p.payer||null, amount:p.amount, source:p.source||null }); }
+                        else tryNext(i+1);
+                    });
+                };
+                tryNext(0);
+            });
         };
 
         function addLedgerEntry(type, amount, reason) {
