@@ -388,25 +388,9 @@
             appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
         };
         firebase.initializeApp(firebaseConfig);
-        // Disk persistence MUST be set before any database call. Keeps the POS usable
-        // through connectivity drops and survives an app restart with writes still queued.
-        try { firebase.database().setPersistenceEnabled(true); } catch (e) { /* already set / unsupported */ }
         const db = firebase.database();
-        // Keep the paths the till reads constantly warm in the local cache so they're
-        // instant on reopen and intact offline.
-        try {
-            db.ref('menu').keepSynced(true);
-            db.ref('settings').keepSynced(true);
-            db.ref('pos/activeTables').keepSynced(true);
-            db.ref('staff').keepSynced(true);
-        } catch (e) { /* keepSynced unavailable offline-first load */ }
 
         const auth = firebase.auth();
-        // Device clocks drift. This is the server's clock minus this device's, in ms.
-        // We add it whenever we need "true" now() — notably the UPI match window.
-        window.serverTimeOffset = 0;
-        db.ref('.info/serverTimeOffset').on('value', s => { window.serverTimeOffset = s.val() || 0; });
-        function serverNow(){ return Date.now() + (window.serverTimeOffset || 0); }
         window.currentStaff = { uid: null, name: null, role: null };
         function showLogin(msg) {
             document.getElementById('login-overlay').classList.remove('hidden');
@@ -1212,7 +1196,7 @@
         function startUPIWatch(amount){
             stopUPIWatch();
             window.upiSettling = false; window.upiMatchedInfo = null;
-            window.upiWatchSince = serverNow() - 90000;   // accept a credit up to 90s before the QR opened (server-corrected clock)
+            window.upiWatchSince = Date.now() - 90000;   // accept a credit up to 90s before the QR opened
             setUPIStatus('waiting');
             const q = db.ref('payments/incoming').orderByChild('at').startAt(window.upiWatchSince);
             const handler = snap => {
@@ -1264,7 +1248,7 @@
         window.confirmUPIPayment = function(){
             if (window.upiSettling) return;
             const amount = parseFloat(window.pendingUPIAmount) || 0;
-            const since = window.upiWatchSince || (serverNow() - 600000);
+            const since = window.upiWatchSince || (Date.now() - 600000);
             db.ref('payments/incoming').orderByChild('at').startAt(since).once('value', snap => {
                 if (window.upiSettling) return;
                 const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5) cand.push({ key:ch.key, p }); });
