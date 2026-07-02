@@ -262,6 +262,8 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        // register the shared service worker (push + instant-open caching)
+        if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.js').catch(function(){}); } catch(e){} }
 
         /* ===== ILA ETA + ORDER STATUS (customer view) ===== */
         (function(){
