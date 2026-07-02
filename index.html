@@ -110,7 +110,26 @@
             <div id="table-badge"></div>
         </header>
 
-        <div id="usual-order-container" style="display: none;">
+        <div id="order-status-banner" style="display:none; margin:12px 0; border-radius:14px; overflow:hidden; border:1px solid rgba(141,110,82,0.35); background:linear-gradient(135deg,#fbf6ee,#f1e7d2);">
+            <div style="padding:16px 18px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                    <span style="font-weight:800; text-transform:uppercase; letter-spacing:2px; font-size:0.85rem; color:#8D6E52;">Your Order</span>
+                    <span id="status-eta-chip" style="font-weight:700; font-size:0.9rem; color:#5a4a38; background:rgba(141,110,82,0.12); padding:4px 10px; border-radius:20px; display:none;"></span>
+                </div>
+                <!-- progress steps -->
+                <div style="display:flex; align-items:center; gap:5px; margin-bottom:10px;">
+                    <div class="status-step" data-step="received" style="flex:1; height:6px; border-radius:3px; background:#8D6E52;"></div>
+                    <div class="status-step" data-step="queue" style="flex:1; height:6px; border-radius:3px; background:rgba(141,110,82,0.2);"></div>
+                    <div class="status-step" data-step="preparing" style="flex:1; height:6px; border-radius:3px; background:rgba(141,110,82,0.2);"></div>
+                    <div class="status-step" data-step="ready" style="flex:1; height:6px; border-radius:3px; background:rgba(141,110,82,0.2);"></div>
+                </div>
+                <div id="status-label" style="font-size:1.05rem; font-weight:700; color:#3a2f24;">Order received</div>
+                <div id="status-sub" style="font-size:0.85rem; color:#6a5b48; margin-top:2px;"></div>
+                <div id="status-oven-note" style="display:none; font-size:0.82rem; color:#a05a2c; margin-top:8px; padding:7px 10px; background:rgba(224,122,44,0.08); border-radius:8px; border:1px solid rgba(224,122,44,0.2);">🔥 The oven's warming up for your pizza — thanks for your patience.</div>
+                <button id="status-dismiss" onclick="window.dismissStatus()" style="display:none; margin-top:12px; width:100%; padding:10px; border:none; border-radius:10px; background:#8D6E52; color:#fff; font-weight:700; cursor:pointer;">Done</button>
+            </div>
+        </div>
+
             <div class="usual-box" onclick="window.loadUsualOrder()">
                 <div style="font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Reorder Your Usual</div>
                 <div id="usual-order-desc" style="font-size: 0.9rem; opacity: 0.7;"></div>
@@ -244,6 +263,254 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+
+        /* ===== ILA ETA + ORDER STATUS (customer view) ===== */
+        (function(){
+            const ETA_DEF = {
+                itemBase:{"margherita":5.9,"marc":7.3,"al funghi":7.4,"pesto burrata":8.7,"fire vodka":7.3,"quattro":8.0,"garlic bread":8.0,"espresso":3.6,"cortado":3.8,"americano":4.0,"iced americano":4.5,"cappuccino (large)":6.3,"cappuccino":5.3,"iced latte (large)":6.3,"iced latte":5.2,"latte":5.8,"flat white":6.5,"matcha":8.0,"iced matcha":8.5,"tea pot":4.4,"iced tea":5.2,"cold brew":4.0,"carrot cake":3.0,"banana bread":2.8,"rose cake":2.9},
+                fallback:{pizza:7.5,hotfood:8.0,drink:5.5,baked:3.1},
+                pizzaKeys:["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"],
+                bakedKeys:["cake","bread","banana"],
+                ovenCurve:[[0,0],[10,0],[15,6],[20,6],[30,12],[45,14],[60,13],[120,13],[180,20]],
+                satCurveChef:[[0,7],[2,7],[4,10],[7,22],[8,23]],
+                satCurveBarista:[[0,0],[1,0],[3,4],[6,5],[7,8]],
+                qtyCurve:[[1,0],[2,4],[4,9],[5,15]],
+                cushionDrinkByLoad:[[0,4],[3,9],[5,11]], cushionPizzaByOven:[[0,4.7],[10,4.7],[20,9],[45,8],[60,7]],
+                cushionHotfood:5, cushionBaked:2, maxQuote:32, rangeWidth:5
+            };
+            let MODEL = ETA_DEF;
+            try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && m.itemBase) MODEL=m; }); } catch(e){}
+            let loadChef=0, loadBar=0, lastPizzaOut=0;
+            try {
+                db.ref('orders/active/chef').on('value', s=>{ loadChef=s.numChildren(); });
+                db.ref('orders/active/barista').on('value', s=>{ loadBar=s.numChildren(); });
+                db.ref('orders/ready').limitToLast(40).on('value', s=>{ let last=0; s.forEach(c=>{const v=c.val()||{}; if(v.items&&v.timestamp&&v.timestamp>last&&isPizza(v.items))last=v.timestamp;}); if(last)lastPizzaOut=last; });
+            } catch(e){}
+
+            // ===== LIVE KITCHEN TEMPO (conservative, smoothed, NON-jumpy) =====
+            // Measures whether the kitchen is currently completing orders faster/slower than the
+            // model expects, and nudges the estimate accordingly. FIVE independent anti-jump guards:
+            //  (1) MEDIAN of recent ratios (one outlier can't move it)
+            //  (2) needs >=6 recent completions, else stays exactly 1.0 (no adjustment)
+            //  (3) hard CLAMP 0.85-1.25 (can never swing the ETA more than that)
+            //  (4) exponential smoothing vs previous value (drifts, never jumps)
+            //  (5) applied ONLY to the load/oven portion, never the base item time or cushion
+            let kitchenTempo = 1.0;                 // the smoothed multiplier (1.0 = on pace)
+            const TEMPO_WINDOW_MS = 45*60000;       // look at completions in the last 45 min
+            const TEMPO_MIN_SAMPLES = 6;            // fewer than this -> no adjustment (stay 1.0)
+            const TEMPO_CLAMP_LO = 0.85, TEMPO_CLAMP_HI = 1.25;
+            const TEMPO_SMOOTH = 0.25;              // low = very smooth (new reading only 25% weight)
+            // rough per-order expected time (base + oven + load) for the ratio — mirrors the model
+            function tempoExpected(items, doneAt){
+                const st={chef:{base:0,pizza:false},bar:{base:0}};
+                for(const nm in (items||{})){ const b=itemBase(nm); if(isPizza(nm)){ if(b>st.chef.base)st.chef.base=b; st.chef.pizza=true; } else if(b>st.bar.base) st.bar.base=b; }
+                let t = Math.max(st.chef.base, st.bar.base);
+                if(t<=0) return null;
+                return t; // conservative: compare actual to the pure base pace (load/oven are what we're detecting)
+            }
+            function recomputeTempo(snap){
+                const now = Date.now();
+                const ratios=[];
+                snap.forEach(ch=>{
+                    const o=ch.val()||{};
+                    if(!o.completedAt || !o.createdAt) return;
+                    if(now - o.completedAt > TEMPO_WINDOW_MS) return;   // only recent
+                    const dur=(o.completedAt-o.createdAt)/60000;
+                    if(dur<1 || dur>60) return;                        // sanity
+                    const exp=tempoExpected(o.items, o.completedAt);
+                    if(exp && exp>0) ratios.push(dur/exp);
+                });
+                let target;
+                if(ratios.length >= TEMPO_MIN_SAMPLES){
+                    ratios.sort((a,b)=>a-b);
+                    let med = ratios[Math.floor(ratios.length/2)];
+                    target = Math.max(TEMPO_CLAMP_LO, Math.min(TEMPO_CLAMP_HI, med));
+                } else {
+                    target = 1.0;   // not enough signal -> neutral
+                }
+                // exponential smoothing: drift toward target, never jump
+                kitchenTempo = TEMPO_SMOOTH*target + (1-TEMPO_SMOOTH)*kitchenTempo;
+            }
+            try {
+                // watch recent completions from BOTH stations for the tempo signal
+                db.ref('orders/completed/chef').limitToLast(30).on('value', recomputeTempo);
+                db.ref('orders/completed/barista').limitToLast(30).on('value', recomputeTempo);
+            } catch(e){}
+            window.custKitchenTempo = function(){ return kitchenTempo; };
+
+            function interp(c,x){ if(!c||!c.length)return 0; if(x<=c[0][0])return c[0][1]; if(x>=c[c.length-1][0])return c[c.length-1][1]; for(let i=1;i<c.length;i++){if(x<=c[i][0]){const[a,b]=c[i-1],[d,e]=c[i];return b+(e-b)*(x-a)/(d-a);}} return c[c.length-1][1]; }
+            function lc(s){return(s||'').toLowerCase();}
+            function isPizza(o){ const n=(typeof o==='string')?lc(o):Object.keys(o||{}).join(' ').toLowerCase(); return MODEL.pizzaKeys.some(k=>n.includes(k)); }
+            function isBaked(name){ return MODEL.bakedKeys.some(k=>lc(name).includes(k)); }
+            function itemBase(name){ const n=lc(name); let best=null,bl=-1; for(const k in MODEL.itemBase){if(n.includes(k)&&k.length>bl){best=MODEL.itemBase[k];bl=k.length;}} if(best!=null)return best; if(isPizza(name))return MODEL.fallback.pizza; if(isBaked(name))return MODEL.fallback.baked; return MODEL.fallback.drink; }
+            // expose live oven-idle (minutes since last pizza out) for honest status messaging
+            window.custOvenIdleMin = function(){ return lastPizzaOut ? Math.max(0,(Date.now()-lastPizzaOut)/60000) : 999; };
+            // whole-order estimate (range), splitting pizza->chef else barista
+            window.custEstimateETA = function(items){
+                const st={chef:{base:0,qty:0,pizza:false,bakedOnly:true},barista:{base:0,qty:0,pizza:false,bakedOnly:true}};
+                let any=false;
+                for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const station=isPizza(nm)?'chef':'barista'; const b=itemBase(nm); if(b>st[station].base)st[station].base=b; st[station].qty+=q; if(isPizza(nm))st[station].pizza=true; if(!isBaked(nm))st[station].bakedOnly=false; any=true; }
+                if(!any)return null;
+                const idle = lastPizzaOut ? Math.max(0,(Date.now()-lastPizzaOut)/60000) : 999;
+                const tempo = (typeof kitchenTempo==='number' && kitchenTempo>0) ? kitchenTempo : 1.0;
+                // stt: base is FIXED (physical prep); the load+oven additions reflect CURRENT kitchen
+                // state, so ONLY those are scaled by live tempo (guard #5). Base and cushion untouched.
+                function stt(s,key){
+                    if(s.base===0&&s.qty===0)return 0;
+                    let conditionAdd = interp(MODEL.qtyCurve,s.qty);
+                    if(s.pizza) conditionAdd += interp(MODEL.ovenCurve,idle);
+                    conditionAdd += interp(key==='chef'?MODEL.satCurveChef:MODEL.satCurveBarista, key==='chef'?loadChef:loadBar);
+                    return s.base + conditionAdd*tempo;   // tempo nudges only the condition-driven part
+                }
+                const chefT=stt(st.chef,'chef'), barT=stt(st.barista,'barista');
+                let domCat; if(chefT>=barT&&(st.chef.base>0||st.chef.qty>0)){domCat=st.chef.pizza?'pizza':'hotfood';}else{domCat=st.barista.bakedOnly?'baked':'drink';}
+                const point=Math.max(chefT,barT);
+                // cushion: live from conditions (drink->load, pizza->oven), dessert flat (data-justified)
+                let cush;
+                if(domCat==='pizza'||domCat==='hotfood'){ cush=interp(MODEL.cushionPizzaByOven||[[0,5]], idle); if(loadChef>=5)cush+=2; if(domCat==='hotfood')cush=MODEL.cushionHotfood!=null?MODEL.cushionHotfood:cush; }
+                else if(domCat==='baked'){ cush=MODEL.cushionBaked!=null?MODEL.cushionBaked:2; }
+                else { cush=interp(MODEL.cushionDrinkByLoad||[[0,4]], loadBar); }
+                let quote=Math.min(point+cush, MODEL.maxQuote||32);
+                const low=Math.max(3,Math.round(quote-(MODEL.rangeWidth||5)/2)), high=Math.round(quote+(MODEL.rangeWidth||5)/2);
+                return { low, high, label: low+'–'+high+' min' };
+            };
+
+            // ----- status watcher -----
+            let statusRef=null, etaTimer=null, queueRef=null;
+            function setSteps(stage){
+                const order=['received','queue','preparing','ready'];
+                // map both received->first, queue->second, preparing->third, ready->fourth
+                const idx=order.indexOf(stage);
+                document.querySelectorAll('.status-step').forEach(el=>{
+                    const i=order.indexOf(el.getAttribute('data-step'));
+                    el.style.background = (i<=idx && i>=0) ? '#8D6E52' : 'rgba(141,110,82,0.2)';
+                });
+            }
+            function showLiveETA(items){
+                const chip=document.getElementById('status-eta-chip');
+                const eta=window.custEstimateETA(items);
+                if(eta && chip){ chip.textContent='⏱ ~'+eta.label; chip.style.display='inline-block'; }
+                // honest cold-oven note: only if the order needs the oven AND it's genuinely cold (>=30m idle)
+                const note=document.getElementById('status-oven-note');
+                if(note){
+                    const hasPizza = Object.keys(items||{}).some(n=>{ const x=n.toLowerCase(); return MODEL.pizzaKeys.some(k=>x.includes(k)); });
+                    const idle = window.custOvenIdleMin();
+                    note.style.display = (hasPizza && idle >= 30) ? 'block' : 'none';
+                }
+            }
+            // count orders ahead of this one at its station (truthful queue position, no kitchen work)
+            function showQueuePosition(items){
+                const sub=document.getElementById('status-sub');
+                const hasPizza = Object.keys(items||{}).some(n=>{ const x=n.toLowerCase(); return MODEL.pizzaKeys.some(k=>x.includes(k)); });
+                const ahead = hasPizza ? loadChef : loadBar;
+                if(ahead > 1){ sub.textContent = (ahead-1) + (ahead-1===1?' order':' orders') + ' ahead of yours'; }
+                else { sub.textContent = "Next up — starting soon"; }
+            }
+            window.dismissStatus=function(){
+                localStorage.removeItem('ila_track_id'); localStorage.removeItem('ila_track_items'); localStorage.removeItem('ila_track_started');
+                if(statusRef){ statusRef.off(); statusRef=null; } if(etaTimer){clearInterval(etaTimer);etaTimer=null;}
+                document.getElementById('order-status-banner').style.display='none';
+            };
+            // bind the banner to a given track record (by id)
+            function bindStatus(trackId, items){
+                const banner=document.getElementById('order-status-banner');
+                banner.style.display='block';
+                const label=document.getElementById('status-label'), sub=document.getElementById('status-sub'),
+                      chip=document.getElementById('status-eta-chip'), dismiss=document.getElementById('status-dismiss');
+                if(statusRef) statusRef.off();
+                statusRef=db.ref('orders/track/'+trackId);
+                statusRef.on('value', s=>{
+                    const t=s.val();
+                    if(!t){ return; }
+                    const trackItems = items || t.items || {};
+                    if(t.status==='rejected'){
+                        // café declined the order — tell the customer instead of leaving them waiting
+                        document.querySelectorAll('.status-step').forEach(el=>{ el.style.background='rgba(180,60,40,0.25)'; });
+                        label.textContent='Order not accepted';
+                        sub.textContent='Sorry — the café couldn\u2019t take this order. Please check with staff or try again.';
+                        chip.style.display='none';
+                        const note=document.getElementById('status-oven-note'); if(note) note.style.display='none';
+                        dismiss.style.display='block';
+                        if(etaTimer){clearInterval(etaTimer);etaTimer=null;}
+                        return;
+                    }
+                    if(t.status==='received'){
+                        setSteps('received'); label.textContent='Order received'; sub.textContent='Waiting for the café to confirm…';
+                        chip.style.display='none'; dismiss.style.display='none';
+                        showLiveETA(trackItems);
+                    } else if(t.status==='preparing'){
+                        // distinguish "in queue" (orders ahead) from "being made" — both truthful from load signal
+                        const hasPizza = Object.keys(trackItems).some(n=>{ const x=n.toLowerCase(); return MODEL.pizzaKeys.some(k=>x.includes(k)); });
+                        const ahead = hasPizza ? loadChef : loadBar;
+                        const partial = (t.stations||1) > 1 && (t.stationsDone||0) > 0 && (t.stationsDone||0) < (t.stations||1);
+                        // brief "accepted" confirmation in the first ~8s after the café accepts
+                        const justAccepted = t.acceptedAt && (Date.now() - t.acceptedAt < 8000);
+                        if(justAccepted && !partial){
+                            setSteps('queue'); label.textContent='✓ Order accepted'; sub.textContent='The café has your order.';
+                        } else if(partial){
+                            setSteps('preparing'); label.textContent='Almost ready'; sub.textContent='Part of your order is done — finishing the rest.';
+                        } else if(ahead > 1){
+                            setSteps('queue'); label.textContent='In the queue';
+                            showQueuePosition(trackItems);
+                        } else {
+                            setSteps('preparing'); label.textContent='Preparing your order'; sub.textContent='Our kitchen is on it.';
+                        }
+                        chip.style.display='inline-block'; dismiss.style.display='none';
+                        showLiveETA(trackItems);
+                        if(!etaTimer) etaTimer=setInterval(()=>{ showLiveETA(trackItems);
+                            // refresh queue/preparing label live too
+                            const hp = Object.keys(trackItems).some(n=>{ const x=n.toLowerCase(); return MODEL.pizzaKeys.some(k=>x.includes(k)); });
+                            const ah = hp ? loadChef : loadBar;
+                            const pt = (t.stations||1) > 1 && (t.stationsDone||0) > 0 && (t.stationsDone||0) < (t.stations||1);
+                            if(pt){ setSteps('preparing'); document.getElementById('status-label').textContent='Almost ready'; document.getElementById('status-sub').textContent='Part of your order is done — finishing the rest.'; }
+                            else if(ah>1){ setSteps('queue'); document.getElementById('status-label').textContent='In the queue'; showQueuePosition(trackItems); }
+                            else { setSteps('preparing'); document.getElementById('status-label').textContent='Preparing your order'; document.getElementById('status-sub').textContent='Our kitchen is on it.'; }
+                        }, 15000);
+                    } else if(t.status==='ready'){
+                        setSteps('ready'); label.textContent='Ready! 🎉'; sub.textContent='Your order is ready.';
+                        chip.style.display='none'; dismiss.style.display='block';
+                        const note=document.getElementById('status-oven-note'); if(note) note.style.display='none';
+                        if(etaTimer){clearInterval(etaTimer);etaTimer=null;}
+                    }
+                });
+            }
+            window.watchOrderStatus=function(){
+                const trackId=localStorage.getItem('ila_track_id');
+                if(trackId){
+                    const items=JSON.parse(localStorage.getItem('ila_track_items')||'{}');
+                    const started=parseInt(localStorage.getItem('ila_track_started')||'0');
+                    if(started && Date.now()-started > 2*3600*1000){ window.dismissStatus(); return; }
+                    bindStatus(trackId, items);
+                    return;
+                }
+                // no personal order — but if a table is in the URL, try to find an active order for that table
+                window.tryTableScan();
+            };
+            // table-scan: find the most recent active (preparing) order for the scanned table
+            window.tryTableScan=function(){
+                const params=new URLSearchParams(location.search);
+                const tbl=params.get('table');
+                if(!tbl) return;
+                const tableLabel='Table '+tbl;
+                db.ref('orders/track').orderByChild('table').equalTo(tableLabel).limitToLast(5).once('value', s=>{
+                    const recs=s.val(); if(!recs) return;
+                    // pick the most recent non-ready (or most recent overall) record
+                    let pick=null, pickKey=null, pickTime=0;
+                    Object.keys(recs).forEach(k=>{
+                        const r=recs[k]; const tm=r.acceptedAt||r.createdAt||0;
+                        // prefer active orders; skip ones already dismissed/ready long ago
+                        if(r.status!=='ready' && tm>pickTime){ pick=r; pickKey=k; pickTime=tm; }
+                    });
+                    // if all are ready, optionally show the latest ready (so they see "ready")
+                    if(!pick){ Object.keys(recs).forEach(k=>{ const r=recs[k]; const tm=r.readyAt||r.acceptedAt||0; if(tm>pickTime){pick=r;pickKey=k;pickTime=tm;} }); }
+                    if(pick && pickKey){
+                        // only show if reasonably recent (within 2h)
+                        if(pickTime && Date.now()-pickTime < 2*3600*1000){ bindStatus(pickKey, pick.items||{}); }
+                    }
+                });
+            };
+        })();
+        /* ===== END ILA ETA + ORDER STATUS ===== */
 
         // Anonymous auth is only needed to WRITE the order. Keep it lazy and crash-proof so a
         // missing/slow auth library can never stop the menu (which reads public data) from rendering.
@@ -543,8 +810,18 @@
             localStorage.setItem('ila_last_order', JSON.stringify(window.cart)); localStorage.setItem('ila_last_amount', window.totalAmount); localStorage.setItem('ila_last_order_type', info.type); 
             if (info.type === 'Delivery') { localStorage.setItem('ila_last_address', document.getElementById('delivery-address').value.trim()); }
 
+            // tracking id so the customer can watch this order's status + live ETA
+            const trackId = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+            const orderItemsSnapshot = JSON.parse(JSON.stringify(window.cart));
+            localStorage.setItem('ila_track_id', trackId);
+            localStorage.setItem('ila_track_items', JSON.stringify(orderItemsSnapshot));
+            localStorage.setItem('ila_track_started', Date.now());
+
             ensureAuth().then(() => {
-                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI" });
+                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", trackId: trackId });
+                // seed a status record the POS will advance as the order progresses
+                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: info.details, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                if (window.watchOrderStatus) window.watchOrderStatus();
             }).catch(() => alert("Couldn't place the order — check your connection and try again."));
 
             let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
@@ -559,6 +836,7 @@
         };
 
         updateCartUI(); 
+        if (window.watchOrderStatus) window.watchOrderStatus();
     </script>
 </body>
 </html>
