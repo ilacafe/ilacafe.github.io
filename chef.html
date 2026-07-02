@@ -120,7 +120,69 @@
                 await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ secret: ALERT_SECRET, notification: { title: '\u23f0 Order overdue', body: body, tag: 'late-' + id, url: '/admin.html' }, subscriptions: subscriptions }) });
             } catch (e) { console.error('push alert failed', e); }
         }
-        function kdsThresholdMs(qty){ return (KDS_SLA_MIN + Math.min(Math.max(0, (qty||1) - 2) * 5, 20)) * 60000; }
+        // ===== SMART overdue threshold — fires relative to THIS order's realistic prep time =====
+        // Reads coefficients from eta/model (same config the POS uses); falls back to defaults.
+        // Alarm = expected prep (point estimate, NOT the customer cushion) + PER-CATEGORY margin (below).
+        // So a coffee flags late quickly; a cold-oven/rush pizza gets proportionally more grace.
+        window.etaModel = null;
+        try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && m.itemBase) window.etaModel = m; }); } catch(e){}
+        // live signals this station needs
+        window.kdsLoadChef = 0;
+        window.kdsLastPizzaOutMs = 0;
+        try {
+            db.ref('orders/active/chef').on('value', s => { window.kdsLoadChef = s.numChildren(); });
+            db.ref('orders/ready').limitToLast(40).on('value', s => {
+                let last=0; s.forEach(ch=>{ const v=ch.val()||{}; if(v.items && v.timestamp && v.timestamp>last && etaIsPizza(v.items)) last=v.timestamp; });
+                if(last) window.kdsLastPizzaOutMs = last;
+            });
+        } catch(e){}
+        // defaults mirror the POS engine (used until eta/model loads)
+        const KDS_ETA_DEF = {
+            itemBase:{"margherita":5.9,"marc":7.3,"al funghi":7.4,"pesto burrata":8.7,"fire vodka":7.3,"quattro":8.0,"garlic bread":8.0},
+            fallback:{pizza:7.5,hotfood:8.0,drink:5.5,baked:3.1},
+            pizzaKeys:["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"],
+            bakedKeys:["cake","bread","banana"],
+            ovenCurve:[[0,0],[10,0],[15,6],[20,6],[30,12],[45,14],[60,13],[120,13],[180,20]],
+            satCurveChef:[[0,7],[2,7],[4,10],[7,22],[8,23]],
+            qtyCurve:[[1,0],[2,4],[4,9],[5,15]]
+        };
+        function etaCfg(){ return window.etaModel || KDS_ETA_DEF; }
+        function etaInterp(c,x){ if(!c||!c.length)return 0; if(x<=c[0][0])return c[0][1]; if(x>=c[c.length-1][0])return c[c.length-1][1]; for(let i=1;i<c.length;i++){ if(x<=c[i][0]){ const[a,b]=c[i-1],[d,e]=c[i]; return b+(e-b)*(x-a)/(d-a);} } return c[c.length-1][1]; }
+        function etaIsPizza(items){ const M=etaCfg(); const n=Object.keys(items||{}).join(' ').toLowerCase(); return M.pizzaKeys.some(k=>n.includes(k)); }
+        function etaItemBase(name){ const M=etaCfg(), n=(name||'').toLowerCase(); let best=null,bl=-1; for(const k in M.itemBase){ if(n.includes(k)&&k.length>bl){best=M.itemBase[k];bl=k.length;} } if(best!=null)return best; if(M.pizzaKeys.some(k=>n.includes(k)))return M.fallback.pizza; if(M.bakedKeys.some(k=>n.includes(k)))return M.fallback.baked; return M.fallback.hotfood; }
+        // expected chef-side prep time for an order's items (this station only)
+        function kdsExpectedPrep(items){
+            const M=etaCfg();
+            let base=0, qty=0, pizza=false;
+            for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const b=etaItemBase(nm); if(b>base)base=b; qty+=q; if(M.pizzaKeys.some(k=>nm.toLowerCase().includes(k)))pizza=true; }
+            if(base===0&&qty===0) return null;
+            let t=base + etaInterp(M.qtyCurve,qty);
+            if(pizza){ const idle = window.kdsLastPizzaOutMs ? Math.max(0,(Date.now()-window.kdsLastPizzaOutMs)/60000) : 999; t += etaInterp(M.ovenCurve, idle); }
+            t += etaInterp(M.satCurveChef, window.kdsLoadChef||0);
+            return t;
+        }
+        // SMART threshold: realistic prep + PER-CATEGORY margin (p95 residual spread, not flat).
+        // Margin = how far past the expected time an order must go to be genuinely stuck, by category.
+        const KDS_LATE_MARGIN = { pizza: 8, hotfood: 8, drink: 7, baked: 3 };
+        function kdsDominantCat(items){
+            const M=etaCfg(); let pizza=false, hot=false, allBaked=true, hasDrink=false;
+            for(const nm in (items||{})){ const n=nm.toLowerCase();
+                if(M.pizzaKeys.some(k=>n.includes(k))) pizza=true; else hot=true;
+                if(!M.bakedKeys.some(k=>n.includes(k))) allBaked=false;
+            }
+            if(pizza) return 'pizza';
+            if(allBaked) return 'baked';
+            return 'hotfood';   // chef non-pizza
+        }
+        function kdsThresholdMs(qty, items){
+            const exp = items ? kdsExpectedPrep(items) : null;
+            if (exp != null) {
+                const cat = kdsDominantCat(items);
+                const margin = (KDS_LATE_MARGIN[cat] != null) ? KDS_LATE_MARGIN[cat] : 8;
+                return (exp + margin) * 60000;
+            }
+            return (40 + Math.min(Math.max(0, (qty||1) - 2) * 5, 20)) * 60000;  // fallback
+        }
         function kdsQty(order){ let q = 0; if (order && order.items) { for (const k in order.items) { q += (parseInt(order.items[k].qty) || 0); } } return q || 1; }
         function kdsTicketStart(order){
             if (order && typeof order.createdAt === 'number') return order.createdAt;
@@ -132,9 +194,12 @@
             const now = Date.now();
             for (const id in window.kdsTickets) {
                 const t = window.kdsTickets[id]; if (!t || !t.start) continue;
-                const age = now - t.start, over = age > kdsThresholdMs(t.qty), mins = Math.floor(age / 60000);
+                const age = now - t.start, over = age > kdsThresholdMs(t.qty, t.items), mins = Math.floor(age / 60000);
                 const card = document.getElementById('ticket-' + id), el = document.getElementById('elapsed-' + id);
-                if (el) el.innerText = mins + 'm';
+                if (el) {
+                    if (t._expM == null) { const e = kdsExpectedPrep(t.items); t._expM = (e!=null) ? Math.round(e) : null; }
+                    el.innerText = mins + 'm' + (t._expM!=null ? ' / ~' + t._expM + 'm' : '');
+                }
                 if (card) { if (over) card.classList.add('overdue'); else card.classList.remove('overdue'); }
                 if (over && !window.kdsAlarmed[id]) { window.kdsAlarmed[id] = true; kdsBeep(); kdsPushAlert(id, t); }
             }
@@ -175,7 +240,7 @@
                     }
                     let notesHTML = order.notes ? `<div class="ticket-notes">Notes: ${escapeHTML(order.notes)}</div>` : "";
                     board.innerHTML += `<div class="ticket-card" id="ticket-${id}"><div class="ticket-header"><div class="ticket-dest">${escapeHTML(order.destination)}</div><div class="ticket-meta"><span class="ticket-time">${escapeHTML(order.time)}</span><span>${escapeHTML(order.source)} &middot; <span class="ticket-elapsed" id="elapsed-${id}"></span></span></div></div><div class="ticket-items">${itemsHTML}</div>${notesHTML}<button class="btn-done" onclick="markOrderDone('${id}')">DONE</button></div>`;
-                    window.kdsTickets[id] = { start: kdsTicketStart(order), qty: kdsQty(order), dest: order.destination || '', summary: order.items ? Object.keys(order.items).map(function(k){ return order.items[k].qty + '\u00d7 ' + k; }).join(', ') : '' };
+                    window.kdsTickets[id] = { start: kdsTicketStart(order), qty: kdsQty(order), dest: order.destination || '', items: order.items || {}, summary: order.items ? Object.keys(order.items).map(function(k){ return order.items[k].qty + '\u00d7 ' + k; }).join(', ') : '' };
                 }
                 for (const aid in window.kdsAlarmed) { if (!(aid in window.kdsTickets)) delete window.kdsAlarmed[aid]; }
                 kdsCheckOverdue();
@@ -196,7 +261,19 @@
                     timestamp: Date.now()
                 };
                 db.ref('orders/ready').push(readySignal);
-                db.ref('orders/completed/chef/' + id).set(order);
+                db.ref('orders/completed/chef/' + id).set({ ...order, completedAt: Date.now() });
+                // mark track ready only when ALL stations for this order are done (handles split orders)
+                if (order.trackId) {
+                    try {
+                        const tref = db.ref('orders/track/' + order.trackId);
+                        tref.transaction(function(cur){
+                            if(!cur) return cur;
+                            cur.stationsDone = (cur.stationsDone||0) + 1;
+                            if(cur.stationsDone >= (cur.stations||1)){ cur.status='ready'; cur.readyAt=Date.now(); }
+                            return cur;
+                        });
+                    } catch(e){}
+                }
                 const ticket = document.getElementById('ticket-' + id);
                 if(ticket) { ticket.style.opacity = '0'; ticket.style.transform = 'scale(0.95)'; ticket.style.transition = 'all 0.2s'; }
                 setTimeout(() => { db.ref('orders/active/chef/' + id).remove(); }, 200);
