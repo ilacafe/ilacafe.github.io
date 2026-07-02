@@ -120,7 +120,42 @@
                 await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ secret: ALERT_SECRET, notification: { title: '\u23f0 Order overdue', body: body, tag: 'late-' + id, url: '/admin.html' }, subscriptions: subscriptions }) });
             } catch (e) { console.error('push alert failed', e); }
         }
-        function kdsThresholdMs(qty){ return (KDS_SLA_MIN + Math.min(Math.max(0, (qty||1) - 2) * 5, 20)) * 60000; }
+        // ===== SMART overdue threshold — fires relative to THIS drink order's realistic prep time =====
+        // Drinks have NO oven; uses the barista saturation curve. Alarm = expected prep + PER-CATEGORY margin.
+        window.etaModel = null;
+        try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && m.itemBase) window.etaModel = m; }); } catch(e){}
+        window.kdsLoadBarista = 0;
+        try { db.ref('orders/active/barista').on('value', s => { window.kdsLoadBarista = s.numChildren(); }); } catch(e){}
+        const KDS_ETA_DEF = {
+            itemBase:{"espresso":3.6,"cortado":3.8,"americano":4.0,"iced americano":4.5,"cappuccino (large)":6.3,"cappuccino":5.3,"iced latte (large)":6.3,"iced latte":5.2,"latte":5.8,"flat white":6.5,"matcha":8.0,"iced matcha":8.5,"tea pot":4.4,"iced tea":5.2,"cold brew":4.0,"carrot cake":3.0,"banana bread":2.8,"rose cake":2.9},
+            fallback:{pizza:7.5,hotfood:8.0,drink:5.5,baked:3.1},
+            pizzaKeys:["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"],
+            bakedKeys:["cake","bread","banana"],
+            satCurveBarista:[[0,0],[1,0],[3,4],[6,5],[7,8]],
+            qtyCurve:[[1,0],[2,4],[4,9],[5,15]]
+        };
+        function etaCfg(){ return window.etaModel || KDS_ETA_DEF; }
+        function etaInterp(c,x){ if(!c||!c.length)return 0; if(x<=c[0][0])return c[0][1]; if(x>=c[c.length-1][0])return c[c.length-1][1]; for(let i=1;i<c.length;i++){ if(x<=c[i][0]){ const[a,b]=c[i-1],[d,e]=c[i]; return b+(e-b)*(x-a)/(d-a);} } return c[c.length-1][1]; }
+        function etaItemBase(name){ const M=etaCfg(), n=(name||'').toLowerCase(); let best=null,bl=-1; for(const k in M.itemBase){ if(n.includes(k)&&k.length>bl){best=M.itemBase[k];bl=k.length;} } if(best!=null)return best; if(M.bakedKeys.some(k=>n.includes(k)))return M.fallback.baked; return M.fallback.drink; }
+        function kdsExpectedPrep(items){
+            const M=etaCfg();
+            let base=0, qty=0;
+            for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const b=etaItemBase(nm); if(b>base)base=b; qty+=q; }
+            if(base===0&&qty===0) return null;
+            let t=base + etaInterp(M.qtyCurve,qty);
+            t += etaInterp(M.satCurveBarista, window.kdsLoadBarista||0);   // no oven term for drinks
+            return t;
+        }
+        function kdsThresholdMs(qty, items){
+            const exp = items ? kdsExpectedPrep(items) : null;
+            if (exp != null) {
+                const M=etaCfg(); let allBaked=true;
+                for(const nm in (items||{})){ if(!M.bakedKeys.some(k=>nm.toLowerCase().includes(k))) allBaked=false; }
+                const margin = allBaked ? 3 : 7;   // dessert p95 spread vs drink p95 spread
+                return (exp + margin) * 60000;
+            }
+            return (20 + Math.min(Math.max(0, (qty||1) - 2) * 5, 20)) * 60000;  // fallback
+        }
         function kdsQty(order){ let q = 0; if (order && order.items) { for (const k in order.items) { q += (parseInt(order.items[k].qty) || 0); } } return q || 1; }
         function kdsTicketStart(order){
             if (order && typeof order.createdAt === 'number') return order.createdAt;
@@ -132,9 +167,12 @@
             const now = Date.now();
             for (const id in window.kdsTickets) {
                 const t = window.kdsTickets[id]; if (!t || !t.start) continue;
-                const age = now - t.start, over = age > kdsThresholdMs(t.qty), mins = Math.floor(age / 60000);
+                const age = now - t.start, over = age > kdsThresholdMs(t.qty, t.items), mins = Math.floor(age / 60000);
                 const card = document.getElementById('ticket-' + id), el = document.getElementById('elapsed-' + id);
-                if (el) el.innerText = mins + 'm';
+                if (el) {
+                    if (t._expM == null) { const e = kdsExpectedPrep(t.items); t._expM = (e!=null) ? Math.round(e) : null; }
+                    el.innerText = mins + 'm' + (t._expM!=null ? ' / ~' + t._expM + 'm' : '');
+                }
                 if (card) { if (over) card.classList.add('overdue'); else card.classList.remove('overdue'); }
                 if (over && !window.kdsAlarmed[id]) { window.kdsAlarmed[id] = true; kdsBeep(); kdsPushAlert(id, t); }
             }
@@ -175,7 +213,7 @@
                     }
                     let notesHTML = order.notes ? `<div class="ticket-notes">Notes: ${escapeHTML(order.notes)}</div>` : "";
                     board.innerHTML += `<div class="ticket-card" id="ticket-${id}"><div class="ticket-header"><div class="ticket-dest">${escapeHTML(order.destination)}</div><div class="ticket-meta"><span class="ticket-time">${escapeHTML(order.time)}</span><span>${escapeHTML(order.source)} &middot; <span class="ticket-elapsed" id="elapsed-${id}"></span></span></div></div><div class="ticket-items">${itemsHTML}</div>${notesHTML}<button class="btn-done" onclick="markOrderDone('${id}')">DONE</button></div>`;
-                    window.kdsTickets[id] = { start: kdsTicketStart(order), qty: kdsQty(order), dest: order.destination || '', summary: order.items ? Object.keys(order.items).map(function(k){ return order.items[k].qty + '\u00d7 ' + k; }).join(', ') : '' };
+                    window.kdsTickets[id] = { start: kdsTicketStart(order), qty: kdsQty(order), dest: order.destination || '', items: order.items || {}, summary: order.items ? Object.keys(order.items).map(function(k){ return order.items[k].qty + '\u00d7 ' + k; }).join(', ') : '' };
                 }
                 for (const aid in window.kdsAlarmed) { if (!(aid in window.kdsTickets)) delete window.kdsAlarmed[aid]; }
                 kdsCheckOverdue();
@@ -196,7 +234,19 @@
                     timestamp: Date.now()
                 };
                 db.ref('orders/ready').push(readySignal);
-                db.ref('orders/completed/barista/' + id).set(order);
+                db.ref('orders/completed/barista/' + id).set({ ...order, completedAt: Date.now() });
+                // mark track ready only when ALL stations for this order are done (handles split orders)
+                if (order.trackId) {
+                    try {
+                        const tref = db.ref('orders/track/' + order.trackId);
+                        tref.transaction(function(cur){
+                            if(!cur) return cur;
+                            cur.stationsDone = (cur.stationsDone||0) + 1;
+                            if(cur.stationsDone >= (cur.stations||1)){ cur.status='ready'; cur.readyAt=Date.now(); }
+                            return cur;
+                        });
+                    } catch(e){}
+                }
                 const ticket = document.getElementById('ticket-' + id);
                 if(ticket) { ticket.style.opacity = '0'; ticket.style.transform = 'scale(0.95)'; ticket.style.transition = 'all 0.2s'; }
                 setTimeout(() => { db.ref('orders/active/barista/' + id).remove(); }, 200);
