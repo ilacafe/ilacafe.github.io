@@ -213,6 +213,7 @@
     <div id="table-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Send Order</h3>
+            <div id="eta-estimate" style="text-align:center; font-size:0.95rem; font-weight:600; color:#6effa0; background:rgba(110,255,160,0.08); border:1px solid rgba(110,255,160,0.25); border-radius:8px; padding:10px; margin-bottom:12px; display:none;"></div>
             <textarea id="pos-order-notes" class="remark-input" placeholder="Order notes (e.g. To-go cup, extra hot...)" style="height: 50px; resize: none; margin-top: 5px; margin-bottom: 15px;"></textarea>
             
             <div class="table-grid" id="sender-table-grid"></div>
@@ -390,7 +391,195 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        /* ===== ILA ETA ENGINE (config-driven; numbers live in eta/model, no rebuild needed) ===== */
+        /* ===================== ILA ETA ENGINE ===================== */
+        (function(){
+          // ---- 1. DEFAULT COEFFICIENTS (provisional, from reconstruction) ----
+          // These seed eta/model on first run. Recalibration overwrites them later.
+          // Everything the formula needs is here — change numbers here OR in Firebase, never the logic.
+          const ETA_DEFAULTS = {
+            version: 1,
+            updatedAt: 0,
+            // per-item HOT base times (minutes). Keys matched case-insensitively, substring.
+            itemBase: {
+              "margherita": 5.9, "marc": 7.3, "al funghi": 7.4, "pesto burrata": 8.7, "fire vodka": 7.3,
+              "quattro": 8.0, "garlic bread": 8.0,
+              "espresso": 3.6, "cortado": 3.8, "americano": 4.0, "iced americano": 4.5,
+              "cappuccino (large)": 6.3, "cappuccino": 5.3, "iced latte (large)": 6.3, "iced latte": 5.2,
+              "latte": 5.8, "flat white": 6.5, "matcha": 8.0, "iced matcha": 8.5,
+              "tea pot": 4.4, "iced tea": 5.2, "cold brew": 4.0,
+              "carrot cake": 3.0, "banana bread": 2.8, "rose cake": 2.9
+            },
+            // category fallbacks when an item isn't found above
+            fallback: { pizza: 7.5, hotfood: 8.0, drink: 5.5, baked: 3.1 },
+            // names that identify a pizza (for oven applicability + pizza fallback)
+            pizzaKeys: ["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"],
+            bakedKeys: ["cake","bread","banana"],
+            // oven cooling: minutes-since-last-pizza-out -> ADDED minutes (delta from hot base)
+            // piecewise, interpolated. Last point plateaus.
+            ovenCurve: [ [0,0],[10,0],[15,6],[20,6],[30,12],[45,14],[60,13],[120,13],[180,20] ],
+            // saturation is STATION-SPECIFIC: orders-ahead-cooking -> ADDED minutes.
+            // chef/pizza carries a floor (~+6) from overlapping pizzas the ahead-count under-captures.
+            // barista/drinks has NO floor — a lone drink is just its base time.
+            satCurveChef:    [ [0,7],[2,7],[4,10],[7,22],[8,23] ],
+            satCurveBarista: [ [0,0],[1,0],[3,4],[6,5],[7,8] ],
+            // quantity within a station: total items -> ADDED minutes
+            qtyCurve:  [ [1,0],[2,4],[4,9],[5,15] ],
+            // cushion — a CURVE evaluated live, not a flat number. The residual spread (how much to pad
+            // for ~85% on-time) GROWS with conditions: a busy drink or a cooling-oven pizza is far less
+            // predictable than a quiet/hot one. Data-derived:
+            //   drinks: spread scales with LOAD  (quiet ~4 -> busy ~11)
+            //   pizza:  spread scales with OVEN IDLE (hot ~4.7 -> cooling ~9)
+            //   dessert: genuinely stable (~2) once 'served after food' excluded -> flat is correct here
+            cushionDrinkByLoad: [ [0,4], [3,9], [5,11] ],
+            cushionPizzaByOven: [ [0,4.7], [10,4.7], [20,9], [45,8], [60,7] ],
+            cushionHotfood: 5,     // hot food: thin data, single sensible value
+            cushionBaked: 2,       // desserts: data shows stable spread -> flat justified
+            maxQuote: 32,       // never display more than this (min); overruns caught by overdue alarm
+            rangeWidth: 5       // width of the displayed range
+          };
+        
+          // ---- 2. LOAD CONFIG FROM FIREBASE (fall back to defaults), keep live ----
+          window.etaModel = ETA_DEFAULTS;
+          try {
+            db.ref('eta/model').on('value', s => {
+              const m = s.val();
+              if (m && m.itemBase) window.etaModel = m;       // use live config when present
+              else db.ref('eta/model').set(ETA_DEFAULTS);     // seed it once if empty
+            });
+          } catch(e){ /* offline: defaults stand */ }
+        
+          // ---- 3. HELPERS ----
+          function interp(curve, x){            // piecewise-linear, plateau beyond ends
+            if (!curve || !curve.length) return 0;
+            if (x <= curve[0][0]) return curve[0][1];
+            if (x >= curve[curve.length-1][0]) return curve[curve.length-1][1];
+            for (let i=1;i<curve.length;i++){
+              if (x <= curve[i][0]){
+                const [x0,y0]=curve[i-1], [x1,y1]=curve[i];
+                return y0 + (y1-y0)*(x-x0)/(x1-x0);
+              }
+            }
+            return curve[curve.length-1][1];
+          }
+          function lc(s){ return (s||"").toLowerCase(); }
+          function isPizza(name){ return window.etaModel.pizzaKeys.some(k=>lc(name).includes(k)); }
+          function isBaked(name){ return window.etaModel.bakedKeys.some(k=>lc(name).includes(k)); }
+          function itemBaseTime(name){
+            const M = window.etaModel, n = lc(name);
+            // exact-ish: longest matching key wins (so "cappuccino (large)" beats "cappuccino")
+            let best=null, bestLen=-1;
+            for (const k in M.itemBase){ if (n.includes(k) && k.length>bestLen){ best=M.itemBase[k]; bestLen=k.length; } }
+            if (best!=null) return best;
+            if (isPizza(name)) return M.fallback.pizza;
+            if (isBaked(name)) return M.fallback.baked;
+            return M.fallback.drink;
+          }
+        
+          // ---- 4. LIVE SIGNALS (read from the running DB state) ----
+          // load ahead per station = count of orders currently in orders/active/{station}
+          window.etaLoad = { chef: 0, barista: 0 };
+          window.etaLastPizzaOutMs = 0;
+          try {
+            db.ref('orders/active/chef').on('value', s => { window.etaLoad.chef = s.numChildren(); });
+            db.ref('orders/active/barista').on('value', s => { window.etaLoad.barista = s.numChildren(); });
+            // most recent pizza completion -> for oven idle. orders/ready carries items + timestamp.
+            db.ref('orders/ready').limitToLast(40).on('value', s => {
+              let last = 0;
+              s.forEach(ch => {
+                const v = ch.val()||{};
+                if (v.items && isPizza(v.items) && v.timestamp && v.timestamp>last) last = v.timestamp;
+              });
+              if (last) window.etaLastPizzaOutMs = last;
+            });
+          } catch(e){}
+        
+          function serverNowSafe(){ return (typeof serverNow==='function') ? serverNow() : Date.now(); }
+        
+          // ---- 5. THE ESTIMATE ----
+          // cartObj: { itemName: {qty, ...} }   (defaults to window.cart)
+          // returns { low, high, point, label } minutes
+          window.estimateETA = function(cartObj){
+            const M = window.etaModel;
+            const cart = cartObj || window.cart || {};
+            const route = window.itemRoutingMap || {};
+        
+            // split items by station, track per-station slowest base + total qty + any pizza + baked-only
+            const st = { chef:{base:0,qty:0,pizza:false,bakedOnly:true,has:false}, barista:{base:0,qty:0,pizza:false,bakedOnly:true,has:false} };
+            let any=false;
+            for (const name in cart){
+              const qty = (cart[name].qty)||1;
+              const station = route[name]==='chef' ? 'chef' : (route[name]==='barista' ? 'barista' : (isPizza(name)?'chef':'barista'));
+              const b = itemBaseTime(name);
+              if (b > st[station].base) st[station].base = b;   // slowest item sets the station floor (parallel)
+              st[station].qty += qty;
+              st[station].has = true;
+              if (isPizza(name)) st[station].pizza = true;
+              if (!isBaked(name)) st[station].bakedOnly = false;  // a non-baked item disqualifies baked-only
+              any=true;
+            }
+            if (!any) return null;
+        
+            // per-station total = base + qty penalty + (oven if pizza) + saturation
+            const idleMin = window.etaLastPizzaOutMs ? Math.max(0,(serverNowSafe()-window.etaLastPizzaOutMs)/60000) : 999;
+            function stationTime(s, key){
+              if (s.base===0 && s.qty===0) return 0;
+              let t = s.base;
+              t += interp(M.qtyCurve, s.qty);
+              if (s.pizza) t += interp(M.ovenCurve, idleMin);
+              const satCurve = (key==='chef') ? M.satCurveChef : M.satCurveBarista;
+              t += interp(satCurve, (window.etaLoad[key]||0));
+              return t;
+            }
+            // determine the DOMINANT category (the one driving the estimate) for cushion selection
+            function categoryOf(s, isChef){
+              if (s.pizza) return 'pizza';
+              if (isChef) return 'hotfood';
+              return 'drink';
+            }
+            // figure which station won, and whether its items are baked-only
+            const chefT = stationTime(st.chef,'chef'), barT = stationTime(st.barista,'barista');
+            let domCat;
+            if (chefT >= barT && (st.chef.base>0||st.chef.qty>0)) {
+              domCat = st.chef.pizza ? 'pizza' : 'hotfood';
+            } else {
+              // barista won (or only barista) — distinguish baked desserts from drinks
+              domCat = st.barista.bakedOnly ? 'baked' : 'drink';
+            }
+            const point = Math.max(chefT, barT);
+        
+            // cushion: evaluated LIVE from the conditions that drive unpredictability (not a flat number).
+            // pizza/hotfood -> by oven idle; drink -> by live load; dessert -> stable flat (data-justified).
+            let cush;
+            if (domCat === 'pizza' || domCat === 'hotfood') {
+              cush = interp(M.cushionPizzaByOven || [[0,5]], idleMin);
+              // heavy load adds a little more spread on top (pizza gets less predictable under backlog)
+              const ld = window.etaLoad ? (window.etaLoad.chef||0) : 0;
+              if (ld >= 5) cush += 2;
+              if (domCat === 'hotfood') cush = M.cushionHotfood != null ? M.cushionHotfood : cush;
+            } else if (domCat === 'baked') {
+              cush = M.cushionBaked != null ? M.cushionBaked : 2;
+            } else { // drink
+              const ld = window.etaLoad ? (window.etaLoad.barista||0) : 0;
+              cush = interp(M.cushionDrinkByLoad || [[0,4]], ld);
+            }
+            let quote = point + cush;
+            quote = Math.min(quote, M.maxQuote||32);
+        
+            const low = Math.max(3, Math.round(quote - (M.rangeWidth||5)/2));
+            const high = Math.round(quote + (M.rangeWidth||5)/2);
+            return { low, high, point: Math.round(point), label: low + "–" + high + " min" };
+          };
+        })();
+        /* =================== END ILA ETA ENGINE =================== */
+
+
         const auth = firebase.auth();
+        // Device clocks drift. This is the server's clock minus this device's, in ms.
+        // We add it whenever we need "true" now() — notably the UPI match window.
+        window.serverTimeOffset = 0;
+        db.ref('.info/serverTimeOffset').on('value', s => { window.serverTimeOffset = s.val() || 0; });
+        function serverNow(){ return Date.now() + (window.serverTimeOffset || 0); }
         window.currentStaff = { uid: null, name: null, role: null };
         function showLogin(msg) {
             document.getElementById('login-overlay').classList.remove('hidden');
@@ -599,7 +788,7 @@
             if (!order) return;
             
             try {
-                dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App");
+                dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App", order.trackId || null);
             } catch(e) { console.error("Kitchen dispatch error", e); }
 
             addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`);
@@ -631,6 +820,11 @@
 
         window.rejectWebOrder = function(id) {
             if(confirm("Reject this web order?")) {
+                const order = window.pendingWebOrders[id];
+                // tell the customer their order was declined (otherwise their app waits forever)
+                if (order && order.trackId) {
+                    try { db.ref('orders/track/' + order.trackId).update({ status: 'rejected', rejectedAt: firebase.database.ServerValue.TIMESTAMP }); } catch(e){}
+                }
                 db.ref('orders/pendingWeb/' + id).remove();
                 delete window.pendingWebOrders[id];
                 if(Object.keys(window.pendingWebOrders).length === 0) closeModal('web-orders-modal');
@@ -932,7 +1126,7 @@
             }
         };
 
-        function dispatchToKitchen(cartObj, destination, notes, source) {
+        function dispatchToKitchen(cartObj, destination, notes, source, trackId) {
             let baristaItems = {}; let chefItems = {};
             for (let itemName in cartObj) {
                 let baseName = itemName.split(" (")[0]; 
@@ -941,12 +1135,40 @@
                 else { baristaItems[itemName] = cartObj[itemName]; }
             }
             const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            // every order gets a track record (POS-entered orders too) so a table-scan can find its status.
+            if (!trackId) trackId = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+            const extra = { trackId: trackId };
             if (Object.keys(baristaItems).length > 0) {
-                db.ref('orders/active/barista').push({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                db.ref('orders/active/barista').push(Object.assign({ items: baristaItems, destination: destination, notes: notes, source: source, time: timeStr, createdAt: firebase.database.ServerValue.TIMESTAMP }, extra));
             }
             if (Object.keys(chefItems).length > 0) {
-                db.ref('orders/active/chef').push({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                db.ref('orders/active/chef').push(Object.assign({ items: chefItems, destination: destination, notes: notes, source: source, time: timeStr, createdAt: firebase.database.ServerValue.TIMESTAMP }, extra));
             }
+            // track record: status starts at 'preparing' here (it's being dispatched to the kitchen now).
+            // Record how many stations this order spans, so it only shows 'ready' when ALL are done.
+            const stationCount = (Object.keys(chefItems).length>0?1:0) + (Object.keys(baristaItems).length>0?1:0);
+            // log the prediction + live conditions for later predicted-vs-actual monitoring (joins with readyAt)
+            let predBlock = {};
+            try {
+                const _eta = window.estimateETA ? window.estimateETA(cartObj) : null;
+                if (_eta) {
+                    predBlock = {
+                        predLow: _eta.low, predHigh: _eta.high, predPoint: _eta.point,
+                        predOvenIdleMin: (window.etaLastPizzaOutMs ? Math.round(Math.max(0,(Date.now()-window.etaLastPizzaOutMs)/60000)) : null),
+                        predLoadChef: (window.etaLoad ? window.etaLoad.chef : null),
+                        predLoadBarista: (window.etaLoad ? window.etaLoad.barista : null),
+                        predModelVersion: (window.etaModel ? window.etaModel.version : null)
+                    };
+                }
+            } catch(e){}
+            try {
+                db.ref('orders/track/' + trackId).update(Object.assign({
+                    status: 'preparing', items: cartObj, table: destination,
+                    stations: stationCount, stationsDone: 0,
+                    acceptedAt: firebase.database.ServerValue.TIMESTAMP
+                }, predBlock));
+            } catch(e){}
+            return trackId;
         }
 
         window.sendOrder = function(tableID) {
@@ -991,6 +1213,13 @@
         window.openTableModal = function() {
             if (window.totalItems === 0) return alert("Cart is empty!");
             document.getElementById('pos-order-notes').value = "";
+            // Show the live prep-time estimate for the current cart before sending
+            try {
+                const eta = window.estimateETA ? window.estimateETA(window.cart) : null;
+                const box = document.getElementById('eta-estimate');
+                if (eta && box) { box.textContent = "⏱ Est. ready in ~" + eta.label; box.style.display = 'block'; }
+                else if (box) { box.style.display = 'none'; }
+            } catch(e){ /* estimate is best-effort; never block sending */ }
             const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
             for (let i = 1; i <= 10; i++) {
                 const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
@@ -1196,7 +1425,7 @@
         function startUPIWatch(amount){
             stopUPIWatch();
             window.upiSettling = false; window.upiMatchedInfo = null;
-            window.upiWatchSince = Date.now() - 90000;   // accept a credit up to 90s before the QR opened
+            window.upiWatchSince = serverNow() - 90000;   // accept a credit up to 90s before the QR opened (server-corrected clock)
             setUPIStatus('waiting');
             const q = db.ref('payments/incoming').orderByChild('at').startAt(window.upiWatchSince);
             const handler = snap => {
@@ -1248,7 +1477,7 @@
         window.confirmUPIPayment = function(){
             if (window.upiSettling) return;
             const amount = parseFloat(window.pendingUPIAmount) || 0;
-            const since = window.upiWatchSince || (Date.now() - 600000);
+            const since = window.upiWatchSince || (serverNow() - 600000);
             db.ref('payments/incoming').orderByChild('at').startAt(since).once('value', snap => {
                 if (window.upiSettling) return;
                 const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5) cand.push({ key:ch.key, p }); });
@@ -1398,10 +1627,13 @@
                 });
                 var _eodBills = Array.isArray(window.pastBills) ? window.pastBills.length : 0;
                 var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income') _eodExp += (parseFloat(e.amount) || 0); });
-                posSendPush({ title: '\ud83d\udccb EOD \u2014 ' + staffName, body: 'UPI \u20b9' + Math.round(safeUPI) + ' \u00b7 Cash \u20b9' + Math.round(safeCash) + ' \u00b7 ' + _eodBills + ' bills' + (_eodExp ? ' \u00b7 Exp \u20b9' + Math.round(_eodExp) : ''), tag: 'eod', url: '/admin.html' });
+                // IMPORTANT: await the push so it actually completes before we navigate to WhatsApp.
+                // (Previously this was fire-and-forget and the wa.me redirect 300ms later aborted the
+                //  in-flight Firebase read + Worker POST, so the EOD notification usually never sent.)
+                await posSendPush({ title: '\ud83d\udccb EOD \u2014 ' + staffName, body: 'UPI \u20b9' + Math.round(safeUPI) + ' \u00b7 Cash \u20b9' + Math.round(safeCash) + ' \u00b7 ' + _eodBills + ' bills' + (_eodExp ? ' \u00b7 Exp \u20b9' + Math.round(_eodExp) : ''), tag: 'eod', url: '/admin.html' });
                 window.activeTables = {}; window.upiTotal = 0; window.salesLedger = []; window.pastBills = [];
                 closeModal('cash-modal');
-                setTimeout(() => { window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`; }, 300);
+                window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(report)}`;
             }
         };
 
