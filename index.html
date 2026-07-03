@@ -794,6 +794,7 @@
             window.currentOrderInfo = { type, details, notes }; closeModal('checkout-modal'); document.getElementById('payment-amount').innerText = window.totalAmount;
             
             const selectedUPI = window.getRandomUPI();
+            window.currentOrderInfo.upiId = selectedUPI;   // carried on the order so the POS can attribute the payment
             const upiString = `upi://pay?pa=${selectedUPI}&pn=ILA&am=${window.totalAmount}&cu=INR`;
             
             document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
@@ -819,7 +820,7 @@
             localStorage.setItem('ila_track_started', Date.now());
 
             ensureAuth().then(() => {
-                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", trackId: trackId });
+                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: info.upiId || null, trackId: trackId });
                 // seed a status record the POS will advance as the order progresses
                 db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: info.details, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 if (window.watchOrderStatus) window.watchOrderStatus();
