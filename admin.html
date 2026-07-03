@@ -179,7 +179,7 @@
             
             <div class="form-group checkbox-group" style="border: 1px solid rgba(255,255,255,0.2); padding: 10px; border-radius: 6px;">
                 <input type="checkbox" id="add-has-sizes" style="width: 18px; height: 18px;" onchange="toggleSizeInputs()">
-                <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Item has Regular & Large sizes</label>
+                <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Item has Regular &amp; Large sizes</label>
             </div>
 
             <div class="row-group" id="single-price-group" style="display: flex;">
@@ -254,11 +254,18 @@
         
         <div class="admin-card" style="margin-bottom: 25px;">
             <h2>UPI Routing</h2>
+            <p class="rec-note">Payments spread across these UPI IDs in proportion to remaining monthly headroom — an ID that hits its cap stops receiving until the 1st, and the mix continuously rebalances. Totals count confirmed settlements from the POS.</p>
+            <div class="form-group" style="margin-bottom: 10px;"><input type="text" id="upi-new-id" placeholder="VPA — e.g. name@okaxis"></div>
             <div class="row-group" style="margin-bottom: 15px;">
-                <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="add-upi-id" placeholder="e.g. cafe@ybl"></div>
-                <button class="btn btn-secondary" style="flex: 1;" onclick="addUPI()">Add UPI</button>
+                <div class="form-group" style="flex: 1.3; margin: 0;"><input type="text" id="upi-new-label" placeholder="Label (e.g. HDFC S)"></div>
+                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="upi-new-cap" placeholder="Cap ₹/mo (0 = none)"></div>
+                <button class="btn btn-secondary" style="flex: 0.7;" onclick="upiAdd()">Add</button>
             </div>
-            <div id="upi-list-container"></div>
+            <div id="upi-routing-list"><p style="opacity:0.5; font-size:0.9rem;">Loading...</p></div>
+            <details style="margin-top: 16px;">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Month history</summary>
+                <div id="upi-history" style="margin-top: 8px;"></div>
+            </details>
         </div>
 
         <div class="admin-card" style="margin-bottom: 25px;">
@@ -443,6 +450,7 @@
             renderInventoryManager();
             populateRecipeDropdowns();
         });
+        loadUPIRouting();
         }
 
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
@@ -629,31 +637,163 @@
         window.changeRole = function(uid, role) { db.ref('users/' + uid + '/role').set(role); };
         window.removeAccess = function(uid, name) { if (!confirm(`Remove ${name}'s access? They won't be able to use any app.`)) return; db.ref('users/' + uid).remove(); };
 
-        // --- NEW UPI ROUTING SYSTEM ---
-        let currentUPIs = ["sraveen.chirania-1@okaxis"]; 
-        
-        db.ref('settings/upiList').on('value', snap => {
-            currentUPIs = snap.val() || ["sraveen.chirania-1@okaxis"];
-            const container = document.getElementById('upi-list-container');
-            container.innerHTML = "";
-            currentUPIs.forEach((upi, index) => {
-                container.innerHTML += `<div class="list-item"><div><strong>${upi}</strong></div><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeUPI(${index})">✖</button></div>`;
-            });
-        });
-
-        window.addUPI = function() {
-            const val = document.getElementById('add-upi-id').value.trim();
-            if(val && !currentUPIs.includes(val)) {
-                currentUPIs.push(val);
-                db.ref('settings/upiList').set(currentUPIs);
-                document.getElementById('add-upi-id').value = "";
+        // ===== CAPACITY-AWARE UPI ROUTING =====
+        // upiRouting/config = the IDs, labels, monthly caps, active flags (admin-managed, staff-readable)
+        // upiRouting/totals/{YYYY-MM} = confirmed rupees routed to each ID this month (written by POS)
+        // settings/upiList = DERIVED public weighted list the POS + customer app pick from:
+        //   each VPA repeated in proportion to remaining headroom; capped-out VPAs removed.
+        function upiKey(vpa){ return String(vpa || '').trim().toLowerCase().replace(/[.#$\[\]\/]/g, '_'); }
+        function upiMonthKey(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+        function upiComputeWeights(config, totals){
+            const entries = Object.keys(config || {}).map(k => { const c = config[k] || {}; return { key: k, id: c.id, label: c.label || c.id, cap: parseFloat(c.monthlyCap) || 0, active: c.active !== false, total: parseFloat((totals || {})[k]) || 0 }; }).filter(e => e.active && e.id);
+            if (!entries.length) return [];
+            const caps = entries.filter(e => e.cap > 0).map(e => e.cap);
+            const maxCap = caps.length ? Math.max.apply(null, caps) : 0;
+            const maxTotal = Math.max.apply(null, entries.map(e => e.total).concat([0]));
+            const elig = [];
+            for (const e of entries){
+                if (e.cap > 0){ const hr = e.cap - e.total; if (hr > 0) elig.push({ e: e, w: hr }); }
+                else { const w = maxCap > 0 ? Math.max(maxCap - e.total, maxCap * 0.1) : (maxTotal - e.total + 1000); elig.push({ e: e, w: w }); }
             }
-        };
+            if (!elig.length){
+                let best = null;
+                for (const e of entries){ const over = e.total - e.cap; if (!best || over < best.over) best = { e: e, over: over }; }
+                return best ? [{ e: best.e, w: 1 }] : [];
+            }
+            return elig;
+        }
+        function upiWeightedList(config, totals){
+            const elig = upiComputeWeights(config, totals);
+            if (!elig.length) return null;
+            if (elig.length === 1) return [elig[0].e.id];
+            const sum = elig.reduce((a, x) => a + x.w, 0) || 1;
+            const list = [];
+            elig.forEach(x => { const slots = Math.max(1, Math.round(12 * x.w / sum)); for (let i = 0; i < slots; i++) list.push(x.e.id); });
+            return list.slice(0, 24);
+        }
 
-        window.removeUPI = function(index) {
-            if(currentUPIs.length <= 1) return alert("You must have at least one active UPI ID.");
-            currentUPIs.splice(index, 1);
-            db.ref('settings/upiList').set(currentUPIs);
+        let upiCfg = {}, upiTot = {}, upiAllTot = {}, upiMigrated = false;
+        function loadUPIRouting(){
+            const mk = upiMonthKey();
+            db.ref('upiRouting/config').on('value', snap => {
+                upiCfg = snap.val() || {};
+                if (!Object.keys(upiCfg).length && !upiMigrated){
+                    upiMigrated = true;
+                    // one-time migration: seed config from the legacy plain settings/upiList
+                    db.ref('settings/upiList').once('value').then(s => {
+                        const legacy = Array.from(new Set(s.val() || [])).filter(Boolean);
+                        if (!legacy.length) return;
+                        const seed = {};
+                        legacy.forEach(v => { seed[upiKey(v)] = { id: v, label: String(v).split('@')[0], monthlyCap: 0, active: true }; });
+                        db.ref('upiRouting/config').set(seed);
+                    });
+                    return;
+                }
+                renderUPIRouting(); renderUPIHistory(); syncPublicUPIList();
+            });
+            db.ref('upiRouting/totals/' + mk).on('value', snap => { upiTot = snap.val() || {}; renderUPIRouting(); syncPublicUPIList(); });
+            db.ref('upiRouting/totals').on('value', snap => { upiAllTot = snap.val() || {}; renderUPIHistory(); });
+        }
+        function syncPublicUPIList(){
+            if (!Object.keys(upiCfg).length) return;
+            const list = upiWeightedList(upiCfg, upiTot);
+            if (!list || !list.length) return;
+            db.ref('settings/upiList').once('value').then(s => {
+                if (JSON.stringify(s.val() || []) !== JSON.stringify(list)) db.ref('settings/upiList').set(list);
+            });
+        }
+        function renderUPIRouting(){
+            const box = document.getElementById('upi-routing-list'); if (!box) return;
+            const keys = Object.keys(upiCfg);
+            if (!keys.length){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>No UPI IDs yet — add one above.</p>"; return; }
+            const day = Math.max(1, new Date().getDate());
+            const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+            let html = '';
+            keys.forEach(k => {
+                const c = upiCfg[k]; if (!c) return;
+                const cap = parseFloat(c.monthlyCap) || 0;
+                const total = parseFloat(upiTot[k]) || 0;
+                const active = c.active !== false;
+                let meta, barHTML = '';
+                if (cap > 0){
+                    const util = total / cap;
+                    const pct = Math.min(100, Math.round(util * 100));
+                    const col = util >= 1 ? 'rgba(244,67,54,0.85)' : (util >= 0.8 ? 'rgba(255,193,7,0.85)' : 'rgba(255,255,255,0.45)');
+                    let proj = '';
+                    if (total >= cap) proj = 'capped — resumes on the 1st';
+                    else { const rate = total / day; if (rate > 0){ const daysLeft = (cap - total) / rate; const hit = new Date(Date.now() + daysLeft * 86400000); const monthEnd = new Date(); monthEnd.setMonth(monthEnd.getMonth() + 1, 0); proj = hit <= monthEnd ? ('on pace to hit cap ~' + hit.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })) : "won't hit cap this month"; } }
+                    meta = inr(total) + ' of ' + inr(cap) + ' · ' + pct + '%' + (proj ? ' · ' + proj : '');
+                    barHTML = '<div style="height:6px; border-radius:3px; background:rgba(0,0,0,0.35); margin-top:8px; overflow:hidden;"><div style="height:100%; width:' + pct + '%; background:' + col + ';"></div></div>';
+                } else {
+                    meta = inr(total) + ' this month · no cap';
+                }
+                html += '<div class="list-item" style="display:block;' + (active ? '' : ' opacity:0.45;') + '">'
+                    + '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">'
+                    + '<div style="min-width:0;"><div class="item-name">' + escapeHTML(c.label || c.id) + (active ? '' : ' <span class="badge">Paused</span>') + '</div><div class="item-meta" style="word-break:break-all;">' + escapeHTML(c.id) + '</div></div>'
+                    + '<div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">'
+                    + '<label class="toggle-switch"><input type="checkbox" ' + (active ? 'checked' : '') + ' onchange="upiToggle(\'' + k + '\')"><span class="slider"></span></label>'
+                    + '<button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="upiRemove(\'' + k + '\')">✖</button>'
+                    + '</div></div>'
+                    + '<div style="display:flex; align-items:center; gap:10px; margin-top:10px;">'
+                    + '<label style="margin:0; flex-shrink:0;">Cap ₹/mo</label>'
+                    + '<input type="number" value="' + (cap || '') + '" placeholder="0 = no cap" style="flex:1; padding:8px;" onchange="upiSetCap(\'' + k + '\', this.value)">'
+                    + '</div>'
+                    + '<div class="item-meta" style="margin-top:8px;">' + meta + ' <button class="rec-mini" style="margin-left:6px;" onclick="upiAdjust(\'' + k + '\')">adjust</button></div>'
+                    + barHTML
+                    + '</div>';
+            });
+            box.innerHTML = html;
+        }
+        function renderUPIHistory(){
+            const box = document.getElementById('upi-history'); if (!box) return;
+            const months = Object.keys(upiAllTot || {}).sort().reverse();
+            if (!months.length){ box.innerHTML = "<p class='rec-note'>No history yet — totals build as UPI payments settle.</p>"; return; }
+            const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+            let html = '<table class="rec-table"><tbody>';
+            months.forEach(m => {
+                const t = upiAllTot[m] || {};
+                const parts = Object.keys(t).map(k => escapeHTML((upiCfg[k] && (upiCfg[k].label || upiCfg[k].id)) || k) + ' ' + inr(parseFloat(t[k]) || 0));
+                const sum = Object.keys(t).reduce((a, k) => a + (parseFloat(t[k]) || 0), 0);
+                html += '<tr><td style="white-space:nowrap;"><strong>' + escapeHTML(m) + '</strong></td><td>' + parts.join(' · ') + '</td><td class="num">' + inr(sum) + '</td></tr>';
+            });
+            box.innerHTML = html + '</tbody></table>';
+        }
+        window.upiAdd = function(){
+            const id = document.getElementById('upi-new-id').value.trim();
+            const label = document.getElementById('upi-new-label').value.trim();
+            const cap = parseFloat(document.getElementById('upi-new-cap').value) || 0;
+            if (!id || id.indexOf('@') < 1) return alert('Enter a valid VPA like name@bank.');
+            const k = upiKey(id);
+            if (upiCfg[k]) return alert('That UPI ID is already added.');
+            db.ref('upiRouting/config/' + k).set({ id: id, label: label || id.split('@')[0], monthlyCap: cap, active: true });
+            document.getElementById('upi-new-id').value = ''; document.getElementById('upi-new-label').value = ''; document.getElementById('upi-new-cap').value = '';
+        };
+        window.upiRemove = function(k){
+            const c = upiCfg[k]; if (!c) return;
+            const others = Object.keys(upiCfg).filter(x => x !== k && upiCfg[x] && upiCfg[x].active !== false);
+            if (!others.length) return alert('You need at least one active UPI ID.');
+            if (confirm('Remove ' + (c.label || c.id) + '? Its month history is kept.')) db.ref('upiRouting/config/' + k).remove();
+        };
+        window.upiToggle = function(k){
+            const c = upiCfg[k]; if (!c) return;
+            if (c.active !== false){
+                const others = Object.keys(upiCfg).filter(x => x !== k && upiCfg[x] && upiCfg[x].active !== false);
+                if (!others.length){ renderUPIRouting(); return alert('You need at least one active UPI ID.'); }
+            }
+            db.ref('upiRouting/config/' + k + '/active').set(c.active === false);
+        };
+        window.upiSetCap = function(k, val){
+            const cap = parseFloat(val) || 0;
+            db.ref('upiRouting/config/' + k + '/monthlyCap').set(cap);
+        };
+        window.upiAdjust = function(k){
+            const c = upiCfg[k]; if (!c) return;
+            const cur = Math.round(parseFloat(upiTot[k]) || 0);
+            const v = prompt('Received this month on ' + (c.label || c.id) + ' (\u20b9) \u2014 correct the counter if it\u2019s off:', cur);
+            if (v === null) return;
+            const n = parseFloat(v);
+            if (isNaN(n) || n < 0) return alert('Enter a valid amount.');
+            db.ref('upiRouting/totals/' + upiMonthKey() + '/' + k).set(n);
         };
 
         // --- DYNAMIC INVENTORY & RECIPE ENGINE ---
