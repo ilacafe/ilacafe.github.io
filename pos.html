@@ -1572,18 +1572,40 @@
         function startUPIWatch(amount){
             stopUPIWatch();
             window.upiSettling = false; window.upiMatchedInfo = null;
-            window.upiWatchSince = serverNow() - 90000;   // accept a credit up to 90s before the QR opened (server-corrected clock)
             setUPIStatus('waiting');
             try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
-            const q = db.ref('payments/incoming').orderByChild('at').startAt(window.upiWatchSince);
+            // Scan recent credits by VALUE (not child_added). child_added with a startAt
+            // lower-bound silently misses a credit whose `at` predates the window — which
+            // happens whenever the QR is opened more than the tolerance after the customer
+            // actually paid, or when the worker's clock skews below the POS clock. Here we
+            // re-scan the last 60 credits on every change and match on amount + bank; the
+            // atomic claim prevents double-settlement, and a credit is only considered if it
+            // arrived within the last 30 min (loose sanity bound, never a tight tripwire).
+            const q = db.ref('payments/incoming').orderByChild('at').limitToLast(60);
             const handler = snap => {
                 if (window.upiSettling) return;
-                const p = snap.val(); if(!p) return;
-                if (Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5) return;   // amount must match
-                if (!window.upiBankCompatible(p)) return;                          // credit landed on a different bank than this table's VPA
-                claimPayment(snap.key, p, won => { if (won && !window.upiSettling) autoConfirmUPI({ ref:snap.key, payer:p.payer||null, amount:p.amount, source:p.source||null }); });
+                const now = serverNow();
+                const cands = [];
+                snap.forEach(ch => {
+                    const p = ch.val(); if (!p) return;
+                    if (Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5) return;   // amount must match
+                    if (!window.upiBankCompatible(p)) return;                          // credit's bank/acct must match this table's VPA
+                    const at = p.at || 0;
+                    if (at && at < now - 30*60000) return;                             // ignore anything older than 30 min
+                    cands.push({ key: ch.key, p, at });
+                });
+                if (!cands.length) return;
+                cands.sort((a,b) => b.at - a.at);   // newest first
+                const tryNext = i => {
+                    if (window.upiSettling || i >= cands.length) return;
+                    claimPayment(cands[i].key, cands[i].p, won => {
+                        if (won && !window.upiSettling) autoConfirmUPI({ ref:cands[i].key, payer:cands[i].p.payer||null, amount:cands[i].p.amount, source:cands[i].p.source||null });
+                        else tryNext(i+1);
+                    });
+                };
+                tryNext(0);
             };
-            q.on('child_added', handler);
+            q.on('value', handler);
             window.upiWatchRef = { q, handler };
         }
         function claimPayment(ref, p, cb){
@@ -1628,10 +1650,11 @@
         window.confirmUPIPayment = function(){
             if (window.upiSettling) return;
             const amount = parseFloat(window.pendingUPIAmount) || 0;
-            const since = window.upiWatchSince || (serverNow() - 600000);
-            db.ref('payments/incoming').orderByChild('at').startAt(since).once('value', snap => {
+            const now = serverNow();
+            db.ref('payments/incoming').orderByChild('at').limitToLast(60).once('value', snap => {
                 if (window.upiSettling) return;
-                const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5 && window.upiBankCompatible(p)) cand.push({ key:ch.key, p }); });
+                const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5 && window.upiBankCompatible(p) && (!(p.at) || p.at >= now - 30*60000)) cand.push({ key:ch.key, p, at:p.at||0 }); });
+                cand.sort((a,b) => b.at - a.at);
                 const tryNext = i => {
                     if (window.upiSettling) return;
                     if (i >= cand.length){ window.upiSettling = true; stopUPIWatch(); settleUPI(null); return; }   // nothing claimable → manual unverified
