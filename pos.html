@@ -1734,54 +1734,61 @@
             const credits = window._reconCredits || {};
             if (!Object.keys(ledger).length || !Object.keys(credits).length) return;
             const now = serverNow();
+            const WIN = 2*60*60000;   // a late auto-verify credit is expected within ~2h of settlement
 
-            // credits already consumed by a verified entry can't be reused
+            // credits already bound to a verified entry can't be reused
             const usedRefs = new Set();
             for (const k in ledger){ const e = ledger[k]; if (e && e.state === 'verified' && e.ref) usedRefs.add(String(e.ref)); }
 
-            // still-unverified UPI entries from the last 3 days
+            // still-unverified UPI entries from the last 2h (older ones are past the auto-verify
+            // window — they wait for admin, so a days-old entry can never grab a fresh credit)
             const pending = [];
             for (const k in ledger){
                 const e = ledger[k];
                 if (!e || e.type !== 'upi_income' || e.state !== 'unverified') continue;
-                if (e.ts && e.ts < now - 3*24*60*60000) continue;
-                pending.push({ key: k, e: e });
+                if (e.ts && e.ts < now - WIN) continue;
+                pending.push({ key: k, e: e, ts: e.ts || 0 });
             }
             if (!pending.length) return;
 
+            function tagOf(e){ const t = e.bankTag || null; if (!t) return { bankTag:null, acctTag:null, raw:null }; const parts = String(t).trim().toLowerCase().split(/\s+/); return { bankTag: parts[0], acctTag: parts[1] || null, raw: String(t).trim().toLowerCase() }; }
+            function creditFits(entryTag, entryTs, p){
+                if (Math.abs((parseFloat(p.amount)||0) - (parseFloat(entryTag.amt)||0)) >= 0.5) return false;
+                if (entryTag.bankTag && p.bank && entryTag.bankTag !== String(p.bank).trim().toLowerCase()) return false;
+                if (entryTag.acctTag && p.acct && String(entryTag.acctTag) !== String(p.acct)) return false;
+                const at = p.at || 0;
+                if (at && Math.abs(at - entryTs) > WIN) return false;   // credit must be near the settlement in time
+                return true;
+            }
+
             const updates = {};
             for (const item of pending){
-                const amt = parseFloat(item.e.amount) || 0;
-                const tag = item.e.bankTag || null;   // "yes 8020" | "axis" | null
-                let bankTag = null, acctTag = null;
-                if (tag){ const parts = String(tag).trim().toLowerCase().split(/\s+/); bankTag = parts[0]; acctTag = parts[1] || null; }
+                const t = tagOf(item.e); t.amt = parseFloat(item.e.amount) || 0;
 
-                // candidate credits: amount match, bank/acct match (fail-open if entry has no tag),
-                // unused, within a generous 3-day window
+                // candidate credits for THIS entry, within the tight time window, unused
                 const fits = [];
                 for (const ref in credits){
                     if (usedRefs.has(String(ref))) continue;
                     const p = credits[ref]; if (!p) continue;
-                    if (Math.abs((parseFloat(p.amount)||0) - amt) >= 0.5) continue;
-                    if (bankTag && p.bank && bankTag !== String(p.bank).trim().toLowerCase()) continue;
-                    if (acctTag && p.acct && String(acctTag) !== String(p.acct)) continue;
-                    const at = p.at || 0; if (at && at < now - 3*24*60*60000) continue;
-                    fits.push({ ref: ref, p: p });
+                    if (creditFits(t, item.ts, p)) fits.push({ ref, p, at: p.at || 0 });
                 }
-                if (fits.length !== 1) continue;   // GUARD: only unambiguous matches auto-verify
+                if (fits.length !== 1) continue;   // GUARD A: entry must have exactly one candidate credit
+                const cand = fits[0];
 
-                // also require this to be the ONLY pending entry of that amount+bank, so a single
-                // credit can't ambiguously belong to two identical manual settlements
-                const twins = pending.filter(o => Math.abs((parseFloat(o.e.amount)||0) - amt) < 0.5 && (o.e.bankTag||null) === (item.e.bankTag||null));
-                if (twins.length !== 1) continue;
+                // GUARD B (bidirectional): that credit must fit exactly ONE pending entry too —
+                // if two same-amount/bank entries both fit this credit, we can't know which paid it.
+                let entriesFittingThisCredit = 0;
+                for (const o of pending){
+                    const ot = tagOf(o.e); ot.amt = parseFloat(o.e.amount) || 0;
+                    if (ot.raw === t.raw && creditFits(ot, o.ts, cand.p)) entriesFittingThisCredit++;
+                }
+                if (entriesFittingThisCredit !== 1) continue;
 
-                const ref = fits[0].ref;
-                usedRefs.add(String(ref));
+                usedRefs.add(String(cand.ref));
                 updates['pos/ledgerEntries/' + item.key + '/state'] = 'verified';
-                updates['pos/ledgerEntries/' + item.key + '/ref'] = String(ref);
+                updates['pos/ledgerEntries/' + item.key + '/ref'] = String(cand.ref);
                 updates['pos/ledgerEntries/' + item.key + '/lateVerified'] = true;
-                // claim the credit so a live table-QR watcher can't also grab it
-                try { claimPayment(ref, fits[0].p, function(){}); } catch(e){}
+                try { claimPayment(cand.ref, cand.p, function(){}); } catch(e){}
             }
             if (Object.keys(updates).length){ try { db.ref().update(updates); } catch(e){} }
         }
