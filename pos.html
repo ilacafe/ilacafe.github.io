@@ -1910,9 +1910,27 @@
                 const todayKey = new Date().toISOString().slice(0, 10);
                 // Snapshot the whole day BEFORE wiping, so nothing is lost if the WhatsApp
                 // hand-off fails. Then clear the live nodes for the new day.
+                // Fold each UPI payment's verification state (verified / ignored + note) into the
+                // archived ledger, so the audit trail survives EOD permanently and ignored payments
+                // can be investigated later. Without this the review data would orphan (upiReview
+                // keys reference ledger entries that no longer exist after the wipe).
+                const reviewMap = window.upiReviewMap || {};
+                const enrichedLedger = (window.salesLedger || []).map(function(e){
+                    if (e.type !== 'upi_income') return e;
+                    const rv = e.payId ? reviewMap[e.payId] : null;
+                    let vstate;
+                    if (rv && rv.state === 'ignored') vstate = 'ignored';
+                    else if (rv && rv.state === 'verified') vstate = 'verified-admin';
+                    else if (e.state === 'verified') vstate = 'verified-bank';
+                    else vstate = 'unverified';
+                    const out = Object.assign({}, e, { verifyState: vstate });
+                    if (rv && rv.note) out.verifyNote = rv.note;
+                    if (rv && rv.by) out.verifyBy = rv.by;
+                    return out;
+                });
                 db.ref('pos/eodArchive/' + todayKey + '-' + Date.now()).set({
                     report: report, upi: safeUPI, cash: safeCash,
-                    bills: window.pastBills, ledger: window.salesLedger,
+                    bills: window.pastBills, ledger: enrichedLedger,
                     closedBy: staffName, closedAt: firebase.database.ServerValue.TIMESTAMP
                 }).then(() => {
                     db.ref('pos/ledgerEntries').remove();
