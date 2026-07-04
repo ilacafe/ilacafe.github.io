@@ -820,7 +820,7 @@
             localStorage.setItem('ila_track_started', Date.now());
 
             ensureAuth().then(() => {
-                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: info.upiId || null, trackId: trackId });
+                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: info.upiId || null, trackId: trackId, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 // seed a status record the POS will advance as the order progresses
                 db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: info.details, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 if (window.watchOrderStatus) window.watchOrderStatus();
