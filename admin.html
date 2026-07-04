@@ -278,6 +278,16 @@
                 <button class="rec-mini" id="uv-tab-ignored" onclick="uvSetTab('ignored')">Ignored</button>
             </div>
             <div id="upi-verify-list"><p style="opacity:0.5; font-size:0.9rem;">Loading...</p></div>
+            <details style="margin-top:18px;">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Past days — archived verification</summary>
+                <p class="rec-note">Every closed day's UPI payments with their final verification state. Ignored payments are kept here permanently so they can be investigated later.</p>
+                <div class="row-group" style="gap:6px; margin:10px 0;">
+                    <button class="rec-mini" id="uvh-filter-ignored" onclick="uvhFilter('ignored')">Ignored only</button>
+                    <button class="rec-mini" id="uvh-filter-unver" onclick="uvhFilter('unverified')">Unverified only</button>
+                    <button class="rec-mini" id="uvh-filter-all" onclick="uvhFilter('all')">All</button>
+                </div>
+                <div id="upi-verify-history"><p style="opacity:0.5; font-size:0.9rem;">Open to load…</p></div>
+            </details>
         </div>
 
         <div class="admin-card" style="margin-bottom: 25px;">
@@ -768,6 +778,60 @@
         window.uvUnignore = function(payId){
             db.ref('upiReview/' + payId).remove();
         };
+
+        // ===== PAST-DAYS ARCHIVED VERIFICATION =====
+        // Reads pos/eodArchive (written at EOD with each UPI payment's folded-in verify state).
+        // Lets you find ignored/unverified payments from any closed day, permanently.
+        let uvhArchive = null, uvhMode = 'ignored';
+        window.uvhFilter = function(m){ uvhMode = m; renderUPIHistory2(); };
+        function loadUPIHistoryArchive(){
+            if (uvhArchive !== null) return;   // load once, on first open
+            uvhArchive = 'loading';
+            db.ref('pos/eodArchive').limitToLast(120).once('value', s => {
+                uvhArchive = s.val() || {};
+                renderUPIHistory2();
+            }).catch(()=>{ uvhArchive = {}; renderUPIHistory2(); });
+        }
+        function renderUPIHistory2(){
+            const box = document.getElementById('upi-verify-history'); if (!box) return;
+            if (uvhArchive === 'loading' || uvhArchive === null){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>Loading…</p>"; return; }
+            ['ignored','unverified','all'].forEach(m => { const b = document.getElementById('uvh-filter-'+ (m==='unverified'?'unver':m)); if (b) b.style.background = (uvhMode===m)?'rgba(255,255,255,0.28)':'rgba(255,255,255,0.10)'; });
+            const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+            // flatten every archived UPI payment across days
+            const rows = [];
+            for (const key in uvhArchive){
+                const day = uvhArchive[key]; if (!day || !Array.isArray(day.ledger)) continue;
+                const dayLabel = (day.closedAt ? new Date(day.closedAt) : null);
+                day.ledger.forEach(e => {
+                    if (!e || e.type !== 'upi_income') return;
+                    const vs = e.verifyState || 'unverified';
+                    if (uvhMode === 'ignored' && vs !== 'ignored') return;
+                    if (uvhMode === 'unverified' && vs !== 'unverified') return;
+                    rows.push({ amount: parseFloat(e.amount)||0, reason: e.reason||'', vs, note: e.verifyNote||null, by: e.verifyBy||null, closedAt: day.closedAt||0, date: e.date||'' });
+                });
+            }
+            rows.sort((a,b)=> b.closedAt - a.closedAt);
+            if (!rows.length){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>None found in the archived days.</p>"; return; }
+            const badge = vs => {
+                if (vs==='ignored') return '<span style="color:#ff9e9e;">ignored</span>';
+                if (vs==='verified-admin') return '<span style="color:#7CFC9A;">✓ admin</span>';
+                if (vs==='verified-bank') return '<span style="color:#7CFC9A;">✓ bank</span>';
+                return '<span style="color:#ffd54f;">unverified</span>';
+            };
+            const fmt = ts => { try { return new Date(ts).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); } catch(e){ return ''; } };
+            let html = '<table class="rec-table"><thead><tr><th>Day</th><th>Payment</th><th class="num">Amount</th><th>State</th></tr></thead><tbody>';
+            rows.forEach(r => {
+                html += '<tr><td style="white-space:nowrap;">'+escapeHTML(fmt(r.closedAt))+'</td><td>'+escapeHTML(r.reason)+'</td><td class="num">'+inr(r.amount)+'</td><td>'+badge(r.vs)+'</td></tr>';
+                if (r.note) html += '<tr><td colspan="4" style="opacity:0.55; font-size:0.78rem; padding-top:0;">note: '+escapeHTML(r.note)+(r.by?' — '+escapeHTML(r.by):'')+'</td></tr>';
+            });
+            box.innerHTML = html + '</tbody></table>';
+        }
+        // load the archive when the details section is first opened
+        document.addEventListener('DOMContentLoaded', function(){
+            const det = document.querySelector('#upi-verify-history');
+            const wrap = det ? det.closest('details') : null;
+            if (wrap) wrap.addEventListener('toggle', function(){ if (wrap.open) loadUPIHistoryArchive(); });
+        });
 
         let upiCfg = {}, upiTot = {}, upiAllTot = {}, upiMigrated = false;
         function loadUPIRouting(){
