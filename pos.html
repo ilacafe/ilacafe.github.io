@@ -626,10 +626,14 @@
             });
             db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
             db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
+            db.ref('upiReview').on('value', snap => { window.upiReviewMap = snap.val() || {}; renderLedger(); });
+            startVerificationReconciler();
             db.ref('pos/ledgerEntries').on('value', snap => {
                 const data = snap.val() || {};
+                window.salesLedgerMap = data;   // keep keyed form for reconciliation
                 window.salesLedger = Object.values(data).sort((a, b) => (b.ts || 0) - (a.ts || 0));
                 renderLedger();
+                try { reconcileLedgerVerification(); } catch(e){}
             });
             db.ref('pos/bills').on('value', snap => {
                 const data = snap.val() || {};
@@ -1631,10 +1635,18 @@
             const total = parseFloat(tableData.total) || 0;
             const paid = parseFloat(tableData.paid) || 0;
             const reason = tableID === 'Takeaway' ? 'Takeaway (UPI)' : `Table ${tableID} (UPI)`;
-            addLedgerEntry('upi_income', amountToPay, reason);
-            try { window.upiRecordPayment(window.tableUPIVPA[tableID] || null, amountToPay); } catch(e){}
+            const payId = 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+            const vpa = window.tableUPIVPA[tableID] || null;
+            const bankTag = (vpa && window._upiCfgCache && window._upiCfgCache[upiKey(vpa)] && window._upiCfgCache[upiKey(vpa)].bank) || null;
+            addLedgerEntry('upi_income', amountToPay, reason, {
+                payId: payId,
+                state: (info && info.ref) ? 'verified' : 'unverified',   // matched a bank credit at the counter → verified
+                ref: (info && info.ref) || null,
+                bankTag: bankTag
+            });
+            try { window.upiRecordPayment(vpa, amountToPay); } catch(e){}
             tableData.paid = paid + amountToPay;
-            tableData._lastPay = info || null;   // archive records verification provenance
+            tableData._lastPay = info ? Object.assign({ payId: payId }, info) : { payId: payId, ref: null };
             if (tableData.paid >= total){
                 archivePOSTable(tableID, tableData, "UPI");
                 delete window.tableUPIVPA[tableID];
@@ -1667,16 +1679,25 @@
             });
         };
 
-        function addLedgerEntry(type, amount, reason) {
+        function addLedgerEntry(type, amount, reason, meta) {
             const parsedAmount = parseFloat(amount) || 0;
             const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
             // Each entry is its own child — push() never touches siblings and merges cleanly
-            // after an offline spell.
-            db.ref('pos/ledgerEntries').push({
+            // after an offline spell. `meta` (UPI only) carries the stable payId, verification
+            // state ('verified' | 'unverified'), the matched credit ref, and the bank/acct the
+            // payment was routed to — so a late bank email can flip unverified→verified later.
+            const entry = {
                 date: timeString, type: type, amount: parsedAmount, reason: reason,
                 ts: firebase.database.ServerValue.TIMESTAMP
-            });
+            };
+            if (meta && typeof meta === 'object') {
+                if (meta.payId) entry.payId = meta.payId;
+                if (meta.state) entry.state = meta.state;               // 'verified' | 'unverified'
+                if (meta.ref) entry.ref = meta.ref;                     // matched bank credit ref
+                if (meta.bankTag) entry.bankTag = meta.bankTag;         // VPA's admin bank tag, e.g. "yes 8020"
+            }
+            db.ref('pos/ledgerEntries').push(entry);
 
             // Running totals via atomic increment — concurrent sales can't lose each other,
             // it shows instantly, and reconciles correctly after reconnect.
@@ -1689,6 +1710,82 @@
             }
         }
 
+        // ===== LEDGER VERIFICATION RECONCILER =====
+        // Late bank emails (esp. Yes Bank) can land minutes after a payment is settled
+        // manually. This keeps a live cache of recent credits and, on any change to either
+        // credits or the ledger, tries to match each still-unverified UPI entry. A match
+        // flips that entry to verified (the ✓ appears on its own). Runs on POS open too,
+        // sweeping the last 3 days — so a credit that arrived overnight is caught next launch.
+        // GUARD: only auto-verifies when the match is UNAMBIGUOUS (exactly one unverified
+        // entry fits that amount+bank); ambiguous cases wait for admin, never guess.
+        window._reconCredits = {}; window._reconFeed = false;
+        function startVerificationReconciler(){
+            if (window._reconFeed) return; window._reconFeed = true;
+            try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
+            try {
+                db.ref('payments/incoming').orderByChild('at').limitToLast(120).on('value', s => {
+                    window._reconCredits = s.val() || {};
+                    try { reconcileLedgerVerification(); } catch(e){}
+                });
+            } catch(e){}
+        }
+        function reconcileLedgerVerification(){
+            const ledger = window.salesLedgerMap || {};
+            const credits = window._reconCredits || {};
+            if (!Object.keys(ledger).length || !Object.keys(credits).length) return;
+            const now = serverNow();
+
+            // credits already consumed by a verified entry can't be reused
+            const usedRefs = new Set();
+            for (const k in ledger){ const e = ledger[k]; if (e && e.state === 'verified' && e.ref) usedRefs.add(String(e.ref)); }
+
+            // still-unverified UPI entries from the last 3 days
+            const pending = [];
+            for (const k in ledger){
+                const e = ledger[k];
+                if (!e || e.type !== 'upi_income' || e.state !== 'unverified') continue;
+                if (e.ts && e.ts < now - 3*24*60*60000) continue;
+                pending.push({ key: k, e: e });
+            }
+            if (!pending.length) return;
+
+            const updates = {};
+            for (const item of pending){
+                const amt = parseFloat(item.e.amount) || 0;
+                const tag = item.e.bankTag || null;   // "yes 8020" | "axis" | null
+                let bankTag = null, acctTag = null;
+                if (tag){ const parts = String(tag).trim().toLowerCase().split(/\s+/); bankTag = parts[0]; acctTag = parts[1] || null; }
+
+                // candidate credits: amount match, bank/acct match (fail-open if entry has no tag),
+                // unused, within a generous 3-day window
+                const fits = [];
+                for (const ref in credits){
+                    if (usedRefs.has(String(ref))) continue;
+                    const p = credits[ref]; if (!p) continue;
+                    if (Math.abs((parseFloat(p.amount)||0) - amt) >= 0.5) continue;
+                    if (bankTag && p.bank && bankTag !== String(p.bank).trim().toLowerCase()) continue;
+                    if (acctTag && p.acct && String(acctTag) !== String(p.acct)) continue;
+                    const at = p.at || 0; if (at && at < now - 3*24*60*60000) continue;
+                    fits.push({ ref: ref, p: p });
+                }
+                if (fits.length !== 1) continue;   // GUARD: only unambiguous matches auto-verify
+
+                // also require this to be the ONLY pending entry of that amount+bank, so a single
+                // credit can't ambiguously belong to two identical manual settlements
+                const twins = pending.filter(o => Math.abs((parseFloat(o.e.amount)||0) - amt) < 0.5 && (o.e.bankTag||null) === (item.e.bankTag||null));
+                if (twins.length !== 1) continue;
+
+                const ref = fits[0].ref;
+                usedRefs.add(String(ref));
+                updates['pos/ledgerEntries/' + item.key + '/state'] = 'verified';
+                updates['pos/ledgerEntries/' + item.key + '/ref'] = String(ref);
+                updates['pos/ledgerEntries/' + item.key + '/lateVerified'] = true;
+                // claim the credit so a live table-QR watcher can't also grab it
+                try { claimPayment(ref, fits[0].p, function(){}); } catch(e){}
+            }
+            if (Object.keys(updates).length){ try { db.ref().update(updates); } catch(e){} }
+        }
+
         function renderLedger() {
             const list = document.getElementById('ledger-list'); list.innerHTML = "";
             if (window.salesLedger.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; return; }
@@ -1698,7 +1795,24 @@
                 else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
                 
                 let safeAmount = parseFloat(entry.amount) || 0;
-                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${escapeHTML(entry.reason)}</span><span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
+                let tick = '';
+                if (entry.type === 'upi_income') {
+                    const rv = (window.upiReviewMap || {})[entry.payId] || null;
+                    const adminVerified = rv && rv.state === 'verified';
+                    const adminIgnored = rv && rv.state === 'ignored';
+                    // ✓ when a bank credit matched (entry.state) OR an admin marked it verified.
+                    // Ignore never shows a ✓ in the POS — an ignored-but-unverified payment keeps
+                    // its ⏳ here on purpose, so the counter never learns that settling without
+                    // proof gets quietly cleared.
+                    if (entry.state === 'verified' || adminVerified) {
+                        tick = '<span title="Verified" style="color:#7CFC9A; font-weight:bold; margin-left:6px;">✓</span>';
+                    } else if (entry.state === 'unverified' && !adminIgnored) {
+                        tick = '<span title="Not yet verified by a bank credit" style="color:#ffd54f; margin-left:6px;">⏳</span>';
+                    } else if (entry.state === 'unverified' && adminIgnored) {
+                        tick = '<span title="Awaiting verification" style="color:#ffd54f; margin-left:6px;">⏳</span>';
+                    }
+                }
+                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${escapeHTML(entry.reason)}</span>${tick}<span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
             });
         }
 
