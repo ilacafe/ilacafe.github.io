@@ -732,6 +732,81 @@
                 }
             } catch(e){ console.error('upiRecordPayment', e); }
         };
+        // bank/account-aware matching: an incoming credit tagged with a bank (and account last-4)
+        // may only settle a payment whose routed VPA belongs to that bank/account. The Admin Bank
+        // field holds "bank" or "bank last4" (e.g. "yes 8020") — account digits give per-account
+        // precision when two VPAs share a bank. FAIL-OPEN: any missing tag falls back to looser
+        // matching — this filter can only PREVENT a wrong claim, never block a right one.
+        window._upiCfgCache = null;
+        window.upiBankMatch = function(vpa, p){
+            try {
+                if (!p || !p.bank) return true;
+                if (!vpa) return true;
+                const cfg = window._upiCfgCache || {};
+                const mine = cfg[upiKey(vpa)];
+                if (!mine || !mine.bank) return true;
+                const parts = String(mine.bank).trim().toLowerCase().split(/\s+/);
+                const bankTag = parts[0], acctTag = parts[1] || null;
+                if (bankTag !== String(p.bank).trim().toLowerCase()) return false;
+                if (acctTag && p.acct && String(acctTag) !== String(p.acct)) return false;
+                return true;
+            } catch(e){ return true; }
+        };
+        window.upiBankCompatible = function(p){
+            return window.upiBankMatch(window.tableUPIVPA[window.checkoutTableID] || null, p);
+        };
+
+        // ===== WEB ORDER PAYMENT VERIFICATION =====
+        // Web orders are paid up-front on trust; now that bank credit emails land in
+        // payments/incoming automatically, each pending web card shows a live badge:
+        // green when a matching credit (amount + the order VPA's bank/account + time
+        // window) has arrived, amber while waiting. Advisory — staff still decide.
+        // On Accept, the matched credit is claimed so a table QR can't take it later.
+        window._wvCredits = {}; window._wvClaims = {}; window._wvMatch = {}; window._wvFeeds = false;
+        function ensureWebVerifyFeeds(){
+            if (window._wvFeeds) return; window._wvFeeds = true;
+            try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
+            try { db.ref('payments/incoming').orderByChild('at').limitToLast(60).on('value', s => { window._wvCredits = s.val() || {}; renderWebVerifyBadges(); }); } catch(e){}
+            try { db.ref('payments/claims').limitToLast(150).on('value', s => { window._wvClaims = s.val() || {}; renderWebVerifyBadges(); }); } catch(e){}
+        }
+        // pure matcher: newest unclaimed credit fitting amount + VPA bank/acct + time window
+        window.wvFindMatch = function(order, credits, claims, nowMs){
+            try {
+                const total = parseFloat(order && order.total); if (!(total > 0)) return null;
+                const created = order && order.createdAt ? order.createdAt : null;
+                const lo = created ? created - 10*60000 : (nowMs - 45*60000);
+                let best = null;
+                for (const ref in (credits || {})){
+                    const p = credits[ref]; if (!p) continue;
+                    if (claims && claims[ref]) continue;
+                    if (Math.abs((parseFloat(p.amount) || 0) - total) >= 0.5) continue;
+                    if (!window.upiBankMatch((order && order.upiId) || null, p)) continue;
+                    const at = p.at || 0;
+                    if (at < lo || at > nowMs + 60000) continue;
+                    if (!best || at > best.at) best = { ref: ref, at: at, p: p };
+                }
+                return best;
+            } catch(e){ return null; }
+        };
+        function renderWebVerifyBadges(){
+            try {
+                const now = Date.now();
+                for (const id in (window.pendingWebOrders || {})){
+                    const el = document.getElementById('wv-' + id); if (!el) continue;
+                    const o = window.pendingWebOrders[id];
+                    const m = window.wvFindMatch(o, window._wvCredits, window._wvClaims, now);
+                    if (m){
+                        window._wvMatch[id] = m.ref;
+                        el.innerHTML = '\u2713 \u20b9' + Math.round(parseFloat(m.p.amount)) + ' received' + (m.p.bank ? ' \u00b7 ' + escapeHTML(String(m.p.bank)) + (m.p.acct ? ' ' + escapeHTML(String(m.p.acct)) : '') : '');
+                        el.style.cssText = 'display:inline-block; margin-top:8px; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; background:rgba(76,175,80,0.18); border:1px solid rgba(76,175,80,0.5); color:#9be9a8;';
+                    } else {
+                        delete window._wvMatch[id];
+                        el.innerHTML = '\u23f3 awaiting bank credit\u2026';
+                        el.style.cssText = 'display:inline-block; margin-top:8px; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; background:rgba(255,193,7,0.12); border:1px solid rgba(255,193,7,0.4); color:#ffd54f;';
+                    }
+                }
+            } catch(e){}
+        }
         // ------------------------
 
         window.defaultModifiers = [
@@ -838,6 +913,7 @@
                         <strong style="font-size: 1.1rem; text-transform: uppercase;">${escapeHTML(o.tableOrAddress)}</strong><br>
                         ${itemsHTML}
                         <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
+                        <span id="wv-${id}"></span>
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
                             <button class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept Order</button>
                             <button class="btn btn-secondary" style="flex: 1;" onclick="window.rejectWebOrder('${id}')">Reject</button>
@@ -845,6 +921,8 @@
                     </div>`;
                 }
             }
+            ensureWebVerifyFeeds();
+            renderWebVerifyBadges();
             document.getElementById('web-orders-modal').classList.add('active');
         };
 
@@ -858,6 +936,8 @@
 
             addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`);
             if (order.upiId) { try { window.upiRecordPayment(order.upiId, parseFloat(order.total) || 0); } catch(e){} }
+            // claim the verified credit so a table QR can't grab the same rupees later
+            try { const _mref = window._wvMatch && window._wvMatch[id]; if (_mref && window._wvCredits[_mref]) claimPayment(_mref, window._wvCredits[_mref], function(){}); } catch(e){}
             
             const localBill = { 
                 id: Date.now(), 
@@ -1494,11 +1574,13 @@
             window.upiSettling = false; window.upiMatchedInfo = null;
             window.upiWatchSince = serverNow() - 90000;   // accept a credit up to 90s before the QR opened (server-corrected clock)
             setUPIStatus('waiting');
+            try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
             const q = db.ref('payments/incoming').orderByChild('at').startAt(window.upiWatchSince);
             const handler = snap => {
                 if (window.upiSettling) return;
                 const p = snap.val(); if(!p) return;
                 if (Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5) return;   // amount must match
+                if (!window.upiBankCompatible(p)) return;                          // credit landed on a different bank than this table's VPA
                 claimPayment(snap.key, p, won => { if (won && !window.upiSettling) autoConfirmUPI({ ref:snap.key, payer:p.payer||null, amount:p.amount, source:p.source||null }); });
             };
             q.on('child_added', handler);
@@ -1549,7 +1631,7 @@
             const since = window.upiWatchSince || (serverNow() - 600000);
             db.ref('payments/incoming').orderByChild('at').startAt(since).once('value', snap => {
                 if (window.upiSettling) return;
-                const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5) cand.push({ key:ch.key, p }); });
+                const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5 && window.upiBankCompatible(p)) cand.push({ key:ch.key, p }); });
                 const tryNext = i => {
                     if (window.upiSettling) return;
                     if (i >= cand.length){ window.upiSettling = true; stopUPIWatch(); settleUPI(null); return; }   // nothing claimable → manual unverified
