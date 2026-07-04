@@ -738,6 +738,10 @@
                     + '<label style="margin:0; flex-shrink:0;">Cap ₹/mo</label>'
                     + '<input type="number" value="' + (cap || '') + '" placeholder="0 = no cap" style="flex:1; padding:8px;" onchange="upiSetCap(\'' + k + '\', this.value)">'
                     + '</div>'
+                    + '<div style="display:flex; align-items:center; gap:10px; margin-top:8px;">'
+                    + '<label style="margin:0; flex-shrink:0;">Bank</label>'
+                    + '<input type="text" value="' + escapeHTML(c.bank || '') + '" placeholder="e.g. yes 8020 — bank + a/c digits from the alert email" style="flex:1; padding:8px;" onchange="upiSetBank(\'' + k + '\', this.value)">'
+                    + '</div>'
                     + '<div class="item-meta" style="margin-top:8px;">' + meta + ' <button class="rec-mini" style="margin-left:6px;" onclick="upiAdjust(\'' + k + '\')">adjust</button></div>'
                     + barHTML
                     + '</div>';
@@ -785,6 +789,10 @@
         window.upiSetCap = function(k, val){
             const cap = parseFloat(val) || 0;
             db.ref('upiRouting/config/' + k + '/monthlyCap').set(cap);
+        };
+        window.upiSetBank = function(k, val){
+            const bank = String(val || '').trim().toLowerCase();
+            db.ref('upiRouting/config/' + k + '/bank').set(bank || null);
         };
         window.upiAdjust = function(k){
             const c = upiCfg[k]; if (!c) return;
