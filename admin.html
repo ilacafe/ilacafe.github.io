@@ -269,6 +269,18 @@
         </div>
 
         <div class="admin-card" style="margin-bottom: 25px;">
+            <h2>UPI Payment Verification</h2>
+            <p class="rec-note">Every UPI payment taken in the POS, and whether a bank credit email has confirmed it. Unverified ones were settled manually at the counter — treat these as the exceptions to watch. A late bank email auto-verifies on its own; or mark verified once you've confirmed it against the statement.</p>
+            <div id="upi-verify-kpis" class="rec-kpis" style="margin-bottom:16px;"></div>
+            <div class="row-group" style="gap:6px; margin-bottom:12px;">
+                <button class="rec-mini" id="uv-tab-review" onclick="uvSetTab('review')">Needs review</button>
+                <button class="rec-mini" id="uv-tab-auto" onclick="uvSetTab('auto')">Verified</button>
+                <button class="rec-mini" id="uv-tab-ignored" onclick="uvSetTab('ignored')">Ignored</button>
+            </div>
+            <div id="upi-verify-list"><p style="opacity:0.5; font-size:0.9rem;">Loading...</p></div>
+        </div>
+
+        <div class="admin-card" style="margin-bottom: 25px;">
             <h2>Inventory Manager</h2>
             <div class="row-group">
                 <select id="inv-tab-select" class="remark-input" style="flex: 1;" onchange="renderInventoryManager()">
@@ -451,6 +463,7 @@
             populateRecipeDropdowns();
         });
         loadUPIRouting();
+        loadUPIVerification();
         }
 
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
@@ -671,6 +684,90 @@
             elig.forEach(x => { const slots = Math.max(1, Math.round(12 * x.w / sum)); for (let i = 0; i < slots; i++) list.push(x.e.id); });
             return list.slice(0, 24);
         }
+
+        // ===== UPI PAYMENT VERIFICATION (review surface) =====
+        // Reads the POS ledger; each upi_income entry is verified (bank credit matched,
+        // at counter or late), unverified (manual, still no credit), or ignored (admin
+        // resolved without a credit). Admin can mark-verified or ignore unverified ones.
+        // State written to a dedicated upiReview node keyed by payId — never mutates the
+        // ledger entry itself, so the live cash-up record and its own reconciler are untouched.
+        let uvLedger = {}, uvReview = {}, uvTab = 'review';
+        function loadUPIVerification(){
+            db.ref('pos/ledgerEntries').on('value', s => { uvLedger = s.val() || {}; renderUPIVerification(); });
+            db.ref('upiReview').on('value', s => { uvReview = s.val() || {}; renderUPIVerification(); });
+        }
+        window.uvSetTab = function(t){ uvTab = t; renderUPIVerification(); };
+        function uvClassify(){
+            // returns { review:[], auto:[], ignored:[] } of {payId, amount, reason, date, ts, ref, state}
+            const out = { review: [], auto: [], ignored: [] };
+            const rows = [];
+            for (const k in uvLedger){
+                const e = uvLedger[k]; if (!e || e.type !== 'upi_income') continue;
+                const payId = e.payId || k;
+                const rv = uvReview[payId] || null;
+                rows.push({ payId, amount: parseFloat(e.amount)||0, reason: e.reason||'', date: e.date||'', ts: e.ts||0, ref: e.ref||null, ledgerState: e.state||'unverified', reviewState: rv && rv.state, note: rv && rv.note });
+            }
+            rows.sort((a,b)=> b.ts - a.ts);
+            for (const r of rows){
+                if (r.reviewState === 'ignored') out.ignored.push(r);
+                else if (r.reviewState === 'verified' || r.ledgerState === 'verified') out.auto.push(r);
+                else out.review.push(r);
+            }
+            return out;
+        }
+        function renderUPIVerification(){
+            const box = document.getElementById('upi-verify-list'); if (!box) return;
+            const g = uvClassify();
+            const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+
+            // KPIs: today's unverified (the security signal) + counts
+            const startToday = new Date(); startToday.setHours(0,0,0,0);
+            let unverToday = 0, unverTodayN = 0;
+            g.review.forEach(r => { if (r.ts >= startToday.getTime()){ unverToday += r.amount; unverTodayN++; } });
+            const k = [];
+            k.push('<div class="rec-kpi'+(unverTodayN?' bad':' good')+'"><div class="lbl">Unverified today</div><div class="val">'+inr(unverToday)+'</div><div class="sub">'+unverTodayN+' payment'+(unverTodayN!==1?'s':'')+'</div></div>');
+            k.push('<div class="rec-kpi"><div class="lbl">Needs review (all)</div><div class="val">'+g.review.length+'</div><div class="sub">awaiting a credit</div></div>');
+            document.getElementById('upi-verify-kpis').innerHTML = k.join('');
+
+            ['review','auto','ignored'].forEach(t => {
+                const btn = document.getElementById('uv-tab-'+t); if (!btn) return;
+                const n = g[t].length;
+                const label = t==='review' ? 'Needs review' : (t==='auto' ? 'Verified' : 'Ignored');
+                btn.innerText = label + ' (' + n + ')';
+                btn.style.background = (uvTab===t) ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)';
+            });
+
+            const rows = g[uvTab] || [];
+            if (!rows.length){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>Nothing here.</p>"; return; }
+            const fmt = ts => { try { return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
+            let html = '<table class="rec-table"><tbody>';
+            rows.forEach(r => {
+                let right = '';
+                if (uvTab === 'review'){
+                    right = '<button class="rec-mini" style="margin-right:6px;" onclick="uvVerify(\''+r.payId+'\')">Mark verified</button><button class="rec-mini" onclick="uvIgnore(\''+r.payId+'\')">Ignore</button>';
+                } else if (uvTab === 'auto'){
+                    right = '<span style="color:#7CFC9A; font-weight:bold;">✓ '+(r.reviewState==='verified'?'admin':'auto')+'</span>';
+                } else {
+                    right = '<button class="rec-mini" onclick="uvUnignore(\''+r.payId+'\')">Un-ignore</button>';
+                }
+                html += '<tr><td>'+escapeHTML(fmt(r.ts))+'</td><td>'+escapeHTML(r.reason)+'</td><td class="num">'+inr(r.amount)+'</td><td class="num">'+right+'</td></tr>';
+                if (r.note){ html += '<tr><td colspan="4" style="opacity:0.55; font-size:0.78rem; padding-top:0;">note: '+escapeHTML(r.note)+'</td></tr>'; }
+            });
+            box.innerHTML = html + '</tbody></table>';
+        }
+        window.uvVerify = function(payId){
+            db.ref('upiReview/' + payId).set({ state: 'verified', by: (window.currentAdmin && window.currentAdmin.name) || 'admin', at: Date.now() });
+        };
+        window.uvIgnore = function(payId){
+            const note = prompt('Ignore this payment — optional note (why it has no bank credit):', '');
+            if (note === null) return;
+            const rec = { state: 'ignored', by: (window.currentAdmin && window.currentAdmin.name) || 'admin', at: Date.now() };
+            if (note.trim()) rec.note = note.trim();
+            db.ref('upiReview/' + payId).set(rec);
+        };
+        window.uvUnignore = function(payId){
+            db.ref('upiReview/' + payId).remove();
+        };
 
         let upiCfg = {}, upiTot = {}, upiAllTot = {}, upiMigrated = false;
         function loadUPIRouting(){
