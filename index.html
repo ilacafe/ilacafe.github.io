@@ -797,7 +797,7 @@
                 list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${escapeHTML(item)}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
             document.getElementById('cart-notes').value = ""; document.getElementById('modal-checkout-total').innerText = window.totalAmount;
-            updateCheckoutOptions(); document.getElementById('checkout-modal').classList.add('active');
+            document.getElementById('checkout-modal').classList.add('active'); updateCheckoutOptions();
         };
 
         window.modifyCartItem = function(item, delta) {
@@ -828,12 +828,12 @@
         window.refreshTakeawayETA = function(){
             const line = document.getElementById('takeaway-eta-line');
             if (!line) return;
-            // Only compute when the takeaway field is actually visible inside an open checkout.
-            // (updateCheckoutOptions can fire from a Firebase storeStatus callback at load time
-            //  with the modal closed / cart empty — computing then would paint a stale estimate.)
-            const modal = document.getElementById('checkout-modal');
+            // Only compute when the takeaway field is actually visible. (The field being shown is
+            // the real signal; we don't also require the modal's 'active' class because checkout-open
+            // computes the ETA a moment before that class is added — requiring it would leave the
+            // hardcoded placeholder text showing.)
             const field = document.getElementById('field-takeaway');
-            const visible = modal && modal.classList.contains('active') && field && field.style.display !== 'none';
+            const visible = field && field.style.display !== 'none';
             if (!visible) return;
             const cart = window.cart || {};
             const hasItems = Object.keys(cart).length > 0;
