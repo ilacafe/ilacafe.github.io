@@ -250,7 +250,7 @@
             <div id="pay-step-phone">
                 <label style="display:block; font-size:0.8rem; opacity:0.75; margin-bottom:6px;">Your mobile number</label>
                 <input type="tel" id="cust-phone" inputmode="numeric" maxlength="10" placeholder="10-digit number" style="width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.06); color:inherit; font-size:1rem; letter-spacing:1px;">
-                <div id="phone-error" style="font-size:0.75rem; color:#ff9e9e; margin-top:6px; display:none;">Enter a valid 10-digit mobile number.</div>
+                <div id="phone-error" style="font-size:0.75rem; color:#ff9e9e; margin-top:6px; display:none;">Please enter a valid 10-digit Indian mobile number.</div>
                 <div id="large-order-note" style="font-size:0.78rem; opacity:0.75; margin-top:10px; display:none; line-height:1.4;"></div>
                 <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
             </div>
@@ -854,11 +854,12 @@
 
             window.currentOrderInfo = { type, details, notes }; closeModal('checkout-modal'); document.getElementById('payment-amount').innerText = window.totalAmount;
 
-            // Large-order gate: if any single item qty > 3, the order must be PAID before the
-            // kitchen starts (guards against phantom bulk orders). Flag it now; the note tells
-            // the customer; sendCustomerOrder marks the order accordingly.
+            const isDineIn = (type === 'Dine-in');
+
+            // Large-order gate: ONLY for takeaway/delivery (a dine-in table is in front of you, so
+            // the phantom-order risk doesn't apply). Gated if any single item qty > 3.
             let gated = false;
-            for (const nm in window.cart){ if ((parseInt(window.cart[nm].qty)||0) > 3){ gated = true; break; } }
+            if (!isDineIn){ for (const nm in window.cart){ if ((parseInt(window.cart[nm].qty)||0) > 3){ gated = true; break; } } }
             window.currentOrderInfo.gated = gated;
             const gnote = document.getElementById('large-order-note');
             if (gnote){
@@ -866,20 +867,39 @@
                 else { gnote.style.display = 'none'; }
             }
 
-            // reset to step 1 (phone)
-            document.getElementById('pay-step-phone').style.display = 'block';
+            // Phone: required for takeaway/delivery (our only link to the customer); skipped for
+            // dine-in (they're at a table). Prefill a saved number for repeat customers.
+            const phoneStep = document.getElementById('pay-step-phone');
+            window._needPhone = !isDineIn;
+            if (isDineIn){
+                // dine-in: skip straight to payment options
+                phoneStep.style.display = 'none';
+                window.currentOrderInfo.phone = null;
+                document.getElementById('payment-modal').classList.add('active');
+                document.getElementById('pay-step-upi').style.display = 'none';
+                document.getElementById('pay-step-status').style.display = 'none';
+                window.startPayment(true);   // skipPhone
+                return;
+            }
+            const saved = localStorage.getItem('ila_cust_phone') || '';
+            const pf = document.getElementById('cust-phone'); if (pf && saved) pf.value = saved;
+
+            phoneStep.style.display = 'block';
             document.getElementById('pay-step-upi').style.display = 'none';
             document.getElementById('pay-step-status').style.display = 'none';
             document.getElementById('phone-error').style.display = 'none';
             document.getElementById('payment-modal').classList.add('active');
         };
 
-        // STEP 1 → 2: validate phone, build the UPI string, reveal the pay options
-        window.startPayment = function(){
-            const raw = (document.getElementById('cust-phone').value || '').replace(/\D/g,'');
-            if (raw.length !== 10){ document.getElementById('phone-error').style.display = 'block'; return; }
-            document.getElementById('phone-error').style.display = 'none';
-            window.currentOrderInfo.phone = raw;
+        // STEP 1 → 2: validate phone (unless dine-in), build the UPI string, reveal pay options
+        window.startPayment = function(skipPhone){
+            if (!skipPhone && window._needPhone){
+                const raw = (document.getElementById('cust-phone').value || '').replace(/\D/g,'');
+                if (raw.length !== 10 || /^(\d)\1{9}$/.test(raw) || raw[0] < '6'){ document.getElementById('phone-error').style.display = 'block'; return; }
+                document.getElementById('phone-error').style.display = 'none';
+                window.currentOrderInfo.phone = raw;
+                localStorage.setItem('ila_cust_phone', raw);   // prefill next time
+            }
 
             const selectedUPI = window.getRandomUPI();
             window.currentOrderInfo.upiId = selectedUPI;
@@ -967,11 +987,14 @@
                     setStatus('⚠️', 'Order not accepted', 'This order was cancelled. If you were charged, it will be refunded — please contact us.');
                 }
             });
-            // Safety timeout: if nothing after 90s, reassure without dead-ending.
+            // Safety timeout: at 120s unverified, flag this order so the POS notifies staff to
+            // verify manually. Keep watching — when they do, paymentVerified flips and the view
+            // updates to confirmed (the loop closes; nothing dead-ends).
             setTimeout(() => {
                 if (done) return;
-                setStatus('⌛', 'Still confirming', "Payment can take a moment to reflect. Your order is recorded — if it doesn't confirm shortly, please check with the counter. You won't need to pay twice.");
-            }, 90000);
+                setStatus('⌛', 'Confirming your payment', "This is taking a little longer than usual. We've alerted our team to check it — your order is recorded and you won't be charged twice. Please hold on.");
+                try { db.ref('orders/track/' + trackId + '/needsManualVerify').set(true); } catch(e){}
+            }, 120000);
         };
 
         updateCartUI(); 
