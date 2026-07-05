@@ -339,6 +339,14 @@
         </div>
 
         <div class="admin-card">
+            <h2>Void a Bill</h2>
+            <p class="rec-note">Reverse a settled bill — refunds, billing errors, or cancellations after payment. The sale is reversed in the till and a visible reversal line is written to the ledger; the original bill is kept in history, flagged as voided. Admin only.</p>
+            <div id="void-bill-status" class="rec-note" style="margin-bottom:10px;"></div>
+            <button class="btn btn-secondary" style="width:auto; margin-bottom:12px;" onclick="loadVoidBills()">Load recent bills</button>
+            <div id="void-bill-list"></div>
+        </div>
+
+        <div class="admin-card">
             <h2>UPI Reconciliation</h2>
             <p class="rec-note">Upload the GooglePay statement PDF(s) for a period — the "Money Received" export is fine, one per account. Matched payments are saved permanently; unmatched orders stay <strong>pending</strong> until a later statement clears them or you ignore them. PDFs are read on this device.</p>
             <input type="file" id="rec-files" accept="application/pdf,.pdf" multiple>
@@ -777,6 +785,86 @@
         };
         window.uvUnignore = function(payId){
             db.ref('upiReview/' + payId).remove();
+        };
+
+        // ===== VOID A BILL (admin only) =====
+        // Reverses a SETTLED bill: (1) reverses the till (cashDrawer or upiTotal), (2) writes a
+        // visible compensating reversal line to the ledger, (3) flags the archived order voided.
+        // The original archive row is KEPT (never deleted) so the audit trail stays honest. If the
+        // bill was UPI bank-verified, the money genuinely arrived — the void notes this so the
+        // reconciliation/bank statement still matches; only the SALE is reversed.
+        let voidBillsCache = {};
+        window.loadVoidBills = function(){
+            const box = document.getElementById('void-bill-list');
+            const status = document.getElementById('void-bill-status');
+            status.innerText = 'Loading recent bills…';
+            db.ref('orders/history').limitToLast(60).once('value', snap => {
+                voidBillsCache = snap.val() || {};
+                const rows = [];
+                for (const key in voidBillsCache){
+                    const o = voidBillsCache[key]; if (!o) continue;
+                    const total = (o.payment && o.payment.total != null) ? parseFloat(o.payment.total) : 0;
+                    if (!(total > 0)) continue;   // skip zero/blank
+                    const ts = parseInt(String(key).split('-')[0], 10) || 0;
+                    rows.push({ key, o, total, ts, method: (o.payment && o.payment.method) || '', where: o.tableOrAddress || o.orderType || '', voided: !!o.voided });
+                }
+                rows.sort((a,b)=> b.ts - a.ts);
+                if (!rows.length){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>No settled bills found.</p>"; status.innerText=''; return; }
+                const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+                const fmt = ts => { try { return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
+                let html = '<table class="rec-table"><thead><tr><th>When</th><th>Bill</th><th>Method</th><th class="num">Total</th><th></th></tr></thead><tbody>';
+                rows.forEach(r => {
+                    const right = r.voided
+                        ? '<span style="color:#ff9e9e; font-weight:bold;">VOIDED</span>'
+                        : '<button class="rec-mini" onclick="voidBill(\''+r.key+'\')">Void</button>';
+                    html += '<tr'+(r.voided?' style="opacity:0.5;"':'')+'><td>'+escapeHTML(fmt(r.ts))+'</td><td>'+escapeHTML(r.where)+'</td><td>'+escapeHTML(String(r.method))+'</td><td class="num">'+inr(r.total)+'</td><td class="num">'+right+'</td></tr>';
+                    if (r.voided && r.voidReason) html += '<tr style="opacity:0.5;"><td colspan="5" style="font-size:0.78rem; padding-top:0;">voided: '+escapeHTML(r.voidReason)+(r.o.voidBy?' — '+escapeHTML(r.o.voidBy):'')+'</td></tr>';
+                });
+                box.innerHTML = html + '</tbody></table>';
+                status.innerText='';
+            }).catch(e => { status.innerText = 'Could not load bills: ' + (e && e.message ? e.message : e); });
+        };
+        window.voidBill = async function(key){
+            const rec = voidBillsCache[key]; if (!rec) return;
+            if (rec.voided){ alert('This bill is already voided.'); return; }
+            const total = (rec.payment && rec.payment.total != null) ? parseFloat(rec.payment.total) : 0;
+            const method = (rec.payment && rec.payment.method) || '';
+            const where = rec.tableOrAddress || rec.orderType || 'bill';
+            const isUpi = /upi/i.test(String(method));
+            const wasVerified = !!(rec.payment && rec.payment.verified);
+            const reason = prompt('Void ' + where + ' (₹' + Math.round(total) + ', ' + method + ').\nReason for voiding this bill:');
+            if (reason === null) return;
+            if (!reason.trim()){ alert('A reason is required to void a bill.'); return; }
+            let extra = '';
+            if (isUpi && wasVerified) extra = '\n\nNote: this UPI bill was bank-verified — the money DID arrive in your account. Voiding reverses the sale in the till, but you may need to refund the customer separately. Continue?';
+            if (!confirm('Void this bill and reverse ' + '₹' + Math.round(total) + ' from the till?' + extra)) return;
+
+            const by = (window.currentAdmin && window.currentAdmin.name) || 'admin';
+            const now = Date.now();
+            try {
+                // 1. flag the archived order (kept, not deleted)
+                await db.ref('orders/history/' + key).update({ voided: true, voidReason: reason.trim(), voidBy: by, voidAt: now, paymentVerifiedAtVoid: wasVerified });
+                // 2. reverse the till
+                if (isUpi) await db.ref('pos/upiTotal').set(firebase.database.ServerValue.increment(-total));
+                else await db.ref('pos/cashDrawer').set(firebase.database.ServerValue.increment(-total));
+                // 3. visible compensating ledger line
+                await db.ref('pos/ledgerEntries').push({
+                    date: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    type: isUpi ? 'void_upi' : 'void_cash',
+                    amount: -Math.abs(total),
+                    reason: 'VOID: ' + where + ' — ' + reason.trim() + ' (' + by + ')',
+                    ts: firebase.database.ServerValue.TIMESTAMP,
+                    voidOf: key
+                });
+                // 4. notify (same push path as item-voids)
+                try {
+                    await fetch(ALERT_WORKER_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({ secret: ALERT_SECRET, notification: { title: '🚫 Bill voided', body: where + ' · ₹' + Math.round(total) + ' · by ' + by + ' — ' + reason.trim(), tag: 'billvoid-' + now, url: '/admin.html' }, subscriptions: Object.values((await db.ref('pushSubscriptions').once('value')).val() || {}).map(x=>x&&x.subscription).filter(Boolean) }) });
+                } catch(e){}
+                if (voidBillsCache[key]) { voidBillsCache[key].voided = true; voidBillsCache[key].voidReason = reason.trim(); voidBillsCache[key].voidBy = by; }
+                loadVoidBills();
+            } catch(e){
+                alert('Void failed: ' + (e && e.message ? e.message : e) + '\nNothing was changed — try again.');
+            }
         };
 
         // ===== PAST-DAYS ARCHIVED VERIFICATION =====
