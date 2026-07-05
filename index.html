@@ -312,7 +312,10 @@
                 cushionHotfood:5, cushionBaked:2, maxQuote:32, rangeWidth:5
             };
             let MODEL = ETA_DEF;
-            try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && m.itemBase) MODEL=m; }); } catch(e){}
+            // Merge any synced model OVER the complete default, so a partial/older model in
+            // Firebase (missing keys like pizzaKeys or the curves) can't break the estimate —
+            // missing keys fall back to the defaults instead of being undefined.
+            try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && typeof m==='object'){ MODEL = Object.assign({}, ETA_DEF, m); } }); } catch(e){}
             let loadChef=0, loadBar=0, lastPizzaOut=0;
             try {
                 db.ref('orders/active/chef').on('value', s=>{ loadChef=s.numChildren(); });
@@ -817,11 +820,22 @@
         };
 
         window.refreshTakeawayETA = function(){
-            const est = window.custEstimateETA ? window.custEstimateETA(window.cart) : null;
             const line = document.getElementById('takeaway-eta-line');
-            if (line) line.innerText = est ? ('Ready in ~' + est.label) : 'Add items to see the estimate';
-            // set the schedule slider's floor to the ETA high end
-            const floor = est ? est.high : 30;
+            const cart = window.cart || {};
+            const hasItems = Object.keys(cart).length > 0;
+            let est = null;
+            try { if (window.custEstimateETA && hasItems) est = window.custEstimateETA(cart); } catch(e){ est = null; }
+            if (line){
+                if (est && est.label){ line.innerText = 'Ready in ~' + est.label; }
+                else if (hasItems){
+                    // Items ARE present but the estimate engine returned nothing (model still
+                    // syncing, or an item not in the model). Show a safe general estimate rather
+                    // than the misleading "add items" message.
+                    line.innerText = 'Ready in ~20–30 min';
+                }
+                else { line.innerText = 'Add items to see the estimate'; }
+            }
+            const floor = (est && est.high) ? est.high : (hasItems ? 30 : 30);
             const sched = document.getElementById('takeaway-sched-time');
             if (sched){ const lo = Math.max(30, Math.ceil(floor/5)*5); sched.min = lo; if (parseInt(sched.value) < lo){ sched.value = lo; const d = document.getElementById('sched-display'); if (d) d.innerText = lo; } }
         };
