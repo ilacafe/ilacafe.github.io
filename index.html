@@ -130,7 +130,7 @@
             </div>
         </div>
 
-        <div class="usual-box" onclick="window.loadUsualOrder()">
+        <div id="usual-order-container" class="usual-box" onclick="window.loadUsualOrder()" style="display: none;">
             <div style="font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Reorder Your Usual</div>
             <div id="usual-order-desc" style="font-size: 0.9rem; opacity: 0.7;"></div>
         </div>
@@ -815,27 +815,21 @@
             const type = window.currentOrderType;
             document.getElementById('field-delivery').style.display = type === 'Delivery' ? 'block' : 'none';
             document.getElementById('field-takeaway').style.display = type === 'Takeaway' ? 'block' : 'none';
-            if (type === 'Takeaway') window.refreshTakeawayETA();
+            if (type === 'Takeaway' && typeof window.refreshTakeawayETA === 'function') window.refreshTakeawayETA();
             document.getElementById('field-dinein').style.display = type === 'Dine-in' ? 'block' : 'none';
         };
 
         window.refreshTakeawayETA = function(){
             const line = document.getElementById('takeaway-eta-line');
+            if (!line) return;
             const cart = window.cart || {};
             const hasItems = Object.keys(cart).length > 0;
             let est = null;
-            try { if (window.custEstimateETA && hasItems) est = window.custEstimateETA(cart); } catch(e){ est = null; }
-            if (line){
-                if (est && est.label){ line.innerText = 'Ready in ~' + est.label; }
-                else if (hasItems){
-                    // Items ARE present but the estimate engine returned nothing (model still
-                    // syncing, or an item not in the model). Show a safe general estimate rather
-                    // than the misleading "add items" message.
-                    line.innerText = 'Ready in ~20–30 min';
-                }
-                else { line.innerText = 'Add items to see the estimate'; }
-            }
-            const floor = (est && est.high) ? est.high : (hasItems ? 30 : 30);
+            try { if (typeof window.custEstimateETA === 'function' && hasItems) est = window.custEstimateETA(cart); } catch(e){ est = null; }
+            if (est && est.label){ line.innerText = 'Ready in ~' + est.label; }
+            else if (hasItems){ line.innerText = 'Ready in ~20–30 min'; }
+            else { line.innerText = 'Add items to see the estimate'; }
+            const floor = (est && est.high) ? est.high : 30;
             const sched = document.getElementById('takeaway-sched-time');
             if (sched){ const lo = Math.max(30, Math.ceil(floor/5)*5); sched.min = lo; if (parseInt(sched.value) < lo){ sched.value = lo; const d = document.getElementById('sched-display'); if (d) d.innerText = lo; } }
         };
