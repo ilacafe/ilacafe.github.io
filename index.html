@@ -312,10 +312,16 @@
                 cushionHotfood:5, cushionBaked:2, maxQuote:32, rangeWidth:5
             };
             let MODEL = ETA_DEF;
-            // Merge any synced model OVER the complete default, so a partial/older model in
-            // Firebase (missing keys like pizzaKeys or the curves) can't break the estimate —
-            // missing keys fall back to the defaults instead of being undefined.
-            try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && typeof m==='object'){ MODEL = Object.assign({}, ETA_DEF, m); } }); } catch(e){}
+            // The POS owns eta/model (seeded + recalibrated) and it's proven correct there. Use it
+            // the same way — merged over defaults so a missing key can't break anything — and refresh
+            // the takeaway estimate if it's on screen when the model arrives.
+            try {
+                db.ref('eta/model').on('value', s => {
+                    const m = s.val();
+                    if (m && m.itemBase && typeof m === 'object') MODEL = Object.assign({}, ETA_DEF, m);
+                    try { if (typeof window.refreshTakeawayETA==='function') window.refreshTakeawayETA(); } catch(e){}
+                });
+            } catch(e){}
             let loadChef=0, loadBar=0, lastPizzaOut=0;
             try {
                 db.ref('orders/active/chef').on('value', s=>{ loadChef=s.numChildren(); });
@@ -822,6 +828,13 @@
         window.refreshTakeawayETA = function(){
             const line = document.getElementById('takeaway-eta-line');
             if (!line) return;
+            // Only compute when the takeaway field is actually visible inside an open checkout.
+            // (updateCheckoutOptions can fire from a Firebase storeStatus callback at load time
+            //  with the modal closed / cart empty — computing then would paint a stale estimate.)
+            const modal = document.getElementById('checkout-modal');
+            const field = document.getElementById('field-takeaway');
+            const visible = modal && modal.classList.contains('active') && field && field.style.display !== 'none';
+            if (!visible) return;
             const cart = window.cart || {};
             const hasItems = Object.keys(cart).length > 0;
             let est = null;
