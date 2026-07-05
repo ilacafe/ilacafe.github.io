@@ -803,6 +803,12 @@
                         window._wvMatch[id] = m.ref;
                         el.innerHTML = '\u2713 \u20b9' + Math.round(parseFloat(m.p.amount)) + ' received' + (m.p.bank ? ' \u00b7 ' + escapeHTML(String(m.p.bank)) + (m.p.acct ? ' ' + escapeHTML(String(m.p.acct)) : '') : '');
                         el.style.cssText = 'display:inline-block; margin-top:8px; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; background:rgba(76,175,80,0.18); border:1px solid rgba(76,175,80,0.5); color:#9be9a8;';
+                        // tell the customer's page their payment is confirmed (once per order)
+                        if (o.trackId && !window._wvSignaled) window._wvSignaled = {};
+                        if (o.trackId && window._wvSignaled && !window._wvSignaled[id]){
+                            window._wvSignaled[id] = true;
+                            try { db.ref('orders/track/' + o.trackId + '/paymentVerified').set(true); } catch(e){}
+                        }
                     } else {
                         delete window._wvMatch[id];
                         el.innerHTML = '\u23f3 awaiting bank credit\u2026';
@@ -913,10 +919,18 @@
                     if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; opacity:0.8;">Notes: ${escapeHTML(o.notes)}</div>`;
                     itemsHTML += "</div>";
 
+                    // Large-order gate: a gated order (any item qty > 3) shouldn't be started until
+                    // its payment is verified. We show a clear banner; the Accept button warns if
+                    // pressed while still unverified (the badge in wv-${id} shows live payment state).
+                    const gateBanner = o.gated
+                        ? `<div id="gate-${id}" style="margin:6px 0; padding:8px 10px; border-radius:6px; background:rgba(255,180,80,0.15); font-size:0.82rem;">⚠ Large order — start only after payment shows verified below.</div>`
+                        : '';
+
                     list.innerHTML += `<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left;">
                         <strong style="font-size: 1.1rem; text-transform: uppercase;">${escapeHTML(o.tableOrAddress)}</strong><br>
                         ${itemsHTML}
                         <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
+                        ${gateBanner}
                         <span id="wv-${id}"></span>
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
                             <button class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept Order</button>
@@ -933,7 +947,17 @@
         window.acceptWebOrder = function(id) {
             const order = window.pendingWebOrders[id];
             if (!order) return;
-            
+
+            // Large-order gate: if this order is gated and payment is NOT yet verified, warn the
+            // operator before starting the kitchen (guards against phantom bulk orders). They can
+            // still override for a genuine case, but the default is to wait for the money.
+            if (order.gated){
+                const matched = !!(window._wvMatch && window._wvMatch[id]);
+                if (!matched){
+                    if (!confirm("This is a LARGE order and its payment is NOT yet verified.\n\nStart preparing anyway? (Recommended: wait until payment shows verified.)")) return;
+                }
+            }
+
             try {
                 dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App", order.trackId || null);
             } catch(e) { console.error("Kitchen dispatch error", e); }
