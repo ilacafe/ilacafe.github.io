@@ -142,12 +142,66 @@
             <img src="logo.png" alt="ILA Logo" class="logo">
         </header>
 
-        <div class="admin-card" style="text-align: center; padding: 20px;">
+<div class="admin-card" style="text-align: center; padding: 20px;">
             <p style="font-size: 0.8rem; opacity: 0.8; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; margin-top: 0;">Master Switch</p>
             <button id="master-status-btn" class="btn" onclick="toggleCafeStatus()">Loading...</button>
         </div>
 
+<div class="admin-card" style="margin-bottom: 25px;">
+            <h2>UPI Payment Verification</h2>
+            <p class="rec-note">Every UPI payment taken in the POS, and whether a bank credit email has confirmed it. Unverified ones were settled manually at the counter — treat these as the exceptions to watch. A late bank email auto-verifies on its own; or mark verified once you've confirmed it against the statement.</p>
+            <div id="upi-verify-kpis" class="rec-kpis" style="margin-bottom:16px;"></div>
+            <div class="row-group" style="gap:6px; margin-bottom:12px;">
+                <button class="rec-mini" id="uv-tab-review" onclick="uvSetTab('review')">Needs review</button>
+                <button class="rec-mini" id="uv-tab-auto" onclick="uvSetTab('auto')">Verified</button>
+                <button class="rec-mini" id="uv-tab-ignored" onclick="uvSetTab('ignored')">Ignored</button>
+            </div>
+            <div id="upi-verify-list"><p style="opacity:0.5; font-size:0.9rem;">Loading...</p></div>
+            <details style="margin-top:18px;">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Past days — archived verification</summary>
+                <p class="rec-note">Every closed day's UPI payments with their final verification state. Ignored payments are kept here permanently so they can be investigated later.</p>
+                <div class="row-group" style="gap:6px; margin:10px 0;">
+                    <button class="rec-mini" id="uvh-filter-ignored" onclick="uvhFilter('ignored')">Ignored only</button>
+                    <button class="rec-mini" id="uvh-filter-unver" onclick="uvhFilter('unverified')">Unverified only</button>
+                    <button class="rec-mini" id="uvh-filter-all" onclick="uvhFilter('all')">All</button>
+                </div>
+                <div id="upi-verify-history"><p style="opacity:0.5; font-size:0.9rem;">Open to load…</p></div>
+            </details>
+        </div>
+
+<div class="admin-card">
+            <h2>Void a Bill</h2>
+            <p class="rec-note">Reverse a settled bill — refunds, billing errors, or cancellations after payment. The sale is reversed in the till and a visible reversal line is written to the ledger; the original bill is kept in history, flagged as voided. Admin only.</p>
+            <details id="void-bill-details">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Recent bills</summary>
+                <div id="void-bill-status" class="rec-note" style="margin:10px 0;"></div>
+                <div id="void-bill-list"><p style="opacity:0.5; font-size:0.9rem;">Open to load recent bills…</p></div>
+            </details>
+        </div>
+
+<div class="admin-card" style="margin-bottom: 25px;">
+            <h2>UPI Routing</h2>
+            <p class="rec-note">Payments spread across these UPI IDs in proportion to remaining monthly headroom — an ID that hits its cap stops receiving until the 1st, and the mix continuously rebalances. Totals count confirmed settlements from the POS.</p>
+            <div class="form-group" style="margin-bottom: 10px;"><input type="text" id="upi-new-id" placeholder="VPA — e.g. name@okaxis"></div>
+            <div class="row-group" style="margin-bottom: 15px;">
+                <div class="form-group" style="flex: 1.3; margin: 0;"><input type="text" id="upi-new-label" placeholder="Label (e.g. HDFC S)"></div>
+                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="upi-new-cap" placeholder="Cap ₹/mo (0 = none)"></div>
+                <button class="btn btn-secondary" style="flex: 0.7;" onclick="upiAdd()">Add</button>
+            </div>
+            <div id="upi-routing-list"><p style="opacity:0.5; font-size:0.9rem;">Loading...</p></div>
+            <details style="margin-top: 16px;">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Month history</summary>
+                <div id="upi-history" style="margin-top: 8px;"></div>
+            </details>
+        </div>
+
         <div class="admin-card">
+            <h2>Setup &amp; Configuration</h2>
+            <p class="rec-note">Menu, staff, inventory, notifications, and one-time settings. Rarely changed once the cafe is running.</p>
+            <details id="setup-config">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Open setup</summary>
+                <div style="margin-top:16px;">
+<div class="admin-card">
             <h2>Service Availability</h2>
             <div class="row-group">
                 <div class="control-row">
@@ -167,12 +221,12 @@
             </div>
         </div>
 
-        <div class="admin-card">
+<div class="admin-card">
             <h2>Category Order</h2>
             <div id="category-order-container"><p style="opacity: 0.5; font-size: 0.9rem;">Loading...</p></div>
         </div>
 
-        <div class="admin-card" id="menu-form-section">
+<div class="admin-card" id="menu-form-section">
             <h2>Add / Edit Item</h2>
             <div class="form-group"><label>Category</label><input type="text" id="add-category" placeholder="e.g., Coffee" required></div>
             <div class="form-group"><label>Item Name</label><input type="text" id="add-name" placeholder="e.g., Latte" required></div>
@@ -217,12 +271,12 @@
             <button id="save-item-btn" class="btn btn-primary" style="margin-top: 15px;" onclick="addMenuItem()">Save Item</button>
         </div>
 
-        <div class="admin-card" style="border: none; background: transparent; padding: 0; margin-top: 30px;">
+<div class="admin-card" style="border: none; background: transparent; padding: 0; margin-top: 30px;">
             <h2 style="border: none; padding: 0; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;">Live Menu</h2>
             <div id="live-menu-container"><p style="opacity: 0.5; margin-top: 20px;">Loading database...</p></div>
         </div>
 
-        <div class="admin-card">
+<div class="admin-card">
             <h2>Staff PINs</h2>
             <div class="row-group" style="margin-bottom: 15px;">
                 <div class="form-group" style="flex: 2; margin: 0;"><input type="text" id="staff-name" placeholder="Name" required></div>
@@ -231,7 +285,8 @@
             <button class="btn btn-secondary" onclick="addStaff()">Add Staff</button>
             <div id="staff-list-container" style="margin-top: 20px;"></div>
         </div>
-        <div class="admin-card">
+
+<div class="admin-card">
             <h2>Staff Accounts &amp; Roles</h2>
             <button class="btn btn-secondary" style="margin-bottom: 15px;" onclick="signOutAdmin()">Sign Out of Admin</button>
             <p style="opacity:0.6; font-size:0.85rem; margin-top:-8px;">App logins. Role controls what each person can open and do.</p>
@@ -251,46 +306,8 @@
             <button class="btn btn-secondary" onclick="createStaffAccount()">Create Login</button>
             <div id="accounts-list-container" style="margin-top: 20px;"></div>
         </div>
-        
-        <div class="admin-card" style="margin-bottom: 25px;">
-            <h2>UPI Routing</h2>
-            <p class="rec-note">Payments spread across these UPI IDs in proportion to remaining monthly headroom — an ID that hits its cap stops receiving until the 1st, and the mix continuously rebalances. Totals count confirmed settlements from the POS.</p>
-            <div class="form-group" style="margin-bottom: 10px;"><input type="text" id="upi-new-id" placeholder="VPA — e.g. name@okaxis"></div>
-            <div class="row-group" style="margin-bottom: 15px;">
-                <div class="form-group" style="flex: 1.3; margin: 0;"><input type="text" id="upi-new-label" placeholder="Label (e.g. HDFC S)"></div>
-                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="upi-new-cap" placeholder="Cap ₹/mo (0 = none)"></div>
-                <button class="btn btn-secondary" style="flex: 0.7;" onclick="upiAdd()">Add</button>
-            </div>
-            <div id="upi-routing-list"><p style="opacity:0.5; font-size:0.9rem;">Loading...</p></div>
-            <details style="margin-top: 16px;">
-                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Month history</summary>
-                <div id="upi-history" style="margin-top: 8px;"></div>
-            </details>
-        </div>
 
-        <div class="admin-card" style="margin-bottom: 25px;">
-            <h2>UPI Payment Verification</h2>
-            <p class="rec-note">Every UPI payment taken in the POS, and whether a bank credit email has confirmed it. Unverified ones were settled manually at the counter — treat these as the exceptions to watch. A late bank email auto-verifies on its own; or mark verified once you've confirmed it against the statement.</p>
-            <div id="upi-verify-kpis" class="rec-kpis" style="margin-bottom:16px;"></div>
-            <div class="row-group" style="gap:6px; margin-bottom:12px;">
-                <button class="rec-mini" id="uv-tab-review" onclick="uvSetTab('review')">Needs review</button>
-                <button class="rec-mini" id="uv-tab-auto" onclick="uvSetTab('auto')">Verified</button>
-                <button class="rec-mini" id="uv-tab-ignored" onclick="uvSetTab('ignored')">Ignored</button>
-            </div>
-            <div id="upi-verify-list"><p style="opacity:0.5; font-size:0.9rem;">Loading...</p></div>
-            <details style="margin-top:18px;">
-                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; opacity:0.8; padding:8px 0;">Past days — archived verification</summary>
-                <p class="rec-note">Every closed day's UPI payments with their final verification state. Ignored payments are kept here permanently so they can be investigated later.</p>
-                <div class="row-group" style="gap:6px; margin:10px 0;">
-                    <button class="rec-mini" id="uvh-filter-ignored" onclick="uvhFilter('ignored')">Ignored only</button>
-                    <button class="rec-mini" id="uvh-filter-unver" onclick="uvhFilter('unverified')">Unverified only</button>
-                    <button class="rec-mini" id="uvh-filter-all" onclick="uvhFilter('all')">All</button>
-                </div>
-                <div id="upi-verify-history"><p style="opacity:0.5; font-size:0.9rem;">Open to load…</p></div>
-            </details>
-        </div>
-
-        <div class="admin-card" style="margin-bottom: 25px;">
+<div class="admin-card" style="margin-bottom: 25px;">
             <h2>Inventory Manager</h2>
             <div class="row-group">
                 <select id="inv-tab-select" class="remark-input" style="flex: 1;" onchange="renderInventoryManager()">
@@ -312,7 +329,7 @@
             <div id="inv-manager-list" style="margin-top: 20px;"></div>
         </div>
 
-        <div class="admin-card" style="margin-bottom: 60px;">
+<div class="admin-card" style="margin-bottom: 60px;">
             <h2>Recipe Builder</h2>
             <div style="margin-bottom: 20px; text-align: left;">
                 <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; display: block; margin-bottom: 5px;">Prepped Item (Output)</label>
@@ -330,7 +347,7 @@
             </div>
         </div>
 
-        <div class="admin-card">
+<div class="admin-card">
             <h2>Notifications</h2>
             <p class="rec-note">Get order-delay alerts on this device — even when the app is closed. Do this once on each device (each iPad or phone separately), from the admin app opened via its Home Screen icon.</p>
             <button class="btn btn-primary" style="width:auto;" id="notif-enable" onclick="notifEnable()">Enable alerts on this device</button>
@@ -338,15 +355,7 @@
             <div id="notif-status" class="rec-note" style="margin-top:12px;"></div>
         </div>
 
-        <div class="admin-card">
-            <h2>Void a Bill</h2>
-            <p class="rec-note">Reverse a settled bill — refunds, billing errors, or cancellations after payment. The sale is reversed in the till and a visible reversal line is written to the ledger; the original bill is kept in history, flagged as voided. Admin only.</p>
-            <div id="void-bill-status" class="rec-note" style="margin-bottom:10px;"></div>
-            <button class="btn btn-secondary" style="width:auto; margin-bottom:12px;" onclick="loadVoidBills()">Load recent bills</button>
-            <div id="void-bill-list"></div>
-        </div>
-
-        <div class="admin-card">
+<div class="admin-card">
             <h2>UPI Reconciliation</h2>
             <p class="rec-note">Upload the GooglePay statement PDF(s) for a period — the "Money Received" export is fine, one per account. Matched payments are saved permanently; unmatched orders stay <strong>pending</strong> until a later statement clears them or you ignore them. PDFs are read on this device.</p>
             <input type="file" id="rec-files" accept="application/pdf,.pdf" multiple>
@@ -375,7 +384,9 @@
                 </details>
             </div>
         </div>
-
+                </div>
+            </details>
+        </div>
     </div>
 
     <script>
@@ -764,7 +775,13 @@
                 if (uvTab === 'review'){
                     right = '<button class="rec-mini" style="margin-right:6px;" onclick="uvVerify(\''+r.payId+'\')">Mark verified</button><button class="rec-mini" onclick="uvIgnore(\''+r.payId+'\')">Ignore</button>';
                 } else if (uvTab === 'auto'){
-                    right = '<span style="color:#7CFC9A; font-weight:bold;">✓ '+(r.reviewState==='verified'?'admin':'auto')+'</span>';
+                    if (r.reviewState === 'verified'){
+                        // admin-verified → can be undone (pushed back to review)
+                        right = '<span style="color:#7CFC9A; font-weight:bold; margin-right:8px;">✓ admin</span><button class="rec-mini" onclick="uvUnverify(\''+r.payId+'\')">Un-verify</button>';
+                    } else {
+                        // bank-credit verified → genuine money arrived, not undoable here
+                        right = '<span style="color:#7CFC9A; font-weight:bold;">✓ bank</span>';
+                    }
                 } else {
                     right = '<button class="rec-mini" onclick="uvUnignore(\''+r.payId+'\')">Un-ignore</button>';
                 }
@@ -785,6 +802,10 @@
         };
         window.uvUnignore = function(payId){
             db.ref('upiReview/' + payId).remove();
+        };
+        window.uvUnverify = function(payId){
+            if (!confirm('Un-verify this payment? It returns to Needs Review and its tick reverts in the POS. Use this if it was marked verified by mistake.')) return;
+            db.ref('upiReview/' + payId).remove();   // removes the admin verification; bank-state (if any) still governs
         };
 
         // ===== VOID A BILL (admin only) =====
@@ -815,8 +836,8 @@
                 let html = '<table class="rec-table"><thead><tr><th>When</th><th>Bill</th><th>Method</th><th class="num">Total</th><th></th></tr></thead><tbody>';
                 rows.forEach(r => {
                     const right = r.voided
-                        ? '<span style="color:#ff9e9e; font-weight:bold;">VOIDED</span>'
-                        : '<button class="rec-mini" onclick="voidBill(\''+r.key+'\')">Void</button>';
+                        ? '<span style="color:#ff9e9e; font-weight:bold; font-size:0.8rem;">VOIDED</span>'
+                        : '<button class="btn-action" onclick="voidBill(\''+r.key+'\')">Void</button>';
                     html += '<tr'+(r.voided?' style="opacity:0.5;"':'')+'><td>'+escapeHTML(fmt(r.ts))+'</td><td>'+escapeHTML(r.where)+'</td><td>'+escapeHTML(String(r.method))+'</td><td class="num">'+inr(r.total)+'</td><td class="num">'+right+'</td></tr>';
                     if (r.voided && r.voidReason) html += '<tr style="opacity:0.5;"><td colspan="5" style="font-size:0.78rem; padding-top:0;">voided: '+escapeHTML(r.voidReason)+(r.o.voidBy?' — '+escapeHTML(r.o.voidBy):'')+'</td></tr>';
                 });
@@ -919,6 +940,9 @@
             const det = document.querySelector('#upi-verify-history');
             const wrap = det ? det.closest('details') : null;
             if (wrap) wrap.addEventListener('toggle', function(){ if (wrap.open) loadUPIHistoryArchive(); });
+            // void bills: load on expand
+            const vd = document.getElementById('void-bill-details');
+            if (vd) vd.addEventListener('toggle', function(){ if (vd.open) loadVoidBills(); });
         });
 
         let upiCfg = {}, upiTot = {}, upiAllTot = {}, upiMigrated = false;
