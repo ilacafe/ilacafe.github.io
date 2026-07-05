@@ -656,7 +656,29 @@
                 previousWebOrderCount = count;
                 isInitialWebOrderLoad = false;
                 if(document.getElementById('web-orders-modal').classList.contains('active')) { window.openWebOrders(); }
+                try { watchManualVerifyFlags(); } catch(e){}
             });
+
+            // #5: when a customer's payment hasn't auto-confirmed in 120s, their app sets
+            // needsManualVerify on the track record. Watch for it and push staff ONCE per order to
+            // go verify manually. When they verify (paymentVerified set), the customer app reflects it.
+            window._mvAlerted = {};
+            function watchManualVerifyFlags(){
+                for (const id in (window.pendingWebOrders || {})){
+                    const o = window.pendingWebOrders[id]; if (!o || !o.trackId) continue;
+                    const tid = o.trackId;
+                    if (window._mvAlerted[tid]) continue;
+                    db.ref('orders/track/' + tid + '/needsManualVerify').once('value', s => {
+                        if (s.val() === true && !window._mvAlerted[tid]){
+                            // only alert if still unverified
+                            const matched = !!(window._wvMatch && window._wvMatch[id]);
+                            if (matched) return;
+                            window._mvAlerted[tid] = true;
+                            posSendPush({ title: '⚠️ Verify a web payment', body: (o.tableOrAddress||'Web order') + ' · ₹' + o.total + ' — customer paid but it hasn\'t auto-confirmed. Check and verify.', tag: 'manualverify-' + tid, url: '/admin.html' });
+                        }
+                    });
+                }
+            }
 
             db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
         }
@@ -910,8 +932,23 @@
             if (Object.keys(window.pendingWebOrders).length === 0) {
                 list.innerHTML = "<p style='opacity:0.5;'>No pending web orders.</p>";
             } else {
-                for (let id in window.pendingWebOrders) {
+                // #1 auto-expire (flag-and-sink): an unpaid order older than 20 min is likely
+                // abandoned. We DON'T delete it (a late bank credit could still verify it) — we mark
+                // it visibly stale and sort it to the bottom. Verified orders never go stale.
+                const STALE_MS = 20 * 60000;
+                const now = Date.now();
+                const ids = Object.keys(window.pendingWebOrders).sort((a,b) => {
+                    const oa = window.pendingWebOrders[a], ob = window.pendingWebOrders[b];
+                    const va = !!(window._wvMatch && window._wvMatch[a]), vb = !!(window._wvMatch && window._wvMatch[b]);
+                    const sa = (!va && oa.createdAt && (now - oa.createdAt) > STALE_MS) ? 1 : 0;
+                    const sb = (!vb && ob.createdAt && (now - ob.createdAt) > STALE_MS) ? 1 : 0;
+                    if (sa !== sb) return sa - sb;                 // stale ones sink
+                    return (ob.createdAt||0) - (oa.createdAt||0);  // otherwise newest first
+                });
+                for (let id of ids) {
                     const o = window.pendingWebOrders[id];
+                    const verified = !!(window._wvMatch && window._wvMatch[id]);
+                    const stale = !verified && o.createdAt && (now - o.createdAt) > STALE_MS;
                     let itemsHTML = "<div style='margin: 10px 0; font-size: 0.9rem; opacity: 0.8; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.3);'>";
                     for(let itemName in o.items) {
                         itemsHTML += `<div style="margin-bottom: 3px;">${o.items[itemName].qty}x ${escapeHTML(itemName)}</div>`;
@@ -919,17 +956,18 @@
                     if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; opacity:0.8;">Notes: ${escapeHTML(o.notes)}</div>`;
                     itemsHTML += "</div>";
 
-                    // Large-order gate: a gated order (any item qty > 3) shouldn't be started until
-                    // its payment is verified. We show a clear banner; the Accept button warns if
-                    // pressed while still unverified (the badge in wv-${id} shows live payment state).
                     const gateBanner = o.gated
                         ? `<div id="gate-${id}" style="margin:6px 0; padding:8px 10px; border-radius:6px; background:rgba(255,180,80,0.15); font-size:0.82rem;">⚠ Large order — start only after payment shows verified below.</div>`
                         : '';
+                    const staleBanner = stale
+                        ? `<div style="margin:6px 0; padding:8px 10px; border-radius:6px; background:rgba(255,90,90,0.18); border:1px solid rgba(255,90,90,0.4); font-size:0.82rem; color:#ffb3b3;">⏰ Unpaid for 20+ min — likely abandoned. Verify payment before making, or reject.</div>`
+                        : '';
 
-                    list.innerHTML += `<div style="border:1px solid rgba(255,255,255,0.2); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left;">
+                    list.innerHTML += `<div style="border:1px solid rgba(255,255,255,${stale?'0.12':'0.2'}); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left; ${stale?'opacity:0.6;':''}">
                         <strong style="font-size: 1.1rem; text-transform: uppercase;">${escapeHTML(o.tableOrAddress)}</strong><br>
                         ${itemsHTML}
                         <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
+                        ${staleBanner}
                         ${gateBanner}
                         <span id="wv-${id}"></span>
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
