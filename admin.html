@@ -124,6 +124,10 @@
         .rec-mini { background: rgba(255,255,255,0.10); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 4px 10px; border-radius: 5px; font-family: 'Quicksand', sans-serif; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
         .rec-mini:active { background: rgba(255,255,255,0.2); }
         @media(max-width: 500px) { .rec-kpis { grid-template-columns: 1fr; } }
+        @media(max-width: 430px) {
+            .control-row { padding: 12px; }
+            .row-group.stack-narrow { flex-direction: column; }
+        }
     </style>
 </head>
 <body>
@@ -203,7 +207,7 @@
                 <div style="margin-top:16px;">
 <div class="admin-card">
             <h2>Service Availability</h2>
-            <div class="row-group">
+            <div class="row-group stack-narrow">
                 <div class="control-row">
                     <label style="margin:0; cursor:pointer;" for="toggle-delivery">Delivery</label>
                     <label class="toggle-switch">
@@ -833,7 +837,7 @@
                 if (!rows.length){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>No settled bills found.</p>"; status.innerText=''; return; }
                 const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
                 const fmt = ts => { try { return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
-                let html = '<table class="rec-table"><thead><tr><th>When</th><th>Bill</th><th>Method</th><th class="num">Total</th><th></th></tr></thead><tbody>';
+                let html = '<div class="rec-scroll"><table class="rec-table"><thead><tr><th>When</th><th>Bill</th><th>Method</th><th class="num">Total</th><th></th></tr></thead><tbody>';
                 rows.forEach(r => {
                     const right = r.voided
                         ? '<span style="color:#ff9e9e; font-weight:bold; font-size:0.8rem;">VOIDED</span>'
@@ -841,7 +845,7 @@
                     html += '<tr'+(r.voided?' style="opacity:0.5;"':'')+'><td>'+escapeHTML(fmt(r.ts))+'</td><td>'+escapeHTML(r.where)+'</td><td>'+escapeHTML(String(r.method))+'</td><td class="num">'+inr(r.total)+'</td><td class="num">'+right+'</td></tr>';
                     if (r.voided && r.voidReason) html += '<tr style="opacity:0.5;"><td colspan="5" style="font-size:0.78rem; padding-top:0;">voided: '+escapeHTML(r.voidReason)+(r.o.voidBy?' — '+escapeHTML(r.o.voidBy):'')+'</td></tr>';
                 });
-                box.innerHTML = html + '</tbody></table>';
+                box.innerHTML = html + '</tbody></table></div>';
                 status.innerText='';
             }).catch(e => { status.innerText = 'Could not load bills: ' + (e && e.message ? e.message : e); });
         };
