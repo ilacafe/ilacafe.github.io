@@ -837,15 +837,23 @@
                 if (!rows.length){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>No settled bills found.</p>"; status.innerText=''; return; }
                 const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
                 const fmt = ts => { try { return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
-                let html = '<div class="rec-scroll"><table class="rec-table"><thead><tr><th>When</th><th>Bill</th><th>Method</th><th class="num">Total</th><th></th></tr></thead><tbody>';
+                // Stacked rows (not a wide table): info on the left wraps naturally, the Void
+                // button is pinned right and always visible — no horizontal scroll to reach it.
+                let html = '';
                 rows.forEach(r => {
                     const right = r.voided
-                        ? '<span style="color:#ff9e9e; font-weight:bold; font-size:0.8rem;">VOIDED</span>'
-                        : '<button class="btn-action" onclick="voidBill(\''+r.key+'\')">Void</button>';
-                    html += '<tr'+(r.voided?' style="opacity:0.5;"':'')+'><td>'+escapeHTML(fmt(r.ts))+'</td><td>'+escapeHTML(r.where)+'</td><td>'+escapeHTML(String(r.method))+'</td><td class="num">'+inr(r.total)+'</td><td class="num">'+right+'</td></tr>';
-                    if (r.voided && r.voidReason) html += '<tr style="opacity:0.5;"><td colspan="5" style="font-size:0.78rem; padding-top:0;">voided: '+escapeHTML(r.voidReason)+(r.o.voidBy?' — '+escapeHTML(r.o.voidBy):'')+'</td></tr>';
+                        ? '<span style="color:#ff9e9e; font-weight:bold; font-size:0.8rem; white-space:nowrap;">VOIDED</span>'
+                        : '<button class="btn-action" style="white-space:nowrap; flex-shrink:0;" onclick="voidBill(\''+r.key+'\')">Void</button>';
+                    html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);'+(r.voided?' opacity:0.5;':'')+'">'
+                          +   '<div style="min-width:0; flex:1;">'
+                          +     '<div style="font-weight:600;">'+escapeHTML(r.where || 'Bill')+' · '+inr(r.total)+'</div>'
+                          +     '<div style="font-size:0.78rem; opacity:0.6; margin-top:2px;">'+escapeHTML(fmt(r.ts))+' · '+escapeHTML(String(r.method))+'</div>'
+                          +     (r.voided && r.voidReason ? '<div style="font-size:0.75rem; opacity:0.6; margin-top:3px;">voided: '+escapeHTML(r.voidReason)+(r.o.voidBy?' — '+escapeHTML(r.o.voidBy):'')+'</div>' : '')
+                          +   '</div>'
+                          +   right
+                          + '</div>';
                 });
-                box.innerHTML = html + '</tbody></table></div>';
+                box.innerHTML = html;
                 status.innerText='';
             }).catch(e => { status.innerText = 'Could not load bills: ' + (e && e.message ? e.message : e); });
         };
