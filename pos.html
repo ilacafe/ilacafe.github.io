@@ -1800,8 +1800,9 @@
                 let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
                 if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'CASH: '; } 
                 else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
+                else if (entry.type === 'void_upi' || entry.type === 'void_cash') { colorClass = 'ledger-out'; sign = '−'; typeTag = 'VOID: '; }
                 
-                let safeAmount = parseFloat(entry.amount) || 0;
+                let safeAmount = Math.abs(parseFloat(entry.amount) || 0);   // stored negative for voids; sign handled above
                 let tick = '';
                 if (entry.type === 'upi_income') {
                     const rv = (window.upiReviewMap || {})[entry.payId] || null;
