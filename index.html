@@ -214,9 +214,18 @@
                         <div id="fixed-table-display" style="display:none; text-align:center; padding:10px; font-weight:bold; color:#ffcc00; border:1px solid rgba(255,255,255,0.2); border-radius:6px;">
                             </div>
                     </div>
-                    <div id="field-takeaway" style="display: none; text-align: center; padding: 10px 0;">
-                        <div style="font-weight: bold; font-size: 1rem;">Pickup: <span id="time-display">30</span> min</div>
-                        <input type="range" id="takeaway-time" min="10" max="90" step="5" value="30" oninput="document.getElementById('time-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); height: 2px; margin-top: 10px; outline: none; border-radius: 2px;">
+                    <div id="field-takeaway" style="display: none; padding: 10px 0;">
+                        <div style="text-align:center; font-weight: bold; font-size: 1rem;" id="takeaway-eta-line">Ready in ~25–30 min</div>
+                        <div style="text-align:center; font-size:0.8rem; opacity:0.65; margin-top:4px;">Estimated from your order and the current kitchen.</div>
+                        <div style="margin-top:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                            <input type="checkbox" id="takeaway-schedule-toggle" onchange="window.toggleSchedule()" style="width:auto;">
+                            <label for="takeaway-schedule-toggle" style="font-size:0.85rem; opacity:0.85;">I'll pick up later</label>
+                        </div>
+                        <div id="takeaway-schedule-row" style="display:none; text-align:center; margin-top:10px;">
+                            <div style="font-size:0.85rem; margin-bottom:6px;">Pick up in <span id="sched-display" style="font-weight:bold;">45</span> min</div>
+                            <input type="range" id="takeaway-sched-time" min="30" max="120" step="5" value="45" oninput="document.getElementById('sched-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); height: 2px; outline: none; border-radius: 2px;">
+                            <div style="font-size:0.75rem; opacity:0.6; margin-top:4px;">Can't be earlier than the kitchen estimate above.</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -232,20 +241,43 @@
     <div id="payment-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Checkout</h3>
-            <div style="border: 1px solid rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="border: 1px solid rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; margin-bottom: 18px;">
                 <div style="font-size: 0.8rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">Amount Due</div>
                 <div style="font-size: 1.8rem; font-weight: 700;">₹<span id="payment-amount">0</span></div>
             </div>
-            
-            <button class="btn btn-primary" style="width: 100%; margin-bottom: 15px;" id="pay-upi-btn">Pay via UPI</button>
-            <img id="payment-qr" src="" alt="QR" style="width: 150px; height: 150px; margin: 0 auto 15px auto; border-radius: 8px; display: block; background: white; padding: 5px;">
-            
-            <div id="payment-instruction" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; margin-bottom: 15px;">
-                Complete payment above to send order
+
+            <!-- STEP 1: phone number (required) -->
+            <div id="pay-step-phone">
+                <label style="display:block; font-size:0.8rem; opacity:0.75; margin-bottom:6px;">Your mobile number</label>
+                <input type="tel" id="cust-phone" inputmode="numeric" maxlength="10" placeholder="10-digit number" style="width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.06); color:inherit; font-size:1rem; letter-spacing:1px;">
+                <div id="phone-error" style="font-size:0.75rem; color:#ff9e9e; margin-top:6px; display:none;">Enter a valid 10-digit mobile number.</div>
+                <div id="large-order-note" style="font-size:0.78rem; opacity:0.75; margin-top:10px; display:none; line-height:1.4;"></div>
+                <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
             </div>
 
-            <button class="btn btn-secondary" id="confirm-order-btn" style="width: 100%; display: none;" onclick="window.sendCustomerOrder()">I Have Paid - Send Order</button>
-            
+            <!-- STEP 2: pay via a UPI app -->
+            <div id="pay-step-upi" style="display:none;">
+                <div style="font-size:0.8rem; opacity:0.75; margin-bottom:10px;">Pay with your UPI app:</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                    <button class="btn btn-secondary upi-app-btn" onclick="window.payWithApp('gpay')">Google Pay</button>
+                    <button class="btn btn-secondary upi-app-btn" onclick="window.payWithApp('phonepe')">PhonePe</button>
+                    <button class="btn btn-secondary upi-app-btn" onclick="window.payWithApp('paytm')">Paytm</button>
+                    <button class="btn btn-secondary upi-app-btn" onclick="window.payWithApp('bhim')">BHIM</button>
+                </div>
+                <button class="btn btn-secondary" style="width:100%; margin-bottom:14px;" onclick="window.payWithApp('generic')">Any other UPI app</button>
+                <div style="text-align:center; font-size:0.75rem; opacity:0.6; margin-bottom:10px;">or scan</div>
+                <img id="payment-qr" src="" alt="Scan to pay" style="width: 160px; height: 160px; margin: 0 auto 14px auto; border-radius: 8px; display: block; background: white; padding: 6px;">
+                <div style="font-size:0.72rem; opacity:0.55; text-align:center; line-height:1.4;">If an app doesn't open, use "Any other UPI app" or scan the code with any UPI app.</div>
+                <button class="btn btn-primary" style="width:100%; margin-top:16px;" onclick="window.sendCustomerOrder()">I've paid — place my order</button>
+            </div>
+
+            <!-- STEP 3: order placed, live payment status -->
+            <div id="pay-step-status" style="display:none; text-align:center; padding:10px 0;">
+                <div id="status-icon" style="font-size:2.5rem; margin-bottom:10px;">⏳</div>
+                <div id="status-title" style="font-size:1.1rem; font-weight:700; margin-bottom:8px;">Order placed</div>
+                <div id="status-detail" style="font-size:0.85rem; opacity:0.8; line-height:1.5;">Confirming your payment automatically…</div>
+            </div>
+
             <button class="close-modal" onclick="closeModal('payment-modal')">✖ CLOSE</button>
         </div>
     </div>
@@ -780,7 +812,23 @@
             const type = window.currentOrderType;
             document.getElementById('field-delivery').style.display = type === 'Delivery' ? 'block' : 'none';
             document.getElementById('field-takeaway').style.display = type === 'Takeaway' ? 'block' : 'none';
+            if (type === 'Takeaway') window.refreshTakeawayETA();
             document.getElementById('field-dinein').style.display = type === 'Dine-in' ? 'block' : 'none';
+        };
+
+        window.refreshTakeawayETA = function(){
+            const est = window.custEstimateETA ? window.custEstimateETA(window.cart) : null;
+            const line = document.getElementById('takeaway-eta-line');
+            if (line) line.innerText = est ? ('Ready in ~' + est.label) : 'Add items to see the estimate';
+            // set the schedule slider's floor to the ETA high end
+            const floor = est ? est.high : 30;
+            const sched = document.getElementById('takeaway-sched-time');
+            if (sched){ const lo = Math.max(30, Math.ceil(floor/5)*5); sched.min = lo; if (parseInt(sched.value) < lo){ sched.value = lo; const d = document.getElementById('sched-display'); if (d) d.innerText = lo; } }
+        };
+        window.toggleSchedule = function(){
+            const on = document.getElementById('takeaway-schedule-toggle').checked;
+            document.getElementById('takeaway-schedule-row').style.display = on ? 'block' : 'none';
+            if (on) window.refreshTakeawayETA();
         };
 
         window.proceedToPayment = function() {
@@ -789,22 +837,81 @@
             else if (type === 'Dine-in') { 
                 if(urlTable) details = "Table " + urlTable; else if (window.currentDineInTable) details = "Table " + window.currentDineInTable; else { alert("Please select a table number."); return; }
             } 
-            else if (type === 'Takeaway') { const time = document.getElementById('takeaway-time').value; details = `Pickup: ${time} min`; }
+            else if (type === 'Takeaway') {
+                // Use the real kitchen estimate, not a blind slider. If they chose to schedule a
+                // later pickup, use that — but never earlier than the ETA floor.
+                const est = window.custEstimateETA ? window.custEstimateETA(window.cart) : null;
+                const floor = est ? est.high : 20;
+                const scheduling = document.getElementById('takeaway-schedule-toggle') && document.getElementById('takeaway-schedule-toggle').checked;
+                if (scheduling){
+                    let mins = parseInt(document.getElementById('takeaway-sched-time').value) || floor;
+                    if (mins < floor) mins = floor;
+                    details = `Pickup in ~${mins} min (scheduled)`;
+                } else {
+                    details = est ? `Ready in ~${est.label}` : `Takeaway`;
+                }
+            }
 
             window.currentOrderInfo = { type, details, notes }; closeModal('checkout-modal'); document.getElementById('payment-amount').innerText = window.totalAmount;
-            
-            const selectedUPI = window.getRandomUPI();
-            window.currentOrderInfo.upiId = selectedUPI;   // carried on the order so the POS can attribute the payment
-            const upiString = `upi://pay?pa=${selectedUPI}&pn=ILA&am=${window.totalAmount}&cu=INR`;
-            
-            document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
-            document.getElementById('confirm-order-btn').style.display = 'none'; document.getElementById('payment-instruction').style.display = 'block';
 
-            document.getElementById('pay-upi-btn').onclick = () => { 
-                window.location.href = upiString; 
-                setTimeout(() => { document.getElementById('payment-instruction').style.display = 'none'; document.getElementById('confirm-order-btn').style.display = 'block'; }, 1500);
-            };
+            // Large-order gate: if any single item qty > 3, the order must be PAID before the
+            // kitchen starts (guards against phantom bulk orders). Flag it now; the note tells
+            // the customer; sendCustomerOrder marks the order accordingly.
+            let gated = false;
+            for (const nm in window.cart){ if ((parseInt(window.cart[nm].qty)||0) > 3){ gated = true; break; } }
+            window.currentOrderInfo.gated = gated;
+            const gnote = document.getElementById('large-order-note');
+            if (gnote){
+                if (gated){ gnote.style.display = 'block'; gnote.innerText = 'This is a large order, so we start preparing it once your payment is confirmed. It usually takes under a minute.'; }
+                else { gnote.style.display = 'none'; }
+            }
+
+            // reset to step 1 (phone)
+            document.getElementById('pay-step-phone').style.display = 'block';
+            document.getElementById('pay-step-upi').style.display = 'none';
+            document.getElementById('pay-step-status').style.display = 'none';
+            document.getElementById('phone-error').style.display = 'none';
             document.getElementById('payment-modal').classList.add('active');
+        };
+
+        // STEP 1 → 2: validate phone, build the UPI string, reveal the pay options
+        window.startPayment = function(){
+            const raw = (document.getElementById('cust-phone').value || '').replace(/\D/g,'');
+            if (raw.length !== 10){ document.getElementById('phone-error').style.display = 'block'; return; }
+            document.getElementById('phone-error').style.display = 'none';
+            window.currentOrderInfo.phone = raw;
+
+            const selectedUPI = window.getRandomUPI();
+            window.currentOrderInfo.upiId = selectedUPI;
+            const amt = window.totalAmount;
+            window._upiParams = { pa: selectedUPI, pn: 'ILA', am: amt, cu: 'INR' };
+            const generic = `upi://pay?pa=${selectedUPI}&pn=ILA&am=${amt}&cu=INR`;
+            document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(generic)}`;
+
+            document.getElementById('pay-step-phone').style.display = 'none';
+            document.getElementById('pay-step-upi').style.display = 'block';
+        };
+
+        // Attempt an app-specific deep link, with the generic upi:// as the reliable fallback.
+        // NOTE: app-specific UPI intents are best-effort — some apps/phones ignore them. The
+        // generic scheme and the QR always work; the buttons are a convenience, not a guarantee.
+        window.payWithApp = function(app){
+            const p = window._upiParams; if (!p) return;
+            const q = `pa=${p.pa}&pn=${p.pn}&am=${p.am}&cu=${p.cu}`;
+            let url;
+            switch(app){
+                case 'gpay':    url = `tez://upi/pay?${q}`; break;         // Google Pay
+                case 'phonepe': url = `phonepe://pay?${q}`; break;
+                case 'paytm':   url = `paytmmp://pay?${q}`; break;
+                case 'bhim':    url = `upi://pay?${q}`; break;             // BHIM handles the generic scheme
+                default:        url = `upi://pay?${q}`; break;            // generic
+            }
+            // Try the app scheme; if nothing catches it, fall back to generic after a moment.
+            const fallback = `upi://pay?${q}`;
+            try { window.location.href = url; } catch(e){ window.location.href = fallback; }
+            if (app !== 'generic' && app !== 'bhim'){
+                setTimeout(function(){ /* if still here, the app likely didn't open; generic is available via the button/QR */ }, 1200);
+            }
         };
 
         window.sendCustomerOrder = function() {
@@ -820,21 +927,51 @@
             localStorage.setItem('ila_track_started', Date.now());
 
             ensureAuth().then(() => {
-                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: info.upiId || null, trackId: trackId, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: info.upiId || null, phone: info.phone || null, gated: !!info.gated, trackId: trackId, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 // seed a status record the POS will advance as the order progresses
-                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: info.details, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: info.details, phone: info.phone || null, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 if (window.watchOrderStatus) window.watchOrderStatus();
+                window.watchPaymentStatus(trackId, info);
             }).catch(() => alert("Couldn't place the order — check your connection and try again."));
 
-            let message = `ORDER: ${info.type.toUpperCase()}\n${info.details}\n`;
-            if (info.notes) { message += `Notes: ${info.notes}\n`; } message += `\n`;
-            for (let item in window.cart) { message += `${window.cart[item].qty}x ${item}\n`; }
-            message += `\nTotal: ₹${window.totalAmount}\nStatus: Customer UPI`;
-            
-            setTimeout(() => { 
-                window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('payment-modal'); 
-                window.location.href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent(message)}`; 
-            }, 100);
+            // Show the live status step (do NOT clear the cart until payment is seen or the
+            // customer closes — so nothing is lost if they need to retry payment).
+            document.getElementById('pay-step-phone').style.display = 'none';
+            document.getElementById('pay-step-upi').style.display = 'none';
+            document.getElementById('pay-step-status').style.display = 'block';
+            window._orderPlaced = true;
+        };
+
+        // Live, honest payment status: watches for the auto-verification (bank credit matched to
+        // this order's account+amount) and updates the view. Never blind, never auto-dismisses.
+        window.watchPaymentStatus = function(trackId, info){
+            const setStatus = (icon, title, detail) => {
+                const i = document.getElementById('status-icon'), t = document.getElementById('status-title'), d = document.getElementById('status-detail');
+                if (i) i.innerText = icon; if (t) t.innerText = title; if (d) d.innerText = detail;
+            };
+            setStatus('⏳', info.gated ? 'Order received — awaiting payment' : 'Order placed', info.gated ? 'We start preparing once your payment is confirmed. Confirming automatically…' : 'Confirming your payment automatically…');
+            // Clear cart now that the order is safely recorded.
+            window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI();
+
+            // Watch this order's pendingWeb record for a verification flag the POS/worker sets,
+            // OR the track status advancing (POS accepted). Either confirms to the customer.
+            let done = false;
+            const trackRef = db.ref('orders/track/' + trackId);
+            const onTrack = trackRef.on('value', snap => {
+                const v = snap.val(); if (!v || done) return;
+                if (v.paymentVerified === true || (v.status && v.status !== 'received' && v.status !== 'cancelled')){
+                    done = true;
+                    setStatus('✅', 'Payment confirmed', 'Your order is placed and on its way to the kitchen. You can track it below.');
+                } else if (v.status === 'cancelled'){
+                    done = true;
+                    setStatus('⚠️', 'Order not accepted', 'This order was cancelled. If you were charged, it will be refunded — please contact us.');
+                }
+            });
+            // Safety timeout: if nothing after 90s, reassure without dead-ending.
+            setTimeout(() => {
+                if (done) return;
+                setStatus('⌛', 'Still confirming', "Payment can take a moment to reflect. Your order is recorded — if it doesn't confirm shortly, please check with the counter. You won't need to pay twice.");
+            }, 90000);
         };
 
         updateCartUI(); 
