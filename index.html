@@ -57,8 +57,28 @@
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .modal-content { background-color: var(--card-bg); border: 1px solid rgba(255,255,255,0.25); box-shadow: 0 12px 40px rgba(0,0,0,0.35); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
-        .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
+        .modal-content { background-color: #ffffff; color: #3a2c20; border: none; box-shadow: 0 12px 40px rgba(0,0,0,0.35); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
+        .modal-content h3 { color: #3a2c20; margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
+        .modal-content .checkout-btn { background-color: var(--brand-bg); color: #fff; }
+        /* inside a white card, flip type buttons to dark-on-white with brown accents */
+        .modal-content .type-btn { color: #6b5844; border-color: rgba(0,0,0,0.2); }
+        .modal-content .type-btn.selected { background: var(--brand-bg); color: #fff; border-color: var(--brand-bg); }
+        .modal-content .qty-btn { color: #6b5844; }
+        .modal-content .qty-btn:active { background: var(--brand-bg); color: #fff; }
+        .modal-content .add-btn { color: #6b5844; border-color: rgba(0,0,0,0.25); }
+        .modal-content .add-btn:active { background: var(--brand-bg); color: #fff; }
+        .modal-content .btn-secondary { color: #3a2c20; border-color: rgba(0,0,0,0.25); }
+        .modal-content .btn-primary { background-color: var(--brand-bg); color: #fff; }
+        .modal-content .btn-secondary, .modal-content .upi-app-btn { background-color: transparent; color: var(--brand-bg); border: 1px solid var(--brand-bg); }
+        .modal-content .upi-app-btn:active, .modal-content .btn-secondary:active { background: var(--brand-bg); color: #fff; }
+        .modal-content input { color: #3a2c20 !important; border-color: rgba(0,0,0,0.25) !important; background: rgba(0,0,0,0.03) !important; }
+        .modal-content input::placeholder { color: rgba(0,0,0,0.4); }
+        /* white card: darken structural borders and receipt, fix the amber table-scan text */
+        .modal-content .bill-receipt { color: #3a2c20; border-color: rgba(0,0,0,0.15); }
+        .modal-content .bill-receipt-row { color: #3a2c20; }
+        #payment-modal [style*="color:#ffcc00"], #checkout-modal [style*="color:#ffcc00"] { color: #9a6a00 !important; }
+        #payment-modal [style*="rgba(255,255,255,0.2)"], #checkout-modal [style*="rgba(255,255,255,0.2)"], #remark-modal [style*="rgba(255,255,255,0.2)"] { border-color: rgba(0,0,0,0.15) !important; }
+        #payment-modal [style*="rgba(255,255,255,0.3)"], #checkout-modal [style*="rgba(255,255,255,0.3)"] { border-color: rgba(0,0,0,0.2) !important; }
         
         .remark-input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); }
