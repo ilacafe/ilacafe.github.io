@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#8D6E52">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>ILA | Order</title>
     <link rel="apple-touch-icon" href="/icon-customer.png" />
     <link rel="icon" type="image/png" href="/icon-customer.png" />
@@ -14,7 +17,7 @@
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
-        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
         header { text-align: center; margin-bottom: 20px; }
         
@@ -52,7 +55,7 @@
         .cart-clear { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
         .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
