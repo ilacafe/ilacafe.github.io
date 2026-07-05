@@ -798,6 +798,10 @@
             }
             document.getElementById('cart-notes').value = ""; document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             document.getElementById('checkout-modal').classList.add('active'); updateCheckoutOptions();
+            // Always recompute the takeaway ETA on open with the CURRENT cart — updateCheckoutOptions
+            // only calls setOrderType (which refreshes) when it needs to switch type, so reopening
+            // with the same type would otherwise leave the previous item's estimate on screen.
+            if (window.currentOrderType === 'Takeaway' && typeof window.refreshTakeawayETA === 'function') window.refreshTakeawayETA();
         };
 
         window.modifyCartItem = function(item, delta) {
