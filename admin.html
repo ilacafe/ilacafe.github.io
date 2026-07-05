@@ -781,28 +781,34 @@
                 for (const k in upiCfg){ const c = upiCfg[k] || {}; if (c.bank && String(c.bank).trim().toLowerCase() === t) return c.label || c.id || tag; }
                 return tag;
             };
-            let html = '<table class="rec-table"><tbody>';
+            // Stacked rows (not a wide table): info on the left wraps naturally, the action
+            // buttons are pinned right and always visible — no horizontal scroll on iPhone.
+            let html = '';
             rows.forEach(r => {
                 let right = '';
                 if (uvTab === 'review'){
                     right = '<button class="rec-mini" style="margin-right:6px;" onclick="uvVerify(\''+r.payId+'\')">Mark verified</button><button class="rec-mini" onclick="uvIgnore(\''+r.payId+'\')">Ignore</button>';
                 } else if (uvTab === 'auto'){
                     if (r.reviewState === 'verified'){
-                        // admin-verified → can be undone (pushed back to review)
-                        right = '<span style="color:#7CFC9A; font-weight:bold; margin-right:8px;">✓ admin</span><button class="rec-mini" onclick="uvUnverify(\''+r.payId+'\')">Un-verify</button>';
+                        right = '<span style="color:#7CFC9A; font-weight:bold; margin-right:8px; white-space:nowrap;">✓ admin</span><button class="rec-mini" onclick="uvUnverify(\''+r.payId+'\')">Un-verify</button>';
                     } else {
-                        // bank-credit verified → genuine money arrived, not undoable here
-                        right = '<span style="color:#7CFC9A; font-weight:bold;">✓ bank</span>';
+                        right = '<span style="color:#7CFC9A; font-weight:bold; white-space:nowrap;">✓ bank</span>';
                     }
                 } else {
                     right = '<button class="rec-mini" onclick="uvUnignore(\''+r.payId+'\')">Un-ignore</button>';
                 }
                 const lbl = labelFor(r.bankTag);
-                const acct = lbl ? '<span style="opacity:0.6; font-size:0.78rem;"> · '+escapeHTML(lbl)+'</span>' : '';
-                html += '<tr><td>'+escapeHTML(fmt(r.ts))+'</td><td>'+escapeHTML(r.reason)+acct+'</td><td class="num">'+inr(r.amount)+'</td><td class="num">'+right+'</td></tr>';
-                if (r.note){ html += '<tr><td colspan="4" style="opacity:0.55; font-size:0.78rem; padding-top:0;">note: '+escapeHTML(r.note)+'</td></tr>'; }
+                const acct = lbl ? '<span style="opacity:0.6;"> · '+escapeHTML(lbl)+'</span>' : '';
+                html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">'
+                      +   '<div style="min-width:0; flex:1;">'
+                      +     '<div style="font-weight:600;">'+inr(r.amount)+acct+'</div>'
+                      +     '<div style="font-size:0.78rem; opacity:0.6; margin-top:2px;">'+escapeHTML(fmt(r.ts))+' · '+escapeHTML(r.reason)+'</div>'
+                      +     (r.note ? '<div style="font-size:0.75rem; opacity:0.55; margin-top:3px;">note: '+escapeHTML(r.note)+'</div>' : '')
+                      +   '</div>'
+                      +   '<div style="flex-shrink:0; display:flex; align-items:center;">'+right+'</div>'
+                      + '</div>';
             });
-            box.innerHTML = html + '</tbody></table>';
+            box.innerHTML = html;
         }
         window.uvVerify = function(payId){
             db.ref('upiReview/' + payId).set({ state: 'verified', by: (window.currentAdmin && window.currentAdmin.name) || 'admin', at: Date.now() });
