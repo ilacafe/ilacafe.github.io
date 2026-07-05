@@ -738,7 +738,7 @@
                 const e = uvLedger[k]; if (!e || e.type !== 'upi_income') continue;
                 const payId = e.payId || k;
                 const rv = uvReview[payId] || null;
-                rows.push({ payId, amount: parseFloat(e.amount)||0, reason: e.reason||'', date: e.date||'', ts: e.ts||0, ref: e.ref||null, ledgerState: e.state||'unverified', reviewState: rv && rv.state, note: rv && rv.note });
+                rows.push({ payId, amount: parseFloat(e.amount)||0, reason: e.reason||'', date: e.date||'', ts: e.ts||0, ref: e.ref||null, bankTag: e.bankTag||null, ledgerState: e.state||'unverified', reviewState: rv && rv.state, note: rv && rv.note });
             }
             rows.sort((a,b)=> b.ts - a.ts);
             for (const r of rows){
@@ -773,6 +773,14 @@
             const rows = g[uvTab] || [];
             if (!rows.length){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>Nothing here.</p>"; return; }
             const fmt = ts => { try { return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
+            // Map a payment's bankTag ("yes 8020") to its friendly routing label ("yes Priya")
+            // so you know which account to check when verifying manually.
+            const labelFor = tag => {
+                if (!tag) return '';
+                const t = String(tag).trim().toLowerCase();
+                for (const k in upiCfg){ const c = upiCfg[k] || {}; if (c.bank && String(c.bank).trim().toLowerCase() === t) return c.label || c.id || tag; }
+                return tag;
+            };
             let html = '<table class="rec-table"><tbody>';
             rows.forEach(r => {
                 let right = '';
@@ -789,7 +797,9 @@
                 } else {
                     right = '<button class="rec-mini" onclick="uvUnignore(\''+r.payId+'\')">Un-ignore</button>';
                 }
-                html += '<tr><td>'+escapeHTML(fmt(r.ts))+'</td><td>'+escapeHTML(r.reason)+'</td><td class="num">'+inr(r.amount)+'</td><td class="num">'+right+'</td></tr>';
+                const lbl = labelFor(r.bankTag);
+                const acct = lbl ? '<span style="opacity:0.6; font-size:0.78rem;"> · '+escapeHTML(lbl)+'</span>' : '';
+                html += '<tr><td>'+escapeHTML(fmt(r.ts))+'</td><td>'+escapeHTML(r.reason)+acct+'</td><td class="num">'+inr(r.amount)+'</td><td class="num">'+right+'</td></tr>';
                 if (r.note){ html += '<tr><td colspan="4" style="opacity:0.55; font-size:0.78rem; padding-top:0;">note: '+escapeHTML(r.note)+'</td></tr>'; }
             });
             box.innerHTML = html + '</tbody></table>';
