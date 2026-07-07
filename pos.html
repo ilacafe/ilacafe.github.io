@@ -18,7 +18,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
     <style>
-        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; --card-bg: #A08668; }
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
         #login-overlay { position: fixed; inset: 0; background: var(--brand-bg); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; }
         #login-overlay.hidden { display: none; }
         #login-box { width: 100%; max-width: 320px; text-align: center; }
@@ -91,9 +91,21 @@
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: flex-start; padding-top: 5vh; box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
-        .modal-content { background-color: var(--card-bg); border: 1px solid rgba(255,255,255,0.25); box-shadow: 0 12px 40px rgba(0,0,0,0.35); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
-        .modal-content h3 { margin-top: 0; font-size: 1.2rem; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;}
-        
+                /* ============================================================
+           MODAL CARD — seamless brand surface with depth
+           Same brand brown as the background; separation comes from a
+           layered shadow plus a faint light edge. Interior keeps the
+           app's standard white-on-brown styling.
+           ============================================================ */
+        .modal-content {
+            background-color: var(--brand-bg); color: var(--brand-text);
+            border: 1px solid rgba(255,255,255,0.22);
+            box-shadow: 0 32px 80px rgba(0,0,0,0.55), 0 12px 32px rgba(0,0,0,0.40), 0 2px 8px rgba(0,0,0,0.30);
+            padding: 24px 22px; border-radius: 14px; text-align: center;
+            width: 85%; max-width: 400px; max-height: 88vh; overflow-y: auto;
+        }
+        .modal-content h3 { margin: 0 0 18px; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1.5px; }
+                
         .remark-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); }
         
