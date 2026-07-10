@@ -146,8 +146,13 @@
                 <span class="chip" id="chipData">data…</span>
                 <span class="chip" id="chipWx">weather…</span>
                 <button class="lnk" onclick="window.doRefit()" style="padding:5px 12px; font-size:0.72rem;">Refresh</button>
+                <button class="lnk" onclick="window.toggleEodReport('how-it-works')" style="padding:5px 12px; font-size:0.72rem;">How it works</button>
             </div>
             <div class="err-card" id="errBox"></div>
+            <div class="pblock" id="how-it-works" style="display:none;">
+                <div id="modelKv"></div>
+                <div class="sub" style="margin-top:10px; margin-bottom:0;" id="modelNote"></div>
+            </div>
 
             <!-- DEMAND SURFACE -->
             <div class="card">
@@ -187,20 +192,10 @@
                 <div class="scroll"><table class="tbl" id="prepTable"><thead><tr><th>Day</th><th>Weather</th><th class="num">Expected</th><th class="num">Balls</th><th class="num">Moz</th></tr></thead><tbody></tbody></table></div>
                 <div class="pblock" style="margin-top:14px;">
                     <div class="pbig">Roast Planner</div>
-                    <div class="rin">
-                        <label>Roasted stock (kg)</label><input type="number" id="inStock" step="0.1" min="0" style="width:100px;">
-                        <label>Last roast</label><input type="date" id="inRoastDate">
-                    </div>
-                    <div id="roastOut" class="pnote"></div>
+                    <div id="roastOut" class="pnote" style="margin-top:8px;"></div>
                 </div>
             </div>
 
-            <!-- MODEL -->
-            <div class="card">
-                <h2>How This Works</h2>
-                <div id="modelKv"></div>
-                <div class="sub" style="margin-top:10px;" id="modelNote"></div>
-            </div>
         </div>
 
         <div id="analytics-block">
@@ -321,7 +316,7 @@
             </div>
         </div>
         </div><!-- /analytics-block -->
-        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-10 &middot; demand-merge c</div>
+        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-10 &middot; demand-merge e</div>
     </div>
 
     <script>
@@ -951,17 +946,15 @@ function plannerPrep(pred, prepCfg) {
   return { balls, mozKg, lo: Math.round(pred.lo), hi: Math.round(pred.hi) };
 }
 
-function plannerRoast(dailyBaristaPts, stockKg, roastCfg) {
-  /* dailyBaristaPts: array of next-days point forecasts (drinks/day) */
+function plannerRoastCadence(dailyBaristaPts, roastCfg) {
+  /* stockless: rhythm from forecast alone; batch sized to the MACDUKE's real ~1.0–1.5 kg charge */
   const burnPerDayKg = dailyBaristaPts.length
     ? dailyBaristaPts.reduce((a, b) => a + b, 0) / dailyBaristaPts.length * roastCfg.espShare * roastCfg.doseG / 1000
     : 0;
-  const coverDays = burnPerDayKg > 0 ? stockKg / burnPerDayKg : Infinity;
-  /* roast must happen restDays before stock runs out */
-  const roastInDays = Math.floor(coverDays - roastCfg.restDays);
-  const needKgRoasted = burnPerDayKg * roastCfg.targetCoverDays;
-  const greenKg = clamp(needKgRoasted / (1 - roastCfg.weightLossPct / 100), roastCfg.minBatchKg, roastCfg.maxBatchKg);
-  return { burnPerDayKg, coverDays, roastInDays, greenKg };
+  const perBatchRoastedKg = roastCfg.batchGreenKg * (1 - roastCfg.weightLossPct / 100);
+  const batchLastsDays = burnPerDayKg > 0 ? perBatchRoastedKg / burnPerDayKg : Infinity;
+  const monthlyGreenKg = burnPerDayKg > 0 ? burnPerDayKg / (1 - roastCfg.weightLossPct / 100) * 30.4 : 0;
+  return { burnPerDayKg, perBatchRoastedKg, batchLastsDays, monthlyGreenKg };
 }
 
 /* ---------- live anomaly ---------- */
@@ -981,7 +974,7 @@ if (typeof module !== "undefined") module.exports = {
   PUSH_CHARS, decodePushTs, encodePushKey, istParts, dateDiffDays, pyDowOfDate, addDays, clamp,
   dailyTotals, fitModel, seedToModel, predictDay, cumShareAt,
   rainBucket, BUCKET_NAMES, learnWeather, scoreHoldout,
-  plannerPrep, plannerRoast, anomalyNow, PY_DAYS
+  plannerPrep, plannerRoastCadence, anomalyNow, PY_DAYS
 };
 
 
@@ -995,7 +988,7 @@ if (typeof module !== "undefined") module.exports = {
             hours: { open: 7, close: 22 },                                  // display window
             prep:  { mozPerPizzaG: 60, doughBufferPct: 10 },
             roast: { espShare: 0.75, doseG: 18, weightLossPct: 15, restDays: 6,
-                     targetCoverDays: 8, minBatchKg: 2, maxBatchKg: 4.5 }
+                     batchGreenKg: 1.2 }   // one MACDUKE charge
         };
         
 
@@ -1284,29 +1277,31 @@ if (typeof module !== "undefined") module.exports = {
                 const p = predictDay(model, "barista", d, wxMultFor("barista", d));
                 if (!p.noHistory) pts.push(p.point);
             }
-            let saved = {};
-            try { saved = JSON.parse(localStorage.getItem("ila_demand_roast") || "{}"); } catch (e) {}
-            const inS = $("inStock"), inD = $("inRoastDate");
-            if (inS.value === "" && saved.kg != null) inS.value = saved.kg;
-            if (inD.value === "" && saved.date) inD.value = saved.date;
-            const recompute = () => {
-                const kg = parseFloat(inS.value);
-                try { localStorage.setItem("ila_demand_roast", JSON.stringify({ kg: inS.value, date: inD.value })); } catch (e) {}
-                if (!(kg >= 0)) { $("roastOut").innerHTML = "Enter how much roasted coffee is on hand and when you last roasted. Right now the bar uses about <strong>" + fmt1(plannerRoast(pts, 0, CFG.roast).burnPerDayKg * 1000) + " g of beans a day</strong>."; return; }
-                const r = plannerRoast(pts, kg, CFG.roast);
-                let restNote = "";
-                if (inD.value) {
-                    const rest = Math.round(dateDiffDays(today, inD.value));
-                    if (rest < CFG.roast.restDays) restNote = " The current batch is still resting — ready " + addDays(inD.value, CFG.roast.restDays) + ".";
-                }
-                const roastBy = addDays(today, Math.max(0, r.roastInDays));
-                const urgent = r.roastInDays <= 1;
-                $("roastOut").innerHTML =
-                    "The bar uses about <strong>" + fmt1(r.burnPerDayKg * 1000) + " g of beans a day</strong>, so this stock lasts <strong>" + fmt1(r.coverDays) + " days</strong>. " +
-                    "<span class='" + (urgent ? "urgent" : "") + "'>Roast by <strong>" + PY_DAYS[pyDowOfDate(roastBy)] + " " + roastBy.slice(5) + "</strong></span> so the beans get their " + CFG.roast.restDays + "-day rest — charge <strong>" + fmt1(r.greenKg) + " kg green</strong>, about <strong>" + fmt1(r.greenKg * (1 - CFG.roast.weightLossPct / 100)) + " kg</strong> after roasting." + restNote;
-            };
-            inS.oninput = recompute; inD.oninput = recompute;
-            recompute();
+            /* daily-roast rhythm: no roasting or service on closed days; balance the week, don't track stock */
+            const rc = plannerRoastCadence(pts, CFG.roast);
+            const openDays = [0, 1, 2, 3, 4, 5, 6].filter(pd => model.barista.dowN[pd] !== 0).length || 7;
+            let weekNeedG = 0;
+            for (let i = 0; i < 7; i++) {
+                const d2 = addDays(today, i);
+                const p2 = predictDay(model, "barista", d2, wxMultFor("barista", d2));
+                if (!p2.noHistory) weekNeedG += p2.point * CFG.roast.espShare * CFG.roast.doseG;
+            }
+            const perBatchG = CFG.roast.batchGreenKg * (1 - CFG.roast.weightLossPct / 100) * 1000;
+            const weekMakeG = openDays * perBatchG;
+            const extra = Math.max(0, Math.ceil((weekNeedG - weekMakeG) / perBatchG));
+            const slackDays = extra > 0 ? 0 : Math.floor((weekMakeG - weekNeedG) / perBatchG);
+            const closedToday = predictDay(model, "barista", today, 1).noHistory;
+            const served = addDays(today, CFG.roast.restDays);
+            const ps = predictDay(model, "barista", served, wxMultFor("barista", served));
+            const servedLine = ps.noHistory ? "" :
+                " It enters service around <strong>" + PY_DAYS[ps.pyDow] + " " + served.slice(5) + "</strong> — a ~" + Math.round(ps.point) + "-drink day (~" + fmt1(ps.point * CFG.roast.espShare * CFG.roast.doseG / 1000) + " kg of beans).";
+            $("roastOut").innerHTML = (closedToday
+                ? "Closed today — no roast. Tomorrow: <strong>1 batch (" + CFG.roast.batchGreenKg + " kg green)</strong>."
+                : "<strong>Roast today: 1 batch (" + CFG.roast.batchGreenKg + " kg green).</strong>" + servedLine) + "<br>" +
+                "A batch on each open day makes about <strong>" + fmt1(weekMakeG / 1000) + " kg</strong> this week; the forecast needs about <strong>" + fmt1(weekNeedG / 1000) + " kg</strong>" +
+                (extra > 0 ? " — <span class='urgent'>add " + extra + " extra batch" + (extra > 1 ? "es" : "") + " on the busiest days.</span>"
+                 : (slackDays > 0 ? " — enough slack to skip " + slackDays + " roast day" + (slackDays > 1 ? "s" : "") + " if you want." : " — evenly matched.")) + "<br>" +
+                "Green coffee to keep on order: about <strong>" + fmt1(rc.monthlyGreenKg) + " kg a month</strong>.";
         }
 
         /* ---------- model panel ---------- */
