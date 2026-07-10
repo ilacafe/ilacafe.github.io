@@ -322,7 +322,7 @@
             </div>
         </div>
         </div><!-- /analytics-block -->
-        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-09 &middot; demand-merge a</div>
+        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-09 &middot; demand-merge b</div>
     </div>
 
     <script>
@@ -990,7 +990,7 @@ if (typeof module !== "undefined") module.exports = {
            CONFIG
            ============================================================ */
         const CFG = {
-            paths: { chef: "completed/chef", barista: "completed/barista" },
+            paths: { chef: "orders/completed/chef", barista: "orders/completed/barista" },
             place: { lat: 29.647, lon: 79.654, elevation: 2100 },          // Kasar Devi ridge
             model: { halfLifeDays: 28, shrinkK: 6, weatherK: 4, minLiveRecords: 200 },
             hours: { open: 7, close: 22 },                                  // display window
@@ -1046,7 +1046,7 @@ if (typeof module !== "undefined") module.exports = {
                 records = [];
                 const m = (e && e.message ? e.message : "" + e);
                 showErr(/permission/i.test(m)
-                    ? "Rules denied reading " + CFG.paths.chef + " / " + CFG.paths.barista + " for this login. Mirror the orders/history admin read rule onto the completed node and reload."
+                    ? "Rules denied reading " + CFG.paths.chef + " / " + CFG.paths.barista + " for this login. Under the locked rules orders/completed is role-readable — check this account has a role in users/{uid} and that the rules for orders/completed are intact."
                     : "Firebase read failed: " + m);
             }
             if (records.length >= CFG.model.minLiveRecords) {
