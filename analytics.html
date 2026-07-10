@@ -71,6 +71,49 @@
         .muted { opacity: 0.55; text-align: center; padding: 20px 0; font-size: 0.85rem; }
         .pull-right { margin-left: auto; }
 
+
+        /* ---------- demand map ---------- */
+        .view-switch { display: flex; gap: 8px; justify-content: center; margin: 0 0 18px 0; flex-wrap: wrap; }
+        .strip { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; justify-content: center; }
+        .chip { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 5px 12px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.5px; opacity: 0.9; }
+        .chip.on { border-color: rgba(108,208,127,0.55); color: #6cd07f; }
+        .chip.off { border-color: rgba(255,138,128,0.55); color: #ff8a80; }
+        .chip.warn { border-color: rgba(244,197,66,0.55); color: #f4c542; }
+        .err-card { background-color: rgba(0, 0, 0, 0.15); border-radius: 12px; padding: 14px 20px; margin-bottom: 22px; border: 1px solid rgba(244,67,54,0.35); color: #ffd2d2; font-size: 0.88rem; display: none; word-break: break-word; }
+        .sub { font-size: 0.8rem; opacity: 0.75; margin: 0 0 12px 0; }
+        .hm { overflow-x: auto; }
+        .hmg { display: grid; gap: 2px; min-width: 560px; }
+        .hmc { height: 24px; border-radius: 4px; background: rgba(255,255,255,0.05); position: relative; }
+        .hml { font-size: 0.72rem; opacity: 0.7; display: flex; align-items: center; font-weight: 700; }
+        .hmh { font-size: 0.62rem; opacity: 0.6; text-align: center; align-self: end; }
+        .hmc.today-row { outline: 1.5px solid rgba(255,255,255,0.75); outline-offset: -1.5px; }
+        .hmc.nowcell::after { content: ""; position: absolute; inset: 2px; border: 1.5px dashed rgba(0,0,0,0.55); border-radius: 3px; }
+        .hmc.closedcell { background: repeating-linear-gradient(45deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, rgba(255,255,255,0.09) 4px, rgba(255,255,255,0.09) 8px); }
+        #hmReadout { font-size: 0.84rem; margin-top: 10px; min-height: 1.2em; opacity: 0.9; }
+        #todayChip { display: inline-block; font-size: 0.85rem; font-weight: 700; padding: 6px 14px; border-radius: 20px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); }
+        #todayChip.on-pace { border-color: rgba(108,208,127,0.55); color: #6cd07f; }
+        #todayChip.surge { border-color: rgba(244,197,66,0.55); color: #f4c542; }
+        #todayChip.slump { border-color: rgba(255,138,128,0.55); color: #ff8a80; }
+        #todayChip.idle { opacity: 0.75; }
+        .tstats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.82rem; opacity: 0.85; margin-top: 10px; }
+        .tstats b { font-weight: 700; }
+        .closed { opacity: 0.55; font-style: italic; }
+        .todayrow td { background: rgba(255,255,255,0.05); }
+        .tbl-note { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.55; font-weight: 700; margin: 16px 0 6px 0; }
+        .pblock { background: rgba(0,0,0,0.15); border-left: 2px solid rgba(255,255,255,0.4); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+        .pbig { font-size: 0.95rem; font-weight: 700; }
+        .pnote { font-size: 0.8rem; opacity: 0.75; margin-top: 3px; }
+        .rin { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+        .rin label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; font-weight: 700; }
+        .rin input { padding: 7px 9px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
+        .urgent { color: #ff8a80; font-weight: 700; }
+        .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.84rem; }
+        .kv div:nth-child(odd) { opacity: 0.6; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; padding-top: 2px; }
+        @media(max-width: 720px) {
+            .kv { grid-template-columns: 1fr; gap: 0 0; }
+            .kv div:nth-child(odd) { margin-top: 8px; }
+        }
+
         @media(max-width: 720px) {
             .kpi-row { grid-template-columns: 1fr 1fr; }
             .grid2 { grid-template-columns: 1fr; }
@@ -92,6 +135,76 @@
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo">
         </header>
+
+        <div class="view-switch">
+            <button class="range-btn active" id="view-analytics" onclick="window.setView('analytics')">Analytics</button>
+            <button class="range-btn" id="view-demand" onclick="window.setView('demand')">Demand Map</button>
+        </div>
+
+        <div id="demand-block" style="display:none;">
+            <div class="strip">
+                <span class="chip" id="chipData">data…</span>
+                <span class="chip" id="chipWx">weather…</span>
+                <span class="chip" id="chipModel">model…</span>
+                <button class="lnk" onclick="window.doRefit()" style="padding:5px 12px; font-size:0.72rem;">Refit</button>
+            </div>
+            <div class="err-card" id="errBox"></div>
+
+            <!-- DEMAND SURFACE -->
+            <div class="card">
+                <h2>Demand Surface</h2>
+                <div class="controls">
+                    <button class="range-btn active" id="tgChef" onclick="window.setStation('chef')">Chef</button>
+                    <button class="range-btn" id="tgBar" onclick="window.setStation('barista')">Barista</button>
+                    <span class="sub pull-right" style="margin:0;">Half-life 28d · brighter = busier · dashed = now</span>
+                </div>
+                <div class="hm"><div class="hmg" id="hmGrid"></div></div>
+                <div id="hmReadout">Tap a cell for the number.</div>
+            </div>
+
+            <!-- TODAY -->
+            <div class="card">
+                <h2>Today · Live</h2>
+                <div class="sub" id="todaySub"></div>
+                <div id="todayChip" class="idle">waiting for data…</div>
+                <div class="chart-full"><canvas id="chart-today"></canvas></div>
+                <div class="tstats" id="todayStats"></div>
+            </div>
+
+            <!-- FORECAST -->
+            <div class="card">
+                <h2>7-Day Forecast</h2>
+                <div class="sub">Weather-adjusted ranges — Open-Meteo, learned from Ila's own history, not assumed.</div>
+                <table class="tbl" id="fcTable"><thead><tr><th>Day</th><th>Weather</th><th class="num">Chef</th><th class="num">Barista</th></tr></thead><tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody></table>
+                <div class="tbl-note">Learned rain effect (× on a normal day · n = days observed)</div>
+                <table class="tbl" id="wxTable"><thead><tr><th></th><th class="num">Dry</th><th class="num">Light</th><th class="num">Wet</th><th class="num">Heavy</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table>
+            </div>
+
+            <!-- PLANNER -->
+            <div class="card">
+                <h2>Prep &amp; Roast Planner</h2>
+                <div class="sub">Dough is mixed the night before (biga lead). Ranges carry the model's honest uncertainty.</div>
+                <div class="pblock" id="prepCard"></div>
+                <table class="tbl" id="prepTable"><thead><tr><th>Day</th><th>Weather</th><th class="num">Dough Items</th><th class="num">Balls</th><th class="num">Moz</th></tr></thead><tbody></tbody></table>
+                <div class="pblock" style="margin-top:14px;">
+                    <div class="pbig">Roast Planner</div>
+                    <div class="rin">
+                        <label>Roasted stock (kg)</label><input type="number" id="inStock" step="0.1" min="0" style="width:100px;">
+                        <label>Last roast</label><input type="date" id="inRoastDate">
+                    </div>
+                    <div id="roastOut" class="pnote"></div>
+                </div>
+            </div>
+
+            <!-- MODEL -->
+            <div class="card">
+                <h2>Model</h2>
+                <div class="kv" id="modelKv"></div>
+                <div class="sub" style="margin-top:10px;" id="modelNote"></div>
+            </div>
+        </div>
+
+        <div id="analytics-block">
 
         <!-- DATE RANGE -->
         <div class="card">
@@ -208,7 +321,8 @@
                 </table>
             </div>
         </div>
-        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-06-16c</div>
+        </div><!-- /analytics-block -->
+        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-09 &middot; demand-merge a</div>
     </div>
 
     <script>
@@ -267,6 +381,7 @@
             db.ref('orders/history').on('value', s => { DATA = s.val()||{}; render(); });
             db.ref('security/voids').on('value', s => { VOIDS = s.val()||{}; render(); });
             db.ref('pos/eodArchive').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
+            demandBoot();
         }
 
         function buildCatMap(menu){
@@ -595,6 +710,663 @@
                 return `<div style="background:rgba(0,0,0,0.15); border-left:2px solid rgba(255,255,255,0.4); border-radius:8px; padding:10px 12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${escapeHTML(String(k).slice(0,10))}</strong><strong style="opacity:0.9;">${rupee(total)}</strong></div><div style="font-size:0.82rem; opacity:0.8;">Cash ${rupee(cash)} · UPI ${rupee(upi)} · ${billCount} bill(s)</div><div style="font-size:0.76rem; opacity:0.55; margin-top:2px;">Closed by ${closedBy}${closedAt ? ' · ' + closedAt : ''}</div>` + (d.report ? `<button onclick="window.toggleEodReport('${rid}')" class="lnk" style="margin-top:8px; padding:4px 10px; font-size:0.72rem;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.78rem; opacity:0.85; margin-top:8px; background:rgba(0,0,0,0.2); padding:10px; border-radius:6px;">${escapeHTML(String(d.report))}</pre>` : '') + `</div>`;
             }).join('');
         }
+
+        /* ============================================================
+           DEMAND MAP (verified runtime; fit math mirrors the June offline fit)
+           ============================================================ */
+/* ============================================================
+   ILA DEMAND MAP — model runtime
+   Mirrors the June 2026 offline fit exactly:
+   decay half-life 28d, shrinkage K=6 toward grand,
+   day-of-week in PYTHON convention (0=Monday ... 6=Sunday),
+   hour shapes stored as unnormalized decayed sums → normalized here.
+   ============================================================ */
+
+const PUSH_CHARS = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+const IST_OFF = 5.5 * 3600 * 1000;
+const DAY_MS = 86400000;
+const PY_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]; // index = python weekday
+
+function _dec64(s) {
+  let t = 0;
+  for (const c of s) {
+    const i = PUSH_CHARS.indexOf(c);
+    if (i < 0) return -1;
+    t = t * 64 + i;
+  }
+  return t;
+}
+
+/* Verified against the Ila completed-order exports in the June fit:
+   the ms timestamp lives in key chars 1–8. Falls back to the standard
+   push-id layout (chars 0–7) only if 1–8 lands outside 2017–2039. */
+function decodePushTs(key) {
+  if (typeof key !== "string" || key.length < 9) return null;
+  const ok = (t) => t >= 1.5e12 && t <= 2.2e12;
+  let t = _dec64(key.slice(1, 9));
+  if (!ok(t)) {
+    const t2 = _dec64(key.slice(0, 8));
+    if (ok(t2)) t = t2;
+  }
+  return ok(t) ? t : null;
+}
+
+/* Test-only inverse: prefix char + 8 timestamp chars + random tail */
+function encodePushKey(tsMs, prefix) {
+  let t = tsMs, s = "";
+  for (let i = 0; i < 8; i++) { s = PUSH_CHARS[t % 64] + s; t = Math.floor(t / 64); }
+  let tail = "";
+  for (let i = 0; i < 11; i++) tail += PUSH_CHARS[Math.floor(Math.random() * 64)];
+  return (prefix || "-") + s + tail;
+}
+
+/* IST calendar parts from a ms timestamp — independent of client timezone */
+function istParts(tsMs) {
+  const d = new Date(tsMs + IST_OFF);
+  return {
+    date: d.toISOString().slice(0, 10),
+    hour: d.getUTCHours() + d.getUTCMinutes() / 60,
+    hourInt: d.getUTCHours(),
+    pyDow: (d.getUTCDay() + 6) % 7
+  };
+}
+function dateDiffDays(a, b) { return (Date.parse(a) - Date.parse(b)) / DAY_MS; }
+function pyDowOfDate(dateStr) { return (new Date(Date.parse(dateStr)).getUTCDay() + 6) % 7; }
+function addDays(dateStr, n) { return new Date(Date.parse(dateStr) + n * DAY_MS).toISOString().slice(0, 10); }
+function clamp(x, a, b) { return Math.min(b, Math.max(a, x)); }
+
+/* ---------- records → daily totals ---------- */
+/* records: [{st:'chef'|'barista', ts:ms, qty:int}] */
+function dailyTotals(records) {
+  const daily = {};
+  for (const r of records) {
+    const p = istParts(r.ts);
+    const k = r.st + "|" + p.date;
+    if (!daily[k]) daily[k] = { st: r.st, date: p.date, pyDow: p.pyDow, qty: 0 };
+    daily[k].qty += r.qty;
+  }
+  return Object.values(daily);
+}
+
+/* ---------- the fit (same math as offline) ---------- */
+function fitModel(records, opts) {
+  const HL = opts.halfLifeDays, K = opts.shrinkK;
+  const days = dailyTotals(records);
+  let refDate = null;
+  for (const d of days) if (!refDate || d.date > refDate) refDate = d.date;
+  const w = (dstr) => Math.pow(0.5, dateDiffDays(refDate, dstr) / HL);
+
+  const model = { meta: { refDate, records: records.length, halfLifeDays: HL, shrinkK: K, source: "live" } };
+  for (const st of ["chef", "barista"]) {
+    const sd = days.filter(d => d.st === st);
+    let sw = 0, swx = 0;
+    for (const d of sd) { const wi = w(d.date); sw += wi; swx += wi * d.qty; }
+    const grand = sw > 0 ? swx / sw : 0;
+
+    const dow = {}, dowN = {};
+    for (let i = 0; i < 7; i++) {
+      let s = 0, sx = 0, n = 0;
+      for (const d of sd) if (d.pyDow === i) { const wi = w(d.date); s += wi; sx += wi * d.qty; n++; }
+      dow[i] = (sx + K * grand) / (s + K);   // shrink toward grand; zero-history weekday → exactly grand
+      dowN[i] = n;
+    }
+
+    /* month multipliers vs the dow baseline, shrunk toward 1, clamped —
+       weak with <1 season of data, kept mild on purpose */
+    const monAcc = {};
+    for (const d of sd) {
+      const m = +d.date.slice(5, 7), wi = w(d.date);
+      const base = dow[d.pyDow] || grand || 1;
+      if (!monAcc[m]) monAcc[m] = { s: 0, sx: 0, n: 0 };
+      monAcc[m].s += wi; monAcc[m].sx += wi * (d.qty / base); monAcc[m].n++;
+    }
+    const mon = {}, monN = {};
+    for (const m in monAcc) { mon[m] = clamp((monAcc[m].sx + K * 1) / (monAcc[m].s + K), 0.7, 1.3); monN[m] = monAcc[m].n; }
+
+    /* hour shape: decayed weighted sums (identical to fit), then normalize */
+    const hs = {};
+    for (const r of records) {
+      if (r.st !== st) continue;
+      const p = istParts(r.ts);
+      hs[p.hourInt] = (hs[p.hourInt] || 0) + w(p.date) * r.qty;
+    }
+    let tot = 0; for (const h in hs) tot += hs[h];
+    const hourShare = {};
+    for (const h in hs) hourShare[h] = tot > 0 ? hs[h] / tot : 0;
+
+    model[st] = { grand, dow, dowN, mon, monN, hourShare, daysObserved: sd.length, mapePct: null };
+  }
+  return model;
+}
+
+/* ---------- seed JSON → same runtime shape ---------- */
+function seedToModel(seed) {
+  const model = { meta: { refDate: seed.meta.fitEnd, records: seed.meta.records, halfLifeDays: seed.meta.halfLifeDays, shrinkK: seed.meta.shrinkK, source: "seed" } };
+  for (const st of ["chef", "barista"]) {
+    const s = seed[st];
+    let tot = 0; for (const h in s.hourShape) tot += s.hourShape[h];
+    const hourShare = {};
+    for (const h in s.hourShape) hourShare[h] = s.hourShape[h] / tot;
+    const dow = {}; for (const k in s.dow) dow[+k] = s.dow[k];
+    /* seed carries no per-dow counts; dow===grand exactly means zero observations (pure shrinkage) */
+    const dowN = {}; for (let i = 0; i < 7; i++) dowN[i] = (dow[i] === s.grand && i !== null) ? 0 : -1; // -1 = unknown-but-present
+    model[st] = { grand: s.grand, dow, dowN, mon: {}, monN: {}, hourShare, daysObserved: null, mapePct: s.mapePct };
+  }
+  return model;
+}
+
+/* ---------- prediction ---------- */
+function predictDay(model, st, dateStr, wxMult) {
+  const m = model[st];
+  const pd = pyDowOfDate(dateStr);
+  const mon = m.mon[+dateStr.slice(5, 7)] || 1;
+  const mult = (wxMult == null ? 1 : wxMult);
+  const point = (m.dow[pd] != null ? m.dow[pd] : m.grand) * mon * mult;
+  const mape = (m.mapePct != null ? m.mapePct : 60) / 100;
+  const lo = Math.max(0, point * (1 - 0.5 * mape));
+  const hi = point * (1 + 0.5 * mape);
+  return { point, lo, hi, pyDow: pd, noHistory: m.dowN[pd] === 0, monMult: mon, wxMult: mult };
+}
+
+/* cumulative expected share of the day completed by fractional hour h */
+function cumShareAt(model, st, hourFloat) {
+  const share = model[st].hourShare;
+  let c = 0;
+  for (const k in share) {
+    const h = +k;
+    if (h + 1 <= hourFloat) c += share[k];
+    else if (h < hourFloat) c += share[k] * (hourFloat - h);
+  }
+  return clamp(c, 0, 1);
+}
+
+/* ---------- weather ---------- */
+function rainBucket(mm) { return mm == null ? null : mm < 0.5 ? 0 : mm < 5 ? 1 : mm < 20 ? 2 : 3; }
+const BUCKET_NAMES = ["dry", "light rain", "wet", "heavy rain"];
+
+/* Learn actual/expected ratios per rain bucket, decayed, shrunk toward 1.
+   wxByDate: {date: {rain, tmax}} ; cutoffDate optional (for leak-free scoring). */
+function learnWeather(records, model, wxByDate, opts, cutoffDate) {
+  const HL = opts.halfLifeDays, K = opts.weatherK != null ? opts.weatherK : 4;
+  const days = dailyTotals(records);
+  let refDate = cutoffDate || model.meta.refDate;
+  const w = (dstr) => Math.pow(0.5, Math.max(0, dateDiffDays(refDate, dstr)) / HL);
+  const out = {};
+  for (const st of ["chef", "barista"]) {
+    const acc = [null, null, null, null].map(() => ({ s: 0, sx: 0, n: 0 }));
+    for (const d of days) {
+      if (d.st !== st) continue;
+      if (cutoffDate && d.date > cutoffDate) continue;
+      const wx = wxByDate[d.date];
+      if (!wx || wx.rain == null) continue;
+      const base = predictDay(model, st, d.date, 1);
+      if (base.point <= 0 || base.noHistory) continue;
+      const b = rainBucket(wx.rain);
+      const wi = w(d.date);
+      acc[b].s += wi; acc[b].sx += wi * (d.qty / base.point); acc[b].n++;
+    }
+    out[st] = acc.map(a => ({ mult: clamp((a.sx + K * 1) / (a.s + K), 0.5, 1.6), n: a.n }));
+  }
+  return out;
+}
+
+/* ---------- holdout scoring (proves the runtime = the fit, and measures the weather layer) ---------- */
+function scoreHoldout(records, opts, wxByDate, holdoutDays) {
+  const H = holdoutDays || 14;
+  const days = dailyTotals(records);
+  let last = null; for (const d of days) if (!last || d.date > last) last = d.date;
+  const cutoff = addDays(last, -H);
+  const train = records.filter(r => istParts(r.ts).date <= cutoff);
+  if (!train.length) return null;
+  const m = fitModel(train, opts);
+  const wxm = wxByDate ? learnWeather(train, m, wxByDate, opts, cutoff) : null;
+  const res = {};
+  for (const st of ["chef", "barista"]) {
+    let e = [], ew = [];
+    for (const d of days) {
+      if (d.st !== st || d.date <= cutoff) continue;
+      if (d.qty <= 0) continue;
+      const base = predictDay(m, st, d.date, 1);
+      if (base.noHistory) continue;
+      e.push(Math.abs(base.point - d.qty) / d.qty);
+      if (wxm && wxByDate[d.date] && wxByDate[d.date].rain != null) {
+        const b = rainBucket(wxByDate[d.date].rain);
+        ew.push(Math.abs(base.point * wxm[st][b].mult - d.qty) / d.qty);
+      }
+    }
+    res[st] = {
+      mapeDow: e.length ? Math.round(100 * e.reduce((a, b) => a + b, 0) / e.length) : null,
+      mapeWx: ew.length ? Math.round(100 * ew.reduce((a, b) => a + b, 0) / ew.length) : null,
+      nDays: e.length
+    };
+  }
+  res.cutoff = cutoff;
+  return res;
+}
+
+/* ---------- planners (pure math; constants come from CFG) ---------- */
+function plannerPrep(pred, prepCfg) {
+  /* pred = predictDay(...) for the target day, chef station */
+  const balls = Math.ceil(pred.point * (1 + prepCfg.doughBufferPct / 100));
+  const mozKg = pred.point * prepCfg.mozPerPizzaG / 1000;
+  return { balls, mozKg, lo: Math.round(pred.lo), hi: Math.round(pred.hi) };
+}
+
+function plannerRoast(dailyBaristaPts, stockKg, roastCfg) {
+  /* dailyBaristaPts: array of next-days point forecasts (drinks/day) */
+  const burnPerDayKg = dailyBaristaPts.length
+    ? dailyBaristaPts.reduce((a, b) => a + b, 0) / dailyBaristaPts.length * roastCfg.espShare * roastCfg.doseG / 1000
+    : 0;
+  const coverDays = burnPerDayKg > 0 ? stockKg / burnPerDayKg : Infinity;
+  /* roast must happen restDays before stock runs out */
+  const roastInDays = Math.floor(coverDays - roastCfg.restDays);
+  const needKgRoasted = burnPerDayKg * roastCfg.targetCoverDays;
+  const greenKg = clamp(needKgRoasted / (1 - roastCfg.weightLossPct / 100), roastCfg.minBatchKg, roastCfg.maxBatchKg);
+  return { burnPerDayKg, coverDays, roastInDays, greenKg };
+}
+
+/* ---------- live anomaly ---------- */
+function anomalyNow(model, st, dayPred, actualSoFar, hourFloat) {
+  const cs = cumShareAt(model, st, hourFloat);
+  const exp = dayPred.point * cs;
+  const band = Math.max(1.64 * Math.sqrt(Math.max(exp, 0.5)), 0.30 * exp);
+  const lo = Math.max(0, exp - band), hi = exp + band;
+  let status = "on-pace";
+  if (exp >= 3) { if (actualSoFar > hi) status = "surge"; else if (actualSoFar < lo) status = "slump"; }
+  const projected = cs > 0.15 ? actualSoFar / cs : null;
+  const pct = exp > 0 ? Math.round(100 * (actualSoFar - exp) / exp) : 0;
+  return { exp, lo, hi, status, projected, pct, cumShare: cs };
+}
+
+if (typeof module !== "undefined") module.exports = {
+  PUSH_CHARS, decodePushTs, encodePushKey, istParts, dateDiffDays, pyDowOfDate, addDays, clamp,
+  dailyTotals, fitModel, seedToModel, predictDay, cumShareAt,
+  rainBucket, BUCKET_NAMES, learnWeather, scoreHoldout,
+  plannerPrep, plannerRoast, anomalyNow, PY_DAYS
+};
+
+
+        /* ============================================================
+           CONFIG
+           ============================================================ */
+        const CFG = {
+            paths: { chef: "completed/chef", barista: "completed/barista" },
+            place: { lat: 29.647, lon: 79.654, elevation: 2100 },          // Kasar Devi ridge
+            model: { halfLifeDays: 28, shrinkK: 6, weatherK: 4, minLiveRecords: 200 },
+            hours: { open: 7, close: 22 },                                  // display window
+            prep:  { mozPerPizzaG: 60, doughBufferPct: 10 },
+            roast: { espShare: 0.75, doseG: 18, weightLossPct: 15, restDays: 6,
+                     targetCoverDays: 8, minBatchKg: 2, maxBatchKg: 4.5 }
+        };
+        
+
+        /* Fitted seed (offline fit, data Feb 24 → Jun 20 2026). Fallback + verification target. */
+        const SEED = {"chef":{"grand":34.85,"dow":{"0":34.85,"1":34.31,"2":30.82,"3":32.42,"4":36.22,"5":39.04,"6":36.2},"hourShape":{"0":0.37,"6":0.08,"7":0.18,"8":0.36,"9":2.24,"10":15.1,"11":25.16,"12":58.89,"13":85.47,"14":104.8,"15":81.16,"16":91.76,"17":88.55,"18":139.99,"19":242.59,"20":174.99,"21":22.29,"22":0.54,"23":0.34},"mapePct":47},"barista":{"grand":61.31,"dow":{"0":61.31,"1":57.77,"2":54.12,"3":54.96,"4":65.28,"5":68.68,"6":66.93},"hourShape":{"0":0.23,"6":0.08,"7":2.61,"8":34.46,"9":69.74,"10":90.96,"11":103.43,"12":136.09,"13":161.34,"14":183.06,"15":159.5,"16":194.92,"17":193.86,"18":229.29,"19":245.98,"20":160.19,"21":34.36,"22":0.91,"23":0.08},"mapePct":76},"meta":{"fitEnd":"2026-06-06","halfLifeDays":28.0,"shrinkK":6,"records":6236}};
+
+        /* ============================================================
+           APP STATE
+           ============================================================ */
+        let records = [], model = null, wxByDate = {}, wxFuture = [], wxLearned = null, holdout = null;
+        let station = "chef", todayRecs = [], pollTimer = null;
+        const $ = (id) => document.getElementById(id);
+        const todayIst = () => istParts(Date.now());
+        const fmt1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
+        function showErr(msg){ const b = $("errBox"); b.style.display = "block"; b.textContent = msg; }
+        function chip(id, cls, txt){ const c = $(id); c.className = "chip " + cls; c.textContent = txt; }
+        
+
+        /* ---------- record extraction (replicates the offline fit exactly) ---------- */
+        function qtyOf(order){
+            let n = 0;
+            const items = order && order.items;
+            const list = Array.isArray(items) ? items : (items && typeof items === "object" ? Object.values(items) : []);
+            for (const it of list) n += (it && typeof it === "object") ? (parseInt(it.qty, 10) || 1) : 1;
+            return Math.max(n, 1);
+        }
+        function snapToRecords(st, val){
+            const out = [];
+            for (const k in (val || {})) {
+                const ts = decodePushTs(k);
+                if (ts == null) continue;
+                out.push({ st, ts, qty: qtyOf(val[k]) });
+            }
+            return out;
+        }
+
+        /* ---------- data loading (post-auth) ---------- */
+        async function loadAll(){
+            chip("chipData", "warn", "data: loading…");
+            try {
+                const [sc, sb] = await Promise.all([
+                    db.ref(CFG.paths.chef).once("value"),
+                    db.ref(CFG.paths.barista).once("value")
+                ]);
+                records = snapToRecords("chef", sc.val()).concat(snapToRecords("barista", sb.val()));
+            } catch (e) {
+                records = [];
+                const m = (e && e.message ? e.message : "" + e);
+                showErr(/permission/i.test(m)
+                    ? "Rules denied reading " + CFG.paths.chef + " / " + CFG.paths.barista + " for this login. Mirror the orders/history admin read rule onto the completed node and reload."
+                    : "Firebase read failed: " + m);
+            }
+            if (records.length >= CFG.model.minLiveRecords) {
+                model = fitModel(records, CFG.model);
+                model.chef.mapePct = SEED.chef.mapePct;       // carried until the live holdout re-score lands
+                model.barista.mapePct = SEED.barista.mapePct;
+                chip("chipData", "on", "data: live · " + records.length + " records → " + model.meta.refDate);
+                const ageDays = Math.round(dateDiffDays(todayIst().date, model.meta.refDate));
+                if (ageDays > 3) chip("chipData", "warn", "data: last record " + ageDays + "d ago (" + model.meta.refDate + ") — check paths");
+            } else {
+                model = seedToModel(SEED);
+                chip("chipData", records.length ? "warn" : "off", "data: seed (Jun 6) · live records: " + records.length);
+            }
+            chip("chipModel", "on", "model: " + model.meta.source + " · HL 28d · K 6");
+        }
+
+        /* ---------- weather ---------- */
+        async function omFetch(url){ const r = await fetch(url); if (!r.ok) throw new Error("open-meteo " + r.status); return r.json(); }
+        function mergeDaily(j){
+            const d = j.daily || {};
+            (d.time || []).forEach((t, i) => {
+                wxByDate[t] = { rain: d.precipitation_sum ? d.precipitation_sum[i] : null,
+                                tmax: d.temperature_2m_max ? d.temperature_2m_max[i] : null,
+                                code: d.weather_code ? d.weather_code[i] : null };
+            });
+            return d.time || [];
+        }
+        async function loadWeather(){
+            chip("chipWx", "warn", "weather: loading…");
+            const today = todayIst().date;
+            const base = "latitude=" + CFG.place.lat + "&longitude=" + CFG.place.lon + "&elevation=" + CFG.place.elevation +
+                "&daily=precipitation_sum,temperature_2m_max,weather_code&timezone=Asia%2FKolkata";
+            try {
+                let histFrom = "2026-02-24";
+                for (const r of records) { const d = istParts(r.ts).date; if (d < histFrom) histFrom = d; }
+                const cKey = "ila_demand_wx_v1";
+                let cached = null;
+                try { cached = JSON.parse(localStorage.getItem(cKey) || "null"); } catch (e) {}
+                if (cached && Date.now() - cached.at < 20 * 3600 * 1000 && cached.from <= histFrom) {
+                    Object.assign(wxByDate, cached.data);
+                } else {
+                    const hj = await omFetch("https://archive-api.open-meteo.com/v1/archive?" + base +
+                        "&start_date=" + histFrom + "&end_date=" + addDays(today, -6));
+                    mergeDaily(hj);
+                    try { localStorage.setItem(cKey, JSON.stringify({ at: Date.now(), from: histFrom, data: wxByDate })); } catch (e) {}
+                }
+                const fj = await omFetch("https://api.open-meteo.com/v1/forecast?" + base + "&past_days=10&forecast_days=7");
+                const ft = mergeDaily(fj);
+                wxFuture = ft.filter(t => t >= today);
+                if (records.length >= CFG.model.minLiveRecords) {
+                    wxLearned = learnWeather(records, model, wxByDate, CFG.model);
+                    chip("chipWx", "on", "weather: learned from " + Object.keys(wxByDate).length + " days");
+                } else {
+                    wxLearned = null;
+                    chip("chipWx", "warn", "weather: forecast only (learning needs live history)");
+                }
+            } catch (e) {
+                chip("chipWx", "off", "weather: unavailable — dow-only forecast");
+                wxFuture = []; wxLearned = null;
+            }
+        }
+        function wxMultFor(st, dateStr){
+            if (!wxLearned) return 1;
+            const wx = wxByDate[dateStr];
+            if (!wx || wx.rain == null) return 1;
+            return wxLearned[st][rainBucket(wx.rain)].mult;
+        }
+        function wxIcon(dateStr){
+            const wx = wxByDate[dateStr];
+            if (!wx) return "—";
+            const c = wx.code, r = wx.rain || 0;
+            let ic = "☀️";
+            if (c != null) { if (c >= 95) ic = "⛈"; else if (c >= 80 || (c >= 61 && c <= 67)) ic = "🌧"; else if (c >= 51) ic = "🌦"; else if (c === 45 || c === 48) ic = "🌫"; else if (c === 3) ic = "☁️"; else if (c >= 1) ic = "🌤"; }
+            else if (r >= 5) ic = "🌧"; else if (r >= 0.5) ic = "🌦";
+            return ic + " " + fmt1(r) + "mm";
+        }
+
+        /* ---------- surface ---------- */
+        function renderSurface(){
+            const g = $("hmGrid");
+            const H0 = CFG.hours.open, H1 = CFG.hours.close;
+            const cols = H1 - H0 + 1;
+            g.style.gridTemplateColumns = "36px repeat(" + cols + ",1fr)";
+            const m = model[station];
+            let max = 0;
+            const val = (pd, h) => (m.dow[pd] || m.grand) * (m.hourShare[h] || 0);
+            for (let pd = 0; pd < 7; pd++) for (let h = H0; h <= H1; h++) max = Math.max(max, val(pd, h));
+            const now = todayIst(), todayPd = now.pyDow, nowH = now.hourInt;
+            let html = "<div class='hml'></div>";
+            for (let h = H0; h <= H1; h++) html += "<div class='hmh'>" + (h % 2 === 0 ? h : "") + "</div>";
+            for (let pd = 0; pd < 7; pd++) {
+                const closed = m.dowN[pd] === 0;
+                html += "<div class='hml'>" + PY_DAYS[pd] + "</div>";
+                for (let h = H0; h <= H1; h++) {
+                    const v = val(pd, h);
+                    const a = max > 0 ? 0.06 + 0.9 * (v / max) : 0;
+                    const cls = ["hmc", pd === todayPd ? "today-row" : "", (pd === todayPd && h === nowH) ? "nowcell" : "", closed ? "closedcell" : ""].join(" ");
+                    const bg = closed ? "" : "style=\"background:rgba(244,197,66," + a.toFixed(3) + ")\"";
+                    html += "<div class='" + cls + "' " + bg + " data-pd='" + pd + "' data-h='" + h + "' data-v='" + v.toFixed(1) + "'></div>";
+                }
+            }
+            g.innerHTML = html;
+            g.onclick = (ev) => {
+                const c = ev.target.closest(".hmc"); if (!c || c.dataset.v == null) return;
+                const pd = +c.dataset.pd;
+                $("hmReadout").textContent = model[station].dowN[pd] === 0
+                    ? PY_DAYS[pd] + " — no history in the data (closed day?)"
+                    : PY_DAYS[pd] + " " + c.dataset.h + ":00 — ~" + c.dataset.v + " " + (station === "chef" ? "kitchen items" : "drinks") + " expected";
+            };
+        }
+
+        /* ---------- today live ---------- */
+        async function pollToday(){
+            const t0 = Date.parse(todayIst().date + "T00:00:00+05:30");
+            try {
+                const [sc, sb] = await Promise.all([
+                    db.ref(CFG.paths.chef).limitToLast(400).once("value"),
+                    db.ref(CFG.paths.barista).limitToLast(400).once("value")
+                ]);
+                todayRecs = snapToRecords("chef", sc.val()).concat(snapToRecords("barista", sb.val())).filter(r => r.ts >= t0);
+            } catch (e) { /* keep last */ }
+            renderToday();
+        }
+        function renderToday(){
+            const now = todayIst();
+            const d = now.date;
+            $("todaySub").textContent = PY_DAYS[now.pyDow] + " " + d + (wxByDate[d] ? " · " + wxIcon(d) : "");
+            const pred = predictDay(model, station, d, wxMultFor(station, d));
+            const actual = todayRecs.filter(r => r.st === station).reduce((a, r) => a + r.qty, 0);
+            const an = anomalyNow(model, station, pred, actual, now.hour);
+            const chipEl = $("todayChip");
+            if (pred.noHistory) { chipEl.className = "idle"; chipEl.textContent = "No history for " + PY_DAYS[now.pyDow] + "s — closed day?"; }
+            else if (an.cumShare < 0.03) { chipEl.className = "idle"; chipEl.textContent = "Too early to call — expecting ~" + Math.round(pred.point) + " today"; }
+            else {
+                chipEl.className = an.status;
+                const lbl = an.status === "surge" ? "SURGE" : an.status === "slump" ? "SLUMP" : "ON PACE";
+                chipEl.textContent = lbl + " " + (an.pct >= 0 ? "+" : "") + an.pct + "% · " + actual + " vs ~" + Math.round(an.exp) + " by now" +
+                    (an.projected != null ? " → trending " + Math.round(an.projected) + " (typical " + Math.round(pred.point) + ")" : "");
+            }
+            const other = station === "chef" ? "barista" : "chef";
+            const oAct = todayRecs.filter(r => r.st === other).reduce((a, r) => a + r.qty, 0);
+            $("todayStats").innerHTML = "<span><b>" + actual + "</b> " + station + " so far</span>" +
+                "<span><b>" + oAct + "</b> " + other + "</span>" +
+                "<span>day range <b>" + Math.round(pred.lo) + "–" + Math.round(pred.hi) + "</b></span>" +
+                (pred.wxMult !== 1 ? "<span>weather ×<b>" + pred.wxMult.toFixed(2) + "</b></span>" : "");
+            drawToday(pred);
+        }
+        function drawToday(pred){
+            const H0 = CFG.hours.open, H1 = CFG.hours.close + 1;
+            const labels = [], exp = [], hiB = [], loB = [];
+            for (let h = H0; h <= H1; h += 0.25) {
+                labels.push(Number.isInteger(h) ? ((h % 12) || 12) + (h < 12 ? "a" : "p") : "");
+                const e = pred.point * cumShareAt(model, station, h);
+                const b = Math.max(1.64 * Math.sqrt(Math.max(e, 0.5)), 0.30 * e);
+                exp.push(e); hiB.push(e + b); loB.push(Math.max(0, e - b));
+            }
+            const sorted = todayRecs.filter(r => r.st === station).sort((a, b) => a.ts - b.ts);
+            let cum = 0;
+            const act = new Array(labels.length).fill(null);
+            const nowH = clamp(todayIst().hour, H0, H1);
+            const idxOf = (h) => Math.round((clamp(h, H0, H1) - H0) / 0.25);
+            act[0] = 0;
+            for (const r of sorted) { cum += r.qty; act[idxOf(istParts(r.ts).hour)] = cum; }
+            let lastV = 0;
+            for (let i = 0; i <= idxOf(nowH); i++) { if (act[i] == null) act[i] = lastV; else lastV = act[i]; }
+            const data = {
+                labels,
+                datasets: [
+                    { data: hiB, borderColor: "transparent", backgroundColor: "rgba(255,255,255,0.12)", fill: "+1", pointRadius: 0, tension: 0.35 },
+                    { data: loB, borderColor: "transparent", backgroundColor: "transparent", fill: false, pointRadius: 0, tension: 0.35 },
+                    { data: exp, borderColor: "#ffffff", borderDash: [5, 4], borderWidth: 2, backgroundColor: "transparent", fill: false, pointRadius: 0, tension: 0.35 },
+                    { data: act, borderColor: "#f4c542", borderWidth: 2.5, backgroundColor: "transparent", fill: false, pointRadius: 0, stepped: true, spanGaps: false }
+                ]
+            };
+            if (charts["chart-today"]) { charts["chart-today"].data = data; charts["chart-today"].update("none"); return; }
+            charts["chart-today"] = new Chart($("chart-today").getContext("2d"), {
+                type: "line",
+                data,
+                options: { responsive: true, maintainAspectRatio: false, animation: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: { x: { grid: { display: false }, ticks: { color: "rgba(255,255,255,0.6)", maxTicksLimit: 8, font: { size: 10 }, maxRotation: 0 } },
+                              y: { grid: { color: "rgba(255,255,255,0.08)" }, ticks: { color: "rgba(255,255,255,0.6)", maxTicksLimit: 5, precision: 0 }, beginAtZero: true } } }
+            });
+        }
+
+        /* ---------- forecast ---------- */
+        function renderForecast(){
+            const tb = $("fcTable").querySelector("tbody");
+            const today = todayIst().date;
+            let rows = "";
+            for (let i = 0; i < 7; i++) {
+                const d = addDays(today, i);
+                const pc = predictDay(model, "chef", d, wxMultFor("chef", d));
+                const pb = predictDay(model, "barista", d, wxMultFor("barista", d));
+                const name = (i === 0 ? "Today" : i === 1 ? "Tomorrow" : PY_DAYS[pc.pyDow]) + " <span style='opacity:0.55;font-size:0.72rem;'>" + d.slice(5) + "</span>";
+                rows += "<tr class='" + (i === 0 ? "todayrow" : "") + "'><td>" + name + "</td><td>" + (wxByDate[d] ? wxIcon(d) : "—") + "</td>" +
+                    (pc.noHistory
+                        ? "<td class='num closed' colspan='2'>no history — closed?</td>"
+                        : "<td class='num'>" + Math.round(pc.lo) + "–" + Math.round(pc.hi) + "</td><td class='num'>" + Math.round(pb.lo) + "–" + Math.round(pb.hi) + "</td>") +
+                    "</tr>";
+            }
+            tb.innerHTML = rows;
+            const wtb = $("wxTable").querySelector("tbody");
+            if (wxLearned) {
+                wtb.innerHTML = ["chef", "barista"].map(st =>
+                    "<tr><td>" + (st === "chef" ? "Chef" : "Barista") + "</td>" +
+                    wxLearned[st].map(b => "<td class='num'>×" + b.mult.toFixed(2) + " <span style='opacity:0.55;font-size:0.72rem;'>n" + b.n + "</span></td>").join("") + "</tr>").join("");
+            } else {
+                wtb.innerHTML = "<tr><td colspan='5' class='muted'>learning needs live order history + weather archive</td></tr>";
+            }
+        }
+
+        /* ---------- planner ---------- */
+        function renderPlanner(){
+            const today = todayIst().date;
+            let target = addDays(today, 1), skippedClosed = false;
+            if (predictDay(model, "chef", target, 1).noHistory) { target = addDays(today, 2); skippedClosed = true; }
+            const pt = predictDay(model, "chef", target, wxMultFor("chef", target));
+            const prep = plannerPrep(pt, CFG.prep);
+            $("prepCard").innerHTML =
+                "<div class='pbig'>Tonight's mix → " + PY_DAYS[pt.pyDow] + ": <strong>" + prep.balls + " dough balls</strong> · <strong>" + fmt1(prep.mozKg) + " kg mozzarella</strong></div>" +
+                "<div class='pnote'>" + (skippedClosed ? "Tomorrow reads closed in the data — planning for the next open day. " : "") +
+                "Expecting " + prep.lo + "–" + prep.hi + " kitchen items (point " + Math.round(pt.point) + (pt.wxMult !== 1 ? ", weather ×" + pt.wxMult.toFixed(2) : "") + "). One ball per item — pizza, calzone, garlic bread alike — plus a " + CFG.prep.doughBufferPct + "% buffer.</div>";
+            const tb = $("prepTable").querySelector("tbody");
+            let rows = "", pts = [];
+            for (let i = 1; i <= 3; i++) {
+                const d = addDays(today, i);
+                const p = predictDay(model, "chef", d, wxMultFor("chef", d));
+                if (p.noHistory) { rows += "<tr><td>" + PY_DAYS[p.pyDow] + " " + d.slice(5) + "</td><td>" + (wxByDate[d] ? wxIcon(d) : "—") + "</td><td class='num closed' colspan='3'>closed?</td></tr>"; continue; }
+                const pr = plannerPrep(p, CFG.prep);
+                rows += "<tr><td>" + PY_DAYS[p.pyDow] + " " + d.slice(5) + "</td><td>" + (wxByDate[d] ? wxIcon(d) : "—") + "</td><td class='num'>" + pr.lo + "–" + pr.hi + "</td><td class='num'>" + pr.balls + "</td><td class='num'>" + fmt1(pr.mozKg) + " kg</td></tr>";
+            }
+            tb.innerHTML = rows;
+            for (let i = 0; i < 7; i++) {
+                const d = addDays(today, i);
+                const p = predictDay(model, "barista", d, wxMultFor("barista", d));
+                if (!p.noHistory) pts.push(p.point);
+            }
+            let saved = {};
+            try { saved = JSON.parse(localStorage.getItem("ila_demand_roast") || "{}"); } catch (e) {}
+            const inS = $("inStock"), inD = $("inRoastDate");
+            if (inS.value === "" && saved.kg != null) inS.value = saved.kg;
+            if (inD.value === "" && saved.date) inD.value = saved.date;
+            const recompute = () => {
+                const kg = parseFloat(inS.value);
+                try { localStorage.setItem("ila_demand_roast", JSON.stringify({ kg: inS.value, date: inD.value })); } catch (e) {}
+                if (!(kg >= 0)) { $("roastOut").innerHTML = "Enter roasted stock on hand to plan the next roast. Burn rate: <strong>" + fmt1(plannerRoast(pts, 0, CFG.roast).burnPerDayKg * 1000) + " g/day</strong> at " + Math.round(CFG.roast.espShare * 100) + "% espresso share, " + CFG.roast.doseG + " g dose."; return; }
+                const r = plannerRoast(pts, kg, CFG.roast);
+                let restNote = "";
+                if (inD.value) {
+                    const rest = Math.round(dateDiffDays(today, inD.value));
+                    if (rest < CFG.roast.restDays) restNote = " Current batch rests until " + addDays(inD.value, CFG.roast.restDays) + ".";
+                }
+                const roastBy = addDays(today, Math.max(0, r.roastInDays));
+                const urgent = r.roastInDays <= 1;
+                $("roastOut").innerHTML =
+                    "Burn <strong>" + fmt1(r.burnPerDayKg * 1000) + " g/day</strong> → stock covers <strong>" + fmt1(r.coverDays) + " days</strong>. " +
+                    "<span class='" + (urgent ? "urgent" : "") + "'>Roast by <strong>" + PY_DAYS[pyDowOfDate(roastBy)] + " " + roastBy.slice(5) + "</strong></span> (beans rest " + CFG.roast.restDays + "d): charge <strong>" + fmt1(r.greenKg) + " kg green</strong> ≈ " + fmt1(r.greenKg * (1 - CFG.roast.weightLossPct / 100)) + " kg roasted." + restNote;
+            };
+            inS.oninput = recompute; inD.oninput = recompute;
+            recompute();
+        }
+
+        /* ---------- model panel ---------- */
+        function renderModelPanel(){
+            const kv = $("modelKv");
+            const rows = [
+                ["Source", model.meta.source === "live" ? "live refit from Firebase" : "June seed (offline fit)"],
+                ["Records", (model.meta.records || 0) + (model.meta.source === "live" ? " (through " + model.meta.refDate + ")" : " (Feb 24 → Jun 20)")],
+                ["Decay", "half-life " + model.meta.halfLifeDays + "d · shrinkage K " + model.meta.shrinkK],
+                ["Baselines", "chef " + fmt1(model.chef.grand) + "/day · barista " + fmt1(model.barista.grand) + "/day"]
+            ];
+            if (holdout) {
+                rows.push(["Holdout 14d", "chef " + holdout.chef.mapeDow + "%" + (holdout.chef.mapeWx != null ? " → " + holdout.chef.mapeWx + "% with weather" : "") +
+                    " · barista " + holdout.barista.mapeDow + "%" + (holdout.barista.mapeWx != null ? " → " + holdout.barista.mapeWx + "% with weather" : "")]);
+                rows.push(["June score", "chef 47% · barista 76% (vs naive 52%/83%)"]);
+            } else {
+                rows.push(["Accuracy", "chef 47% · barista 76% MAPE, June holdout (vs naive 52%/83%)"]);
+            }
+            kv.innerHTML = rows.map(r => "<div>" + r[0] + "</div><div>" + r[1] + "</div>").join("");
+            $("modelNote").textContent = "Ranges everywhere are ± half the holdout MAPE — honest width for small daily counts. The model re-fits from Firebase on every load; the weather layer's contribution is measured on held-out days, not assumed.";
+        }
+
+        /* ---------- wiring ---------- */
+        window.setStation = function(st){
+            station = st;
+            $("tgChef").className = "range-btn" + (st === "chef" ? " active" : "");
+            $("tgBar").className = "range-btn" + (st === "barista" ? " active" : "");
+            renderSurface(); renderToday();
+        };
+        window.doRefit = function(){ try { localStorage.removeItem("ila_demand_wx_v1"); } catch (e) {} location.reload(); };
+        async function demandBoot(){
+            await loadAll();
+            renderSurface(); renderModelPanel(); renderForecast(); renderPlanner();
+            await pollToday();
+            loadWeather().then(() => {
+                renderForecast(); renderPlanner(); renderToday();
+                if (records.length >= CFG.model.minLiveRecords) {
+                    holdout = scoreHoldout(records, CFG.model, Object.keys(wxByDate).length ? wxByDate : null, 14);
+                    if (holdout && holdout.chef.mapeDow != null) {
+                        model.chef.mapePct = holdout.chef.mapeWx != null ? holdout.chef.mapeWx : holdout.chef.mapeDow;
+                        model.barista.mapePct = holdout.barista.mapeWx != null ? holdout.barista.mapeWx : holdout.barista.mapeDow;
+                        renderModelPanel(); renderForecast(); renderPlanner(); renderToday();
+                    }
+                }
+            });
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(pollToday, 120000);
+            document.addEventListener("visibilitychange", () => { if (!document.hidden) pollToday(); });
+        }
+
+        /* ---------- view switcher ---------- */
+        window.setView = function(v){
+            document.getElementById('analytics-block').style.display = (v==='analytics') ? '' : 'none';
+            document.getElementById('demand-block').style.display = (v==='demand') ? '' : 'none';
+            document.getElementById('view-analytics').classList.toggle('active', v==='analytics');
+            document.getElementById('view-demand').classList.toggle('active', v==='demand');
+            if(v==='demand'){ try{ renderToday(); if(charts['chart-today']) charts['chart-today'].resize(); }catch(e){} _rz(); }
+        };
+
         window.toggleEodReport = function(id){ const el = document.getElementById(id); if(el) el.style.display = (el.style.display === 'none' ? 'block' : 'none'); };
     </script>
 </body>
