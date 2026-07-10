@@ -81,7 +81,7 @@
         .chip.warn { border-color: rgba(244,197,66,0.55); color: #f4c542; }
         .err-card { background-color: rgba(0, 0, 0, 0.15); border-radius: 12px; padding: 14px 20px; margin-bottom: 22px; border: 1px solid rgba(244,67,54,0.35); color: #ffd2d2; font-size: 0.88rem; display: none; word-break: break-word; }
         .sub { font-size: 0.8rem; opacity: 0.75; margin: 0 0 12px 0; }
-        .hm { overflow-x: auto; }
+        .hm { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .hmg { display: grid; gap: 2px; min-width: 560px; }
         .hmc { height: 24px; border-radius: 4px; background: rgba(255,255,255,0.05); position: relative; }
         .hml { font-size: 0.72rem; opacity: 0.7; display: flex; align-items: center; font-weight: 700; }
@@ -90,7 +90,7 @@
         .hmc.nowcell::after { content: ""; position: absolute; inset: 2px; border: 1.5px dashed rgba(0,0,0,0.55); border-radius: 3px; }
         .hmc.closedcell { background: repeating-linear-gradient(45deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, rgba(255,255,255,0.09) 4px, rgba(255,255,255,0.09) 8px); }
         #hmReadout { font-size: 0.84rem; margin-top: 10px; min-height: 1.2em; opacity: 0.9; }
-        #todayChip { display: inline-block; font-size: 0.85rem; font-weight: 700; padding: 6px 14px; border-radius: 20px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); }
+        #todayChip { display: inline-block; max-width: 100%; line-height: 1.5; font-size: 0.85rem; font-weight: 700; padding: 6px 14px; border-radius: 14px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); }
         #todayChip.on-pace { border-color: rgba(108,208,127,0.55); color: #6cd07f; }
         #todayChip.surge { border-color: rgba(244,197,66,0.55); color: #f4c542; }
         #todayChip.slump { border-color: rgba(255,138,128,0.55); color: #ff8a80; }
@@ -145,19 +145,18 @@
             <div class="strip">
                 <span class="chip" id="chipData">data…</span>
                 <span class="chip" id="chipWx">weather…</span>
-                <span class="chip" id="chipModel">model…</span>
-                <button class="lnk" onclick="window.doRefit()" style="padding:5px 12px; font-size:0.72rem;">Refit</button>
+                <button class="lnk" onclick="window.doRefit()" style="padding:5px 12px; font-size:0.72rem;">Refresh</button>
             </div>
             <div class="err-card" id="errBox"></div>
 
             <!-- DEMAND SURFACE -->
             <div class="card">
-                <h2>Demand Surface</h2>
+                <h2>When We're Busy</h2>
                 <div class="controls">
                     <button class="range-btn active" id="tgChef" onclick="window.setStation('chef')">Chef</button>
                     <button class="range-btn" id="tgBar" onclick="window.setStation('barista')">Barista</button>
-                    <span class="sub pull-right" style="margin:0;">Half-life 28d · brighter = busier · dashed = now</span>
                 </div>
+                <div class="sub">A typical week, hour by hour — darker gold means busier. Tap any cell for the number. The dashed box is right now.</div>
                 <div class="hm"><div class="hmg" id="hmGrid"></div></div>
                 <div id="hmReadout">Tap a cell for the number.</div>
             </div>
@@ -173,19 +172,19 @@
 
             <!-- FORECAST -->
             <div class="card">
-                <h2>7-Day Forecast</h2>
-                <div class="sub">Weather-adjusted ranges — Open-Meteo, learned from Ila's own history, not assumed.</div>
-                <table class="tbl" id="fcTable"><thead><tr><th>Day</th><th>Weather</th><th class="num">Chef</th><th class="num">Barista</th></tr></thead><tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody></table>
-                <div class="tbl-note">Learned rain effect (× on a normal day · n = days observed)</div>
-                <table class="tbl" id="wxTable"><thead><tr><th></th><th class="num">Dry</th><th class="num">Light</th><th class="num">Wet</th><th class="num">Heavy</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table>
+                <h2>The Week Ahead</h2>
+                <div class="sub">How busy each day looks, weather included. Ranges, because no forecast is exact — Chef is kitchen items, Barista is drinks.</div>
+                <div class="scroll"><table class="tbl" id="fcTable"><thead><tr><th>Day</th><th>Weather</th><th class="num">Chef</th><th class="num">Barista</th></tr></thead><tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody></table></div>
+                <div class="tbl-note">What rain does to a day — from Ila's own history</div>
+                <div class="scroll"><table class="tbl" id="wxTable"><thead><tr><th></th><th class="num">Dry</th><th class="num">Light</th><th class="num">Wet</th><th class="num">Heavy</th></tr></thead><tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table></div>
             </div>
 
             <!-- PLANNER -->
             <div class="card">
                 <h2>Prep &amp; Roast Planner</h2>
-                <div class="sub">Dough is mixed the night before (biga lead). Ranges carry the model's honest uncertainty.</div>
+                <div class="sub">Dough is mixed the night before. Numbers already include the weather and a safety margin.</div>
                 <div class="pblock" id="prepCard"></div>
-                <table class="tbl" id="prepTable"><thead><tr><th>Day</th><th>Weather</th><th class="num">Dough Items</th><th class="num">Balls</th><th class="num">Moz</th></tr></thead><tbody></tbody></table>
+                <div class="scroll"><table class="tbl" id="prepTable"><thead><tr><th>Day</th><th>Weather</th><th class="num">Expected</th><th class="num">Balls</th><th class="num">Moz</th></tr></thead><tbody></tbody></table></div>
                 <div class="pblock" style="margin-top:14px;">
                     <div class="pbig">Roast Planner</div>
                     <div class="rin">
@@ -198,8 +197,8 @@
 
             <!-- MODEL -->
             <div class="card">
-                <h2>Model</h2>
-                <div class="kv" id="modelKv"></div>
+                <h2>How This Works</h2>
+                <div id="modelKv"></div>
                 <div class="sub" style="margin-top:10px;" id="modelNote"></div>
             </div>
         </div>
@@ -322,7 +321,7 @@
             </div>
         </div>
         </div><!-- /analytics-block -->
-        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-09 &middot; demand-merge b</div>
+        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-10 &middot; demand-merge c</div>
     </div>
 
     <script>
@@ -1035,7 +1034,7 @@ if (typeof module !== "undefined") module.exports = {
 
         /* ---------- data loading (post-auth) ---------- */
         async function loadAll(){
-            chip("chipData", "warn", "data: loading…");
+            chip("chipData", "warn", "Loading orders…");
             try {
                 const [sc, sb] = await Promise.all([
                     db.ref(CFG.paths.chef).once("value"),
@@ -1053,14 +1052,13 @@ if (typeof module !== "undefined") module.exports = {
                 model = fitModel(records, CFG.model);
                 model.chef.mapePct = SEED.chef.mapePct;       // carried until the live holdout re-score lands
                 model.barista.mapePct = SEED.barista.mapePct;
-                chip("chipData", "on", "data: live · " + records.length + " records → " + model.meta.refDate);
+                chip("chipData", "on", "Live · " + records.length.toLocaleString("en-IN") + " orders");
                 const ageDays = Math.round(dateDiffDays(todayIst().date, model.meta.refDate));
-                if (ageDays > 3) chip("chipData", "warn", "data: last record " + ageDays + "d ago (" + model.meta.refDate + ") — check paths");
+                if (ageDays > 3) chip("chipData", "warn", "Last order " + ageDays + " days ago — check the connection");
             } else {
                 model = seedToModel(SEED);
-                chip("chipData", records.length ? "warn" : "off", "data: seed (Jun 6) · live records: " + records.length);
+                chip("chipData", records.length ? "warn" : "off", "Offline — using the June snapshot");
             }
-            chip("chipModel", "on", "model: " + model.meta.source + " · HL 28d · K 6");
         }
 
         /* ---------- weather ---------- */
@@ -1075,7 +1073,7 @@ if (typeof module !== "undefined") module.exports = {
             return d.time || [];
         }
         async function loadWeather(){
-            chip("chipWx", "warn", "weather: loading…");
+            chip("chipWx", "warn", "Checking weather…");
             const today = todayIst().date;
             const base = "latitude=" + CFG.place.lat + "&longitude=" + CFG.place.lon + "&elevation=" + CFG.place.elevation +
                 "&daily=precipitation_sum,temperature_2m_max,weather_code&timezone=Asia%2FKolkata";
@@ -1098,13 +1096,13 @@ if (typeof module !== "undefined") module.exports = {
                 wxFuture = ft.filter(t => t >= today);
                 if (records.length >= CFG.model.minLiveRecords) {
                     wxLearned = learnWeather(records, model, wxByDate, CFG.model);
-                    chip("chipWx", "on", "weather: learned from " + Object.keys(wxByDate).length + " days");
+                    chip("chipWx", "on", "Weather: on");
                 } else {
                     wxLearned = null;
-                    chip("chipWx", "warn", "weather: forecast only (learning needs live history)");
+                    chip("chipWx", "warn", "Weather: forecast only");
                 }
             } catch (e) {
-                chip("chipWx", "off", "weather: unavailable — dow-only forecast");
+                chip("chipWx", "off", "Weather: off");
                 wxFuture = []; wxLearned = null;
             }
         }
@@ -1178,20 +1176,21 @@ if (typeof module !== "undefined") module.exports = {
             const actual = todayRecs.filter(r => r.st === station).reduce((a, r) => a + r.qty, 0);
             const an = anomalyNow(model, station, pred, actual, now.hour);
             const chipEl = $("todayChip");
-            if (pred.noHistory) { chipEl.className = "idle"; chipEl.textContent = "No history for " + PY_DAYS[now.pyDow] + "s — closed day?"; }
-            else if (an.cumShare < 0.03) { chipEl.className = "idle"; chipEl.textContent = "Too early to call — expecting ~" + Math.round(pred.point) + " today"; }
+            if (pred.noHistory) { chipEl.className = "idle"; chipEl.textContent = "We're usually closed on " + PY_DAYS[now.pyDow] + "s."; }
+            else if (an.cumShare < 0.03) { chipEl.className = "idle"; chipEl.textContent = "Too early to say — expecting around " + Math.round(pred.point) + " today"; }
             else {
                 chipEl.className = an.status;
-                const lbl = an.status === "surge" ? "SURGE" : an.status === "slump" ? "SLUMP" : "ON PACE";
-                chipEl.textContent = lbl + " " + (an.pct >= 0 ? "+" : "") + an.pct + "% · " + actual + " vs ~" + Math.round(an.exp) + " by now" +
-                    (an.projected != null ? " → trending " + Math.round(an.projected) + " (typical " + Math.round(pred.point) + ")" : "");
+                const word = station === "chef" ? "kitchen items" : "drinks";
+                const lbl = an.status === "surge" ? "Busier than usual" : an.status === "slump" ? "Quieter than usual" : "On pace";
+                chipEl.textContent = lbl + " — " + actual + " " + word + " done; ~" + Math.round(an.exp) + " is normal by now." +
+                    (an.projected != null ? " Heading for ~" + Math.round(an.projected) + " (a normal " + PY_DAYS[now.pyDow] + " is " + Math.round(pred.point) + ")." : "");
             }
             const other = station === "chef" ? "barista" : "chef";
             const oAct = todayRecs.filter(r => r.st === other).reduce((a, r) => a + r.qty, 0);
-            $("todayStats").innerHTML = "<span><b>" + actual + "</b> " + station + " so far</span>" +
-                "<span><b>" + oAct + "</b> " + other + "</span>" +
-                "<span>day range <b>" + Math.round(pred.lo) + "–" + Math.round(pred.hi) + "</b></span>" +
-                (pred.wxMult !== 1 ? "<span>weather ×<b>" + pred.wxMult.toFixed(2) + "</b></span>" : "");
+            $("todayStats").innerHTML = "<span><b>" + actual + "</b> " + (station === "chef" ? "kitchen items" : "drinks") + " so far</span>" +
+                "<span><b>" + oAct + "</b> " + (other === "chef" ? "kitchen items" : "drinks") + "</span>" +
+                "<span>today likely <b>" + Math.round(pred.lo) + "–" + Math.round(pred.hi) + "</b></span>" +
+                (pred.wxMult < 0.97 || pred.wxMult > 1.03 ? "<span>weather factored in</span>" : "");
             drawToday(pred);
         }
         function drawToday(pred){
@@ -1244,7 +1243,7 @@ if (typeof module !== "undefined") module.exports = {
                 const name = (i === 0 ? "Today" : i === 1 ? "Tomorrow" : PY_DAYS[pc.pyDow]) + " <span style='opacity:0.55;font-size:0.72rem;'>" + d.slice(5) + "</span>";
                 rows += "<tr class='" + (i === 0 ? "todayrow" : "") + "'><td>" + name + "</td><td>" + (wxByDate[d] ? wxIcon(d) : "—") + "</td>" +
                     (pc.noHistory
-                        ? "<td class='num closed' colspan='2'>no history — closed?</td>"
+                        ? "<td class='num closed' colspan='2'>usually closed</td>"
                         : "<td class='num'>" + Math.round(pc.lo) + "–" + Math.round(pc.hi) + "</td><td class='num'>" + Math.round(pb.lo) + "–" + Math.round(pb.hi) + "</td>") +
                     "</tr>";
             }
@@ -1253,9 +1252,9 @@ if (typeof module !== "undefined") module.exports = {
             if (wxLearned) {
                 wtb.innerHTML = ["chef", "barista"].map(st =>
                     "<tr><td>" + (st === "chef" ? "Chef" : "Barista") + "</td>" +
-                    wxLearned[st].map(b => "<td class='num'>×" + b.mult.toFixed(2) + " <span style='opacity:0.55;font-size:0.72rem;'>n" + b.n + "</span></td>").join("") + "</tr>").join("");
+                    wxLearned[st].map(b => "<td class='num'>×" + b.mult.toFixed(2) + " <span style='opacity:0.55;font-size:0.72rem;'>seen " + b.n + "×</span></td>").join("") + "</tr>").join("");
             } else {
-                wtb.innerHTML = "<tr><td colspan='5' class='muted'>learning needs live order history + weather archive</td></tr>";
+                wtb.innerHTML = "<tr><td colspan='5' class='muted'>Still learning — needs live orders and a weather connection.</td></tr>";
             }
         }
 
@@ -1268,14 +1267,14 @@ if (typeof module !== "undefined") module.exports = {
             const prep = plannerPrep(pt, CFG.prep);
             $("prepCard").innerHTML =
                 "<div class='pbig'>Tonight's mix → " + PY_DAYS[pt.pyDow] + ": <strong>" + prep.balls + " dough balls</strong> · <strong>" + fmt1(prep.mozKg) + " kg mozzarella</strong></div>" +
-                "<div class='pnote'>" + (skippedClosed ? "Tomorrow reads closed in the data — planning for the next open day. " : "") +
-                "Expecting " + prep.lo + "–" + prep.hi + " kitchen items (point " + Math.round(pt.point) + (pt.wxMult !== 1 ? ", weather ×" + pt.wxMult.toFixed(2) : "") + "). One ball per item — pizza, calzone, garlic bread alike — plus a " + CFG.prep.doughBufferPct + "% buffer.</div>";
+                "<div class='pnote'>" + (skippedClosed ? "Tomorrow we're usually closed — this is for the next open day. " : "") +
+                "Expect around " + Math.round(pt.point) + " kitchen items; could be " + prep.lo + " to " + prep.hi + ". One ball each for pizza, calzone and garlic bread, plus " + CFG.prep.doughBufferPct + "% spare." + (pt.wxMult < 0.97 || pt.wxMult > 1.03 ? " Weather already factored in." : "") + "</div>";
             const tb = $("prepTable").querySelector("tbody");
             let rows = "", pts = [];
             for (let i = 1; i <= 3; i++) {
                 const d = addDays(today, i);
                 const p = predictDay(model, "chef", d, wxMultFor("chef", d));
-                if (p.noHistory) { rows += "<tr><td>" + PY_DAYS[p.pyDow] + " " + d.slice(5) + "</td><td>" + (wxByDate[d] ? wxIcon(d) : "—") + "</td><td class='num closed' colspan='3'>closed?</td></tr>"; continue; }
+                if (p.noHistory) { rows += "<tr><td>" + PY_DAYS[p.pyDow] + " " + d.slice(5) + "</td><td>" + (wxByDate[d] ? wxIcon(d) : "—") + "</td><td class='num closed' colspan='3'>usually closed</td></tr>"; continue; }
                 const pr = plannerPrep(p, CFG.prep);
                 rows += "<tr><td>" + PY_DAYS[p.pyDow] + " " + d.slice(5) + "</td><td>" + (wxByDate[d] ? wxIcon(d) : "—") + "</td><td class='num'>" + pr.lo + "–" + pr.hi + "</td><td class='num'>" + pr.balls + "</td><td class='num'>" + fmt1(pr.mozKg) + " kg</td></tr>";
             }
@@ -1293,18 +1292,18 @@ if (typeof module !== "undefined") module.exports = {
             const recompute = () => {
                 const kg = parseFloat(inS.value);
                 try { localStorage.setItem("ila_demand_roast", JSON.stringify({ kg: inS.value, date: inD.value })); } catch (e) {}
-                if (!(kg >= 0)) { $("roastOut").innerHTML = "Enter roasted stock on hand to plan the next roast. Burn rate: <strong>" + fmt1(plannerRoast(pts, 0, CFG.roast).burnPerDayKg * 1000) + " g/day</strong> at " + Math.round(CFG.roast.espShare * 100) + "% espresso share, " + CFG.roast.doseG + " g dose."; return; }
+                if (!(kg >= 0)) { $("roastOut").innerHTML = "Enter how much roasted coffee is on hand and when you last roasted. Right now the bar uses about <strong>" + fmt1(plannerRoast(pts, 0, CFG.roast).burnPerDayKg * 1000) + " g of beans a day</strong>."; return; }
                 const r = plannerRoast(pts, kg, CFG.roast);
                 let restNote = "";
                 if (inD.value) {
                     const rest = Math.round(dateDiffDays(today, inD.value));
-                    if (rest < CFG.roast.restDays) restNote = " Current batch rests until " + addDays(inD.value, CFG.roast.restDays) + ".";
+                    if (rest < CFG.roast.restDays) restNote = " The current batch is still resting — ready " + addDays(inD.value, CFG.roast.restDays) + ".";
                 }
                 const roastBy = addDays(today, Math.max(0, r.roastInDays));
                 const urgent = r.roastInDays <= 1;
                 $("roastOut").innerHTML =
-                    "Burn <strong>" + fmt1(r.burnPerDayKg * 1000) + " g/day</strong> → stock covers <strong>" + fmt1(r.coverDays) + " days</strong>. " +
-                    "<span class='" + (urgent ? "urgent" : "") + "'>Roast by <strong>" + PY_DAYS[pyDowOfDate(roastBy)] + " " + roastBy.slice(5) + "</strong></span> (beans rest " + CFG.roast.restDays + "d): charge <strong>" + fmt1(r.greenKg) + " kg green</strong> ≈ " + fmt1(r.greenKg * (1 - CFG.roast.weightLossPct / 100)) + " kg roasted." + restNote;
+                    "The bar uses about <strong>" + fmt1(r.burnPerDayKg * 1000) + " g of beans a day</strong>, so this stock lasts <strong>" + fmt1(r.coverDays) + " days</strong>. " +
+                    "<span class='" + (urgent ? "urgent" : "") + "'>Roast by <strong>" + PY_DAYS[pyDowOfDate(roastBy)] + " " + roastBy.slice(5) + "</strong></span> so the beans get their " + CFG.roast.restDays + "-day rest — charge <strong>" + fmt1(r.greenKg) + " kg green</strong>, about <strong>" + fmt1(r.greenKg * (1 - CFG.roast.weightLossPct / 100)) + " kg</strong> after roasting." + restNote;
             };
             inS.oninput = recompute; inD.oninput = recompute;
             recompute();
@@ -1312,22 +1311,20 @@ if (typeof module !== "undefined") module.exports = {
 
         /* ---------- model panel ---------- */
         function renderModelPanel(){
-            const kv = $("modelKv");
-            const rows = [
-                ["Source", model.meta.source === "live" ? "live refit from Firebase" : "June seed (offline fit)"],
-                ["Records", (model.meta.records || 0) + (model.meta.source === "live" ? " (through " + model.meta.refDate + ")" : " (Feb 24 → Jun 20)")],
-                ["Decay", "half-life " + model.meta.halfLifeDays + "d · shrinkage K " + model.meta.shrinkK],
-                ["Baselines", "chef " + fmt1(model.chef.grand) + "/day · barista " + fmt1(model.barista.grand) + "/day"]
-            ];
-            if (holdout) {
-                rows.push(["Holdout 14d", "chef " + holdout.chef.mapeDow + "%" + (holdout.chef.mapeWx != null ? " → " + holdout.chef.mapeWx + "% with weather" : "") +
-                    " · barista " + holdout.barista.mapeDow + "%" + (holdout.barista.mapeWx != null ? " → " + holdout.barista.mapeWx + "% with weather" : "")]);
-                rows.push(["June score", "chef 47% · barista 76% (vs naive 52%/83%)"]);
-            } else {
-                rows.push(["Accuracy", "chef 47% · barista 76% MAPE, June holdout (vs naive 52%/83%)"]);
-            }
-            kv.innerHTML = rows.map(r => "<div>" + r[0] + "</div><div>" + r[1] + "</div>").join("");
-            $("modelNote").textContent = "Ranges everywhere are ± half the holdout MAPE — honest width for small daily counts. The model re-fits from Firebase on every load; the weather layer's contribution is measured on held-out days, not assumed.";
+            const rec = (model.meta.records || 0).toLocaleString('en-IN');
+            const kM = model.chef.mapePct, bM = model.barista.mapePct;
+            const wxBit = (holdout && holdout.chef.mapeWx != null && holdout.chef.mapeWx < holdout.chef.mapeDow)
+                ? " Adding the weather cut the kitchen error from ±" + holdout.chef.mapeDow + "% to ±" + holdout.chef.mapeWx + "%."
+                : "";
+            $("modelKv").innerHTML =
+                "<div style='font-size:0.86rem; opacity:0.92; line-height:1.65;'>" +
+                "It reads every completed order — " + rec + " so far — and trusts recent weeks the most, so it keeps up as the café changes. " +
+                "Rain effects come from Ila's own rainy days, not assumptions. " +
+                "Tested on two weeks it had never seen, kitchen forecasts landed within about ±" + kM + "% and drinks within about ±" + bM + "% — that's why everything here is a range, not a single number." + wxBit +
+                "</div>";
+            $("modelNote").innerHTML = "<span style='opacity:0.45; font-size:0.7rem;'>" +
+                (model.meta.source === 'live' ? "live refit" : "June snapshot") + " · through " + model.meta.refDate +
+                " · half-life 28d · K6 · 14-day holdout</span>";
         }
 
         /* ---------- wiring ---------- */
