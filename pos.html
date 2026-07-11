@@ -1014,7 +1014,23 @@
                 dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App", order.trackId || null);
             } catch(e) { console.error("Kitchen dispatch error", e); }
 
-            addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`);
+            // Web orders must carry the same verification meta as QR settlements, so a late
+            // bank email can flip unverified→verified (map the order's routed VPA → bank tag).
+            (async () => {
+                let bankTag = null;
+                try {
+                    const cfg = (await db.ref('upiRouting/config').once('value')).val() || {};
+                    for (const k in cfg){ const c = cfg[k] || {}; const v = c.upi || c.vpa || c.id;
+                        if (v && order.upiId && String(v).trim().toLowerCase() === String(order.upiId).trim().toLowerCase()){ bankTag = c.bank || null; break; } }
+                } catch(e){}
+                const mref = (window._wvMatch && window._wvMatch[id]) || null;
+                addLedgerEntry('upi_income', order.total, `Web: ${order.tableOrAddress}`, {
+                    payId: 'web_' + (order.trackId || id),
+                    state: mref ? 'verified' : 'unverified',
+                    ref: mref,
+                    bankTag: bankTag
+                });
+            })();
             if (order.upiId) { try { window.upiRecordPayment(order.upiId, parseFloat(order.total) || 0); } catch(e){} }
             // claim the verified credit so a table QR can't grab the same rupees later
             try { const _mref = window._wvMatch && window._wvMatch[id]; if (_mref && window._wvCredits[_mref]) claimPayment(_mref, window._wvCredits[_mref], function(){}); } catch(e){}
