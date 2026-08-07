@@ -89,6 +89,11 @@
         .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; border: none; text-transform: uppercase; letter-spacing: 1px;}
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
+
+        /* The UPI handoff is an anchor, not a button — iOS routes a tapped link
+           itself, which a JS location.href assignment does not reliably do
+           inside a standalone/home-screen web app. */
+        .btn-link { display: block; width: 100%; box-sizing: border-box; text-decoration: none; text-align: center; }
         
         .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: white; color: var(--brand-bg); }
@@ -270,19 +275,16 @@
                 <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
             </div>
 
-            <!-- STEP 2: pay via a UPI app -->
+            <!-- STEP 2: pay via a UPI app.
+                 This is an <a href>, not a button running JS. Every path that has
+                 worked here — scanning the QR, tapping a link — is one the OS routes
+                 itself; the JS location.href handoff is the one that failed. -->
             <div id="pay-step-upi" style="display:none;">
-                <div style="font-size:0.8rem; opacity:0.75; margin-bottom:10px;">Pay with your UPI app:</div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
-                    <button class="btn btn-secondary upi-app-btn" onclick="window.payWithApp('gpay')">Google Pay</button>
-                    <button class="btn btn-secondary upi-app-btn" onclick="window.payWithApp('phonepe')">PhonePe</button>
-                    <button class="btn btn-secondary upi-app-btn" onclick="window.payWithApp('paytm')">Paytm</button>
-                    <button class="btn btn-secondary upi-app-btn" onclick="window.payWithApp('bhim')">BHIM</button>
-                </div>
-                <button class="btn btn-secondary" style="width:100%; margin-bottom:14px;" onclick="window.payWithApp('generic')">Any other UPI app</button>
-                <div style="text-align:center; font-size:0.75rem; opacity:0.6; margin-bottom:10px;">or scan</div>
+                <a id="upi-open-link" class="btn btn-primary btn-link" href="#">Open UPI app</a>
+                <div style="text-align:center; font-size:0.75rem; opacity:0.6; margin:14px 0 10px;">or scan with another phone</div>
                 <img id="payment-qr" src="" alt="Scan to pay" style="width: 160px; height: 160px; margin: 0 auto 14px auto; border-radius: 8px; display: block; background: white; padding: 6px;">
-                <div style="font-size:0.72rem; opacity:0.55; text-align:center; line-height:1.4;">If an app doesn't open, use "Any other UPI app" or scan the code with any UPI app.</div>
+                <div style="font-size:0.75rem; opacity:0.7; text-align:center; line-height:1.5;">Or pay manually to<br><span id="upi-vpa-text" style="font-weight:bold; word-break:break-all;"></span></div>
+                <button class="btn btn-secondary" style="width:100%; margin-top:10px;" onclick="window.copyUPI(this)">Copy UPI ID</button>
                 <button class="btn btn-primary" style="width:100%; margin-top:16px;" onclick="window.sendCustomerOrder()">I've paid — place my order</button>
             </div>
 
@@ -948,29 +950,28 @@
             const generic = `upi://pay?pa=${selectedUPI}&pn=ILA&am=${amt}&cu=INR`;
             document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(generic)}`;
 
+            // The link and the QR now carry the SAME string, byte for byte. The QR is known to
+            // work when scanned, so if the link still fails the difference is the handoff and
+            // nothing else — no payload variable left to hide behind.
+            const lnk = document.getElementById('upi-open-link');
+            if (lnk) lnk.setAttribute('href', generic);
+            const vpaTxt = document.getElementById('upi-vpa-text');
+            if (vpaTxt) vpaTxt.textContent = selectedUPI;
+
             document.getElementById('pay-step-phone').style.display = 'none';
             document.getElementById('pay-step-upi').style.display = 'block';
         };
 
-        // Attempt an app-specific deep link, with the generic upi:// as the reliable fallback.
-        // NOTE: app-specific UPI intents are best-effort — some apps/phones ignore them. The
-        // generic scheme and the QR always work; the buttons are a convenience, not a guarantee.
-        window.payWithApp = function(app){
-            const p = window._upiParams; if (!p) return;
-            const q = `pa=${p.pa}&pn=${p.pn}&am=${p.am}&cu=${p.cu}`;
-            let url;
-            switch(app){
-                case 'gpay':    url = `tez://upi/pay?${q}`; break;         // Google Pay
-                case 'phonepe': url = `phonepe://pay?${q}`; break;
-                case 'paytm':   url = `paytmmp://pay?${q}`; break;
-                case 'bhim':    url = `upi://pay?${q}`; break;             // BHIM handles the generic scheme
-                default:        url = `upi://pay?${q}`; break;            // generic
-            }
-            // Try the app scheme; if nothing catches it, fall back to generic after a moment.
-            const fallback = `upi://pay?${q}`;
-            try { window.location.href = url; } catch(e){ window.location.href = fallback; }
-            if (app !== 'generic' && app !== 'bhim'){
-                setTimeout(function(){ /* if still here, the app likely didn't open; generic is available via the button/QR */ }, 1200);
+        // Manual fallback: some phones won't hand off to a UPI app at all. Copying the ID lets
+        // the customer pay from inside their own app with no handoff involved.
+        window.copyUPI = function(btn){
+            const v = (window._upiParams && window._upiParams.pa) || '';
+            if (!v) return;
+            const done = () => { const t = btn.innerText; btn.innerText = 'Copied'; setTimeout(() => { btn.innerText = t; }, 1500); };
+            if (navigator.clipboard && navigator.clipboard.writeText){
+                navigator.clipboard.writeText(v).then(done).catch(() => { window.prompt('Copy this UPI ID:', v); });
+            } else {
+                window.prompt('Copy this UPI ID:', v);
             }
         };
 
