@@ -889,6 +889,32 @@
                  + '</div>';
         }
 
+        // ===== SEND PAY LINK (takeaway / delivery) =====
+        // A upi:// link tapped inside a WEB PAGE is an NPCI Intent (mode 04) and is refused
+        // for our payees. Tapped inside a NATIVE app it completes — so the link goes out over
+        // WhatsApp and the customer taps it there. The UPI ID and amount also go in as plain
+        // text: WhatsApp renders links from an unsaved number as dead text, and that is
+        // exactly a first-time customer.
+        window.sendPayLink = function(id){
+            const o = window.pendingWebOrders[id]; if (!o) return;
+            const p = String(o.phone || '').replace(/\D/g, '').slice(-10);
+            if (p.length !== 10) { alert("No phone number on this order."); return; }
+            let vpa = o.upiId;
+            if (!vpa){
+                vpa = window.getRandomUPI();
+                // record which VPA this order was billed to, so the bank/account filter in
+                // wvFindMatch can still tie the incoming credit to this order
+                try { db.ref('orders/pendingWeb/' + id + '/upiId').set(vpa); } catch(e){}
+                o.upiId = vpa;
+            }
+            const amt = parseFloat(o.total) || 0;
+            const link = 'upi://pay?pa=' + vpa + '&pn=ILA&am=' + amt.toFixed(2) + '&cu=INR';
+            const msg = 'ILA \u2014 your order comes to \u20b9' + amt + '.\n\nTap to pay:\n' + link
+                      + '\n\nOr pay \u20b9' + amt + ' to UPI ID: ' + vpa
+                      + '\n\nWe start preparing as soon as the payment lands.';
+            window.open('https://wa.me/91' + p + '?text=' + encodeURIComponent(msg), '_blank');
+        };
+
         window.defaultModifiers = [
             { name: "Medium sweet", price: 0 },
             { name: "No sweetness", price: 0 },
@@ -1018,6 +1044,7 @@
                         ${staleBanner}
                         ${gateBanner}
                         <span id="wv-${id}"></span>
+                        ${(o.orderType !== 'Dine-in' && o.phone) ? `<button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.sendPayLink('${id}')">Send pay link on WhatsApp</button>` : ''}
                         <div id="cr-${id}">${contactRow(o, verified)}</div>
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
                             <button class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept Order</button>
@@ -1049,8 +1076,25 @@
                 dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App", order.trackId || null);
             } catch(e) { console.error("Kitchen dispatch error", e); }
 
-            // Web orders must carry the same verification meta as QR settlements, so a late
-            // bank email can flip unverified→verified (map the order's routed VPA → bank tag).
+            // A dine-in web order is not money yet — the customer settles on the POS QR at the
+            // end, like any walk-in. Open it as a table instead of writing it into the ledger,
+            // otherwise the day's UPI total counts cash that was never collected. Increments
+            // mirror sendOrder() so two devices adding to one table can't overwrite each other.
+            if (order.orderType === 'Dine-in'){
+                const tid = String(order.tableOrAddress || '').replace(/\D/g, '') || 'Takeaway';
+                for (const it in order.items){
+                    db.ref('pos/activeTables/' + tid + '/items/' + it + '/price').set(order.items[it].price);
+                    db.ref('pos/activeTables/' + tid + '/items/' + it + '/qty').set(firebase.database.ServerValue.increment(order.items[it].qty));
+                }
+                db.ref('pos/activeTables/' + tid + '/total').set(firebase.database.ServerValue.increment(parseFloat(order.total) || 0));
+                if (order.notes) db.ref('pos/activeTables/' + tid + '/notes').transaction(c => c ? c + " | " + order.notes : order.notes);
+                db.ref('orders/pendingWeb/' + id).remove();
+                closeModal('web-orders-modal');
+                return;
+            }
+
+            // Takeaway/delivery is prepaid, so it settles here. Carry the same verification meta
+            // as a QR settlement, so a late bank email can flip unverified→verified.
             (async () => {
                 let bankTag = null;
                 try {
