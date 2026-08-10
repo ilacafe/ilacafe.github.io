@@ -128,6 +128,13 @@
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
         .btn-dark { background-color: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); }
+
+        /* Staff-facing contact affordances on a web order card. The number was already being
+           captured for takeaway/delivery and stored — these are what make it reachable. */
+        .contact-row { display: flex; gap: 8px; margin-top: 10px; }
+        .contact-btn { flex: 1; text-align: center; padding: 10px 6px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; }
+        .contact-call { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.35); color: #fff; }
+        .contact-wa { background: #25D366; color: #fff; }
         
         .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: white; color: var(--brand-bg); }
@@ -676,6 +683,8 @@
             // #5: when a customer's payment hasn't auto-confirmed in 120s, their app sets
             // needsManualVerify on the track record. Watch for it and push staff ONCE per order to
             // go verify manually. When they verify (paymentVerified set), the customer app reflects it.
+            // The push carries the customer's number for takeaway/delivery, so whoever sees the
+            // alert can chase it from the lock screen without digging the order out first.
             window._mvAlerted = {};
             function watchManualVerifyFlags(){
                 for (const id in (window.pendingWebOrders || {})){
@@ -688,7 +697,8 @@
                             const matched = !!(window._wvMatch && window._wvMatch[id]);
                             if (matched) return;
                             window._mvAlerted[tid] = true;
-                            posSendPush({ title: '⚠️ Verify a web payment', body: (o.tableOrAddress||'Web order') + ' · ₹' + o.total + ' — customer paid but it hasn\'t auto-confirmed. Check and verify.', tag: 'manualverify-' + tid, url: '/admin.html' });
+                            const ph = o.phone ? ' \u00b7 \ud83d\udcde ' + o.phone : '';
+                            posSendPush({ title: '⚠️ Verify a web payment', body: (o.tableOrAddress||'Web order') + ' · ₹' + o.total + ph + ' — customer paid but it hasn\'t auto-confirmed. Check and verify.', tag: 'manualverify-' + tid, url: '/admin.html' });
                         }
                     });
                 }
@@ -850,10 +860,34 @@
                         el.innerHTML = '\u23f3 awaiting bank credit\u2026';
                         el.style.cssText = 'display:inline-block; margin-top:8px; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; background:rgba(255,193,7,0.12); border:1px solid rgba(255,193,7,0.4); color:#ffd54f;';
                     }
+                    // the contact row's WhatsApp text depends on whether money has landed, so
+                    // re-render it whenever the badge changes state
+                    const cr = document.getElementById('cr-' + id);
+                    if (cr) cr.innerHTML = contactRow(o, !!m);
                 }
             } catch(e){}
         }
         // ------------------------
+
+        // ===== CUSTOMER CONTACT (staff-facing) =====
+        // The number is captured in the customer app for takeaway and delivery and written to
+        // orders/pendingWeb — it was being stored and never shown, so nobody at the counter
+        // could actually use it. These are the two things staff need it for: chasing a payment
+        // that didn't auto-confirm, and telling someone their takeaway is ready.
+        // Dine-in orders carry no number and render nothing.
+        function contactRow(order, verified){
+            if (!order || !order.phone) return '';
+            const p = String(order.phone).replace(/\D/g, '').slice(-10);
+            if (p.length !== 10) return '';
+            const what = verified
+                ? 'your order is confirmed \u2014 we\u2019re making it now.'
+                : 'we haven\u2019t seen your payment of \u20b9' + order.total + ' yet. Could you confirm?';
+            const msg = encodeURIComponent('Hi, this is ILA \u2014 ' + what);
+            return '<div class="contact-row">'
+                 + '<a class="contact-btn contact-call" href="tel:+91' + p + '">\ud83d\udcde ' + p + '</a>'
+                 + '<a class="contact-btn contact-wa" href="https://wa.me/91' + p + '?text=' + msg + '" target="_blank" rel="noopener">WhatsApp</a>'
+                 + '</div>';
+        }
 
         window.defaultModifiers = [
             { name: "Medium sweet", price: 0 },
@@ -984,6 +1018,7 @@
                         ${staleBanner}
                         ${gateBanner}
                         <span id="wv-${id}"></span>
+                        <div id="cr-${id}">${contactRow(o, verified)}</div>
                         <div style="display: flex; gap: 10px; margin-top: 15px;">
                             <button class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept Order</button>
                             <button class="btn btn-secondary" style="flex: 1;" onclick="window.rejectWebOrder('${id}')">Reject</button>
@@ -1035,13 +1070,17 @@
             // claim the verified credit so a table QR can't grab the same rupees later
             try { const _mref = window._wvMatch && window._wvMatch[id]; if (_mref && window._wvCredits[_mref]) claimPayment(_mref, window._wvCredits[_mref], function(){}); } catch(e){}
             
+            // phone travels onto the bill: once the pendingWeb record is removed the number would
+            // otherwise be unreachable, and it's needed again to say "your takeaway is ready"
+            // and to send the receipt without retyping it.
             const localBill = { 
                 id: Date.now(), 
                 table: "Web: " + order.tableOrAddress, 
                 date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), 
                 items: JSON.parse(JSON.stringify(order.items)), 
                 total: order.total, 
-                notes: order.notes || "" 
+                notes: order.notes || "",
+                phone: order.phone || null
             };
             db.ref('pos/bills').push(localBill);
             calculateDailyCups();
@@ -1052,6 +1091,7 @@
                 orderType: "Delivery/Web",
                 tableOrAddress: order.tableOrAddress,
                 notes: order.notes || "",
+                phone: order.phone || null,
                 payment: { method: "UPI", total: order.total },
                 items: order.items
             };
@@ -1931,7 +1971,10 @@
             if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${escapeHTML(bill.notes)}</div>`;
             for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${escapeHTML(item)}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
-            document.getElementById('past-bill-receipt').innerHTML = receiptHTML; document.getElementById('past-bill-phone').value = "";
+            document.getElementById('past-bill-receipt').innerHTML = receiptHTML;
+            // prefill from the order if we captured it — web takeaway/delivery carries the number,
+            // so "Send Receipt" is one tap instead of retyping it from memory
+            document.getElementById('past-bill-phone').value = bill.phone || "";
             closeModal('past-bills-modal'); document.getElementById('view-past-bill-modal').classList.add('active');
         };
 
