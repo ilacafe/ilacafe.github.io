@@ -848,7 +848,7 @@
                     if (m){
                         window._wvMatch[id] = m.ref;
                         el.innerHTML = '\u2713 \u20b9' + Math.round(parseFloat(m.p.amount)) + ' received' + (m.p.bank ? ' \u00b7 ' + escapeHTML(String(m.p.bank)) + (m.p.acct ? ' ' + escapeHTML(String(m.p.acct)) : '') : '');
-                        el.style.cssText = 'display:inline-block; margin-top:8px; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; background:rgba(76,175,80,0.18); border:1px solid rgba(76,175,80,0.5); color:#9be9a8;';
+                        el.style.cssText = 'flex-shrink:0; white-space:nowrap; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:bold; background:rgba(76,175,80,0.18); border:1px solid rgba(76,175,80,0.5); color:#9be9a8;';
                         // tell the customer's page their payment is confirmed (once per order)
                         if (o.trackId && !window._wvSignaled) window._wvSignaled = {};
                         if (o.trackId && window._wvSignaled && !window._wvSignaled[id]){
@@ -857,13 +857,17 @@
                         }
                     } else {
                         delete window._wvMatch[id];
-                        el.innerHTML = '\u23f3 awaiting bank credit\u2026';
-                        el.style.cssText = 'display:inline-block; margin-top:8px; padding:4px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; background:rgba(255,193,7,0.12); border:1px solid rgba(255,193,7,0.4); color:#ffd54f;';
+                        el.innerHTML = '\u23f3 unpaid';
+                        el.style.cssText = 'flex-shrink:0; white-space:nowrap; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:bold; background:rgba(255,193,7,0.12); border:1px solid rgba(255,193,7,0.4); color:#ffd54f;';
                     }
                     // the contact row's WhatsApp text depends on whether money has landed, so
                     // re-render it whenever the badge changes state
                     const cr = document.getElementById('cr-' + id);
-                    if (cr) cr.innerHTML = contactRow(o, !!m);
+                    if (cr) cr.innerHTML = contactRow(o, !!m, id);
+                    // visual state instead of a warning banner: a prepaid order that hasn't
+                    // been paid for reads as not-ready-to-start
+                    const acc = document.getElementById('acc-' + id);
+                    if (acc) acc.style.opacity = (o.orderType !== 'Dine-in' && !m) ? '0.45' : '1';
                 }
             } catch(e){}
         }
@@ -875,16 +879,20 @@
         // could actually use it. These are the two things staff need it for: chasing a payment
         // that didn't auto-confirm, and telling someone their takeaway is ready.
         // Dine-in orders carry no number and render nothing.
-        function contactRow(order, verified){
+        function contactRow(order, verified, id){
             if (!order || !order.phone) return '';
             const p = String(order.phone).replace(/\D/g, '').slice(-10);
             if (p.length !== 10) return '';
-            const what = verified
-                ? 'your order is confirmed \u2014 we\u2019re making it now.'
-                : 'we haven\u2019t seen your payment of \u20b9' + order.total + ' yet. Could you confirm?';
-            const msg = encodeURIComponent('Hi, this is ILA \u2014 ' + what);
-            return '<div class="contact-row">'
-                 + '<a class="contact-btn contact-call" href="tel:+91' + p + '">\ud83d\udcde ' + p + '</a>'
+            const call = '<a class="contact-btn contact-call" href="tel:+91' + p + '">\ud83d\udcde ' + p + '</a>';
+            // unpaid takeaway/delivery -> the WhatsApp button IS the pay link.
+            // once the credit lands (or for dine-in) it becomes an ordinary message.
+            if (order.orderType !== 'Dine-in' && !verified){
+                return '<div class="contact-row">' + call
+                     + '<button class="contact-btn contact-wa" style="border:none; cursor:pointer; font-weight:700;" onclick="window.sendPayLink(\'' + id + '\')">Send pay link</button>'
+                     + '</div>';
+            }
+            const msg = encodeURIComponent('Hi, this is ILA \u2014 your order is confirmed and we\u2019re making it now.');
+            return '<div class="contact-row">' + call
                  + '<a class="contact-btn contact-wa" href="https://wa.me/91' + p + '?text=' + msg + '" target="_blank" rel="noopener">WhatsApp</a>'
                  + '</div>';
         }
@@ -1030,24 +1038,23 @@
                     if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; opacity:0.8;">Notes: ${escapeHTML(o.notes)}</div>`;
                     itemsHTML += "</div>";
 
-                    const gateBanner = o.gated
-                        ? `<div id="gate-${id}" style="margin:6px 0; padding:8px 10px; border-radius:6px; background:rgba(255,180,80,0.15); font-size:0.82rem;">⚠ Large order — start only after payment shows verified below.</div>`
-                        : '';
+                    // The badge already says whether the money has landed, so no separate
+                    // "wait for payment" banner. Stale is a one-line note, not a block.
                     const staleBanner = stale
-                        ? `<div style="margin:6px 0; padding:8px 10px; border-radius:6px; background:rgba(255,90,90,0.18); border:1px solid rgba(255,90,90,0.4); font-size:0.82rem; color:#ffb3b3;">⏰ Unpaid for 20+ min — likely abandoned. Verify payment before making, or reject.</div>`
+                        ? `<div style="font-size:0.78rem; color:#ffb3b3; margin-top:6px;">⏰ Unpaid 20+ min — likely abandoned</div>`
                         : '';
 
                     list.innerHTML += `<div style="border:1px solid rgba(255,255,255,${stale?'0.12':'0.2'}); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left; ${stale?'opacity:0.6;':''}">
-                        <strong style="font-size: 1.1rem; text-transform: uppercase;">${escapeHTML(o.tableOrAddress)}</strong><br>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                            <strong style="font-size:1.1rem; text-transform:uppercase;">${escapeHTML(o.tableOrAddress)}</strong>
+                            <span id="wv-${id}"></span>
+                        </div>
                         ${itemsHTML}
-                        <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong><br>
+                        <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong>
                         ${staleBanner}
-                        ${gateBanner}
-                        <span id="wv-${id}"></span>
-                        ${(o.orderType !== 'Dine-in' && o.phone) ? `<button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="window.sendPayLink('${id}')">Send pay link on WhatsApp</button>` : ''}
-                        <div id="cr-${id}">${contactRow(o, verified)}</div>
-                        <div style="display: flex; gap: 10px; margin-top: 15px;">
-                            <button class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept Order</button>
+                        <div id="cr-${id}">${contactRow(o, verified, id)}</div>
+                        <div style="display: flex; gap: 10px; margin-top: 12px;">
+                            <button id="acc-${id}" class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept</button>
                             <button class="btn btn-secondary" style="flex: 1;" onclick="window.rejectWebOrder('${id}')">Reject</button>
                         </div>
                     </div>`;
