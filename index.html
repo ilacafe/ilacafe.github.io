@@ -161,6 +161,7 @@
                 <span class="footer-divider">|</span>
                 <a href="https://instagram.com/ila_cafe" class="contact-link" target="_blank">@ila_cafe</a>
             </div>
+            <div id="build-stamp" style="font-size:0.6rem; opacity:0.25; margin-top:10px; letter-spacing:1px;"></div>
         </div>
     </div>
 
@@ -271,25 +272,6 @@
                 <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
             </div>
 
-            <!-- STEP 2: pay.
-                 The handoff link carries NO amount. NPCI OC/76A bars P2P intents that push a
-                 prefilled sum; a bare "pay this payee" handoff is a different shape and
-                 completes. Confirmed on a live payment. The customer types the amount, so it
-                 is displayed large and repeated. -->
-            <div id="pay-step-upi" style="display:none;">
-                <div style="text-align:center; font-size:0.7rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.7;">Enter this amount in your UPI app</div>
-                <div style="text-align:center; font-size:2.6rem; font-weight:700; line-height:1.15; margin:2px 0 18px;">₹<span id="upi-amt-big">0</span></div>
-
-                <a id="upi-open-link" class="btn btn-primary btn-link" href="#">Open UPI app</a>
-                <div style="font-size:0.78rem; opacity:0.7; text-align:center; margin-top:10px; line-height:1.5;">ILA is already filled in — just type <b>₹<span id="upi-amt-inline">0</span></b> and pay.</div>
-
-                <div style="text-align:center; font-size:0.75rem; opacity:0.6; margin:22px 0 10px;">or scan from another phone</div>
-                <img id="payment-qr" src="" alt="Scan to pay" style="width: 160px; height: 160px; margin: 0 auto 12px auto; border-radius: 8px; display: block; background: white; padding: 6px;">
-                <div style="font-size:0.72rem; opacity:0.65; text-align:center; line-height:1.5; word-break:break-all;">UPI ID: <span id="upi-vpa-text" style="font-weight:bold;"></span></div>
-                <button class="btn btn-secondary" style="width:100%; margin-top:10px;" onclick="window.copyUPI(this)">Copy UPI ID</button>
-
-                <button class="btn btn-primary" style="width:100%; margin-top:18px;" onclick="window.sendCustomerOrder()">I've paid — place my order</button>
-            </div>
 
             <!-- STEP 3: order placed, live payment status -->
             <div id="pay-step-status" style="display:none; text-align:center; padding:10px 0;">
@@ -314,8 +296,36 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        // register the shared service worker (push + instant-open caching)
-        if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.js').catch(function(){}); } catch(e){} }
+        // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
+        // page being served is cached, not the one just pushed.
+        const ILA_BUILD = '2026-08-10.1';
+
+        // Register the shared service worker (push + instant-open caching).
+        // A cache-first service worker serves the PREVIOUS build until it decides to update,
+        // which makes a fresh deploy look identical to the old one. Check for an update on
+        // every load, and reload once a new worker takes control, so what's on screen is
+        // always what was last pushed.
+        if ('serviceWorker' in navigator) {
+            try {
+                navigator.serviceWorker.register('/sw.js').then(function(reg){
+                    try { reg.update(); } catch(e){}
+                    reg.addEventListener('updatefound', function(){
+                        var nw = reg.installing; if (!nw) return;
+                        nw.addEventListener('statechange', function(){
+                            // ask the new worker to activate immediately (harmless if sw.js ignores it)
+                            if (nw.state === 'installed' && navigator.serviceWorker.controller){
+                                try { nw.postMessage({ type: 'SKIP_WAITING' }); } catch(e){}
+                            }
+                        });
+                    });
+                }).catch(function(){});
+                var _swReloaded = false;
+                navigator.serviceWorker.addEventListener('controllerchange', function(){
+                    if (_swReloaded) return; _swReloaded = true;   // guard: never loop
+                    location.reload();
+                });
+            } catch(e){}
+        }
 
         /* ===== ILA ETA + ORDER STATUS (customer view) ===== */
         (function(){
@@ -903,12 +913,14 @@
 
             // Large-order gate: ONLY for takeaway/delivery (a dine-in table is in front of you, so
             // the phantom-order risk doesn't apply). Gated if any single item qty > 3.
-            let gated = false;
-            if (!isDineIn){ for (const nm in window.cart){ if ((parseInt(window.cart[nm].qty)||0) > 3){ gated = true; break; } } }
+            // Prepaid is the rule for takeaway and delivery — an uncollected order costs food
+            // and a slot. Gated means the POS won't start the kitchen until the bank credit
+            // for this order has been matched.
+            const gated = !isDineIn;
             window.currentOrderInfo.gated = gated;
             const gnote = document.getElementById('large-order-note');
             if (gnote){
-                if (gated){ gnote.style.display = 'block'; gnote.innerText = 'This is a large order, so we start preparing it once your payment is confirmed. It usually takes under a minute.'; }
+                if (gated){ gnote.style.display = 'block'; gnote.innerText = 'We\u2019ll WhatsApp your payment link on this number. Your order goes to the kitchen as soon as the payment lands.'; }
                 else { gnote.style.display = 'none'; }
             }
 
@@ -921,7 +933,6 @@
                 phoneStep.style.display = 'none';
                 window.currentOrderInfo.phone = null;
                 document.getElementById('payment-modal').classList.add('active');
-                document.getElementById('pay-step-upi').style.display = 'none';
                 document.getElementById('pay-step-status').style.display = 'none';
                 window.startPayment(true);   // skipPhone
                 return;
@@ -930,13 +941,16 @@
             const pf = document.getElementById('cust-phone'); if (pf && saved) pf.value = saved;
 
             phoneStep.style.display = 'block';
-            document.getElementById('pay-step-upi').style.display = 'none';
             document.getElementById('pay-step-status').style.display = 'none';
             document.getElementById('phone-error').style.display = 'none';
             document.getElementById('payment-modal').classList.add('active');
         };
 
-        // STEP 1 → 2: validate phone (unless dine-in), build the UPI string, reveal pay options
+        // STEP 1 → PLACE. There is no in-browser payment step.
+        // A upi:// handoff from a WEB PAGE is an NPCI "Intent" (initiation mode 04), and
+        // OC/76A bars mode 04/05 to a P2P payee — it dies after the PIN no matter how the
+        // string is built. The same link tapped inside a native app completes, so collection
+        // happens there: a WhatsApp pay link for takeaway/delivery, the POS QR for dine-in.
         window.startPayment = function(skipPhone){
             if (!skipPhone && window._needPhone){
                 const raw = (document.getElementById('cust-phone').value || '').replace(/\D/g,'');
@@ -945,54 +959,9 @@
                 window.currentOrderInfo.phone = raw;
                 localStorage.setItem('ila_cust_phone', raw);   // prefill next time
             }
-
-            const selectedUPI = window.getRandomUPI();
-            window.currentOrderInfo.upiId = selectedUPI;
-            const amt = window.totalAmount;
-            window._upiParams = { pa: selectedUPI, pn: 'ILA', am: amt, cu: 'INR' };
-
-            // THE HANDOFF LINK CARRIES NO AMOUNT.
-            // NPCI OC/76A bars P2P intents (initiation mode 04/05) that push a prefilled sum —
-            // that is what was failing after the PIN. A bare "pay this payee" intent is a
-            // different shape and completes. This exact two-parameter string is the one that
-            // was tested on a live payment: raw @, pn=ILA, nothing else.
-            // DO NOT add am, cu, tn or tr here. Any of them may reintroduce the block.
-            const intentURI = `upi://pay?pa=${selectedUPI}&pn=ILA`;
-
-            // The QR keeps the amount. QR scanning is a different initiation mode and is not
-            // restricted, so a second-device scan needs no typing. This is the original string
-            // that has always worked when scanned — plain integer amount, unchanged.
-            const qrURI = `upi://pay?pa=${selectedUPI}&pn=ILA&am=${amt}&cu=INR`;
-
-            const lnk = document.getElementById('upi-open-link');
-            if (lnk) lnk.setAttribute('href', intentURI);
-            document.getElementById('payment-qr').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(qrURI)}`;
-
-            // The customer types the amount, so it has to be impossible to miss. If they type
-            // the wrong figure the bank credit won't match and it falls to manual verification.
-            const amtBig = document.getElementById('upi-amt-big');
-            if (amtBig) amtBig.textContent = amt;
-            const amtInline = document.getElementById('upi-amt-inline');
-            if (amtInline) amtInline.textContent = amt;
-            const vpaTxt = document.getElementById('upi-vpa-text');
-            if (vpaTxt) vpaTxt.textContent = selectedUPI;
-
-            document.getElementById('pay-step-phone').style.display = 'none';
-            document.getElementById('pay-step-upi').style.display = 'block';
+            window.sendCustomerOrder();
         };
 
-        // Manual fallback: some phones won't hand off to a UPI app at all. Copying the ID lets
-        // the customer pay from inside their own app with no handoff involved.
-        window.copyUPI = function(btn){
-            const v = (window._upiParams && window._upiParams.pa) || '';
-            if (!v) return;
-            const done = () => { const t = btn.innerText; btn.innerText = 'Copied'; setTimeout(() => { btn.innerText = t; }, 1500); };
-            if (navigator.clipboard && navigator.clipboard.writeText){
-                navigator.clipboard.writeText(v).then(done).catch(() => { window.prompt('Copy this UPI ID:', v); });
-            } else {
-                window.prompt('Copy this UPI ID:', v);
-            }
-        };
 
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo; 
@@ -1017,7 +986,6 @@
             // Show the live status step (do NOT clear the cart until payment is seen or the
             // customer closes — so nothing is lost if they need to retry payment).
             document.getElementById('pay-step-phone').style.display = 'none';
-            document.getElementById('pay-step-upi').style.display = 'none';
             document.getElementById('pay-step-status').style.display = 'block';
             window._orderPlaced = true;
         };
@@ -1029,7 +997,12 @@
                 const i = document.getElementById('status-icon'), t = document.getElementById('status-title'), d = document.getElementById('status-detail');
                 if (i) i.innerText = icon; if (t) t.innerText = title; if (d) d.innerText = detail;
             };
-            setStatus('⏳', info.gated ? 'Order received — awaiting payment' : 'Order placed', info.gated ? 'We start preparing once your payment is confirmed. Confirming automatically…' : 'Confirming your payment automatically…');
+            const isDineIn = (info.type === 'Dine-in');
+            if (isDineIn){
+                setStatus('\u2705', 'Order placed', 'It\u2019s with the kitchen. Pay at your table when you\u2019re done \u2014 our staff will bring the bill.');
+            } else {
+                setStatus('\u23f3', 'Order received \u2014 awaiting payment', 'We\u2019ll WhatsApp your payment link' + (info.phone ? ' on ' + info.phone : '') + ' in a moment. Your order goes to the kitchen as soon as the payment lands.');
+            }
             // Clear cart now that the order is safely recorded.
             window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI();
 
@@ -1050,12 +1023,16 @@
             // Safety timeout: at 120s unverified, flag this order so the POS notifies staff to
             // verify manually. Keep watching — when they do, paymentVerified flips and the view
             // updates to confirmed (the loop closes; nothing dead-ends).
-            setTimeout(() => {
-                if (done) return;
-                setStatus('⌛', 'Confirming your payment', "This is taking a little longer than usual. We've alerted our team to check it — your order is recorded and you won't be charged twice. Please hold on.");
-                try { db.ref('orders/track/' + trackId + '/needsManualVerify').set(true); } catch(e){}
-            }, 120000);
+            if (info.type !== 'Dine-in'){
+                setTimeout(() => {
+                    if (done) return;
+                    setStatus('\u231b', 'Still waiting on your payment', "If you haven't had the WhatsApp link yet, please check your messages \u2014 we've also alerted our team.");
+                    try { db.ref('orders/track/' + trackId + '/needsManualVerify').set(true); } catch(e){}
+                }, 120000);
+            }
         };
+
+        try { const _bs = document.getElementById('build-stamp'); if (_bs) _bs.textContent = 'build ' + ILA_BUILD; } catch(e){}
 
         updateCartUI(); 
         if (window.watchOrderStatus) window.watchOrderStatus();
