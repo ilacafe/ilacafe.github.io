@@ -180,6 +180,20 @@
         </div>
 
 <div class="admin-card">
+            <h2>Kitchen Accuracy</h2>
+            <p class="rec-note">Every order records the time it was quoted and the time it was actually finished. This compares the two. If on-time is drifting, the numbers in <code>eta/model</code> need nudging &mdash; this tells you which direction, instead of guessing.</p>
+            <div id="eta-acc-kpis" class="rec-kpis" style="margin-bottom:14px;"></div>
+            <div id="eta-acc-detail"></div>
+        </div>
+
+<div class="admin-card">
+            <h2>Repeat Customers</h2>
+            <p class="rec-note">Counted from phone numbers on takeaway and delivery orders &mdash; dine-in walk-ins aren't identified, so this covers only the orders that carry a number.</p>
+            <div id="repeat-kpis" class="rec-kpis"></div>
+            <div id="repeat-list" style="margin-top:14px;"></div>
+        </div>
+
+<div class="admin-card">
             <h2>Void a Bill</h2>
             <p class="rec-note">Reverse a settled bill — refunds, billing errors, or cancellations after payment. The sale is reversed in the till and a visible reversal line is written to the ledger; the original bill is kept in history, flagged as voided. Admin only.</p>
             <details id="void-bill-details">
@@ -475,6 +489,8 @@
         loadUPIRouting();
         loadUPIVerification();
         loadRefunds();
+        loadETAAccuracy();
+        loadRepeatCustomers();
         }
 
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
@@ -805,6 +821,112 @@
             if (!confirm('Un-verify this payment? It returns to Needs Review and its tick reverts in the POS. Use this if it was marked verified by mistake.')) return;
             db.ref('upiReview/' + payId).remove();   // removes the admin verification; bank-state (if any) still governs
         };
+
+        // ===== KITCHEN ACCURACY =====
+        // dispatchToKitchen stamps predLow/predHigh/predPoint onto orders/track; the kitchen
+        // screens stamp completedAt onto orders/completed/*. Both already exist and nothing has
+        // ever read them back, so the ETA model has only ever been tuned by judgement.
+        // Joined on trackId. An order spanning two stations counts once, at its LAST completion.
+        const ETA_PIZZA_KEYS = ["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"];
+        function etaHasPizza(items){
+            for (const n in (items||{})){ const x = String(n).toLowerCase(); if (ETA_PIZZA_KEYS.some(k => x.includes(k))) return true; }
+            return false;
+        }
+        let etaDone = {}, etaTracks = {};
+        function loadETAAccuracy(){
+            ['chef','barista'].forEach(st => {
+                db.ref('orders/completed/' + st).limitToLast(250).on('value', s => {
+                    s.forEach(ch => {
+                        const o = ch.val() || {}; if (!o.trackId) return;
+                        const prev = etaDone[o.trackId] || {};
+                        const completedAt = Math.max(prev.completedAt || 0, o.completedAt || 0);   // last station out
+                        const starts = [prev.createdAt, o.createdAt].filter(Boolean);
+                        etaDone[o.trackId] = { completedAt: completedAt, createdAt: starts.length ? Math.min.apply(null, starts) : 0 };
+                    });
+                    recomputeETAAccuracy();
+                });
+            });
+            db.ref('orders/track').limitToLast(400).on('value', s => { etaTracks = s.val() || {}; recomputeETAAccuracy(); });
+        }
+        function recomputeETAAccuracy(){
+            const rows = [];
+            for (const tid in etaDone){
+                const d = etaDone[tid], t = etaTracks[tid];
+                if (!t || t.predLow == null || t.predHigh == null) continue;
+                if (!d.completedAt || !d.createdAt) continue;
+                const actual = (d.completedAt - d.createdAt) / 60000;
+                if (actual < 0.5 || actual > 120) continue;              // clock skew / stale tickets
+                rows.push({ actual: actual, low: t.predLow, high: t.predHigh, pizza: etaHasPizza(t.items), items: t.items, at: d.completedAt });
+            }
+            renderETAAccuracy(rows);
+        }
+        function renderETAAccuracy(rows){
+            const k = document.getElementById('eta-acc-kpis'), box = document.getElementById('eta-acc-detail');
+            if (!k || !box) return;
+            if (!rows.length){
+                k.innerHTML = '<div class="rec-kpi"><div class="lbl">Sample</div><div class="val">0</div><div class="sub">no completed orders carry a quote yet</div></div>';
+                box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>Nothing to compare yet \u2014 this fills in as orders are quoted and finished.</p>";
+                return;
+            }
+            rows.sort((a,b) => b.at - a.at);
+            const n = rows.length;
+            const onTime = rows.filter(r => r.actual <= r.high).length;
+            const early  = rows.filter(r => r.actual < r.low).length;
+            const late   = rows.filter(r => r.actual > r.high);
+            const pct = Math.round(100 * onTime / n);
+            const med = arr => { if (!arr.length) return 0; const a = arr.slice().sort((x,y)=>x-y); return a[Math.floor(a.length/2)]; };
+            const medActual = med(rows.map(r => r.actual));
+            const medQuote  = med(rows.map(r => (r.low + r.high) / 2));
+            const avgOver = late.length ? (late.reduce((a,r) => a + (r.actual - r.high), 0) / late.length) : 0;
+            const cls = pct >= 85 ? 'good' : (pct >= 70 ? 'warn' : 'bad');
+            const pctOf = a => a.length ? Math.round(100 * a.filter(r => r.actual <= r.high).length / a.length) : null;
+            const pz = rows.filter(r => r.pizza), dr = rows.filter(r => !r.pizza);
+            const pzP = pctOf(pz), drP = pctOf(dr);
+            let h = '';
+            h += '<div class="rec-kpi ' + cls + '"><div class="lbl">On time</div><div class="val">' + pct + '%</div><div class="sub">' + onTime + ' of ' + n + ' within the quote</div></div>';
+            h += '<div class="rec-kpi"><div class="lbl">Median actual vs quoted</div><div class="val">' + medActual.toFixed(0) + ' / ' + medQuote.toFixed(0) + ' min</div><div class="sub">' + (medActual > medQuote ? 'slower than quoted' : 'faster than quoted') + '</div></div>';
+            h += '<div class="rec-kpi"><div class="lbl">When late, by</div><div class="val">' + (late.length ? '+' + avgOver.toFixed(1) + ' min' : '\u2014') + '</div><div class="sub">' + late.length + ' late \u00b7 ' + early + ' early</div></div>';
+            h += '<div class="rec-kpi"><div class="lbl">Pizza vs rest</div><div class="val">' + (pzP == null ? '\u2014' : pzP + '%') + ' / ' + (drP == null ? '\u2014' : drP + '%') + '</div><div class="sub">' + pz.length + ' with pizza \u00b7 ' + dr.length + ' without</div></div>';
+            k.innerHTML = h;
+            const worst = late.slice().sort((a,b) => (b.actual - b.high) - (a.actual - a.high)).slice(0, 6);
+            if (!worst.length){ box.innerHTML = "<p style='opacity:0.6; font-size:0.9rem;'>Nothing ran past its quote.</p>"; return; }
+            let t = '<div class="rec-scroll"><table class="rec-table"><thead><tr><th>Order</th><th class="num">Quoted</th><th class="num">Actual</th><th class="num">Over</th></tr></thead><tbody>';
+            worst.forEach(r => {
+                const names = Object.keys(r.items || {}).slice(0,3).map(x => escapeHTML(x)).join(', ') || 'order';
+                t += '<tr><td>' + names + '</td><td class="num">' + r.low + '\u2013' + r.high + '</td><td class="num">' + r.actual.toFixed(0) + '</td><td class="num" style="color:#ff9e9e;">+' + (r.actual - r.high).toFixed(0) + '</td></tr>';
+            });
+            box.innerHTML = t + '</tbody></table></div>';
+        }
+
+        // ===== REPEAT CUSTOMERS =====
+        // customers/<phone> is incremented by the POS when a web order is accepted.
+        function loadRepeatCustomers(){
+            db.ref('customers').on('value', s => renderRepeat(s.val() || {}));
+        }
+        function renderRepeat(map){
+            const k = document.getElementById('repeat-kpis'), box = document.getElementById('repeat-list');
+            if (!k || !box) return;
+            const rows = [];
+            for (const ph in map){ const c = map[ph] || {}; rows.push({ ph: ph, n: parseInt(c.orders) || 0, lastAt: c.lastAt || 0 }); }
+            if (!rows.length){
+                k.innerHTML = '<div class="rec-kpi"><div class="lbl">Identified customers</div><div class="val">0</div><div class="sub">builds as takeaway orders are accepted</div></div>';
+                box.innerHTML = '';
+                return;
+            }
+            const repeat = rows.filter(r => r.n > 1);
+            const pct = Math.round(100 * repeat.length / rows.length);
+            k.innerHTML = '<div class="rec-kpi"><div class="lbl">Identified customers</div><div class="val">' + rows.length + '</div><div class="sub">with a phone number</div></div>'
+                        + '<div class="rec-kpi ' + (pct >= 30 ? 'good' : '') + '"><div class="lbl">Ordered more than once</div><div class="val">' + pct + '%</div><div class="sub">' + repeat.length + ' of ' + rows.length + '</div></div>';
+            rows.sort((a,b) => b.n - a.n || b.lastAt - a.lastAt);
+            const top = repeat.slice(0, 10);
+            if (!top.length){ box.innerHTML = "<p style='opacity:0.6; font-size:0.9rem;'>No repeat orders yet.</p>"; return; }
+            const fmt = ts => { try { return new Date(ts).toLocaleDateString('en-IN',{day:'numeric',month:'short'}); } catch(e){ return ''; } };
+            let t = '<table class="rec-table"><tbody>';
+            top.forEach(r => {
+                t += '<tr><td><a href="https://wa.me/91' + escapeHTML(r.ph) + '" target="_blank" rel="noopener" style="color:#fff;">' + escapeHTML(r.ph) + '</a></td><td class="num">' + r.n + ' orders</td><td class="num" style="opacity:0.6;">last ' + escapeHTML(fmt(r.lastAt)) + '</td></tr>';
+            });
+            box.innerHTML = t + '</tbody></table>';
+        }
 
         // ===== REFUNDS DUE =====
         // Written by the POS when staff reject an order whose payment had already landed.
