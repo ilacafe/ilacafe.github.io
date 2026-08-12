@@ -151,7 +151,13 @@
             <button id="master-status-btn" class="btn" onclick="toggleCafeStatus()">Loading...</button>
         </div>
 
-<div class="admin-card" style="margin-bottom: 25px;">
+<div class="admin-card" id="refunds-card" style="display:none; margin-bottom: 25px; border-color: rgba(244,67,54,0.45); background: rgba(244,67,54,0.08);">
+            <h2>Refunds Due</h2>
+            <p class="rec-note">A prepaid order that was rejected after the customer's money had already arrived. The payment is real and stays in the ledger &mdash; mark it refunded once you have actually sent the money back, and a matching reversal is written to the till.</p>
+            <div id="refunds-list"></div>
+        </div>
+
+        <div class="admin-card" style="margin-bottom: 25px;">
             <h2>UPI Payment Verification</h2>
             <p class="rec-note">Every UPI payment taken in the POS, and whether a bank credit email has confirmed it. Unverified ones were settled manually at the counter — treat these as the exceptions to watch. A late bank email auto-verifies on its own; or mark verified once you've confirmed it against the statement.</p>
             <div id="upi-verify-kpis" class="rec-kpis" style="margin-bottom:16px;"></div>
@@ -468,6 +474,7 @@
         });
         loadUPIRouting();
         loadUPIVerification();
+        loadRefunds();
         }
 
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
@@ -799,6 +806,79 @@
             db.ref('upiReview/' + payId).remove();   // removes the admin verification; bank-state (if any) still governs
         };
 
+        // ===== REFUNDS DUE =====
+        // Written by the POS when staff reject an order whose payment had already landed.
+        // The income entry is deliberately left alone (the money IS in the account, and the
+        // ledger must still agree with the bank statement) — what is recorded here is the DEBT.
+        // Marking it refunded writes the compensating outflow and reverses the till, the same
+        // shape as a bill void, so addLedgerEntry's cash-drawer branch is never involved.
+        let refundsCache = {};
+        function loadRefunds(){
+            db.ref('orders/refundsDue').on('value', s => { refundsCache = s.val() || {}; renderRefunds(); });
+        }
+        function renderRefunds(){
+            const card = document.getElementById('refunds-card');
+            const box = document.getElementById('refunds-list');
+            if (!card || !box) return;
+            const inr = n => '\u20b9' + Math.round(n).toLocaleString('en-IN');
+            const fmt = ts => { try { return new Date(ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); } catch(e){ return ''; } };
+            const due = [], done = [];
+            for (const rid in refundsCache){
+                const r = refundsCache[rid]; if (!r) continue;
+                (r.status === 'refunded' ? done : due).push(Object.assign({ rid: rid }, r));
+            }
+            due.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+            done.sort((a,b)=> (b.refundedAt||0)-(a.refundedAt||0));
+            if (!due.length && !done.length){ card.style.display = 'none'; return; }
+            card.style.display = '';
+            let html = '';
+            if (!due.length) html += "<p style='opacity:0.6; font-size:0.9rem;'>Nothing owed \u2014 all refunds settled.</p>";
+            due.forEach(r => {
+                const ph = r.phone ? String(r.phone).replace(/\D/g,'').slice(-10) : '';
+                const wa = 'Hi, this is ILA \u2014 sorry, we couldn\u2019t take your order. We\u2019re refunding \u20b9' + Math.round(r.amount) + ' now.';
+                html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">'
+                     +   '<div style="min-width:0; flex:1;">'
+                     +     '<div style="font-weight:700; font-size:1.05rem;">' + inr(r.amount) + ' \u00b7 ' + escapeHTML(r.tableOrAddress || 'Web order') + '</div>'
+                     +     '<div style="font-size:0.78rem; opacity:0.6; margin-top:2px;">' + escapeHTML(fmt(r.createdAt)) + (r.rejectedBy ? ' \u00b7 rejected by ' + escapeHTML(r.rejectedBy) : '') + (r.upiId ? ' \u00b7 ' + escapeHTML(r.upiId) : '') + '</div>'
+                     +     (ph ? '<div style="margin-top:8px;"><a href="tel:+91' + ph + '" style="color:#fff; text-decoration:none; border:1px solid rgba(255,255,255,0.3); padding:5px 10px; border-radius:5px; font-size:0.8rem; margin-right:6px;">\ud83d\udcde ' + ph + '</a><a href="https://wa.me/91' + ph + '?text=' + encodeURIComponent(wa) + '" target="_blank" rel="noopener" style="background:#25D366; color:#fff; text-decoration:none; padding:5px 10px; border-radius:5px; font-size:0.8rem;">WhatsApp</a></div>' : '')
+                     +   '</div>'
+                     +   '<button class="btn-action" style="white-space:nowrap; flex-shrink:0;" onclick="refundDone(\'' + r.rid + '\')">Mark refunded</button>'
+                     + '</div>';
+            });
+            if (done.length){
+                html += '<details style="margin-top:14px;"><summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.75rem; opacity:0.7; padding:6px 0;">Settled (' + done.length + ')</summary>';
+                done.forEach(r => {
+                    html += '<div style="padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:0.85rem; opacity:0.7;">'
+                         +  inr(r.amount) + ' \u00b7 ' + escapeHTML(r.tableOrAddress || '') + ' \u2014 refunded ' + escapeHTML(fmt(r.refundedAt)) + (r.refundedBy ? ' by ' + escapeHTML(r.refundedBy) : '')
+                         + '</div>';
+                });
+                html += '</details>';
+            }
+            box.innerHTML = html;
+        }
+        window.refundDone = async function(rid){
+            const r = refundsCache[rid]; if (!r) return;
+            const amt = parseFloat(r.amount) || 0;
+            const where = r.tableOrAddress || 'Web order';
+            if (!confirm('Confirm you have ALREADY sent \u20b9' + Math.round(amt) + ' back to the customer' + (r.phone ? ' (' + r.phone + ')' : '') + '.\n\nThis writes the refund to the ledger and reverses it from the UPI total. It does not move any money by itself.')) return;
+            const by = (window.currentAdmin && window.currentAdmin.name) || 'admin';
+            const now = Date.now();
+            try {
+                await db.ref('pos/ledgerEntries').push({
+                    date: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    type: 'refund_upi',
+                    amount: -Math.abs(amt),
+                    reason: 'REFUND: ' + where + (r.phone ? ' \u00b7 ' + r.phone : '') + ' (' + by + ')',
+                    ts: firebase.database.ServerValue.TIMESTAMP,
+                    refundOf: r.payId || null
+                });
+                await db.ref('pos/upiTotal').set(firebase.database.ServerValue.increment(-Math.abs(amt)));
+                await db.ref('orders/refundsDue/' + rid).update({ status: 'refunded', refundedBy: by, refundedAt: now });
+            } catch(e){
+                alert('Could not record the refund: ' + (e && e.message ? e.message : e) + '\nNothing was changed \u2014 try again.');
+            }
+        };
+
         // ===== VOID A BILL (admin only) =====
         // Reverses a SETTLED bill: (1) reverses the till (cashDrawer or upiTotal), (2) writes a
         // visible compensating reversal line to the ledger, (3) flags the archived order voided.
@@ -815,6 +895,7 @@
                 const rows = [];
                 for (const key in voidBillsCache){
                     const o = voidBillsCache[key]; if (!o) continue;
+                    if (o.rejected) continue;   // rejected orders aren't sales — Refunds Due handles those
                     const total = (o.payment && o.payment.total != null) ? parseFloat(o.payment.total) : 0;
                     if (!(total > 0)) continue;   // skip zero/blank
                     const ts = parseInt(String(key).split('-')[0], 10) || 0;
