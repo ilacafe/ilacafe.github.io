@@ -707,6 +707,30 @@
             }
 
             db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
+
+            // ===== FORGOTTEN PAY LINK =====
+            // Takeaway/delivery is prepaid, and the link only goes out when someone taps it.
+            // A busy counter forgets. The customer's browser can't detect this (it doesn't know
+            // whether staff sent anything) — the POS can, because sendPayLink stamps the order.
+            // Alerts once per order, and only when no link was ever sent.
+            window._plAlerted = {};
+            setInterval(function(){
+                const now = Date.now();
+                for (const id in (window.pendingWebOrders || {})){
+                    const o = window.pendingWebOrders[id]; if (!o) continue;
+                    if (o.orderType === 'Dine-in') continue;          // settles at the table
+                    if (o.payment && o.payment.ref) continue;        // already paid
+                    if (o.payLinkSentAt) continue;                   // link went out; other alerts cover it
+                    if (!o.createdAt || now - o.createdAt < 5*60000) continue;
+                    if (window._plAlerted[id]) continue;
+                    window._plAlerted[id] = true;
+                    posSendPush({
+                        title: '\ud83d\udce4 Pay link never sent',
+                        body: (o.tableOrAddress || 'Web order') + ' \u00b7 \u20b9' + o.total + (o.phone ? ' \u00b7 ' + o.phone : '') + ' \u2014 waiting ' + Math.round((now - o.createdAt)/60000) + ' min with no payment link sent.',
+                        tag: 'paylink-' + id, url: '/pos.html'
+                    });
+                }
+            }, 60000);
         }
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
@@ -1110,6 +1134,7 @@
                         ${itemsHTML}
                         <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong>
                         ${staleBanner}
+                        <span id="cust-${id}"></span>
                         <div id="cr-${id}">${contactRow(o, verified, id)}</div>
                         <div style="display: flex; gap: 10px; margin-top: 12px;">
                             <button id="acc-${id}" class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept</button>
@@ -1120,12 +1145,36 @@
             }
             ensureWebVerifyFeeds();
             renderWebVerifyBadges();
+            renderCustomerBadges();
             document.getElementById('web-orders-modal').classList.add('active');
         };
+
+        // Looks up each web order's phone against the repeat counter. Read per card on open
+        // rather than subscribing to the whole customers node, which only grows.
+        function renderCustomerBadges(){
+            for (const id in (window.pendingWebOrders || {})){
+                const o = window.pendingWebOrders[id]; if (!o || !o.phone) continue;
+                const el = document.getElementById('cust-' + id); if (!el) continue;
+                const cp = String(o.phone).replace(/\D/g, '').slice(-10);
+                if (cp.length !== 10) continue;
+                db.ref('customers/' + cp).once('value').then(snap => {
+                    const c = snap.val(); const prior = (c && parseInt(c.orders)) || 0;
+                    if (!prior) return;                       // first-timer: say nothing
+                    const nth = prior + 1;
+                    const suffix = (nth % 100 >= 11 && nth % 100 <= 13) ? 'th' : ({1:'st',2:'nd',3:'rd'}[nth % 10] || 'th');
+                    const last = c.lastAt ? new Date(c.lastAt).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '';
+                    el.innerHTML = '<span style="display:inline-block; margin-top:8px; padding:3px 9px; border-radius:6px; font-size:0.75rem; font-weight:bold; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25);">\u2605 ' + nth + suffix + ' order' + (last ? ' \u00b7 last ' + escapeHTML(last) : '') + '</span>';
+                }).catch(function(){});
+            }
+        }
 
         window.acceptWebOrder = function(id) {
             const order = window.pendingWebOrders[id];
             if (!order) return;
+            if (!window._webActing) window._webActing = {};
+            if (window._webActing[id]) return;              // already accepting/rejecting this one
+            window._webActing[id] = true;
+            setTimeout(function(){ delete window._webActing[id]; }, 3000);
 
             // Large-order gate: if this order is gated and payment is NOT yet verified, warn the
             // operator before starting the kitchen (guards against phantom bulk orders). They can
@@ -1197,7 +1246,19 @@
             };
             db.ref('pos/bills').push(localBill);
             calculateDailyCups();
-            
+
+            // Repeat-customer counter. The phone is the only identifier this café has ever had,
+            // and until now it was captured and never used. Incremented on accept so the count
+            // reflects orders actually served, not orders placed.
+            try {
+                const cp = String(order.phone || '').replace(/\D/g, '').slice(-10);
+                if (cp.length === 10){
+                    db.ref('customers/' + cp + '/orders').set(firebase.database.ServerValue.increment(1));
+                    db.ref('customers/' + cp + '/lastAt').set(firebase.database.ServerValue.TIMESTAMP);
+                    db.ref('customers/' + cp + '/lastSpend').set(parseFloat(order.total) || 0);
+                }
+            } catch(e){}
+
             const archivePacket = {
                 timestamp: new Date().toLocaleString('en-GB', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}),
                 source: "Web App",
@@ -1216,6 +1277,10 @@
         window.rejectWebOrder = function(id) {
             const order = window.pendingWebOrders[id];
             if (!order) return;
+            if (!window._webActing) window._webActing = {};
+            if (window._webActing[id]) return;
+            window._webActing[id] = true;
+            setTimeout(function(){ delete window._webActing[id]; }, 3000);
 
             // Prepaid means a rejected order can ALREADY BE PAID. The money was booked the
             // moment the credit matched, so it is safely in the ledger either way — what
@@ -1613,6 +1678,12 @@
 
         window.sendOrder = function(tableID) {
             if (window.totalItems === 0) return alert("Cart is empty!");
+            // Double-tap guard. The table total uses increment(), so a second tap on a laggy
+            // connection sends a second kitchen ticket AND charges the table twice. Neither is
+            // recoverable without a void.
+            if (window._sendingOrder) return;
+            window._sendingOrder = true;
+            setTimeout(function(){ window._sendingOrder = false; }, 2500);
             
             const notes = document.getElementById('pos-order-notes').value.trim().replace(/</g, "&lt;").replace(/>/g, "&gt;");
             let destName = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
@@ -1800,6 +1871,10 @@
         };
 
         window.payWithCash = function(customAmount = null) {
+            // Same guard as UPI (which has upiSettling): a double-tap here books the cash twice.
+            if (window._settlingCash) return;
+            window._settlingCash = true;
+            setTimeout(function(){ window._settlingCash = false; }, 2000);
             window.currentPaymentMethod = "Cash";
             const tableData = window.activeTables[window.checkoutTableID];
             
