@@ -499,7 +499,9 @@
                         // café declined the order — tell the customer instead of leaving them waiting
                         document.querySelectorAll('.status-step').forEach(el=>{ el.style.background='rgba(180,60,40,0.25)'; });
                         label.textContent='Order not accepted';
-                        sub.textContent='Sorry — the café couldn\u2019t take this order. Please check with staff or try again.';
+                        sub.textContent = t.refundDue
+                            ? 'Sorry \u2014 we couldn\u2019t take this order. Your payment is being refunded; we\u2019ll be in touch.'
+                            : 'Sorry \u2014 the caf\u00e9 couldn\u2019t take this order. Please check with staff or try again.';
                         chip.style.display='none';
                         const note=document.getElementById('status-oven-note'); if(note) note.style.display='none';
                         dismiss.style.display='block';
@@ -602,16 +604,10 @@
         }
 
         const OWNER_WHATSAPP = "918882946526"; 
-        const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
-        
-        // --- NEW UPI ROUTING SYSTEM ---
-        window.activeUPIs = [CAFE_UPI_ID];
-        db.ref('settings/upiList').on('value', snap => {
-            if (snap.exists() && snap.val().length > 0) { window.activeUPIs = snap.val(); }
-        });
-        window.getRandomUPI = function() {
-            return window.activeUPIs[Math.floor(Math.random() * window.activeUPIs.length)];
-        };
+        // No UPI routing here any more. This app never collects payment: a upi:// fired from a
+        // web page is an NPCI Intent and is refused for our payees. The POS assigns the VPA when
+        // it sends the WhatsApp pay link (sendPayLink), and writes it back onto the order so the
+        // bank matcher can tie the credit to it.
         
         const urlParams = new URLSearchParams(window.location.search);
         const urlTable = urlParams.get('table');
@@ -976,7 +972,7 @@
             localStorage.setItem('ila_track_started', Date.now());
 
             ensureAuth().then(() => {
-                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: info.upiId || null, phone: info.phone || null, gated: !!info.gated, trackId: trackId, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: null, phone: info.phone || null, gated: !!info.gated, trackId: trackId, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 // seed a status record the POS will advance as the order progresses
                 db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: info.details, phone: info.phone || null, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 if (window.watchOrderStatus) window.watchOrderStatus();
@@ -1014,7 +1010,9 @@
                 const v = snap.val(); if (!v || done) return;
                 if (v.paymentVerified === true || (v.status && v.status !== 'received' && v.status !== 'cancelled')){
                     done = true;
-                    setStatus('✅', 'Payment confirmed', 'Your order is placed and on its way to the kitchen. You can track it below.');
+                    // dine-in settles at the table, so confirming a PAYMENT here would be false
+                    if (isDineIn) setStatus('\u2705', 'In the kitchen', 'Your order is being made. Pay at your table when you\u2019re done.');
+                    else setStatus('\u2705', 'Payment confirmed', 'Your order is placed and on its way to the kitchen. You can track it below.');
                 } else if (v.status === 'cancelled'){
                     done = true;
                     setStatus('⚠️', 'Order not accepted', 'This order was cancelled. If you were charged, it will be refunded — please contact us.');
@@ -1023,11 +1021,12 @@
             // Safety timeout: at 120s unverified, flag this order so the POS notifies staff to
             // verify manually. Keep watching — when they do, paymentVerified flips and the view
             // updates to confirmed (the loop closes; nothing dead-ends).
+            // Nudge only. This page cannot know whether the pay link has been sent yet, so it
+            // must not assert that a payment is late — the POS card carries that state.
             if (info.type !== 'Dine-in'){
                 setTimeout(() => {
                     if (done) return;
-                    setStatus('\u231b', 'Still waiting on your payment', "If you haven't had the WhatsApp link yet, please check your messages \u2014 we've also alerted our team.");
-                    try { db.ref('orders/track/' + trackId + '/needsManualVerify').set(true); } catch(e){}
+                    setStatus('\u231b', 'Waiting for your payment', 'If the WhatsApp payment link hasn\u2019t arrived, please check your messages or speak to our staff.');
                 }, 120000);
             }
         };
