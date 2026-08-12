@@ -700,7 +700,7 @@
                             if (matched) return;
                             window._mvAlerted[tid] = true;
                             const ph = o.phone ? ' \u00b7 \ud83d\udcde ' + o.phone : '';
-                            posSendPush({ title: '⚠️ Verify a web payment', body: (o.tableOrAddress||'Web order') + ' · ₹' + o.total + ph + ' — customer paid but it hasn\'t auto-confirmed. Check and verify.', tag: 'manualverify-' + tid, url: '/admin.html' });
+                            posSendPush({ title: '⚠️ Web order still unpaid', body: (o.tableOrAddress||'Web order') + ' · ₹' + o.total + ph + ' — no payment matched yet. Send or resend the pay link, or check the bank.', tag: 'manualverify-' + tid, url: '/admin.html' });
                         }
                     });
                 }
@@ -841,10 +841,11 @@
                     window._wvBooking[id] = true;
                     // the device that wins the atomic claim is the one that books it — same lock
                     // the counter QR uses, so two POS devices can't write the entry twice
+                    const tok = o.trackId ? ('web-' + o.trackId) : null;
                     claimPayment(m.ref, m.p, won => {
                         if (!won){ delete window._wvBooking[id]; return; }
                         bookWebPayment(id, o, m);
-                    });
+                    }, tok);
                 }
                 renderWebVerifyBadges();
             } catch(e){}
@@ -877,12 +878,14 @@
         window.wvFindMatch = function(order, credits, claims, nowMs){
             try {
                 const total = parseFloat(order && order.total); if (!(total > 0)) return null;
+                const myTok = (order && order.trackId) ? ('web-' + order.trackId) : null;
                 const created = order && order.createdAt ? order.createdAt : null;
                 const lo = created ? created - 10*60000 : (nowMs - 45*60000);
                 let best = null;
                 for (const ref in (credits || {})){
                     const p = credits[ref]; if (!p) continue;
-                    if (claims && claims[ref]) continue;
+                    // a credit claimed by THIS order is still ours — see claimPayment(fixedToken)
+                    if (claims && claims[ref] && !(myTok && claims[ref] === myTok)) continue;
                     if (Math.abs((parseFloat(p.amount) || 0) - total) >= 0.5) continue;
                     if (!window.upiBankMatch((order && order.upiId) || null, p)) continue;
                     const at = p.at || 0;
@@ -933,8 +936,16 @@
             // unpaid takeaway/delivery -> the WhatsApp button IS the pay link.
             // once the credit lands (or for dine-in) it becomes an ordinary message.
             if (order.orderType !== 'Dine-in' && !verified){
+                const sent = !!order.payLinkSentAt;
+                const label = sent ? 'Resend link' : 'Send pay link';
+                // an unsent link is the actual failure mode now, so make it loud and the
+                // resend quiet — you can see at a glance which orders still need a tap
+                const style = sent
+                    ? 'border:1px solid rgba(255,255,255,0.35); background:transparent; cursor:pointer; font-weight:700;'
+                    : 'border:none; cursor:pointer; font-weight:700;';
+                const cls = sent ? 'contact-btn' : 'contact-btn contact-wa';
                 return '<div class="contact-row">' + call
-                     + '<button class="contact-btn contact-wa" style="border:none; cursor:pointer; font-weight:700;" onclick="window.sendPayLink(\'' + id + '\')">Send pay link</button>'
+                     + '<button class="' + cls + '" style="' + style + '" onclick="window.sendPayLink(\'' + id + '\')">' + label + '</button>'
                      + '</div>';
             }
             const msg = encodeURIComponent('Hi, this is ILA \u2014 your order is confirmed and we\u2019re making it now.');
@@ -966,6 +977,7 @@
             const msg = 'ILA \u2014 your order comes to \u20b9' + amt + '.\n\nTap to pay:\n' + link
                       + '\n\nOr pay \u20b9' + amt + ' to UPI ID: ' + vpa
                       + '\n\nWe start preparing as soon as the payment lands.';
+            try { db.ref('orders/pendingWeb/' + id + '/payLinkSentAt').set(firebase.database.ServerValue.TIMESTAMP); } catch(e){}
             window.open('https://wa.me/91' + p + '?text=' + encodeURIComponent(msg), '_blank');
         };
 
@@ -1021,8 +1033,8 @@
             const toast = document.createElement('div');
             toast.className = 'toast-card';
             toast.innerHTML = `
-                <div class="toast-header">${title}</div>
-                <div class="toast-details">${details}</div>
+                <div class="toast-header">${escapeHTML(title)}</div>
+                <div class="toast-details">${escapeHTML(details)}</div>
                 <button class="toast-btn" onclick="this.parentElement.remove()">OKAY</button>
             `;
             area.appendChild(toast);
@@ -1087,7 +1099,7 @@
                     // The badge already says whether the money has landed, so no separate
                     // "wait for payment" banner. Stale is a one-line note, not a block.
                     const staleBanner = stale
-                        ? `<div style="font-size:0.78rem; color:#ffb3b3; margin-top:6px;">⏰ Unpaid 20+ min — likely abandoned</div>`
+                        ? `<div style="font-size:0.78rem; color:#ffb3b3; margin-top:6px;">⏰ Unpaid 20+ min — ${o.payLinkSentAt ? 'likely abandoned' : 'no pay link was ever sent'}</div>`
                         : '';
 
                     list.innerHTML += `<div style="border:1px solid rgba(255,255,255,${stale?'0.12':'0.2'}); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left; ${stale?'opacity:0.6;':''}">
@@ -1890,8 +1902,11 @@
             q.on('value', handler);
             window.upiWatchRef = { q, handler };
         }
-        function claimPayment(ref, p, cb){
-            const token = 'pos-' + (window.checkoutTableID||'?') + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+        function claimPayment(ref, p, cb, fixedToken){
+            // fixedToken: a stable, order-derived token (web orders). If the tab dies between
+            // winning the claim and writing the booking, the retry recognises its own claim
+            // instead of treating the credit as taken by someone else and losing the money.
+            const token = fixedToken || ('pos-' + (window.checkoutTableID||'?') + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,6));
             db.ref('payments/claims/' + ref).transaction(
                 curr => (curr === null ? token : undefined),   // claim only if unclaimed, else abort
                 (err, committed, snap) => { cb(!err && committed && snap && snap.val() === token); }
@@ -2147,7 +2162,12 @@
 
             const selectedUPI = window.getRandomUPI();
             window.tableUPIVPA[window.checkoutTableID] = selectedUPI;   // attribution: bill link offered this VPA
-            billStr += `Pay via UPI:\n${CAFE_WEBSITE_LINK}/pay.html?am=${remaining}&id=${selectedUPI}`;
+            // NOT a link to pay.html. A upi:// fired from a web page is an NPCI Intent and is
+            // refused for our payees after the PIN; the same link tapped inside WhatsApp works.
+            // So the message carries the link itself, plus the ID and amount as plain text for
+            // the case where WhatsApp renders it as dead text (unsaved sender).
+            billStr += `Tap to pay:\nupi://pay?pa=${selectedUPI}&pn=ILA&am=${Number(remaining).toFixed(2)}&cu=INR`;
+            billStr += `\n\nOr pay \u20b9${remaining} to UPI ID: ${selectedUPI}`;
             window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
@@ -2187,8 +2207,14 @@
             let safeCash = parseFloat(window.cashDrawer) || 0;
 
             let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${Math.round(safeUPI)}\nCash: ₹${Math.round(safeCash)}\n\nEXPENSES:\n`;
-            let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income') { report += `- ₹${e.amount} | ${e.reason}\n`; exp = true; } });
+            // Reversals (voids, refunds) are stored NEGATIVE. Printing them as expenses gave
+            // "- \u20b9-450", and they distorted the expense figure. Report them separately.
+            const REVERSALS = { void_upi: 1, void_cash: 1, refund_upi: 1 };
+            let exp = false; window.salesLedger.forEach(e => { if (e.type !== 'cash_income' && e.type !== 'upi_income' && !REVERSALS[e.type]) { report += `- \u20b9${Math.abs(parseFloat(e.amount) || 0)} | ${e.reason}\n`; exp = true; } });
             if (!exp) report += `None.\n`;
+            let rev = false, revStr = '';
+            window.salesLedger.forEach(e => { if (REVERSALS[e.type]) { revStr += `- \u20b9${Math.abs(parseFloat(e.amount) || 0)} | ${e.reason}\n`; rev = true; } });
+            if (rev) report += `\nVOIDS & REFUNDS:\n` + revStr;
             if (confirm("Close the day? Today's sales will be archived and the till reset for tomorrow.")) {
                 const todayKey = new Date().toISOString().slice(0, 10);
                 // Snapshot the whole day BEFORE wiping, so nothing is lost if the WhatsApp
@@ -2223,7 +2249,7 @@
                     db.ref('pos/activeTables').remove();
                 });
                 var _eodBills = Array.isArray(window.pastBills) ? window.pastBills.length : 0;
-                var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income') _eodExp += (parseFloat(e.amount) || 0); });
+                var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income' && !REVERSALS[e.type]) _eodExp += Math.abs(parseFloat(e.amount) || 0); });
                 // IMPORTANT: await the push so it actually completes before we navigate to WhatsApp.
                 // (Previously this was fire-and-forget and the wa.me redirect 300ms later aborted the
                 //  in-flight Firebase read + Worker POST, so the EOD notification usually never sent.)
