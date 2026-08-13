@@ -856,12 +856,24 @@
         function sweepWebPayments(){
             try {
                 const now = Date.now();
+                // Pass 1 — work out who wants which credit, claiming nothing yet.
+                const want = {}, found = {};
                 for (const id in (window.pendingWebOrders || {})){
                     const o = window.pendingWebOrders[id]; if (!o) continue;
                     if (o.payment && o.payment.ref){ window._wvMatch[id] = o.payment.ref; continue; }   // already booked
                     if (window._wvBooking[id]) continue;                                                // write in flight
                     const m = window.wvFindMatch(o, window._wvCredits, window._wvClaims, now);
                     if (!m){ delete window._wvMatch[id]; continue; }
+                    found[id] = m;
+                    (want[m.ref] = want[m.ref] || []).push(id);
+                }
+                // Pass 2 — book only the unambiguous ones. Same discipline as the ledger
+                // reconciler: if two pending orders fit one credit we cannot know whose it is,
+                // so nobody takes it and staff resolve it. Guessing here misattributes money.
+                for (const id in found){
+                    const m = found[id];
+                    if ((want[m.ref] || []).length !== 1){ delete window._wvMatch[id]; continue; }
+                    const o = window.pendingWebOrders[id]; if (!o) continue;
                     window._wvBooking[id] = true;
                     // the device that wins the atomic claim is the one that books it — same lock
                     // the counter QR uses, so two POS devices can't write the entry twice
@@ -902,9 +914,17 @@
         window.wvFindMatch = function(order, credits, claims, nowMs){
             try {
                 const total = parseFloat(order && order.total); if (!(total > 0)) return null;
+                // A web order may only claim a credit it was actually BILLED for.
+                // Without a sent pay link there is no VPA on the order, upiBankMatch fail-opens,
+                // and the order would match a credit from ANY account on amount alone — which is
+                // how a late counter credit got taken by an unrelated pending web order and left
+                // the counter's own manual settlement permanently unverified.
+                const vpa = order && order.upiId;
+                const sentAt = order && order.payLinkSentAt;
+                if (!vpa || !sentAt) return null;
                 const myTok = (order && order.trackId) ? ('web-' + order.trackId) : null;
-                const created = order && order.createdAt ? order.createdAt : null;
-                const lo = created ? created - 10*60000 : (nowMs - 45*60000);
+                // and it cannot have been paid before the customer was asked
+                const lo = sentAt - 2*60000;
                 let best = null;
                 for (const ref in (credits || {})){
                     const p = credits[ref]; if (!p) continue;
@@ -990,10 +1010,8 @@
             if (p.length !== 10) { alert("No phone number on this order."); return; }
             let vpa = o.upiId;
             if (!vpa){
+                // the VPA this order is billed to — written below together with payLinkSentAt
                 vpa = window.getRandomUPI();
-                // record which VPA this order was billed to, so the bank/account filter in
-                // wvFindMatch can still tie the incoming credit to this order
-                try { db.ref('orders/pendingWeb/' + id + '/upiId').set(vpa); } catch(e){}
                 o.upiId = vpa;
             }
             const amt = parseFloat(o.total) || 0;
@@ -1001,7 +1019,9 @@
             const msg = 'ILA \u2014 your order comes to \u20b9' + amt + '.\n\nTap to pay:\n' + link
                       + '\n\nOr pay \u20b9' + amt + ' to UPI ID: ' + vpa
                       + '\n\nWe start preparing as soon as the payment lands.';
-            try { db.ref('orders/pendingWeb/' + id + '/payLinkSentAt').set(firebase.database.ServerValue.TIMESTAMP); } catch(e){}
+            // one update, not two: the matcher requires BOTH upiId and payLinkSentAt, so a
+            // half-landed write would leave the order permanently unmatchable
+            try { db.ref('orders/pendingWeb/' + id).update({ upiId: vpa, payLinkSentAt: firebase.database.ServerValue.TIMESTAMP }); } catch(e){}
             window.open('https://wa.me/91' + p + '?text=' + encodeURIComponent(msg), '_blank');
         };
 
@@ -1935,8 +1955,18 @@
             else if (state === 'verified'){ el.className = 'upi-status verified'; el.innerText = '✓ Received' + (info && info.payer ? ' — ' + info.payer : '') + ' · ₹' + (info ? info.amount : ''); }
             else { el.className = 'upi-status'; el.innerText = ''; }
         }
+        // The watcher attaches with on('value'). Detaching with a DIFFERENT event type is a
+        // no-op, so every QR opened used to leave a live handler on payments/incoming forever —
+        // each closing over its own amount. A late bank credit then woke every one of those
+        // ghosts, and the first with a matching amount claimed it and settled against whatever
+        // table happened to be open. That is why a late email sometimes never verified the
+        // entry it belonged to: something else had already taken the credit.
+        // Two defences: detach correctly, AND stamp each watch with a session number so a
+        // handler that somehow survives can still never act.
+        window.upiWatchSession = 0;
         function stopUPIWatch(){
-            if (window.upiWatchRef){ try { window.upiWatchRef.q.off('child_added', window.upiWatchRef.handler); } catch(e){} window.upiWatchRef = null; }
+            window.upiWatchSession++;   // invalidates any handler still attached
+            if (window.upiWatchRef){ try { window.upiWatchRef.q.off('value', window.upiWatchRef.handler); } catch(e){} window.upiWatchRef = null; }
         }
         function startUPIWatch(amount){
             stopUPIWatch();
@@ -1951,8 +1981,15 @@
             // atomic claim prevents double-settlement, and a credit is only considered if it
             // arrived within the last 30 min (loose sanity bound, never a tight tripwire).
             const q = db.ref('payments/incoming').orderByChild('at').limitToLast(60);
+            const mySession = window.upiWatchSession;
+            const myTable = window.checkoutTableID;
             const handler = snap => {
+                if (mySession !== window.upiWatchSession) return;      // this watch is over
                 if (window.upiSettling) return;
+                // Don't claim on behalf of a table that has since been settled or cleared —
+                // claiming there consumes the credit and then settleUPI returns early, leaving
+                // it claimed with nothing booked against it.
+                if (window.checkoutTableID !== myTable || !window.activeTables[myTable]) return;
                 const now = serverNow();
                 const cands = [];
                 snap.forEach(ch => {
@@ -1966,8 +2003,10 @@
                 if (!cands.length) return;
                 cands.sort((a,b) => b.at - a.at);   // newest first
                 const tryNext = i => {
+                    if (mySession !== window.upiWatchSession) return;
                     if (window.upiSettling || i >= cands.length) return;
                     claimPayment(cands[i].key, cands[i].p, won => {
+                        if (mySession !== window.upiWatchSession) return;
                         if (won && !window.upiSettling) autoConfirmUPI({ ref:cands[i].key, payer:cands[i].p.payer||null, amount:cands[i].p.amount, source:cands[i].p.source||null });
                         else tryNext(i+1);
                     });
@@ -2082,11 +2121,15 @@
         // Late bank emails (esp. Yes Bank) can land minutes after a payment is settled
         // manually. This keeps a live cache of recent credits and, on any change to either
         // credits or the ledger, tries to match each still-unverified UPI entry. A match
-        // flips that entry to verified (the ✓ appears on its own). Runs on POS open too,
-        // sweeping the last 3 days — so a credit that arrived overnight is caught next launch.
+        // flips that entry to verified (the ✓ appears on its own).
+        // TWO SOURCES, because the last bills of the night used to be unfixable: EOD deletes
+        // pos/ledgerEntries, and the reconciler only runs inside a live session — so a bank
+        // email arriving after closing had nothing left to match against. EOD now parks any
+        // still-unverified payment in pos/unverified before wiping, and this sweeps that node
+        // too, on a much longer window, every time the POS is opened.
         // GUARD: only auto-verifies when the match is UNAMBIGUOUS (exactly one unverified
         // entry fits that amount+bank); ambiguous cases wait for admin, never guess.
-        window._reconCredits = {}; window._reconFeed = false;
+        window._reconCredits = {}; window._reconFeed = false; window._carryUnverified = {};
         function startVerificationReconciler(){
             if (window._reconFeed) return; window._reconFeed = true;
             try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
@@ -2096,67 +2139,114 @@
                     try { reconcileLedgerVerification(); } catch(e){}
                 });
             } catch(e){}
+            try {
+                db.ref('pos/unverified').on('value', s => {
+                    window._carryUnverified = s.val() || {};
+                    try { reconcileLedgerVerification(); } catch(e){}
+                });
+            } catch(e){}
         }
         function reconcileLedgerVerification(){
             const ledger = window.salesLedgerMap || {};
             const credits = window._reconCredits || {};
             if (!Object.keys(ledger).length || !Object.keys(credits).length) return;
             const now = serverNow();
-            const WIN = 2*60*60000;   // a late auto-verify credit is expected within ~2h of settlement
+            // TWO SEPARATE THINGS. Conflating them is what stopped the last bills of a session
+            // from ever verifying: the POS is closed when the email lands, so nothing runs until
+            // the next morning — and an AGE filter then discarded the entry before its credit was
+            // ever compared to it, even though the two were minutes apart.
+            //   ENTRY_AGE  — how long an unresolved entry stays eligible. Generous: an entry
+            //                sitting in the live ledger is unresolved by definition.
+            //   PROXIMITY  — how close the credit must be to the settlement. Tight: this is what
+            //                makes a match trustworthy, and it alone stops a days-old entry from
+            //                grabbing a fresh credit.
+            const ENTRY_AGE = 7*24*60*60000;
+            const CARRY_AGE = 5*24*60*60000;
+            const PROXIMITY = 3*60*60000;
 
             // credits already bound to a verified entry can't be reused
             const usedRefs = new Set();
             for (const k in ledger){ const e = ledger[k]; if (e && e.state === 'verified' && e.ref) usedRefs.add(String(e.ref)); }
 
-            // still-unverified UPI entries from the last 2h (older ones are past the auto-verify
-            // window — they wait for admin, so a days-old entry can never grab a fresh credit)
             const pending = [];
             for (const k in ledger){
                 const e = ledger[k];
                 if (!e || e.type !== 'upi_income' || e.state !== 'unverified') continue;
-                if (e.ts && e.ts < now - WIN) continue;
-                pending.push({ key: k, e: e, ts: e.ts || 0 });
+                if (e.ts && e.ts < now - ENTRY_AGE) continue;
+                pending.push({ key: k, e: e, ts: e.ts || 0, src: 'ledger', win: PROXIMITY });
+            }
+            // parked at EOD — these outlive the ledger they came from
+            const carry = window._carryUnverified || {};
+            for (const pid in carry){
+                const c = carry[pid]; if (!c || c.state === 'verified') continue;
+                if (c.ts && c.ts < now - CARRY_AGE) continue;
+                if (c.ref) usedRefs.add(String(c.ref));
+                pending.push({ key: pid, ts: c.ts || 0, src: 'carry', win: PROXIMITY,
+                               e: { type: 'upi_income', state: 'unverified', amount: c.amount, bankTag: c.bankTag || null } });
             }
             if (!pending.length) return;
 
             function tagOf(e){ const t = e.bankTag || null; if (!t) return { bankTag:null, acctTag:null, raw:null }; const parts = String(t).trim().toLowerCase().split(/\s+/); return { bankTag: parts[0], acctTag: parts[1] || null, raw: String(t).trim().toLowerCase() }; }
-            function creditFits(entryTag, entryTs, p){
+            function creditFits(entryTag, entryTs, p, win){
+                win = win || PROXIMITY;
                 if (Math.abs((parseFloat(p.amount)||0) - (parseFloat(entryTag.amt)||0)) >= 0.5) return false;
                 if (entryTag.bankTag && p.bank && entryTag.bankTag !== String(p.bank).trim().toLowerCase()) return false;
                 if (entryTag.acctTag && p.acct && String(entryTag.acctTag) !== String(p.acct)) return false;
                 const at = p.at || 0;
-                if (at && Math.abs(at - entryTs) > WIN) return false;   // credit must be near the settlement in time
+                if (at && Math.abs(at - entryTs) > win) return false;   // credit must be near the settlement in time
                 return true;
             }
 
-            const updates = {};
+            // MATCH IN GROUPS, NOT ONE BY ONE.
+            // The old rule demanded exactly one candidate credit per entry. Two bills of the
+            // SAME amount to the same account break that: both credits fit both entries, so
+            // every entry sees two candidates and none is ever verified. Two ₹450 sales in one
+            // evening could therefore never auto-verify, no matter how promptly the bank mailed.
+            // Individually those payments are indistinguishable — but in aggregate they are not
+            // ambiguous at all: N entries and N matching credits pair up, whichever way round,
+            // and the ledger is correct either way. Pair them in time order. Refuse only when
+            // the counts DON'T line up, which is the genuinely unresolvable case.
+            const groups = {};
             for (const item of pending){
                 const t = tagOf(item.e); t.amt = parseFloat(item.e.amount) || 0;
+                const gk = t.amt.toFixed(2) + '|' + (t.raw || '');
+                if (!groups[gk]) groups[gk] = { tag: t, items: [] };
+                groups[gk].items.push(item);
+            }
 
-                // candidate credits for THIS entry, within the tight time window, unused
-                const fits = [];
+            const updates = {};
+            for (const gk in groups){
+                const g = groups[gk];
+                const ents = g.items.slice().sort((a,b) => a.ts - b.ts);
+
+                // unused credits that fit at least one entry in this group
+                const cands = [];
                 for (const ref in credits){
                     if (usedRefs.has(String(ref))) continue;
                     const p = credits[ref]; if (!p) continue;
-                    if (creditFits(t, item.ts, p)) fits.push({ ref, p, at: p.at || 0 });
+                    if (ents.some(it => creditFits(g.tag, it.ts, p, it.win))) cands.push({ ref: ref, p: p, at: p.at || 0 });
                 }
-                if (fits.length !== 1) continue;   // GUARD A: entry must have exactly one candidate credit
-                const cand = fits[0];
+                if (!cands.length) continue;
+                // counts must line up — 2 entries and 1 credit stays ambiguous, as does 1 and 2
+                if (cands.length !== ents.length) continue;
 
-                // GUARD B (bidirectional): that credit must fit exactly ONE pending entry too —
-                // if two same-amount/bank entries both fit this credit, we can't know which paid it.
-                let entriesFittingThisCredit = 0;
-                for (const o of pending){
-                    const ot = tagOf(o.e); ot.amt = parseFloat(o.e.amount) || 0;
-                    if (ot.raw === t.raw && creditFits(ot, o.ts, cand.p)) entriesFittingThisCredit++;
+                cands.sort((a,b) => a.at - b.at);
+                // every pairing must still stand on its own proximity check
+                let ok = true;
+                for (let i = 0; i < ents.length; i++){
+                    if (!creditFits(g.tag, ents[i].ts, cands[i].p, ents[i].win)) { ok = false; break; }
                 }
-                if (entriesFittingThisCredit !== 1) continue;
+                if (!ok) continue;
 
-                usedRefs.add(String(cand.ref));
-                updates['pos/ledgerEntries/' + item.key + '/state'] = 'verified';
-                updates['pos/ledgerEntries/' + item.key + '/ref'] = String(cand.ref);
-                updates['pos/ledgerEntries/' + item.key + '/lateVerified'] = true;
-                try { claimPayment(cand.ref, cand.p, function(){}); } catch(e){}
+                for (let i = 0; i < ents.length; i++){
+                    const item = ents[i], cand = cands[i];
+                    usedRefs.add(String(cand.ref));
+                    const base = (item.src === 'carry') ? ('pos/unverified/' + item.key) : ('pos/ledgerEntries/' + item.key);
+                    updates[base + '/state'] = 'verified';
+                    updates[base + '/ref'] = String(cand.ref);
+                    updates[base + '/lateVerified'] = true;
+                    try { claimPayment(cand.ref, cand.p, function(){}); } catch(e){}
+                }
             }
             if (Object.keys(updates).length){ try { db.ref().update(updates); } catch(e){} }
         }
@@ -2317,6 +2407,28 @@
                     bills: window.pastBills, ledger: enrichedLedger,
                     closedBy: staffName, closedAt: firebase.database.ServerValue.TIMESTAMP
                 }).then(() => {
+                    // Park anything still unverified BEFORE wiping. This is the only reason the
+                    // last bills of the night can ever auto-verify: their ledger rows are about
+                    // to be deleted, and the bank email may not have arrived yet. Money is not
+                    // moved or recounted here — the day's totals are already archived. This is
+                    // purely so a late credit can still find the payment it belongs to.
+                    try {
+                        const carry = {};
+                        const rvMap = window.upiReviewMap || {};
+                        (window.salesLedger || []).forEach(function(e){
+                            if (!e || e.type !== 'upi_income' || !e.payId) return;
+                            if (e.state === 'verified') return;
+                            const rv = rvMap[e.payId];
+                            if (rv && (rv.state === 'verified' || rv.state === 'ignored')) return;
+                            carry[e.payId] = {
+                                amount: parseFloat(e.amount) || 0, reason: e.reason || '',
+                                ts: e.ts || 0, bankTag: e.bankTag || null,
+                                day: todayKey, state: 'unverified'
+                            };
+                        });
+                        if (Object.keys(carry).length) db.ref('pos/unverified').update(carry);
+                    } catch(e){ console.error('EOD carry-forward', e); }
+
                     db.ref('pos/ledgerEntries').remove();
                     db.ref('pos/bills').remove();
                     // cashDrawer is NOT reset — physical cash carries forward to the next day.
