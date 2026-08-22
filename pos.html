@@ -145,6 +145,8 @@
         .tip-btn:active { background: var(--brand-text); color: var(--brand-bg); }
         .tip-btn.tip-clear { flex: 0 0 42px; }
         .tip-note { font-size: 0.85rem; opacity: 0.85; margin: -2px 0 10px; }
+        /* Deliberately quiet: a customer looking at the QR shouldn't notice it, staff know it's there. */
+        .staff-reveal { background: transparent; border: none; color: var(--brand-text); opacity: 0.3; font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 10px 16px; margin-top: 6px; cursor: pointer; }
 
         .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: white; color: var(--brand-bg); }
@@ -343,7 +345,15 @@
             </div>
             <img id="qr-image" src="" alt="QR">
             <div id="upi-status" class="upi-status"></div>
-            <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Confirm Payment</button></div>
+
+            <!-- This screen is handed to the customer, so nothing on it may settle a bill.
+                 A matching bank credit still auto-confirms on its own; the manual override
+                 lives behind the staff reveal below and is deliberately dull to find. -->
+            <div id="upi-staff-actions" style="display:none;">
+                <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Settle without bank confirmation</button></div>
+            </div>
+            <button class="staff-reveal" id="upi-staff-reveal" onclick="window.revealStaffActions()">Staff</button>
+
             <button class="close-modal" onclick="cancelUPI()">✖ CANCEL</button>
         </div>
     </div>
@@ -1962,6 +1972,7 @@
             window.tableUPIVPA[window.checkoutTableID] = window.getRandomUPI();
 
             closeModal('checkout-modal'); closeModal('split-bill-modal'); document.getElementById('upi-modal').classList.add('active');
+            hideStaffActions();   // every payment starts in customer-facing state
             window.renderUPIQR();
         };
 
@@ -1988,6 +1999,16 @@
 
         // Presets ADD. Three taps of +\u20b910 gets to \u20b930 without opening a keyboard, which is
         // what you want at a counter with a queue. \u2716 clears; 'Tip' sets an exact figure.
+        window.revealStaffActions = function(){
+            document.getElementById('upi-staff-actions').style.display = 'block';
+            document.getElementById('upi-staff-reveal').style.display = 'none';
+        };
+        function hideStaffActions(){
+            const a = document.getElementById('upi-staff-actions'), r = document.getElementById('upi-staff-reveal');
+            if (a) a.style.display = 'none';
+            if (r) r.style.display = '';
+        }
+
         window.setTip = function(v){
             const cur = parseFloat(window.pendingTip) || 0;
             if (v === 'custom'){
@@ -2149,6 +2170,10 @@
         window.confirmUPIPayment = function(){
             if (window.upiSettling) return;
             const amount = parseFloat(window.pendingUPIAmount) || 0;
+            // Say plainly what this does. If a credit has already matched, the watcher would
+            // have settled it automatically — so reaching this button almost always means
+            // vouching for money the system cannot see yet.
+            if (!confirm('Mark \u20b9' + Math.round(amount) + ' as received?\n\nNo bank credit has matched this payment yet. It will show as unverified until one does.')) return;
             const now = serverNow();
             db.ref('payments/incoming').orderByChild('at').limitToLast(60).once('value', snap => {
                 if (window.upiSettling) return;
