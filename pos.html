@@ -323,6 +323,14 @@
         <div class="modal-content">
             <h3>Scan</h3>
             <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">₹0</p>
+            <div id="upi-tip-line" style="display:none; font-size:0.8rem; opacity:0.75; margin:-2px 0 8px;"></div>
+            <div style="display:flex; gap:6px; justify-content:center; margin-bottom:12px;">
+                <button class="btn-action" onclick="window.setTip(10)">+10</button>
+                <button class="btn-action" onclick="window.setTip(20)">+20</button>
+                <button class="btn-action" onclick="window.setTip(50)">+50</button>
+                <button class="btn-action" onclick="window.setTip('custom')">Tip…</button>
+                <button class="btn-action" id="upi-tip-clear" style="display:none;" onclick="window.setTip(0)">✖</button>
+            </div>
             <img id="qr-image" src="" alt="QR">
             <div id="upi-status" class="upi-status"></div>
             <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Confirm Payment</button></div>
@@ -341,6 +349,12 @@
             <div class="modal-buttons" style="margin-bottom: 15px;">
                 <button class="btn btn-secondary" onclick="openTransactionModal('expense')">Expense</button>
                 <button class="btn btn-secondary" onclick="openTransactionModal('withdrawal')">Withdraw</button>
+            </div>
+            <div id="tip-pool-box" style="display:none; border:1px solid rgba(255,255,255,0.25); border-radius:8px; padding:14px; margin-bottom:15px; text-align:left;">
+                <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.7;">Tips today</div>
+                <div id="tip-pool-amount" style="font-size:1.6rem; font-weight:700; line-height:1.2;">₹0</div>
+                <div id="tip-pool-sub" style="font-size:0.78rem; opacity:0.65; margin-top:2px;"></div>
+                <button class="btn btn-primary" id="tip-payout-btn" style="width:100%; margin-top:12px;" onclick="window.payOutTips()">Pay out from drawer</button>
             </div>
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                 <button class="btn btn-dark" style="flex: 1;" onclick="closeModal('cash-modal'); openPastBills()">History</button>
@@ -648,6 +662,7 @@
             db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
             db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
             db.ref('upiReview').on('value', snap => { window.upiReviewMap = snap.val() || {}; renderLedger(); });
+            startTipFeed();
             startVerificationReconciler();
             db.ref('pos/ledgerEntries').on('value', snap => {
                 const data = snap.val() || {};
@@ -1930,17 +1945,49 @@
             let amountToPay = customAmount !== null ? parseFloat(customAmount) : remaining;
             amountToPay = amountToPay || 0;
             
-            window.pendingUPIAmount = amountToPay;
-            
-            const selectedUPI = window.getRandomUPI();
-            window.tableUPIVPA[window.checkoutTableID] = selectedUPI;   // attribution: this table was offered this VPA
-            const upiString = `upi://pay?pa=${selectedUPI}&pn=ILA&am=${amountToPay}&cu=INR`;
-            
-            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
-            document.getElementById('upi-amount-text').innerText = `₹${amountToPay}`;
-            
+            // base = what the bill needs. Tip rides on top and is re-rendered without
+            // re-rolling the VPA, so attribution and the bank/account filter stay stable.
+            window.upiBaseAmount = amountToPay;
+            window.pendingTip = 0;
+            window.tableUPIVPA[window.checkoutTableID] = window.getRandomUPI();
+
             closeModal('checkout-modal'); closeModal('split-bill-modal'); document.getElementById('upi-modal').classList.add('active');
-            startUPIWatch(amountToPay);
+            window.renderUPIQR();
+        };
+
+        // Rebuilds the QR for base+tip and restarts the watcher on the NEW amount. It has to be
+        // one amount on one QR: the bank credit is matched to the ledger entry to within 50 paise
+        // in four places, so a tip the customer adds freehand on top of a fixed-amount QR would
+        // silently stop that payment ever auto-verifying.
+        window.renderUPIQR = function(){
+            const base = parseFloat(window.upiBaseAmount) || 0;
+            const tip = parseFloat(window.pendingTip) || 0;
+            const total = Math.round((base + tip) * 100) / 100;
+            window.pendingUPIAmount = total;
+            const vpa = window.tableUPIVPA[window.checkoutTableID] || window.getRandomUPI();
+            const upiString = `upi://pay?pa=${vpa}&pn=ILA&am=${total}&cu=INR`;
+            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
+            document.getElementById('upi-amount-text').innerText = `₹${total}`;
+            const line = document.getElementById('upi-tip-line');
+            const clr = document.getElementById('upi-tip-clear');
+            if (tip > 0){ line.style.display = 'block'; line.innerText = '\u20b9' + base + ' bill + \u20b9' + tip + ' tip'; if (clr) clr.style.display = ''; }
+            else { line.style.display = 'none'; if (clr) clr.style.display = 'none'; }
+            startUPIWatch(total);   // also invalidates the previous amount's watcher
+        };
+
+        window.setTip = function(v){
+            if (v === 'custom'){
+                const raw = prompt('Tip amount (\u20b9):', String(parseFloat(window.pendingTip) || ''));
+                if (raw === null) return;
+                const n = parseFloat(raw);
+                if (isNaN(n) || n < 0) return alert('Enter a valid amount.');
+                window.pendingTip = n;
+            } else if (v === 0){
+                window.pendingTip = 0;
+            } else {
+                window.pendingTip = (parseFloat(window.pendingTip) || 0) + v;
+            }
+            window.renderUPIQR();
         };
 
         // ---- UPI auto-verification ------------------------------------------
@@ -2045,15 +2092,34 @@
             const payId = 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
             const vpa = window.tableUPIVPA[tableID] || null;
             const bankTag = (vpa && window._upiCfgCache && window._upiCfgCache[upiKey(vpa)] && window._upiCfgCache[upiKey(vpa)].bank) || null;
-            addLedgerEntry('upi_income', amountToPay, reason, {
+            const tip = parseFloat(window.pendingTip) || 0;
+            // The entry records the FULL amount received — that is what the bank credit will say,
+            // and the matcher compares them exactly. The tip is a field on it, not a second entry.
+            addLedgerEntry('upi_income', amountToPay, reason + (tip > 0 ? ' + \u20b9' + tip + ' tip' : ''), {
                 payId: payId,
                 state: (info && info.ref) ? 'verified' : 'unverified',   // matched a bank credit at the counter → verified
                 ref: (info && info.ref) || null,
-                bankTag: bankTag
+                bankTag: bankTag,
+                tip: tip
             });
             try { window.upiRecordPayment(vpa, amountToPay); } catch(e){}
-            tableData.paid = paid + amountToPay;
+            if (tip > 0){
+                // Accrues as a liability. Survives EOD deliberately — the payout may lag the day.
+                const dk = new Date().toISOString().slice(0, 10);
+                try {
+                    db.ref('pos/tips/' + dk + '/accrued').set(firebase.database.ServerValue.increment(tip));
+                    db.ref('pos/tips/' + dk + '/entries').push({
+                        amount: tip, table: (tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID),
+                        by: (window.currentStaff && window.currentStaff.name) || 'staff',
+                        at: firebase.database.ServerValue.TIMESTAMP
+                    });
+                } catch(e){}
+            }
+            // Only the BILL portion pays the table down — otherwise a tip on a part-payment
+            // would understate what is still due on a split bill.
+            tableData.paid = paid + (amountToPay - tip);
             tableData._lastPay = info ? Object.assign({ payId: payId }, info) : { payId: payId, ref: null };
+            window.pendingTip = 0;   // consumed
             if (tableData.paid >= total){
                 archivePOSTable(tableID, tableData, "UPI");
                 delete window.tableUPIVPA[tableID];
@@ -2063,7 +2129,7 @@
                 syncToCloud(tableID); closeModal('upi-modal'); window.openCheckout(tableID);
             }
         }
-        window.cancelUPI = function(){ stopUPIWatch(); window.upiSettling = false; setUPIStatus(null); closeModal('upi-modal'); };
+        window.cancelUPI = function(){ stopUPIWatch(); window.upiSettling = false; window.pendingTip = 0; setUPIStatus(null); closeModal('upi-modal'); };
         // Manual fallback: claim a matching credit if one is already in, otherwise
         // settle as an un-verified manual confirm (the cashier is vouching for it).
         window.confirmUPIPayment = function(){
@@ -2103,6 +2169,7 @@
                 if (meta.state) entry.state = meta.state;               // 'verified' | 'unverified'
                 if (meta.ref) entry.ref = meta.ref;                     // matched bank credit ref
                 if (meta.bankTag) entry.bankTag = meta.bankTag;         // VPA's admin bank tag, e.g. "yes 8020"
+                if (meta.tip) entry.tip = parseFloat(meta.tip) || 0;    // part of amount, not extra revenue
             }
             db.ref('pos/ledgerEntries').push(entry);
 
@@ -2260,6 +2327,7 @@
                 else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
                 else if (entry.type === 'void_upi' || entry.type === 'void_cash') { colorClass = 'ledger-out'; sign = '−'; typeTag = 'VOID: '; }
                 else if (entry.type === 'refund_upi') { colorClass = 'ledger-out'; sign = '−'; typeTag = 'REFUND: '; }
+                else if (entry.type === 'tip_payout') { colorClass = 'ledger-out'; sign = '−'; typeTag = 'TIPS OUT: '; }
                 
                 let safeAmount = Math.abs(parseFloat(entry.amount) || 0);   // stored negative for voids; sign handled above
                 let tick = '';
@@ -2336,7 +2404,59 @@
             window.location.href = `https://wa.me/91${phone}?text=${encodeURIComponent(billStr)}`;
         };
 
-        window.openCashManagement = function() { renderLedger(); document.getElementById('cash-modal').classList.add('active'); };
+        // ===== TIP POOL =====
+        // Tips arrive in the café's UPI account with the sale — UPI cannot split a payment to
+        // a staff member's VPA. So they accrue here as a liability and are settled in CASH from
+        // the drawer at the end of the day: the money is already in the bank, the drawer pays
+        // it out, and the ledger line clears it. Pooled, split equally by headcount.
+        window.tipPool = { accrued: 0, paidOut: 0 };
+        function tipDayKey(){ return new Date().toISOString().slice(0, 10); }
+        function startTipFeed(){
+            try {
+                db.ref('pos/tips/' + tipDayKey()).on('value', s => {
+                    const v = s.val() || {};
+                    window.tipPool = { accrued: parseFloat(v.accrued) || 0, paidOut: parseFloat(v.paidOut) || 0 };
+                    renderTipPool();
+                });
+            } catch(e){}
+        }
+        function renderTipPool(){
+            const box = document.getElementById('tip-pool-box'); if (!box) return;
+            const due = Math.max(0, (window.tipPool.accrued || 0) - (window.tipPool.paidOut || 0));
+            if (!(window.tipPool.accrued > 0)){ box.style.display = 'none'; return; }
+            box.style.display = 'block';
+            document.getElementById('tip-pool-amount').innerText = '\u20b9' + Math.round(due);
+            document.getElementById('tip-pool-sub').innerText = window.tipPool.paidOut > 0
+                ? ('\u20b9' + Math.round(window.tipPool.accrued) + ' collected \u00b7 \u20b9' + Math.round(window.tipPool.paidOut) + ' already paid out')
+                : ('\u20b9' + Math.round(window.tipPool.accrued) + ' collected today');
+            const btn = document.getElementById('tip-payout-btn');
+            if (btn){ btn.style.display = due > 0 ? '' : 'none'; }
+        }
+        window.payOutTips = async function(){
+            const due = Math.max(0, (window.tipPool.accrued || 0) - (window.tipPool.paidOut || 0));
+            if (!(due > 0)) return;
+            const headsRaw = prompt('Paying out \u20b9' + Math.round(due) + ' in tips.\n\nHow many people are sharing it?', '');
+            if (headsRaw === null) return;
+            const heads = parseInt(headsRaw);
+            if (isNaN(heads) || heads < 1) return alert('Enter how many people are sharing.');
+            const each = Math.floor(due / heads);
+            const pinStr = prompt('\u20b9' + Math.round(due) + ' \u00f7 ' + heads + ' = \u20b9' + each + ' each.\nThis takes \u20b9' + Math.round(due) + ' OUT of the cash drawer.\n\nStaff PIN to authorise:');
+            if (!pinStr) return;
+            const staffName = window.staffPins[await hashPin(pinStr)];
+            if (!staffName) return alert('Invalid PIN.');
+            const cash = parseFloat(window.cashDrawer) || 0;
+            if (due > cash && !confirm('Only \u20b9' + Math.round(cash) + ' in the drawer. Pay out anyway?')) return;
+            // decrements the drawer via addLedgerEntry's outflow branch
+            addLedgerEntry('tip_payout', due, 'Tips \u00b7 ' + heads + ' \u00d7 \u20b9' + each + ' (' + staffName + ')');
+            try {
+                db.ref('pos/tips/' + tipDayKey()).update({
+                    paidOut: firebase.database.ServerValue.increment(due),
+                    lastPayout: { amount: due, heads: heads, each: each, by: staffName, at: firebase.database.ServerValue.TIMESTAMP }
+                });
+            } catch(e){}
+        };
+
+        window.openCashManagement = function() { renderLedger(); renderTipPool(); document.getElementById('cash-modal').classList.add('active'); };
         window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
         window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
 
@@ -2367,11 +2487,20 @@
             const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
             const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
             if (Object.keys(window.activeTables).length > 0) { if(!confirm("Tables open. End day?")) return; }
+            const _tipDue = Math.max(0, ((window.tipPool && window.tipPool.accrued) || 0) - ((window.tipPool && window.tipPool.paidOut) || 0));
+            if (_tipDue > 0 && !confirm('\u20b9' + Math.round(_tipDue) + ' of tips has not been paid out yet.\n\nClose the day anyway? (It stays owed and will still be there tomorrow.)')) return;
             
             let safeUPI = parseFloat(window.upiTotal) || 0;
             let safeCash = parseFloat(window.cashDrawer) || 0;
 
-            let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${Math.round(safeUPI)}\nCash: ₹${Math.round(safeCash)}\n\nEXPENSES:\n`;
+            // Tips arrive inside the UPI total, so state them separately — otherwise the day's
+            // sales figure is overstated by whatever the customers were generous with.
+            const tipAcc = (window.tipPool && window.tipPool.accrued) || 0;
+            const tipPaid = (window.tipPool && window.tipPool.paidOut) || 0;
+            const tipDue = Math.max(0, tipAcc - tipPaid);
+            let report = `ILA - EOD\nBy: ${staffName}\nDate: ${new Date().toLocaleDateString()}\n\nUPI: ₹${Math.round(safeUPI)}\nCash: ₹${Math.round(safeCash)}\n`;
+            if (tipAcc > 0) report += `\nTips collected: ₹${Math.round(tipAcc)}\nSales excl. tips: ₹${Math.round(safeUPI - tipAcc)}\n` + (tipDue > 0 ? `Tips still to pay out: ₹${Math.round(tipDue)}\n` : `Tips paid out: ₹${Math.round(tipPaid)}\n`);
+            report += `\nEXPENSES:\n`;
             // Reversals (voids, refunds) are stored NEGATIVE. Printing them as expenses gave
             // "- \u20b9-450", and they distorted the expense figure. Report them separately.
             const REVERSALS = { void_upi: 1, void_cash: 1, refund_upi: 1 };
