@@ -89,7 +89,7 @@
 
         @keyframes slideDown { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: flex-start; padding-top: 5vh; box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: flex-start; padding: calc(5vh + env(safe-area-inset-top)) 0 calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
                 /* ============================================================
            MODAL CARD — seamless brand surface with depth
@@ -102,7 +102,10 @@
             border: 1px solid rgba(255,255,255,0.22);
             box-shadow: 0 32px 80px rgba(0,0,0,0.55), 0 12px 32px rgba(0,0,0,0.40), 0 2px 8px rgba(0,0,0,0.30);
             padding: 24px 22px; border-radius: 14px; text-align: center;
-            width: 85%; max-width: 400px; max-height: 88vh; overflow-y: auto;
+            width: 90%; max-width: 400px; overflow-y: auto;
+            /* leave room for the notch above and the home indicator below */
+            max-height: calc(100vh - 5vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
         }
         .modal-content h3 { margin: 0 0 18px; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1.5px; }
                 
@@ -116,6 +119,12 @@
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; }
         .table-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         .table-btn.occupied { background-color: #ffffff; color: #8D6E52; border: none;}
+        @media (max-width: 400px) {
+            .modal-content { padding: 20px 16px; }
+            .btn { font-size: 0.85rem; padding: 12px 6px; letter-spacing: 0; }
+            .btn-row-wrap { flex-wrap: wrap; }
+            .btn-row-wrap > .btn { flex: 1 1 45%; }
+        }
         .takeaway-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; margin-bottom: 15px; text-transform: uppercase; transition: all 0.2s;}
         .takeaway-btn:active { background: white; color: var(--brand-bg); }
 
@@ -124,7 +133,9 @@
         .upi-status.waiting { color: #ffffff; animation: upiPulse 1.2s ease-in-out infinite; }
         .upi-status.verified { color: #6effa0; }
         @keyframes upiPulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
-        .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; text-transform: uppercase; letter-spacing: 1px; border: none;}
+        /* min-width:0 is load-bearing: without it a flex item refuses to shrink below its text
+           width, so three uppercase buttons burst out of a 287px-wide modal on an iPhone. */
+        .btn { padding: 12px 10px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1 1 0; min-width: 0; text-transform: uppercase; letter-spacing: 0.5px; border: none; white-space: nowrap; }
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
         .btn-dark { background-color: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); }
@@ -179,7 +190,14 @@
         
         #qr-image { width: 150px; height: 150px; margin: 15px auto; border-radius: 8px; display: block; background: white; padding: 5px; }
 
-        .ledger-box { border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 10px; max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px; }
+        /* NO inner scroller. This sits inside .modal-content, which already scrolls — nesting two
+           scroll areas on iOS traps the touch between them. The modal is the single scroller. */
+        .ledger-box { border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; padding: 10px; text-align: left; margin-top: 15px; }
+        /* Where an inner scroll area genuinely helps (a long cart above fixed pay buttons), it
+           at least gets momentum and stops handing the gesture to the modal behind it. */
+        .modal-content [style*="overflow-y: auto"], .modal-content [style*="overflow-y:auto"] {
+            -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+        }
         .ledger-item { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255, 255, 255, 0.1); padding: 8px 0; font-size: 0.85rem; }
         .ledger-item:last-child { border-bottom: none; }
         .ledger-income { color: white; font-weight: bold; }
@@ -231,7 +249,7 @@
     <div id="web-orders-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Web Orders</h3>
-            <div id="web-orders-list" style="margin-top: 15px; max-height: 400px; overflow-y: auto;"></div>
+            <div id="web-orders-list" style="margin-top: 15px;"></div>
             <button class="close-modal" onclick="closeModal('web-orders-modal')">✖ CLOSE</button>
         </div>
     </div>
@@ -239,7 +257,7 @@
     <div id="review-cart-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Cart</h3>
-            <div id="review-cart-list" class="bill-receipt" style="max-height: 250px; overflow-y: auto; margin-top: 15px;"></div>
+            <div id="review-cart-list" class="bill-receipt" style="margin-top: 15px;"></div>
             <div class="modal-buttons"><button class="btn btn-secondary" onclick="clearCart()">Empty</button></div>
             <button class="close-modal" onclick="closeModal('review-cart-modal')">✖ CLOSE</button>
         </div>
@@ -275,7 +293,7 @@
     <div id="active-bills-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Open Tables</h3>
-            <div id="active-bills-list" style="margin-top: 15px; max-height: 300px; overflow-y: auto;"></div>
+            <div id="active-bills-list" style="margin-top: 15px;"></div>
             <button class="close-modal" onclick="closeModal('active-bills-modal')">✖ CLOSE</button>
         </div>
     </div>
@@ -283,7 +301,7 @@
     <div id="past-bills-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>History</h3>
-            <div id="past-bills-list" class="ledger-box" style="max-height: 300px; margin-top: 15px;"></div>
+            <div id="past-bills-list" class="ledger-box" style="margin-top: 15px;"></div>
             <button class="close-modal" onclick="closeModal('past-bills-modal')">✖ CLOSE</button>
         </div>
     </div>
@@ -311,7 +329,7 @@
     <div id="checkout-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="checkout-title">Bill</h3>
-            <div id="checkout-receipt" class="bill-receipt" style="max-height: 35vh; overflow-y: auto;"></div>
+            <div id="checkout-receipt" class="bill-receipt" style="max-height: 30vh; overflow-y: auto;"></div>
             
             <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="10">
             <button class="btn btn-secondary" style="width: 100%; margin-bottom: 15px;" onclick="sendWhatsAppBill()">Send Pay Link</button>
@@ -416,10 +434,10 @@
                 <div id="tip-pool-sub" style="font-size:0.78rem; opacity:0.65; margin-top:2px;"></div>
                 <button class="btn btn-primary" id="tip-payout-btn" style="width:100%; margin-top:12px;" onclick="window.payOutTips()">Pay out from drawer</button>
             </div>
-            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                <button class="btn btn-dark" style="flex: 1;" onclick="closeModal('cash-modal'); openPastBills()">History</button>
-                <button class="btn btn-dark" style="flex: 1;" onclick="promptEOD()">End of Day</button>
-                <button class="btn btn-dark" style="flex: 1;" onclick="signOutPOS()">Sign Out</button>
+            <div class="btn-row-wrap" style="display: flex; gap: 8px; margin-bottom: 15px;">
+                <button class="btn btn-dark" onclick="closeModal('cash-modal'); openPastBills()">History</button>
+                <button class="btn btn-dark" onclick="promptEOD()">End Day</button>
+                <button class="btn btn-dark" onclick="signOutPOS()">Sign Out</button>
             </div>
             
             <h4 style="text-align: left; margin-top: 25px; margin-bottom: 5px; font-size: 0.8rem; letter-spacing: 1px; opacity: 0.7;">LOGS</h4>
