@@ -143,9 +143,8 @@
         .tip-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; }
         .tip-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: var(--brand-text); border-radius: 6px; padding: 10px 0; flex: 1; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; font-weight: bold; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; }
         .tip-btn:active { background: var(--brand-text); color: var(--brand-bg); }
-        .tip-btn.selected { background: var(--brand-text); color: var(--brand-bg); border-color: var(--brand-text); }
         .tip-btn.tip-clear { flex: 0 0 42px; }
-        .tip-note { font-size: 0.8rem; opacity: 0.7; margin: -2px 0 10px; }
+        .tip-note { font-size: 0.85rem; opacity: 0.85; margin: -2px 0 10px; }
 
         .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: white; color: var(--brand-bg); }
@@ -336,10 +335,10 @@
             <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">₹0</p>
             <div id="upi-tip-line" class="tip-note" style="display:none;"></div>
             <div class="tip-row">
-                <button class="tip-btn" data-tip="10" onclick="window.setTip(10)">₹10</button>
-                <button class="tip-btn" data-tip="20" onclick="window.setTip(20)">₹20</button>
-                <button class="tip-btn" data-tip="50" onclick="window.setTip(50)">₹50</button>
-                <button class="tip-btn" data-tip="custom" onclick="window.setTip('custom')">Tip</button>
+                <button class="tip-btn" onclick="window.setTip(10)">+₹10</button>
+                <button class="tip-btn" onclick="window.setTip(20)">+₹20</button>
+                <button class="tip-btn" onclick="window.setTip(50)">+₹50</button>
+                <button class="tip-btn" onclick="window.setTip('custom')">Tip</button>
                 <button class="tip-btn tip-clear" id="upi-tip-clear" style="display:none;" onclick="window.setTip(0)">✖</button>
             </div>
             <img id="qr-image" src="" alt="QR">
@@ -1981,20 +1980,14 @@
             document.getElementById('upi-amount-text').innerText = `₹${total}`;
             const line = document.getElementById('upi-tip-line');
             const clr = document.getElementById('upi-tip-clear');
-            if (tip > 0){ line.style.display = 'block'; line.innerText = '\u20b9' + base + ' bill + \u20b9' + tip + ' tip'; if (clr) clr.style.display = ''; }
+            if (tip > 0){ line.style.display = 'block'; line.innerHTML = '\u20b9' + base + ' bill + <b>\u20b9' + tip + ' tip</b>'; if (clr) clr.style.display = ''; }
             else { line.style.display = 'none'; if (clr) clr.style.display = 'none'; }
-            // reflect the chosen preset, the way the sweetness grid does
-            document.querySelectorAll('.tip-btn[data-tip]').forEach(function(b){
-                const v = b.getAttribute('data-tip');
-                const on = (v === 'custom') ? (tip > 0 && [10,20,50].indexOf(tip) === -1) : (tip === parseFloat(v));
-                b.classList.toggle('selected', !!on);
-            });
+
             startUPIWatch(total);   // also invalidates the previous amount's watcher
         };
 
-        // Presets SET the tip rather than adding to it, and tapping the chosen one clears it —
-        // same exclusive-choice behaviour as the sweetness buttons, so there is one interaction
-        // model in the app instead of two.
+        // Presets ADD. Three taps of +\u20b910 gets to \u20b930 without opening a keyboard, which is
+        // what you want at a counter with a queue. \u2716 clears; 'Tip' sets an exact figure.
         window.setTip = function(v){
             const cur = parseFloat(window.pendingTip) || 0;
             if (v === 'custom'){
@@ -2006,7 +1999,7 @@
             } else if (v === 0){
                 window.pendingTip = 0;
             } else {
-                window.pendingTip = (cur === v) ? 0 : v;   // tap again to clear
+                window.pendingTip = cur + v;
             }
             window.renderUPIQR();
         };
