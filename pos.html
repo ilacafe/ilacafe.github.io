@@ -28,10 +28,42 @@
         #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .pos-panes { display: block; }
+        .pane-cart { display: none; }
+
+        /* Two panes once there is room for them — menu left, live order right. */
+        @media (min-width: 900px) {
+            .container { max-width: 1120px; }
+            body { padding-bottom: 40px; }
+            .pos-panes { display: flex; align-items: flex-start; gap: 26px; }
+            .pane-menu { flex: 1 1 auto; min-width: 0; }
+            .pane-cart { display: block; flex: 0 0 330px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+            .rail-card { border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 16px; margin-bottom: 14px; text-align: left; }
+            .rail-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px dashed rgba(255,255,255,0.15); font-size: 0.9rem; }
+            .rail-row:last-child { border-bottom: none; }
+            .rail-row .nm { flex: 1 1 0; min-width: 0; }
+            .rail-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.25); font-weight: 700; font-size: 1.25rem; }
+            .rail-eta { font-size: 0.78rem; opacity: 0.7; margin-top: 6px; }
+            .pane-cart .table-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0; }
+            #cart-banner { display: none; }
+            .cat-strip { top: 0; }
+        }
         header { text-align: center; margin-bottom: 25px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
 
         /* 5-ITEM DASHBOARD - Tuned to fit perfectly on mobile */
+        /* Every drink order used to mean scrolling past the pizzas. Sticks under the top of the
+           screen so the jump targets are always where your thumb already is. */
+        .cat-strip { position: sticky; top: 0; z-index: 900; display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; margin-bottom: 6px;
+                     background: var(--brand-bg); -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .cat-strip::-webkit-scrollbar { display: none; }
+        .cat-strip:empty { display: none; }
+        .cat-chip { flex: 0 0 auto; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: var(--brand-text);
+                    border-radius: 20px; padding: 7px 14px; font-family: 'Quicksand', sans-serif; font-size: 0.78rem; font-weight: 700;
+                    text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
+        .cat-chip:active, .cat-chip.active { background: var(--brand-text); color: var(--brand-bg); border-color: var(--brand-text); }
+        h2[id^="cat-"] { scroll-margin-top: 58px; }
+
         .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1 1 0; min-width: 0; transition: opacity 0.2s; }
         .dash-stat:active { opacity: 0.5; }
@@ -62,6 +94,7 @@
         
         .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
         
+        [data-add] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
         .add-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 4px; width: 32px; height: 32px; font-size: 1.4rem; font-weight: 400; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0; }
         .add-btn:active { background-color: var(--brand-text); color: var(--brand-bg); }
         .add-btn:disabled { opacity: 0.2; cursor: not-allowed; border-color: transparent; }
@@ -136,7 +169,9 @@
         
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0; }
         .table-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        .table-btn { position: relative; line-height: 1.1; }
         .table-btn.occupied { background-color: #ffffff; color: #8D6E52; border: none;}
+        .table-sub { display: block; font-size: 0.6rem; font-weight: 700; opacity: 0.65; letter-spacing: 0; margin-top: 1px; }
         @media (max-width: 400px) {
             .modal-content { padding: 20px 16px; }
             .btn { font-size: 0.9rem; padding: 12px 8px; letter-spacing: 0.5px; }
@@ -260,8 +295,30 @@
             <div class="dash-stat" onclick="openPastBills()"><span class="dash-label">Shots</span><span class="dash-value" id="cups-display">0</span></div>
         </div>
 
-        <div id="live-menu-container">
-            <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
+        <div class="pos-panes">
+            <div class="pane-menu">
+                <div id="cat-strip" class="cat-strip"></div>
+                <div id="live-menu-container">
+                    <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Wide screens only. On an iPad the cart was hidden behind a modal on a 600px column
+                 with half the display empty; here it is always visible beside the menu. -->
+            <aside class="pane-cart" id="side-rail">
+                <div class="rail-card">
+                    <div class="section-label" style="margin-top:0;">Current order</div>
+                    <div id="rail-cart"></div>
+                    <div class="rail-total">Total <span>₹<span id="rail-total">0</span></span></div>
+                    <div id="rail-eta" class="rail-eta"></div>
+                </div>
+                <div class="rail-card">
+                    <div class="section-label" style="margin-top:0;">Send to</div>
+                    <textarea id="rail-notes" class="remark-input" placeholder="Order notes…" style="height:44px; resize:none; margin:0 0 10px;"></textarea>
+                    <div class="table-grid" id="rail-table-grid"></div>
+                    <button class="takeaway-btn" style="margin-top:12px; margin-bottom:0;" onclick="window.sendOrderFromRail('Takeaway')">Takeaway</button>
+                </div>
+            </aside>
         </div>
     </div>
 
@@ -805,7 +862,7 @@
                 } else {
                     window.activeTables = data;
                 }
-                updateDashboards(); refreshActiveModals();
+                updateDashboards(); refreshActiveModals(); try { renderSideRail(); } catch(e){}
             });
             db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
             db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
@@ -1235,16 +1292,19 @@
             }
         });
 
-        function showToast(title, details) {
+        // autoDismissMs: a send confirmation shouldn't need acknowledging — it's reassurance,
+        // not an alert. Ready-for-pickup toasts still wait for OKAY.
+        function showToast(title, details, autoDismissMs) {
             const area = document.getElementById('notification-area');
             const toast = document.createElement('div');
             toast.className = 'toast-card';
             toast.innerHTML = `
                 <div class="toast-header">${escapeHTML(title)}</div>
                 <div class="toast-details">${escapeHTML(details)}</div>
-                <button class="toast-btn" onclick="this.parentElement.remove()">OKAY</button>
+                ${autoDismissMs ? '' : '<button class="toast-btn" onclick="this.parentElement.remove()">OKAY</button>'}
             `;
             area.appendChild(toast);
+            if (autoDismissMs) setTimeout(() => { try { toast.remove(); } catch(e){} }, autoDismissMs);
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
         }
 
@@ -1527,6 +1587,37 @@
             updateCartUI();
         }
 
+        function renderSideRail(){
+            const box = document.getElementById('rail-cart'); if (!box) return;
+            const names = Object.keys(window.cart || {});
+            if (!names.length){
+                box.innerHTML = "<div style='opacity:0.45; font-size:0.9rem; padding:6px 0;'>Nothing yet — tap items to build the order.</div>";
+            } else {
+                box.innerHTML = names.map(item => {
+                    const safe = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    return `<div class="rail-row"><span class="nm">${escapeHTML(item)}</span>`
+                         + `<span style="display:flex; align-items:center; flex-shrink:0;">`
+                         + `<button class="mini-btn" onclick="window.modifyCartItem('${safe}', -1)">-</button>`
+                         + `<span style="width:22px; text-align:center; font-weight:bold;">${window.cart[item].qty}</span>`
+                         + `<button class="mini-btn" onclick="window.modifyCartItem('${safe}', 1)">+</button></span></div>`;
+                }).join('');
+            }
+            document.getElementById('rail-total').innerText = Math.round(window.totalAmount || 0);
+            const eta = document.getElementById('rail-eta');
+            try {
+                const e = (window.totalItems > 0 && window.estimateETA) ? window.estimateETA(window.cart) : null;
+                eta.innerText = e ? ('\u23f1 Est. ready in ~' + e.label) : '';
+            } catch(err){ eta.innerText = ''; }
+            renderTableGrid('rail-table-grid', "window.sendOrderFromRail");
+        }
+        window.sendOrderFromRail = function(tableID){
+            const n = document.getElementById('rail-notes');
+            const p = document.getElementById('pos-order-notes');
+            if (p) p.value = n ? n.value : '';       // sendOrder reads the modal's notes field
+            window.sendOrder(tableID);
+            if (n) n.value = '';
+        };
+
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
             if (window.totalItems > 0) { 
@@ -1535,6 +1626,7 @@
             } 
             else { banner.classList.remove('visible'); }
             if (window.renderInlineControls) window.renderInlineControls();
+            renderSideRail();
         }
 
         window.getCartQty = function(baseName) {
@@ -1553,12 +1645,69 @@
                 let reqSweet = container.getAttribute('data-sweet') === 'true';
                 let qty = window.getCartQty(safeName);
 
+                // No inline onclick on the + any more: it is bound by delegation below so that a
+                // TAP adds the default and a LONG-PRESS opens the options.
+                const addAttrs = `data-add="${safeName}" data-price="${price}" data-sweet="${reqSweet}"`;
                 if (qty > 0) {
-                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`;
+                    container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" ${addAttrs}>+</button></div>`;
                 } else {
-                    container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`;
+                    container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" ${addAttrs}>+</button>`;
                 }
             });
+        };
+
+        // Most coffees go out at the default sweetness, so the modal was a tax on every one of
+        // them. Tap = add the default. Hold = choose. Items with no options are unaffected.
+        (function bindMenuAdds(){
+            const HOLD_MS = 450;
+            let timer = null, fired = false, held = null;
+            function info(btn){
+                return { name: btn.getAttribute('data-add'),
+                         price: parseFloat(btn.getAttribute('data-price')) || 0,
+                         sweet: btn.getAttribute('data-sweet') === 'true' };
+            }
+            function start(e){
+                const btn = e.target.closest('[data-add]'); if (!btn) return;
+                held = btn; fired = false;
+                const d = info(btn);
+                if (!d.sweet) return;                      // nothing to hold for
+                timer = setTimeout(() => {
+                    fired = true;
+                    if (navigator.vibrate) navigator.vibrate(20);
+                    window.promptRemark(d.name, d.price, true);
+                }, HOLD_MS);
+            }
+            function cancel(){ if (timer){ clearTimeout(timer); timer = null; } }
+            function tap(e){
+                const btn = e.target.closest('[data-add]'); if (!btn) return;
+                cancel();
+                if (fired){ fired = false; return; }        // the hold already handled it
+                const d = info(btn);
+                window.addDefault(d.name, d.price, d.sweet);
+            }
+            document.addEventListener('touchstart', start, { passive: true });
+            document.addEventListener('touchend', cancel);
+            document.addEventListener('touchmove', cancel, { passive: true });
+            document.addEventListener('mousedown', start);
+            document.addEventListener('mouseup', cancel);
+            document.addEventListener('click', tap);
+        })();
+
+        // Adds straight to the cart at the default modifier, skipping the modal.
+        window.addDefault = function(safeName, price, requiresSweetness){
+            let finalName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            let finalPrice = parseFloat(price) || 0;
+            if (requiresSweetness){
+                const def = (window.defaultModifiers && window.defaultModifiers[0]) || { name: '', price: 0 };
+                if (def.name) finalName += ` (${def.name})`;
+                finalPrice += parseFloat(def.price) || 0;
+            }
+            if (window.cart[finalName]) window.cart[finalName].qty += 1;
+            else window.cart[finalName] = { price: finalPrice, qty: 1 };
+            window.totalAmount += finalPrice;
+            window.totalItems += 1;
+            if (navigator.vibrate) navigator.vibrate(50);
+            saveLocalCart();
         };
 
         window.decrementInline = function(safeName) {
@@ -1695,6 +1844,7 @@
             let activeCats = Object.keys(menuData);
             let sortedCats = categoryOrder.filter(cat => activeCats.includes(cat));
             activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
+            const catOrder = [];
 
             sortedCats.forEach(category => {
                 let standardItems = []; let sizedItems = []; let hasVisibleItems = false;
@@ -1708,7 +1858,9 @@
                 });
 
                 if (!hasVisibleItems) return;
-                let catHTML = `<section><h2>${category}</h2>`;
+                const catId = 'cat-' + category.replace(/[^a-zA-Z0-9]/g, '-');
+                catOrder.push({ id: catId, name: category });
+                let catHTML = `<section><h2 id="${catId}">${category}</h2>`;
 
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
@@ -1737,8 +1889,20 @@
                 catHTML += `</section>`;
                 container.innerHTML += catHTML;
             });
+            const strip = document.getElementById('cat-strip');
+            if (strip) strip.innerHTML = catOrder.length > 1
+                ? catOrder.map(c => `<button class="cat-chip" onclick="window.jumpToCategory('${c.id}')">${escapeHTML(c.name)}</button>`).join('')
+                : '';
             window.renderInlineControls();
         }
+
+        window.jumpToCategory = function(id){
+            const el = document.getElementById(id); if (!el) return;
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+            const chip = Array.from(document.querySelectorAll('.cat-chip')).find(c => (c.getAttribute('onclick') || '').includes("'" + id + "'"));
+            if (chip) chip.classList.add('active');
+        };
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
@@ -1909,6 +2073,12 @@
             db.ref('pos/activeTables/' + tableID + '/total').set(firebase.database.ServerValue.increment(safeTotal));
             if (notes) db.ref('pos/activeTables/' + tableID + '/notes').transaction(c => c ? c + " | " + notes : notes);
             
+            // The modal closing and the cart emptying is also what a failure looks like. Say so.
+            try {
+                const n = Object.values(window.cart).reduce((a, i) => a + (parseInt(i.qty) || 0), 0);
+                const amt = Math.round(parseFloat(window.totalAmount) || 0);
+                showToast(destName + ' \u2014 sent', n + (n === 1 ? ' item' : ' items') + ' \u00b7 \u20b9' + amt, 2600);
+            } catch(e){}
             closeModal('table-modal'); 
             window.clearCart();
         };
@@ -1923,13 +2093,24 @@
                 if (eta && box) { box.textContent = "⏱ Est. ready in ~" + eta.label; box.style.display = 'block'; }
                 else if (box) { box.style.display = 'none'; }
             } catch(e){ /* estimate is best-effort; never block sending */ }
-            const grid = document.getElementById('sender-table-grid'); grid.innerHTML = "";
-            for (let i = 1; i <= 10; i++) {
-                const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
-                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="window.sendOrder('${i}')">${i}</button>`;
-            }
+            renderTableGrid('sender-table-grid', "window.sendOrder");
             document.getElementById('table-modal').classList.add('active');
         };
+
+        // Ten identical buttons told you nothing. Showing what is already on each table means
+        // you pick the right one, and spot the wrong one BEFORE the kitchen sees it.
+        function renderTableGrid(gridId, fnName){
+            const grid = document.getElementById(gridId); if (!grid) return;
+            let html = '';
+            for (let i = 1; i <= 10; i++) {
+                const t = window.activeTables[i.toString()];
+                const occ = t ? 'occupied' : '';
+                const due = t ? Math.max(0, (parseFloat(t.total) || 0) - (parseFloat(t.paid) || 0)) : 0;
+                const sub = t ? `<span class="table-sub">\u20b9${Math.round(due || (parseFloat(t.total) || 0))}</span>` : '';
+                html += `<button class="table-btn ${occ}" onclick="${fnName}('${i}')">${i}${sub}</button>`;
+            }
+            grid.innerHTML = html;
+        }
 
         window.openActiveBills = function() {
             const list = document.getElementById('active-bills-list'); list.innerHTML = "";
@@ -2972,12 +3153,7 @@
         };
 
         window.openMoveTable = function() {
-            const grid = document.getElementById('move-table-grid');
-            grid.innerHTML = "";
-            for (let i = 1; i <= 10; i++) {
-                const isOccupied = window.activeTables[i.toString()] ? 'occupied' : '';
-                grid.innerHTML += `<button class="table-btn ${isOccupied}" onclick="window.confirmMoveTable('${i}')">${i}</button>`;
-            }
+            renderTableGrid('move-table-grid', "window.confirmMoveTable");
             closeModal('checkout-modal'); 
             document.getElementById('move-table-modal').classList.add('active');
         };
