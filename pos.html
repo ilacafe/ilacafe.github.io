@@ -150,8 +150,17 @@
         .split-row:last-child { border-bottom: none; }
         .split-row .nm { flex: 1; min-width: 0; font-size: 0.9rem; }
         .split-row .sub { font-size: 0.72rem; opacity: 0.55; }
-        .split-ctrl { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-        .split-qty { width: 34px; text-align: center; font-weight: bold; font-size: 0.95rem; }
+        .split-line { padding: 10px 0; border-bottom: 1px dashed rgba(255,255,255,0.18); }
+        .split-line:last-child { border-bottom: none; }
+        .split-line-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+        .split-line-head .nm { font-size: 0.92rem; font-weight: 500; min-width: 0; }
+        .split-line-head .sub { font-size: 0.74rem; opacity: 0.6; flex-shrink: 0; white-space: nowrap; }
+        .split-line-ctrl { display: flex; align-items: center; gap: 8px; }
+        .split-chips { display: flex; gap: 5px; flex: 1; }
+        .split-chip { flex: 1; background: transparent; border: 1px solid rgba(255,255,255,0.35); color: var(--brand-text); border-radius: 5px; padding: 7px 0; font-family: 'Quicksand', sans-serif; font-size: 0.78rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        .split-chip:active, .split-chip.selected { background: var(--brand-text); color: var(--brand-bg); border-color: var(--brand-text); }
+        .split-amt { width: 76px; flex-shrink: 0; padding: 7px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.9rem; font-weight: bold; text-align: right; outline: none; box-sizing: border-box; }
+        .split-amt::placeholder { color: rgba(255,255,255,0.35); font-weight: normal; }
         .split-paid { opacity: 0.35; }
 
         .staff-reveal { background: transparent; border: none; color: var(--brand-text); opacity: 0.3; font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 10px 16px; margin-top: 6px; cursor: pointer; }
@@ -322,9 +331,8 @@
             <div style="font-size: 1rem; margin-bottom: 2px; opacity: 0.8;">Total: ₹<span id="split-total">0</span></div>
             <div style="font-size: 1.4rem; font-weight: bold; margin-bottom: 12px;">Due: ₹<span id="split-remaining">0</span></div>
 
-            <!-- Headcount. The point of this row is that staff can see "3 of 5 paid" while the
-                 group is still in the room, instead of finding the gap after they have left. -->
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:10px 12px; margin-bottom:14px;">
+            <!-- Headcount: so staff can see "3 of 5 paid" while the group is still in the room. -->
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
                 <div style="text-align:left;">
                     <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.7;">Paying separately</div>
                     <div id="split-progress" style="font-size:0.9rem; font-weight:700; margin-top:1px;">—</div>
@@ -336,24 +344,28 @@
                 </div>
             </div>
 
-            <div style="display: flex; gap: 8px; margin-bottom: 14px; justify-content: center;">
-                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(2)">/ 2</button>
-                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(3)">/ 3</button>
-                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(4)">/ 4</button>
-                <button class="btn btn-secondary" style="flex:1;" onclick="window.calculateSplitByHead()">/ heads</button>
+            <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(2)">÷2</button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(3)">÷3</button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="calculateSplit(4)">÷4</button>
+                <button class="btn btn-secondary" style="flex:1;" onclick="window.calculateSplitByHead()">÷ heads</button>
             </div>
 
-            <!-- Pick items, in halves. Steppers are capped at what is still unpaid on each line. -->
-            <div style="text-align:left; font-size:0.68rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.7; margin-bottom:6px;">This share</div>
-            <div id="split-item-list" class="bill-receipt" style="max-height:34vh; overflow-y:auto; margin-bottom:12px;"></div>
+            <!-- Every line takes a rupee figure. The chips only fill it; the box always wins. -->
+            <div style="text-align:left; font-size:0.68rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.7; margin-bottom:6px;">This share pays for</div>
+            <div id="split-item-list" class="bill-receipt" style="max-height:38vh; overflow-y:auto; margin-bottom:10px;"></div>
 
-            <p style="text-align: left; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; margin-bottom: 0; opacity: 0.7;">Collect Now (₹)</p>
-            <input type="number" id="partial-pay-amount" class="remark-input" placeholder="0" oninput="window.onSplitAmountEdited()">
-            <div id="split-alloc-note" style="font-size:0.72rem; opacity:0.6; text-align:left; margin-top:-2px;"></div>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                <label style="margin:0; flex:1; text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.7;">Other (not an item)</label>
+                <input type="number" id="split-other" class="split-amt" inputmode="numeric" placeholder="₹0" oninput="window.setSplitOther(this.value)">
+            </div>
+            <div id="split-alloc-note" style="font-size:0.72rem; opacity:0.6; text-align:left; min-height:1em;"></div>
 
-            <div class="modal-buttons" style="margin-top: 16px;">
-                <button class="btn btn-primary" onclick="processSplit('upi')">UPI</button>
-                <button class="btn btn-primary" onclick="processSplit('cash')">Cash</button>
+            <div style="font-size:1.5rem; font-weight:700; margin:12px 0 2px;">Collecting ₹<span id="split-share-total">0</span></div>
+
+            <div class="modal-buttons" style="margin-top: 8px;">
+                <button class="btn btn-primary" id="split-pay-upi" onclick="processSplit('upi')">UPI</button>
+                <button class="btn btn-primary" id="split-pay-cash" onclick="processSplit('cash')">Cash</button>
             </div>
             <button class="close-modal" onclick="closeSplitBill()">✖ CANCEL</button>
         </div>
@@ -1860,20 +1872,22 @@
             for (let item in tableData.items) {
                 const it = tableData.items[item];
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                const paidQ = parseFloat(it.paidQty) || 0;
-                const leftQ = Math.max(0, (parseFloat(it.qty) || 0) - paidQ);
-                if (leftQ > 0) stillDue.push(((Math.round(leftQ*2)/2).toString().replace(/\.5$/, '\u00bd')) + '\u00d7 ' + item);
-                const paidMark = paidQ > 0
-                    ? `<span style="font-size:0.7rem; opacity:0.6; margin-left:6px;">${leftQ > 0 ? ((Math.round(paidQ*2)/2)+' paid') : 'paid'}</span>`
+                const lt = (parseFloat(it.price) || 0) * (parseFloat(it.qty) || 0);
+                const lp = (it.paidAmt != null) ? (parseFloat(it.paidAmt) || 0) : ((parseFloat(it.paidQty) || 0) * (parseFloat(it.price) || 0));
+                const ll = (lt - lp) < 0.5 ? 0 : Math.round((lt - lp) * 100) / 100;
+                if (ll > 0 && lp > 0) stillDue.push(escapeHTML(item) + ' \u20b9' + Math.round(ll));
+                else if (ll > 0) stillDue.push(escapeHTML(item));
+                const paidMark = lp > 0
+                    ? `<span style="font-size:0.7rem; opacity:0.6; margin-left:6px;">${ll > 0 ? ('₹' + Math.round(lp) + ' paid') : 'paid'}</span>`
                     : '';
-                receiptHTML += `<div class="bill-receipt-row" style="${leftQ <= 0 ? 'opacity:0.45;' : ''}"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${it.qty}x ${escapeHTML(item)}${paidMark}</span><span>₹${it.qty * it.price}</span></div>`;
+                receiptHTML += `<div class="bill-receipt-row" style="${ll <= 0 ? 'opacity:0.45;' : ''}"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${it.qty}x ${escapeHTML(item)}${paidMark}</span><span>₹${Math.round(lt)}</span></div>`;
             }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${total}</div>`;
             if (paid > 0) {
                 receiptHTML += `<div style="text-align: right; opacity: 0.8; font-size: 0.9rem; margin-top: 5px;">Paid: ₹${paid}</div>`;
                 receiptHTML += `<div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`;
                 // Naming WHAT is unpaid is far easier to raise with a group than a bare number.
-                if (stillDue.length && remaining > 0) receiptHTML += `<div style="text-align:right; font-size:0.78rem; opacity:0.75; margin-top:4px;">Still unpaid: ${escapeHTML(stillDue.join(', '))}</div>`;
+                if (stillDue.length && remaining > 0) receiptHTML += `<div style="text-align:right; font-size:0.78rem; opacity:0.75; margin-top:4px;">Still unpaid: ${stillDue.join(', ')}</div>`;
             }
             const sh = tableData.shares || null;
             if (sh && parseInt(sh.count) > 0){
@@ -1946,75 +1960,111 @@
         };
 
         // ===== SPLIT BY ITEM =====
-        // Each item carries paidQty (halves allowed) alongside qty, so the table always knows
-        // WHAT is still unpaid, not just how much. That is what lets staff say "someone still
-        // owes for a cold brew" while the group is standing up, instead of finding a shortfall
-        // once they have gone.
-        window.splitSel = {};          // itemName -> qty being paid for in THIS share
-        window.splitAmountEdited = false;
+        // The unit is MONEY against a line, not a fraction of it. Every line carries paidAmt in
+        // rupees; "half a pizza" is just a shortcut that fills a rupee box you can overwrite with
+        // any figure. That covers equal shares, "I'll put ₹200 towards the pizza", and everything
+        // between, with one model instead of two.
+        window.splitSel = {};            // itemName -> RUPEES allocated to that line in this share
+        window.splitOther = 0;           // rupees collected that aren't tied to any line
+        const LINE_EPS = 0.5;            // under half a rupee, a line is settled
 
-        function itemUnpaid(it){ return Math.max(0, (parseFloat(it.qty) || 0) - (parseFloat(it.paidQty) || 0)); }
-        function fmtQty(n){ return (Math.round(n * 2) / 2).toString().replace(/\.5$/, '\u00bd').replace(/^0\u00bd$/, '\u00bd'); }
+        function lineTotal(it){ return Math.round(((parseFloat(it.price) || 0) * (parseFloat(it.qty) || 0)) * 100) / 100; }
+        function linePaid(it){
+            if (it.paidAmt != null) return parseFloat(it.paidAmt) || 0;
+            return (parseFloat(it.paidQty) || 0) * (parseFloat(it.price) || 0);   // legacy tables
+        }
+        function lineLeft(it){ const l = lineTotal(it) - linePaid(it); return l < LINE_EPS ? 0 : Math.round(l * 100) / 100; }
+        function tableDue(t){ const d = (parseFloat(t.total) || 0) - (parseFloat(t.paid) || 0); return d < LINE_EPS ? 0 : Math.round(d * 100) / 100; }
 
         window.openSplitBill = function() {
-            const tableData = window.activeTables[window.checkoutTableID];
-            if (!tableData) return;
-            window.splitSel = {};
-            window.splitAmountEdited = false;
+            const t = window.activeTables[window.checkoutTableID];
+            if (!t) return;
+            window.splitSel = {}; window.splitOther = 0;
             renderSplit();
             closeModal('checkout-modal'); document.getElementById('split-bill-modal').classList.add('active');
         };
-
-        window.closeSplitBill = function() { window.splitSel = {}; closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
+        window.closeSplitBill = function() { window.splitSel = {}; window.splitOther = 0; closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
 
         window.setShareCount = function(delta){
             const t = window.activeTables[window.checkoutTableID]; if (!t) return;
-            const cur = parseInt((t.shares && t.shares.count) || 0);
-            const next = Math.max(0, cur + delta);
+            const next = Math.max(0, (parseInt((t.shares && t.shares.count) || 0)) + delta);
             if (!t.shares) t.shares = { count: 0, paid: 0 };
             t.shares.count = next;
             db.ref('pos/activeTables/' + window.checkoutTableID + '/shares/count').set(next);
             renderSplit();
         };
 
-        window.adjustSplitItem = function(safeName, delta){
+        // A chip just fills the rupee box. Fraction of ONE unit, because the shared thing is
+        // usually a single pizza; "All" takes whatever is left on the line.
+        window.chipSplit = function(safeName, kind){
             const t = window.activeTables[window.checkoutTableID]; if (!t) return;
-            const name = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
-            const it = t.items[name]; if (!it) return;
-            const cap = itemUnpaid(it);
-            const cur = parseFloat(window.splitSel[name]) || 0;
-            let next = Math.round((cur + delta) * 2) / 2;
-            if (next < 0) next = 0;
-            if (next > cap) next = cap;
-            if (next === 0) delete window.splitSel[name]; else window.splitSel[name] = next;
-            window.splitAmountEdited = false;   // picking items drives the amount again
-            renderSplit();
+            const nm = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            const it = t.items[nm]; if (!it) return;
+            const left = lineLeft(it), unit = parseFloat(it.price) || 0;
+            let v;
+            if (kind === 'all') v = left;
+            else if (kind === 'unit') v = Math.min(unit, left);
+            else v = Math.min(Math.round(unit / parseInt(kind)), left);
+            const cur = parseFloat(window.splitSel[nm]) || 0;
+            if (Math.abs(cur - v) < 0.5) v = 0;      // tapping the same chip clears it
+            setLineAmount(nm, v);
         };
-
-        function splitSelTotal(){
-            const t = window.activeTables[window.checkoutTableID]; if (!t) return 0;
-            let sum = 0;
-            for (const nm in window.splitSel){
-                const it = t.items[nm]; if (!it) continue;
-                sum += (parseFloat(it.price) || 0) * (parseFloat(window.splitSel[nm]) || 0);
-            }
-            return Math.round(sum * 100) / 100;
+        window.editLineAmount = function(safeName, raw){
+            const nm = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            setLineAmount(nm, parseFloat(raw));
+        };
+        function setLineAmount(nm, v){
+            const t = window.activeTables[window.checkoutTableID]; if (!t) return;
+            const it = t.items[nm]; if (!it) return;
+            const left = lineLeft(it);
+            if (isNaN(v) || v <= 0) delete window.splitSel[nm];
+            else window.splitSel[nm] = Math.min(Math.round(v * 100) / 100, left);
+            renderSplit();
         }
-
-        window.onSplitAmountEdited = function(){
-            // Typing an amount means "just take this much" — money only, no item allocation.
-            if (Object.keys(window.splitSel).length){ window.splitSel = {}; }
-            window.splitAmountEdited = true;
+        window.setSplitOther = function(raw){
+            const v = parseFloat(raw);
+            window.splitOther = (isNaN(v) || v <= 0) ? 0 : Math.round(v * 100) / 100;
             renderSplit(true);
         };
 
-        function renderSplit(skipAmountField){
+        // Even splits allocate ACROSS the lines rather than as untied money, so an evenly split
+        // table still knows which items are settled.
+        function splitEvenly(ways){
+            const t = window.activeTables[window.checkoutTableID]; if (!t || ways < 1) return;
+            window.splitSel = {}; window.splitOther = 0;
+            const due = tableDue(t);
+            const target = Math.round(due / ways);
+            let assigned = 0;
+            const lines = Object.keys(t.items).filter(nm => lineLeft(t.items[nm]) > 0);
+            for (let i = 0; i < lines.length; i++){
+                const nm = lines[i], left = lineLeft(t.items[nm]);
+                if (assigned >= target) break;
+                const take = Math.min(left, Math.round(target - assigned));
+                if (take > 0){ window.splitSel[nm] = take; assigned += take; }
+            }
+            renderSplit();
+        }
+        window.calculateSplit = function(ways){ splitEvenly(ways); };
+        window.calculateSplitByHead = function(){
+            const t = window.activeTables[window.checkoutTableID];
+            const heads = parseInt((t.shares && t.shares.count) || 0);
+            if (heads < 1) return alert('Set how many people are paying separately first.');
+            const left = Math.max(1, heads - (parseInt((t.shares && t.shares.paid) || 0)));
+            splitEvenly(left);
+        };
+
+        function splitSelTotal(){
+            let sum = 0;
+            for (const nm in window.splitSel) sum += parseFloat(window.splitSel[nm]) || 0;
+            return Math.round(sum * 100) / 100;
+        }
+
+        function renderSplit(skipOtherField){
             const t = window.activeTables[window.checkoutTableID]; if (!t) return;
             const total = parseFloat(t.total) || 0;
-            const paid = parseFloat(t.paid) || 0;
-            const remaining = Math.round((total - paid) * 100) / 100;
+            const due = tableDue(t);
             document.getElementById('split-total').innerText = Math.round(total);
-            document.getElementById('split-remaining').innerText = Math.round(remaining);
+            document.getElementById('split-remaining').innerText = Math.round(due);
 
             const heads = parseInt((t.shares && t.shares.count) || 0);
             const done = parseInt((t.shares && t.shares.paid) || 0);
@@ -2022,75 +2072,54 @@
             const prog = document.getElementById('split-progress');
             if (heads > 0){
                 prog.innerText = done + ' of ' + heads + ' paid';
-                prog.style.color = (done >= heads && remaining > 0) ? '#ffd54f' : '';
-            } else {
-                prog.innerText = done > 0 ? (done + ' paid so far') : 'set the headcount';
-                prog.style.color = '';
-            }
+                prog.style.color = (done >= heads && due > 0) ? '#ffd54f' : '';
+            } else { prog.innerText = done > 0 ? (done + ' paid so far') : 'set the headcount'; prog.style.color = ''; }
 
-            // item picker — only lines with something still unpaid are actionable
-            const list = document.getElementById('split-item-list');
             let html = '';
             for (const nm in t.items){
                 const it = t.items[nm];
-                const left = itemUnpaid(it);
-                const sel = parseFloat(window.splitSel[nm]) || 0;
+                const left = lineLeft(it), unit = parseFloat(it.price) || 0, qty = parseFloat(it.qty) || 0;
                 const safe = nm.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                 if (left <= 0){
-                    html += '<div class="split-row split-paid"><div class="nm">' + escapeHTML(nm) + '<div class="sub">paid</div></div><div class="split-ctrl">\u2713</div></div>';
+                    html += '<div class="split-row split-paid"><div class="nm">' + escapeHTML(nm) + '<div class="sub">paid</div></div><div>\u2713</div></div>';
                     continue;
                 }
-                html += '<div class="split-row"><div class="nm">' + escapeHTML(nm)
-                     +   '<div class="sub">' + fmtQty(left) + ' left \u00b7 \u20b9' + Math.round(it.price) + ' each</div></div>'
-                     +   '<div class="split-ctrl">'
-                     +     '<button class="mini-btn" onclick="window.adjustSplitItem(\'' + safe + '\', -0.5)">−</button>'
-                     +     '<span class="split-qty">' + (sel ? fmtQty(sel) : '0') + '</span>'
-                     +     '<button class="mini-btn" onclick="window.adjustSplitItem(\'' + safe + '\', 0.5)">+</button>'
-                     +   '</div></div>';
+                const sel = parseFloat(window.splitSel[nm]) || 0;
+                const chip = (k, label) => {
+                    const v = k === 'all' ? left : (k === 'unit' ? Math.min(unit, left) : Math.min(Math.round(unit / parseInt(k)), left));
+                    const on = sel > 0 && Math.abs(sel - v) < 0.5;
+                    return '<button class="split-chip' + (on ? ' selected' : '') + '" onclick="window.chipSplit(\'' + safe + '\', \'' + k + '\')">' + label + '</button>';
+                };
+                html += '<div class="split-line">'
+                     +   '<div class="split-line-head"><span class="nm">' + escapeHTML(nm) + '</span><span class="sub">\u20b9' + Math.round(left) + ' left'
+                     +      (qty > 1 ? (' \u00b7 ' + qty + ' \u00d7 \u20b9' + Math.round(unit)) : '') + '</span></div>'
+                     +   '<div class="split-line-ctrl">'
+                     +     '<div class="split-chips">' + chip('all','All') + (qty > 1 ? chip('unit','1\u00d7') : '') + chip('2','\u00bd') + chip('3','\u2153') + chip('4','\u00bc') + '</div>'
+                     +     '<input type="number" class="split-amt" inputmode="numeric" value="' + (sel || '') + '" placeholder="\u20b90" oninput="window.editLineAmount(\'' + safe + '\', this.value)">'
+                     +   '</div>'
+                     + '</div>';
             }
-            list.innerHTML = html || "<p style='opacity:0.5; font-size:0.9rem; text-align:center;'>Everything on this table is paid for.</p>";
+            document.getElementById('split-item-list').innerHTML = html || "<p style='opacity:0.5; font-size:0.9rem; text-align:center;'>Everything on this table is paid for.</p>";
 
-            const selTotal = splitSelTotal();
+            if (!skipOtherField) document.getElementById('split-other').value = window.splitOther || '';
+            const share = Math.round((splitSelTotal() + (parseFloat(window.splitOther) || 0)) * 100) / 100;
+            document.getElementById('split-share-total').innerText = Math.round(share);
+            const btnU = document.getElementById('split-pay-upi'), btnC = document.getElementById('split-pay-cash');
+            const ok = share > 0;
+            [btnU, btnC].forEach(b => { if (b){ b.disabled = !ok; b.style.opacity = ok ? '1' : '0.4'; } });
             const note = document.getElementById('split-alloc-note');
-            if (!skipAmountField && !window.splitAmountEdited){
-                document.getElementById('partial-pay-amount').value = selTotal > 0 ? selTotal : (remaining || '');
-            }
-            if (selTotal > 0){
-                const names = Object.keys(window.splitSel).map(n => fmtQty(window.splitSel[n]) + ' \u00d7 ' + n).join(', ');
-                note.innerHTML = 'Covers: ' + escapeHTML(names);
-            } else if (window.splitAmountEdited){
-                note.innerText = 'Amount only \u2014 no items will be marked paid.';
-            } else {
-                note.innerText = '';
-            }
+            const names = Object.keys(window.splitSel);
+            if (names.length) note.innerHTML = 'Covers: ' + escapeHTML(names.map(n => n + ' \u20b9' + Math.round(window.splitSel[n])).join(', '));
+            else if (share > 0) note.innerText = 'Not tied to any item \u2014 nothing will be marked paid.';
+            else note.innerText = '';
         }
 
-        window.calculateSplit = function(ways) {
-            const t = window.activeTables[window.checkoutTableID];
-            const remaining = (parseFloat(t.total) || 0) - (parseFloat(t.paid) || 0);
-            window.splitSel = {}; window.splitAmountEdited = true;
-            document.getElementById('partial-pay-amount').value = Math.ceil(remaining / ways);
-            renderSplit(true);
-        };
-        window.calculateSplitByHead = function(){
-            const t = window.activeTables[window.checkoutTableID];
-            const heads = parseInt((t.shares && t.shares.count) || 0);
-            if (heads < 1) return alert('Set how many people are paying separately first.');
-            const done = parseInt((t.shares && t.shares.paid) || 0);
-            const left = Math.max(1, heads - done);
-            const remaining = (parseFloat(t.total) || 0) - (parseFloat(t.paid) || 0);
-            window.splitSel = {}; window.splitAmountEdited = true;
-            document.getElementById('partial-pay-amount').value = Math.ceil(remaining / left);
-            renderSplit(true);
-        };
-
         window.processSplit = function(method) {
-            let amount = parseFloat(document.getElementById('partial-pay-amount').value);
-            const t = window.activeTables[window.checkoutTableID];
-            const remaining = (parseFloat(t.total) || 0) - (parseFloat(t.paid) || 0);
-            if (isNaN(amount) || amount <= 0) return;
-            if (amount > remaining) amount = remaining;
-            // hand the item allocation to the settlement step; it applies only when the money lands
+            const t = window.activeTables[window.checkoutTableID]; if (!t) return;
+            let amount = Math.round((splitSelTotal() + (parseFloat(window.splitOther) || 0)) * 100) / 100;
+            const due = tableDue(t);
+            if (!(amount > 0)) return;
+            if (amount > due) amount = due;
             window.pendingSplitAlloc = Object.keys(window.splitSel).length ? JSON.parse(JSON.stringify(window.splitSel)) : null;
             if (method === 'upi') window.payWithUPI(amount); else window.payWithCash(amount);
         };
@@ -2106,13 +2135,16 @@
                 if (alloc){
                     for (const nm in alloc){
                         const it = t.items[nm]; if (!it) continue;
-                        it.paidQty = Math.min(parseFloat(it.qty) || 0, (parseFloat(it.paidQty) || 0) + (parseFloat(alloc[nm]) || 0));
-                        db.ref('pos/activeTables/' + tableID + '/items/' + nm + '/paidQty').set(it.paidQty);
+                        const cap = lineTotal(it);
+                        let pa = Math.min(cap, linePaid(it) + (parseFloat(alloc[nm]) || 0));
+                        if (cap - pa < LINE_EPS) pa = cap;      // rounding must never strand a line
+                        it.paidAmt = Math.round(pa * 100) / 100;
+                        db.ref('pos/activeTables/' + tableID + '/items/' + nm + '/paidAmt').set(it.paidAmt);
                     }
                 }
             }
             window.pendingSplitAlloc = null;
-            window.splitSel = {};
+            window.splitSel = {}; window.splitOther = 0;
         }
 
         window.payWithCash = function(customAmount = null) {
