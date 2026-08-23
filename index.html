@@ -55,7 +55,7 @@
         .cart-clear { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: calc(12px + env(safe-area-inset-top)) 0 calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
                 /* ============================================================
            MODAL CARD — seamless brand surface with depth
@@ -68,7 +68,9 @@
             border: 1px solid rgba(255,255,255,0.22);
             box-shadow: 0 32px 80px rgba(0,0,0,0.55), 0 12px 32px rgba(0,0,0,0.40), 0 2px 8px rgba(0,0,0,0.30);
             padding: 24px 22px; border-radius: 14px; text-align: center;
-            width: 85%; max-width: 400px; max-height: 88vh; overflow-y: auto;
+            width: 90%; max-width: 400px; overflow-y: auto;
+            max-height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
         }
         .modal-content h3 { margin: 0 0 18px; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1.5px; }
         
