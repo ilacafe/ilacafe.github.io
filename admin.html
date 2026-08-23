@@ -265,6 +265,19 @@
         </div>
 
 <div class="admin-card">
+            <h2>Add-ons</h2>
+            <p class="rec-note">Extras the POS can attach to any item in a category &mdash; extra cheese on a pizza, oat milk on a coffee. They are <em>not</em> menu items, so they don't lengthen the menu, and staff add them by tapping the line in the cart rather than hunting for a separate item. Each one is counted separately in reporting.</p>
+            <div class="row-group" style="margin-bottom: 12px;">
+                <div class="form-group" style="flex: 1.2; margin: 0;"><input type="text" id="addon-cat" placeholder="Category (exactly as on the menu)"></div>
+                <div class="form-group" style="flex: 1.2; margin: 0;"><input type="text" id="addon-name" placeholder="Add-on name"></div>
+                <div class="form-group" style="flex: 0.8; margin: 0;"><input type="number" id="addon-price" placeholder="₹"></div>
+                <button class="btn btn-secondary" style="flex: 0.6;" onclick="addonAdd()">Add</button>
+            </div>
+            <div id="addon-list"><p style="opacity:0.5; font-size:0.9rem;">Loading...</p></div>
+            <div id="addon-counts" style="margin-top:18px;"></div>
+        </div>
+
+<div class="admin-card">
             <h2>Category Order</h2>
             <div id="category-order-container"><p style="opacity: 0.5; font-size: 0.9rem;">Loading...</p></div>
         </div>
@@ -416,7 +429,7 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        const ILA_BUILD = '2026-08-12.2';   // shown at the foot of the page, so a cached build is obvious
+        const ILA_BUILD = '2026-08-12.3';   // shown at the foot of the page, so a cached build is obvious
 
         const auth = firebase.auth();
         window.currentAdmin = { uid: null, name: null };
@@ -512,6 +525,7 @@
         loadRefunds();
         loadETAAccuracy();
         loadRepeatCustomers();
+        loadAddons();
         }
 
         let isCafeOpen = true; let currentMenuData = {}; let currentCategoryOrder = []; let currentItemOrder = {};
@@ -853,6 +867,65 @@
             if (!confirm('Un-verify this payment? It returns to Needs Review and its tick reverts in the POS. Use this if it was marked verified by mistake.')) return;
             db.ref('upiReview/' + payId).remove();   // removes the admin verification; bank-state (if any) still governs
         };
+
+        // ===== ADD-ONS =====
+        // settings/addons/<category> = [{name, price}] — read by the POS to offer extras on a
+        // cart line. Kept out of the menu so it stays short.
+        let addonCfg = {};
+        function loadAddons(){
+            db.ref('settings/addons').on('value', s => { addonCfg = s.val() || {}; renderAddonCfg(); });
+            db.ref('orders/history').limitToLast(300).once('value', s => renderAddonCounts(s.val() || {}));
+        }
+        function renderAddonCfg(){
+            const box = document.getElementById('addon-list'); if (!box) return;
+            const cats = Object.keys(addonCfg).filter(c => (addonCfg[c] || []).length);
+            if (!cats.length){ box.innerHTML = "<p style='opacity:0.5; font-size:0.9rem;'>No add-ons yet. The category must match a menu category exactly.</p>"; return; }
+            box.innerHTML = cats.map(c => {
+                const rows = (addonCfg[c] || []).map((a, i) =>
+                    `<div class="list-item"><div class="item-details"><span class="item-name">${escapeHTML(a.name)}</span>`
+                    + `<div class="item-meta">${(parseFloat(a.price) || 0) ? '+₹' + Math.round(a.price) : 'free'}</div></div>`
+                    + `<button class="btn-action" style="border-color:rgba(255,255,255,0.2);" onclick="addonRemove('${escapeHTML(c).replace(/'/g,"\\'")}', ${i})">✖</button></div>`
+                ).join('');
+                return `<div class="category-block"><div class="category-title">${escapeHTML(c)}</div>${rows}</div>`;
+            }).join('');
+        }
+        window.addonAdd = function(){
+            const cat = document.getElementById('addon-cat').value.trim();
+            const name = document.getElementById('addon-name').value.trim();
+            const price = parseFloat(document.getElementById('addon-price').value) || 0;
+            if (!cat || !name) return alert('Category and add-on name are both required.');
+            const list = (addonCfg[cat] || []).slice();
+            if (list.some(a => a.name === name)) return alert('That add-on already exists in this category.');
+            list.push({ name: name, price: price });
+            db.ref('settings/addons/' + cat).set(list);
+            document.getElementById('addon-name').value = ''; document.getElementById('addon-price').value = '';
+        };
+        window.addonRemove = function(cat, idx){
+            const list = (addonCfg[cat] || []).slice();
+            if (!list[idx]) return;
+            if (!confirm('Remove "' + list[idx].name + '" from ' + cat + '? Orders already placed keep it.')) return;
+            list.splice(idx, 1);
+            db.ref('settings/addons/' + cat).set(list.length ? list : null);
+        };
+        // Counted from the mods array the POS writes onto each line, so an add-on stays a
+        // countable thing rather than being buried in the item name.
+        function renderAddonCounts(hist){
+            const box = document.getElementById('addon-counts'); if (!box) return;
+            const tally = {};
+            for (const k in hist){
+                const o = hist[k]; if (!o || !o.items) continue;
+                for (const nm in o.items){
+                    const it = o.items[nm]; const qty = parseInt(it.qty) || 0;
+                    (it.mods || []).forEach(m => { tally[m] = (tally[m] || 0) + qty; });
+                }
+            }
+            const rows = Object.keys(tally).sort((a,b) => tally[b] - tally[a]);
+            if (!rows.length){ box.innerHTML = "<p class='rec-note'>No add-ons sold yet — counts appear here once orders carry them.</p>"; return; }
+            box.innerHTML = '<div class="section-sub" style="font-size:0.64rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.55; margin-bottom:6px;">Sold (last 300 orders)</div>'
+                + '<table class="rec-table"><tbody>'
+                + rows.map(r => `<tr><td>${escapeHTML(r)}</td><td class="num">${tally[r]}</td></tr>`).join('')
+                + '</tbody></table>';
+        }
 
         // ===== KITCHEN ACCURACY =====
         // dispatchToKitchen stamps predLow/predHigh/predPoint onto orders/track; the kitchen
