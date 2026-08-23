@@ -58,14 +58,18 @@
            point. Every category is visible and one tap away.
            top: uses the safe-area inset because the status bar is translucent: at top:0 the strip
            slid under the clock and network icons on a notched iPhone. */
-        .cat-strip { position: sticky; top: env(safe-area-inset-top); z-index: 900; display: flex; flex-wrap: wrap; gap: 6px;
-                     padding: 9px 0 10px; margin-bottom: 4px; background: var(--brand-bg);
-                     box-shadow: 0 8px 12px -8px rgba(0,0,0,0.45); }
+        /* Navigation, not a second set of headings. The section h2s already name the categories,
+           so this recedes: no pill outlines, no drop shadow competing with the h2's own rule —
+           just quiet labels, with the one you are currently in lit up. */
+        .cat-strip { position: sticky; top: env(safe-area-inset-top); z-index: 900; display: flex; flex-wrap: wrap;
+                     gap: 2px 4px; padding: 8px 0; margin-bottom: 2px; background: var(--brand-bg);
+                     border-bottom: 1px solid rgba(255,255,255,0.14); }
         .cat-strip:empty { display: none; }
-        .cat-chip { flex: 0 1 auto; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: var(--brand-text);
-                    border-radius: 20px; padding: 6px 12px; font-family: 'Quicksand', sans-serif; font-size: 0.72rem; font-weight: 700;
-                    text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
-        .cat-chip:active, .cat-chip.active { background: var(--brand-text); color: var(--brand-bg); border-color: var(--brand-text); }
+        .cat-chip { flex: 0 1 auto; background: transparent; border: none; color: var(--brand-text); opacity: 0.45;
+                    border-radius: 4px; padding: 5px 8px; font-family: 'Quicksand', sans-serif; font-size: 0.7rem; font-weight: 700;
+                    text-transform: uppercase; letter-spacing: 1px; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
+        .cat-chip.active { opacity: 1; }
+        .cat-chip:active { opacity: 1; }
         h2[id^="cat-"] { scroll-margin-top: calc(64px + env(safe-area-inset-top)); }
 
         /* The web view runs under the translucent status bar, so page content scrolls up behind
@@ -1900,18 +1904,37 @@
             });
             const strip = document.getElementById('cat-strip');
             if (strip) strip.innerHTML = catOrder.length > 1
-                ? catOrder.map(c => `<button class="cat-chip" onclick="window.jumpToCategory('${c.id}')">${escapeHTML(c.name)}</button>`).join('')
+                ? catOrder.map(c => `<button class="cat-chip" data-cat="${c.id}" onclick="window.jumpToCategory('${c.id}')">${escapeHTML(c.name)}</button>`).join('')
                 : '';
+            try { if (window.posSpy) window.posSpy(); } catch(e){}
             window.renderInlineControls();
         }
 
         window.jumpToCategory = function(id){
             const el = document.getElementById(id); if (!el) return;
             el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
-            const chip = Array.from(document.querySelectorAll('.cat-chip')).find(c => (c.getAttribute('onclick') || '').includes("'" + id + "'"));
-            if (chip) chip.classList.add('active');
+            setActiveChip(id);
         };
+        function setActiveChip(id){
+            document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-cat') === id));
+        }
+        // Scroll-spy: light up whichever section you're actually in, so the strip is a position
+        // indicator rather than a decorative repeat of the headings below it.
+        (function(){
+            let ticking = false;
+            function spy(){
+                ticking = false;
+                const heads = document.querySelectorAll('h2[id^="cat-"]');
+                if (!heads.length) return;
+                const line = 90 + (parseInt(getComputedStyle(document.body).paddingTop) || 0);
+                let current = heads[0].id;
+                heads.forEach(h => { if (h.getBoundingClientRect().top <= line) current = h.id; });
+                setActiveChip(current);
+            }
+            window.addEventListener('scroll', () => { if (!ticking){ ticking = true; requestAnimationFrame(spy); } }, { passive: true });
+            window.addEventListener('resize', spy);
+            window.posSpy = spy;
+        })();
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
