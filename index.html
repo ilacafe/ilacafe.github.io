@@ -26,7 +26,7 @@
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 30px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
-        .item-name { flex-grow: 1; display: flex; align-items: center; flex-wrap: wrap; padding-right: 5px;}
+        .item-name { flex-grow: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; padding-right: 5px;}
         
         .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
@@ -45,12 +45,13 @@
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
+        .footer-divider { opacity: 0.4; }
         .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.85rem; opacity: 0.7; }
         .contact-link { color: var(--brand-text); text-decoration: none; }
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; cursor: pointer;}
         #cart-banner.visible { transform: translateY(0); }
-        .cart-info { display: flex; flex-direction: column; flex-grow: 1;}
+        .cart-info { display: flex; flex-direction: column; flex-grow: 1; min-width: 0;}
         .cart-total { font-weight: 700; font-size: 1.1rem; }
         .cart-clear { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
@@ -80,15 +81,15 @@
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         
         .type-row { display: flex; gap: 8px; margin-top: 8px; justify-content: center; }
-        .type-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 10px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1; }
+        .type-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 8px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1 1 0; min-width: 0; white-space: nowrap; }
         .type-btn.selected { background: white; color: var(--brand-bg); border-color: white; }
         .type-btn.hidden { display: none; }
 
-        .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1;}
+        .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1 1 0; min-width: 0;}
         .choice-btn.selected { background: white; color: var(--brand-bg); border-color: white;}
         
         .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
-        .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1; border: none; text-transform: uppercase; letter-spacing: 1px;}
+        .btn { padding: 12px 15px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1 1 0; min-width: 0; border: none; text-transform: uppercase; letter-spacing: 1px;}
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
         .btn-link { display: block; width: 100%; box-sizing: border-box; text-decoration: none; text-align: center; }
@@ -300,7 +301,7 @@
         const db = firebase.database();
         // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
         // page being served is cached, not the one just pushed.
-        const ILA_BUILD = '2026-08-10.1';
+        const ILA_BUILD = '2026-08-12.2';
 
         // Register the shared service worker (push + instant-open caching).
         // A cache-first service worker serves the PREVIOUS build until it decides to update,
