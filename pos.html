@@ -283,6 +283,13 @@
         .item-remove-x { color: rgba(255,255,255,0.5); font-weight: normal; font-size: 1.2rem; cursor: pointer; padding: 5px 12px 5px 0; }
         
         #qr-image { width: 150px; height: 150px; margin: 15px auto; border-radius: 8px; display: block; background: white; padding: 5px; }
+        /* Stands in for the code until one for the CURRENT amount has actually loaded. A code is
+           money: showing a stale one is worse than showing none. */
+        .qr-wait { width: 160px; height: 160px; margin: 15px auto; border-radius: 8px; display: none;
+                   align-items: center; justify-content: center; text-align: center; padding: 12px;
+                   box-sizing: border-box; border: 1px dashed rgba(255,255,255,0.35);
+                   font-size: 0.8rem; opacity: 0.75; line-height: 1.4; cursor: default; }
+        .qr-wait.qr-err { border-color: rgba(255,150,150,0.6); color: #ffb3b3; opacity: 1; cursor: pointer; }
 
         /* NO inner scroller. This sits inside .modal-content, which already scrolls — nesting two
            scroll areas on iOS traps the touch between them. The modal is the single scroller. */
@@ -557,6 +564,7 @@
                 <button class="tip-btn tip-clear" id="upi-tip-clear" style="display:none;" onclick="window.setTip(0)">✖</button>
             </div>
             <img id="qr-image" src="" alt="QR">
+            <div id="qr-wait" class="qr-wait">Preparing code…</div>
             <div id="upi-status" class="upi-status"></div>
 
             <!-- This screen is handed to the customer, so nothing on it may settle a bill.
@@ -997,7 +1005,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-12.3';
+        const ILA_BUILD = '2026-08-12.4';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -2705,6 +2713,46 @@
         // one amount on one QR: the bank credit is matched to the ledger entry to within 50 paise
         // in four places, so a tip the customer adds freehand on top of a fixed-amount QR would
         // silently stop that payment ever auto-verifying.
+        // The QR is fetched from quickchart.io. Assigning .src does NOT clear the image already
+        // on screen — the browser keeps showing the previous bitmap until the new one arrives, and
+        // forever if the request fails. On a patchy connection that means the PREVIOUS TABLE'S
+        // code stays up while the amount beside it reads the new total. A customer scanned that
+        // and paid the wrong table's bill.
+        // So: blank it the instant the amount changes, load into a detached image, and only put a
+        // code on screen once it has loaded AND is still the current one.
+        let qrToken = 0;
+        function showQR(url){
+            const img = document.getElementById('qr-image');
+            const wait = document.getElementById('qr-wait');
+            const token = ++qrToken;
+            img.removeAttribute('src');
+            img.style.display = 'none';
+            wait.style.display = 'flex';
+            wait.classList.remove('qr-err');
+            wait.onclick = null;
+            if (navigator.onLine === false){
+                wait.textContent = 'No connection — code unavailable. Take cash, or use the UPI ID.';
+                wait.classList.add('qr-err');
+                wait.onclick = function(){ showQR(url); };
+                return;
+            }
+            wait.textContent = 'Preparing code…';
+            const pre = new Image();
+            pre.onload = function(){
+                if (token !== qrToken) return;      // a newer amount superseded this one
+                img.src = url;
+                img.style.display = 'block';
+                wait.style.display = 'none';
+            };
+            pre.onerror = function(){
+                if (token !== qrToken) return;
+                wait.textContent = 'Code didn\u2019t load — tap to retry';
+                wait.classList.add('qr-err');
+                wait.onclick = function(){ showQR(url); };
+            };
+            pre.src = url;
+        }
+
         window.renderUPIQR = function(){
             const base = parseFloat(window.upiBaseAmount) || 0;
             const tip = parseFloat(window.pendingTip) || 0;
@@ -2712,7 +2760,7 @@
             window.pendingUPIAmount = total;
             const vpa = window.tableUPIVPA[window.checkoutTableID] || window.getRandomUPI();
             const upiString = `upi://pay?pa=${vpa}&pn=ILA&am=${total}&cu=INR`;
-            document.getElementById('qr-image').src = `https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`;
+            showQR(`https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`);
             document.getElementById('upi-amount-text').innerText = `₹${total}`;
             const line = document.getElementById('upi-tip-line');
             const clr = document.getElementById('upi-tip-clear');
@@ -2881,6 +2929,7 @@
             tableData._lastPay = info ? Object.assign({ payId: payId }, info) : { payId: payId, ref: null };
             window.pendingTip = 0;   // consumed
             applySplitAllocation(tableID);
+            clearQR();
             if (tableData.paid >= total){
                 archivePOSTable(tableID, tableData, "UPI");
                 delete window.tableUPIVPA[tableID];
@@ -2890,7 +2939,18 @@
                 syncToCloud(tableID); closeModal('upi-modal'); window.openCheckout(tableID);
             }
         }
-        window.cancelUPI = function(){ stopUPIWatch(); window.upiSettling = false; window.pendingTip = 0; setUPIStatus(null); closeModal('upi-modal'); };
+        window.cancelUPI = function(){
+            stopUPIWatch(); window.upiSettling = false; window.pendingTip = 0; setUPIStatus(null);
+            clearQR();                     // so the next table can never inherit this code
+            closeModal('upi-modal');
+        };
+        function clearQR(){
+            qrToken++;                     // invalidates any load still in flight
+            const img = document.getElementById('qr-image');
+            const wait = document.getElementById('qr-wait');
+            if (img){ img.removeAttribute('src'); img.style.display = 'none'; }
+            if (wait){ wait.style.display = 'none'; wait.classList.remove('qr-err'); wait.onclick = null; }
+        }
         // Manual fallback: claim a matching credit if one is already in, otherwise
         // settle as an un-verified manual confirm (the cashier is vouching for it).
         window.confirmUPIPayment = function(){
