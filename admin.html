@@ -26,7 +26,8 @@
         #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
-        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; padding-bottom: 80px; }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; line-height: 1.6; padding: env(safe-area-inset-top) 0 calc(80px + env(safe-area-inset-bottom)); }
+        body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--brand-bg); z-index: 950; pointer-events: none; }
         .container { width: 90%; max-width: 800px; margin: 0 auto; padding: 20px; }
         
         header { text-align: center; margin-bottom: 30px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 20px; }
@@ -114,7 +115,19 @@
         .rec-kpi.bad { border-color: rgba(244,67,54,0.55); background: rgba(244,67,54,0.10); }
         .rec-kpi.warn { border-color: rgba(255,193,7,0.45); }
         .rec-kpi.good { border-color: rgba(76,175,80,0.45); }
-        .rec-scroll { overflow-x: auto; margin-top: 6px; }
+        .rec-scroll { overflow-x: auto; margin-top: 6px; -webkit-overflow-scrolling: touch; }
+        /* On a phone a 4-column table can't be read sideways. Collapse each row into a stacked
+           card instead of hiding columns off the right edge. */
+        @media (max-width: 560px) {
+            .rec-scroll { overflow-x: visible; }
+            .rec-table, .rec-table tbody, .rec-table tr, .rec-table td { display: block; width: 100%; }
+            .rec-table thead { display: none; }
+            .rec-table tr { border-bottom: 1px solid rgba(255,255,255,0.12); padding: 10px 0; }
+            .rec-table tr:last-child { border-bottom: none; }
+            .rec-table td { border: none; padding: 2px 0; }
+            .rec-table td.num, .rec-table th.num { text-align: left; }
+            .rec-table td:first-child { font-weight: 700; }
+        }
         .rec-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
         .rec-table th { text-align: left; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.55; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.15); white-space: nowrap; }
         .rec-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
@@ -718,10 +731,14 @@
         // resolved without a credit). Admin can mark-verified or ignore unverified ones.
         // State written to a dedicated upiReview node keyed by payId — never mutates the
         // ledger entry itself, so the live cash-up record and its own reconciler are untouched.
-        let uvLedger = {}, uvReview = {}, uvTab = 'review';
+        let uvLedger = {}, uvReview = {}, uvCarry = {}, uvTab = 'review';
         function loadUPIVerification(){
             db.ref('pos/ledgerEntries').on('value', s => { uvLedger = s.val() || {}; renderUPIVerification(); });
             db.ref('upiReview').on('value', s => { uvReview = s.val() || {}; renderUPIVerification(); });
+            // Payments parked at EOD while still unverified. Without this they disappear from
+            // review the moment the day closes — which is exactly when the last bills of the
+            // night are still waiting on a bank email.
+            db.ref('pos/unverified').on('value', s => { uvCarry = s.val() || {}; renderUPIVerification(); });
         }
         window.uvSetTab = function(t){ uvTab = t; renderUPIVerification(); };
         function uvClassify(){
@@ -733,6 +750,12 @@
                 const payId = e.payId || k;
                 const rv = uvReview[payId] || null;
                 rows.push({ payId, amount: parseFloat(e.amount)||0, reason: e.reason||'', date: e.date||'', ts: e.ts||0, ref: e.ref||null, bankTag: e.bankTag||null, ledgerState: e.state||'unverified', reviewState: rv && rv.state, note: rv && rv.note });
+            }
+            for (const payId in uvCarry){
+                const c = uvCarry[payId]; if (!c) continue;
+                if (rows.some(r => r.payId === payId)) continue;      // still in the live ledger
+                const rv = uvReview[payId] || null;
+                rows.push({ payId, amount: parseFloat(c.amount)||0, reason: c.reason||'', date: '', ts: c.ts||0, ref: c.ref||null, bankTag: c.bankTag||null, ledgerState: c.state||'unverified', reviewState: rv && rv.state, note: rv && rv.note, carried: c.day || true });
             }
             rows.sort((a,b)=> b.ts - a.ts);
             for (const r of rows){
@@ -793,9 +816,10 @@
                 }
                 const lbl = labelFor(r.bankTag);
                 const acct = lbl ? '<span style="opacity:0.6;"> · '+escapeHTML(lbl)+'</span>' : '';
+                const carried = r.carried ? '<span style="margin-left:8px; padding:2px 7px; border-radius:5px; font-size:0.65rem; font-weight:bold; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.22);">carried over'+(typeof r.carried === 'string' ? ' \u00b7 '+escapeHTML(r.carried) : '')+'</span>' : '';
                 html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">'
                       +   '<div style="min-width:0; flex:1;">'
-                      +     '<div style="font-weight:600;">'+inr(r.amount)+acct+'</div>'
+                      +     '<div style="font-weight:600;">'+inr(r.amount)+acct+carried+'</div>'
                       +     '<div style="font-size:0.78rem; opacity:0.6; margin-top:2px;">'+escapeHTML(fmt(r.ts))+' · '+escapeHTML(r.reason)+'</div>'
                       +     (r.note ? '<div style="font-size:0.75rem; opacity:0.55; margin-top:3px;">note: '+escapeHTML(r.note)+'</div>' : '')
                       +   '</div>'
