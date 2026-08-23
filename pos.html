@@ -117,6 +117,8 @@
         .qty-btn:active { background: white; color: var(--brand-bg); }
         .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
 
+        /* Marks a row whose + opens options rather than adding straight away. */
+        .opt-mark { display: inline-block; margin-left: 6px; font-size: 0.7rem; opacity: 0.4; vertical-align: middle; }
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; }
@@ -367,15 +369,11 @@
     <div id="remark-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="remark-item-title">Item</h3>
-            <div style="text-align: left; width: 100%; margin: 15px auto;">
-                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Preferences</label>
+            <div style="text-align: left; width: 100%; margin: 15px auto 8px;">
+                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Tap one to add</label>
                 <div class="choice-grid" id="pos-sweetness-grid"></div>
             </div>
-            <div class="modal-buttons">
-                <button class="btn btn-secondary" onclick="closeModal('remark-modal')">Cancel</button>
-                <button class="btn btn-primary" onclick="confirmAddItem()">Add</button>
-            </div>
-            <button class="close-modal" onclick="closeModal('remark-modal')">✖ CLOSE</button>
+            <button class="close-modal" onclick="closeModal('remark-modal')">✖ CANCEL</button>
         </div>
     </div>
 
@@ -1676,41 +1674,19 @@
             });
         };
 
-        // Most coffees go out at the default sweetness, so the modal was a tax on every one of
-        // them. Tap = add the default. Hold = choose. Items with no options are unaffected.
+        // NO long-press. It saved about one tap, and a deliberate-but-slow press crossing the
+        // threshold silently added the default with no modal to correct it — a wrong sweetness
+        // with no way to notice. Speed comes from the modal instead: the sweetness buttons add
+        // and close, so EVERY choice is two taps, not just the default one.
         (function bindMenuAdds(){
-            const HOLD_MS = 450;
-            let timer = null, fired = false, held = null;
-            function info(btn){
-                return { name: btn.getAttribute('data-add'),
-                         price: parseFloat(btn.getAttribute('data-price')) || 0,
-                         sweet: btn.getAttribute('data-sweet') === 'true' };
-            }
-            function start(e){
+            document.addEventListener('click', function(e){
                 const btn = e.target.closest('[data-add]'); if (!btn) return;
-                held = btn; fired = false;
-                const d = info(btn);
-                if (!d.sweet) return;                      // nothing to hold for
-                timer = setTimeout(() => {
-                    fired = true;
-                    if (navigator.vibrate) navigator.vibrate(20);
-                    window.promptRemark(d.name, d.price, true);
-                }, HOLD_MS);
-            }
-            function cancel(){ if (timer){ clearTimeout(timer); timer = null; } }
-            function tap(e){
-                const btn = e.target.closest('[data-add]'); if (!btn) return;
-                cancel();
-                if (fired){ fired = false; return; }        // the hold already handled it
-                const d = info(btn);
-                window.addDefault(d.name, d.price, d.sweet);
-            }
-            document.addEventListener('touchstart', start, { passive: true });
-            document.addEventListener('touchend', cancel);
-            document.addEventListener('touchmove', cancel, { passive: true });
-            document.addEventListener('mousedown', start);
-            document.addEventListener('mouseup', cancel);
-            document.addEventListener('click', tap);
+                const name = btn.getAttribute('data-add');
+                const price = parseFloat(btn.getAttribute('data-price')) || 0;
+                const sweet = btn.getAttribute('data-sweet') === 'true';
+                if (sweet) window.promptRemark(name, price, true);
+                else window.addDefault(name, price, false);
+            });
         })();
 
         // Adds straight to the cart at the default modifier, skipping the modal.
@@ -1885,7 +1861,8 @@
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) {
-                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
+                        const optMark = item.requiresSweetness ? '<span class="opt-mark" title="has options">\u2022</span>' : '';
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}${optMark}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
                     } else {
                         catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
                     }
@@ -1903,7 +1880,8 @@
                             if(item.priceReg) regHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '<div style="width:100%; text-align:right;">-</div>';
                             if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
                         }
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
+                        const optMarkS = item.requiresSweetness ? '<span class="opt-mark" title="has options">\u2022</span>' : '';
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}${optMarkS}</span>${regHTML}${lrgHTML}</div>`;
                     });
                 }
                 catHTML += `</section>`;
@@ -1962,12 +1940,14 @@
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
+        // Choosing IS confirming — one tap per choice instead of choose-then-Add.
         window.selectSweetness = function(val, price, btn) {
             window.currentModifierName = val;
             window.currentModifierPrice = price;
             let siblings = btn.parentNode.children;
             for(let s of siblings) s.classList.remove('selected');
             btn.classList.add('selected');
+            window.confirmAddItem();
         };
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
@@ -1991,8 +1971,9 @@
                 let label = mod.price > 0 ? `${mod.name} (+₹${mod.price})` : mod.name;
                 btn.innerText = label;
                 btn.onclick = function() { window.selectSweetness(mod.name, mod.price, this); };
-                if(index === 0) { 
-                    btn.classList.add('selected'); 
+                // Nothing pre-selected: with tap-to-add there is no pending state to show, and a
+                // highlighted option would imply an Add button that no longer exists.
+                if(index === 0) {
                     window.currentModifierName = mod.name;
                     window.currentModifierPrice = mod.price;
                 }
