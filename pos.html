@@ -62,7 +62,7 @@
            so this recedes: no pill outlines, no drop shadow competing with the h2's own rule —
            just quiet labels, with the one you are currently in lit up. */
         .cat-strip { position: sticky; top: env(safe-area-inset-top); z-index: 900; display: flex; flex-wrap: wrap;
-                     gap: 2px 4px; padding: 8px 0; margin-bottom: 2px; background: var(--brand-bg);
+                     justify-content: center; gap: 2px 4px; padding: 8px 0; margin-bottom: 2px; background: var(--brand-bg);
                      border-bottom: 1px solid rgba(255,255,255,0.14); }
         .cat-strip:empty { display: none; }
         .cat-chip { flex: 0 1 auto; background: transparent; border: none; color: var(--brand-text); opacity: 0.45;
@@ -70,7 +70,7 @@
                     text-transform: uppercase; letter-spacing: 1px; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
         .cat-chip.active { opacity: 1; }
         .cat-chip:active { opacity: 1; }
-        h2[id^="cat-"] { scroll-margin-top: calc(64px + env(safe-area-inset-top)); }
+        h2[id^="cat-"] { scroll-margin-top: 72px; }   /* replaced at runtime with the strip's real height */
 
         /* The web view runs under the translucent status bar, so page content scrolls up behind
            the clock. This keeps that strip solid brown instead. */
@@ -1906,35 +1906,52 @@
             if (strip) strip.innerHTML = catOrder.length > 1
                 ? catOrder.map(c => `<button class="cat-chip" data-cat="${c.id}" onclick="window.jumpToCategory('${c.id}')">${escapeHTML(c.name)}</button>`).join('')
                 : '';
-            try { if (window.posSpy) window.posSpy(); } catch(e){}
+            try { syncCatOffsets(); if (window.posSpy) window.posSpy(); } catch(e){}
             window.renderInlineControls();
         }
 
-        window.jumpToCategory = function(id){
-            const el = document.getElementById(id); if (!el) return;
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            setActiveChip(id);
-        };
         function setActiveChip(id){
             document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-cat') === id));
         }
-        // Scroll-spy: light up whichever section you're actually in, so the strip is a position
-        // indicator rather than a decorative repeat of the headings below it.
+        // The line the spy measures against, and the offset the jump lands on, must be the SAME
+        // number or the two disagree. Both come from the strip's real height, which changes when
+        // the chips wrap to a second row.
+        function catStripOffset(){
+            const strip = document.getElementById('cat-strip');
+            const inset = parseInt(getComputedStyle(document.body).paddingTop) || 0;
+            return inset + (strip && strip.offsetHeight ? strip.offsetHeight : 40) + 8;
+        }
         (function(){
-            let ticking = false;
+            let ticking = false, lockUntil = 0;
             function spy(){
                 ticking = false;
-                const heads = document.querySelectorAll('h2[id^="cat-"]');
+                if (Date.now() < lockUntil) return;   // a smooth scroll is in flight; don't fight it
+                const heads = Array.prototype.slice.call(document.querySelectorAll('h2[id^="cat-"]'));
                 if (!heads.length) return;
-                const line = 90 + (parseInt(getComputedStyle(document.body).paddingTop) || 0);
+                // At the bottom of the page the last heading never reaches the line, so it could
+                // never be highlighted — tapping the last category lit up the wrong one.
+                const atBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 4);
+                if (atBottom){ setActiveChip(heads[heads.length - 1].id); return; }
+                const line = catStripOffset();
                 let current = heads[0].id;
                 heads.forEach(h => { if (h.getBoundingClientRect().top <= line) current = h.id; });
                 setActiveChip(current);
             }
+            window.jumpToCategory = function(id){
+                const el = document.getElementById(id); if (!el) return;
+                setActiveChip(id);
+                lockUntil = Date.now() + 900;         // hold it while the animation runs
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            };
             window.addEventListener('scroll', () => { if (!ticking){ ticking = true; requestAnimationFrame(spy); } }, { passive: true });
-            window.addEventListener('resize', spy);
+            window.addEventListener('resize', () => { syncCatOffsets(); spy(); });
             window.posSpy = spy;
         })();
+        // Keep every heading's scroll target in step with the strip's current height.
+        function syncCatOffsets(){
+            const off = catStripOffset() + 'px';
+            document.querySelectorAll('h2[id^="cat-"]').forEach(h => { h.style.scrollMarginTop = off; });
+        }
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
