@@ -119,6 +119,12 @@
 
         /* Marks a row whose + opens options rather than adding straight away. */
         .opt-mark { display: inline-block; margin-left: 6px; font-size: 0.7rem; opacity: 0.4; vertical-align: middle; }
+        /* A cart line you can tap to attach add-ons. Looks like text, behaves like a button. */
+        .cart-name { flex: 1 1 0; min-width: 0; background: transparent; border: none; color: var(--brand-text);
+                     font-family: 'Quicksand', sans-serif; font-size: inherit; font-weight: inherit; text-align: left;
+                     padding: 4px 0; cursor: pointer; }
+        .cart-name .opt-mark { opacity: 0.55; font-weight: 700; }
+        .cart-name:active { opacity: 0.6; }
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; }
@@ -155,7 +161,9 @@
             padding: 24px 22px; border-radius: 14px; text-align: center;
             width: 90%; max-width: 400px; overflow-y: auto;
             /* leave room for the notch above and the home indicator below */
-            max-height: calc(100vh - 5vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            /* 100vh does NOT shrink when the iOS keyboard opens, so a fixed footer slid underneath
+               it and could not be scrolled to. --app-vh tracks the visible viewport instead. */
+            max-height: calc(var(--app-vh, 100vh) - 5vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
             -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
         }
         .modal-content h3 { margin: 0 0 18px; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1.5px; }
@@ -165,6 +173,12 @@
            crude alternative of letting the whole modal grow a mile long and pushing the buttons
            off the bottom. */
         .modal-content.modal-stack { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 14px; }
+        /* When the keyboard is up there isn't room for a fixed head AND foot, so the card would
+           clip its own footer with nothing to scroll. Below that height it becomes one scroller
+           again, which keeps CANCEL and the pay buttons reachable. */
+        body.short-viewport .modal-content.modal-stack { display: block; overflow-y: auto; }
+        body.short-viewport .modal-stack > .modal-scroll { overflow: visible; min-height: 0; }
+        body.short-viewport .modal-overlay { padding-top: calc(10px + env(safe-area-inset-top)); }
         .modal-stack > .modal-head, .modal-stack > .modal-foot { flex: 0 0 auto; }
         .modal-stack > .modal-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
         .modal-foot { border-top: 1px solid rgba(255,255,255,0.12); margin-top: 12px; padding-top: 6px; }
@@ -231,6 +245,10 @@
         .split-row:last-child { border-bottom: none; }
         .split-row .nm { flex: 1; min-width: 0; font-size: 0.9rem; }
         .split-row .sub { font-size: 0.72rem; opacity: 0.55; }
+        /* "÷ heads" needs ~66px of text and only gets 41-56px across four columns on a phone,
+           and .btn is nowrap so it spilled instead of wrapping. Two columns below 430px. */
+        .split-ops { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+
         .split-line { padding: 10px 0; border-bottom: 1px dashed rgba(255,255,255,0.18); }
         .split-line:last-child { border-bottom: none; }
         .split-line-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 7px; }
@@ -379,6 +397,16 @@
         </div>
     </div>
 
+    <div id="addon-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="addon-title">Add-ons</h3>
+            <div id="addon-sub" style="font-size:0.8rem; opacity:0.7; margin:-10px 0 14px;"></div>
+            <div class="choice-grid" id="addon-grid"></div>
+            <div id="addon-empty" style="display:none; opacity:0.55; font-size:0.9rem; padding:10px 0;">No add-ons set up for this category yet.</div>
+            <button class="close-modal" onclick="closeModal('addon-modal')">✖ DONE</button>
+        </div>
+    </div>
+
     <div id="table-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Send Order</h3>
@@ -483,7 +511,7 @@
                     </div>
                 </div>
 
-                <div class="modal-buttons" style="margin: 0 0 14px;">
+                <div class="split-ops">
                     <button class="btn btn-secondary" onclick="calculateSplit(2)">÷2</button>
                     <button class="btn btn-secondary" onclick="calculateSplit(3)">÷3</button>
                     <button class="btn btn-secondary" onclick="calculateSplit(4)">÷4</button>
@@ -969,7 +997,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-12.2';
+        const ILA_BUILD = '2026-08-12.3';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -1271,7 +1299,18 @@
         ];
 
         window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
-        window.cart = JSON.parse(localStorage.getItem('ila_pos_cart')) || {}; 
+        window.cart = JSON.parse(localStorage.getItem('ila_pos_cart')) || {};
+        // A cart saved by an older build has no base/cat/mods. Backfill so the add-on sheet and
+        // the table write don't trip over it.
+        try {
+            for (const k in window.cart){
+                const l = window.cart[k];
+                if (l.base == null) l.base = String(k).split(' (')[0];
+                if (l.mods == null) l.mods = [];
+                if (l.basePrice == null) l.basePrice = parseFloat(l.price) || 0;
+                if (l.opt == null) l.opt = '';
+            }
+        } catch(e){} 
         window.totalAmount = parseFloat(localStorage.getItem('ila_pos_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_pos_items')) || 0;
         
@@ -1300,7 +1339,10 @@
         window.currentModifierName = ""; window.currentModifierPrice = 0;
 
         window.itemRoutingMap = {};
-        window.coffeeItemsMap = {}; 
+        window.itemCategoryMap = {};     // item -> category, so a cart line knows which add-ons apply
+        window.coffeeItemsMap = {};
+        window.addonsByCategory = {};    // settings/addons/<category> = [{name, price}]
+        try { db.ref('settings/addons').on('value', s => { window.addonsByCategory = s.val() || {}; }); } catch(e){}
 
         db.ref('orders/ready').limitToLast(1).on('child_added', snap => {
             const data = snap.val();
@@ -1615,7 +1657,11 @@
             } else {
                 box.innerHTML = names.map(item => {
                     const safe = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    return `<div class="rail-row"><span class="nm">${escapeHTML(item)}</span>`
+                    const hasAddons = window.addonsForLine(item).length > 0;
+                    const nm = hasAddons
+                        ? `<button class="cart-name nm" onclick="window.openAddons('${safe}')">${escapeHTML(item)}<span class="opt-mark">+</span></button>`
+                        : `<span class="nm">${escapeHTML(item)}</span>`;
+                    return `<div class="rail-row">${nm}`
                          + `<span style="display:flex; align-items:center; flex-shrink:0;">`
                          + `<button class="mini-btn" onclick="window.modifyCartItem('${safe}', -1)">-</button>`
                          + `<span style="width:22px; text-align:center; font-weight:bold;">${window.cart[item].qty}</span>`
@@ -1693,17 +1739,15 @@
 
         // Adds straight to the cart at the default modifier, skipping the modal.
         window.addDefault = function(safeName, price, requiresSweetness){
-            let finalName = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
-            let finalPrice = parseFloat(price) || 0;
+            const base = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            let opt = '', basePrice = parseFloat(price) || 0;
             if (requiresSweetness){
                 const def = (window.defaultModifiers && window.defaultModifiers[0]) || { name: '', price: 0 };
-                if (def.name) finalName += ` (${def.name})`;
-                finalPrice += parseFloat(def.price) || 0;
+                opt = def.name || '';
+                basePrice += parseFloat(def.price) || 0;
             }
-            if (window.cart[finalName]) window.cart[finalName].qty += 1;
-            else window.cart[finalName] = { price: finalPrice, qty: 1 };
-            window.totalAmount += finalPrice;
-            window.totalItems += 1;
+            cartAdd({ base: base, cat: window.itemCategoryMap[base] || window.itemCategoryMap[baseNameOf(base)] || '',
+                      basePrice: basePrice, opt: opt, mods: [], price: basePrice }, 1);
             if (navigator.vibrate) navigator.vibrate(50);
             saveLocalCart();
         };
@@ -1820,11 +1864,14 @@
                 for(let item in currentMenuData[cat]) {
                     let route = currentMenuData[cat][item].routing || 'barista';
                     window.itemRoutingMap[item] = route;
+                    window.itemCategoryMap[item] = cat;
                     if(isCoffeeCat) window.coffeeItemsMap[item] = true;
 
                     if(currentMenuData[cat][item].hasSizes) {
                         window.itemRoutingMap[item + " (Regular)"] = route;
                         window.itemRoutingMap[item + " (Large)"] = route;
+                        window.itemCategoryMap[item + " (Regular)"] = cat;
+                        window.itemCategoryMap[item + " (Large)"] = cat;
                         if(isCoffeeCat) window.coffeeItemsMap[item + " (Regular)"] = true;
                         if(isCoffeeCat) window.coffeeItemsMap[item + " (Large)"] = true;
                     }
@@ -1940,6 +1987,21 @@
             document.querySelectorAll('h2[id^="cat-"]').forEach(h => { h.style.scrollMarginTop = off; });
         }
 
+        // Tracks the VISIBLE viewport. On iOS the software keyboard shrinks visualViewport but
+        // leaves 100vh untouched, which is how a modal's footer ends up underneath it.
+        (function trackViewport(){
+            const vv = window.visualViewport;
+            function set(){
+                const h = vv ? vv.height : window.innerHeight;
+                document.documentElement.style.setProperty('--app-vh', h + 'px');
+                document.body.classList.toggle('short-viewport', h < 560);
+            }
+            set();
+            if (vv){ vv.addEventListener('resize', set); vv.addEventListener('scroll', set); }
+            window.addEventListener('resize', set);
+            window.addEventListener('orientationchange', () => setTimeout(set, 250));
+        })();
+
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         // Tap the backdrop to dismiss. Only fires when the tap lands on the overlay itself, so a
@@ -2011,17 +2073,57 @@
         };
 
         window.confirmAddItem = function() {
-            let finalName = window.pendingItemName.replace(/&quot;/g, '"'); 
-            if (window.currentModifierName !== "") { finalName += ` (${window.currentModifierName})`; }
-            let finalPrice = (parseFloat(window.pendingItemPrice) || 0) + (parseFloat(window.currentModifierPrice) || 0);
-
-            if (window.cart[finalName]) { window.cart[finalName].qty += 1; } 
-            else { window.cart[finalName] = { price: finalPrice, qty: 1 }; }
-            
-            window.totalAmount += finalPrice; 
-            window.totalItems += 1;
+            const base = window.pendingItemName.replace(/&quot;/g, '"');
+            const basePrice = (parseFloat(window.pendingItemPrice) || 0) + (parseFloat(window.currentModifierPrice) || 0);
+            cartAdd({ base: base, cat: window.itemCategoryMap[base] || window.itemCategoryMap[baseNameOf(base)] || '',
+                      basePrice: basePrice, opt: window.currentModifierName || '', mods: [], price: basePrice }, 1);
             saveLocalCart(); closeModal('remark-modal');
         };
+
+        // ===== CART LINE MODEL =====
+        // A line is { base, cat, basePrice, opt, mods[], price, qty }.
+        //   base      the menu item, size included ("Latte (Regular)")
+        //   opt       the REQUIRED choice, e.g. sweetness — picked when the item is added
+        //   mods      OPTIONAL paid add-ons, added later from the cart line
+        // mods is kept as its own array so add-ons stay countable in reporting rather than
+        // being buried inside the item name.
+        function cartKeyFor(base, opt, mods){
+            const parts = [];
+            if (opt) parts.push(opt);
+            (mods || []).forEach(m => parts.push(m));
+            return base + (parts.length ? ' (' + parts.join(', ') + ')' : '');
+        }
+        function baseNameOf(n){ return String(n || '').split(' (')[0]; }
+        window.addonsForCat = function(cat){ return (window.addonsByCategory || {})[cat] || []; };
+        // A cart restored from localStorage (or saved by an older build) has no cat, and the menu
+        // listener may not have populated itemCategoryMap yet when the cart first renders.
+        function catOfLine(key){
+            const l = window.cart[key] || {};
+            return l.cat || window.itemCategoryMap[l.base || ''] || window.itemCategoryMap[baseNameOf(key)] || '';
+        }
+        window.addonsForLine = function(key){ return window.addonsForCat(catOfLine(key)); };
+        function addonPrice(cat, name){
+            const a = window.addonsForCat(cat).find(x => x && x.name === name);
+            return a ? (parseFloat(a.price) || 0) : 0;
+        }
+        function cartAdd(line, n){
+            const key = cartKeyFor(line.base, line.opt, line.mods);
+            if (window.cart[key]) window.cart[key].qty += n;
+            else window.cart[key] = { base: line.base, cat: line.cat, basePrice: line.basePrice,
+                                      opt: line.opt || '', mods: (line.mods || []).slice(),
+                                      price: line.price, qty: n };
+            window.totalAmount += line.price * n;
+            window.totalItems += n;
+            return key;
+        }
+        function cartRemove(key, n){
+            const l = window.cart[key]; if (!l) return;
+            const take = Math.min(n, l.qty);
+            l.qty -= take;
+            window.totalAmount -= l.price * take;
+            window.totalItems -= take;
+            if (l.qty <= 0) delete window.cart[key];
+        }
 
         window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveLocalCart(); closeModal('review-cart-modal'); };
 
@@ -2031,10 +2133,65 @@
             else {
                 for (let item in window.cart) {
                     const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                    list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${escapeHTML(item)}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                    const hasAddons = window.addonsForLine(item).length > 0;
+                    const nameCell = hasAddons
+                        ? `<button class="cart-name" onclick="window.openAddons('${safeItemName}')">${escapeHTML(item)}<span class="opt-mark">+</span></button>`
+                        : `<span style="flex:1;">${escapeHTML(item)}</span>`;
+                    list.innerHTML += `<div class="bill-receipt-row">${nameCell}<span style="display:flex; align-items:center; flex-shrink:0;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
                 }
             }
             document.getElementById('review-cart-modal').classList.add('active');
+        };
+
+        // ===== ADD-ONS ON A CART LINE =====
+        // Opened from a cart line, never from the menu — so a plain order costs exactly the same
+        // number of taps it always did. Each toggle moves ONE unit onto a line carrying that
+        // add-on, which is why "two Margheritas, one with extra cheese" works without any extra
+        // controls: tap the line, add cheese, and it splits itself.
+        window.addonKey = null;
+        window.openAddons = function(safeKey){
+            const key = safeKey.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            const line = window.cart[key]; if (!line) return;
+            window.addonKey = key;
+            renderAddons();
+            document.getElementById('addon-modal').classList.add('active');
+        };
+        function renderAddons(){
+            const line = window.cart[window.addonKey];
+            const grid = document.getElementById('addon-grid');
+            const empty = document.getElementById('addon-empty');
+            if (!line){ closeModal('addon-modal'); return; }
+            document.getElementById('addon-title').innerText = line.base;
+            const list = window.addonsForLine(window.addonKey);
+            document.getElementById('addon-sub').innerText = line.qty > 1
+                ? ('\u20b9' + Math.round(line.price) + ' each \u00b7 changes one of ' + line.qty)
+                : ('\u20b9' + Math.round(line.price));
+            if (!list.length){ grid.innerHTML = ''; empty.style.display = 'block'; return; }
+            empty.style.display = 'none';
+            grid.innerHTML = list.map(a => {
+                const on = (line.mods || []).indexOf(a.name) >= 0;
+                const safe = String(a.name).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                const p = parseFloat(a.price) || 0;
+                return '<button class="choice-btn' + (on ? ' selected' : '') + '" onclick="window.toggleAddon(\'' + safe + '\')">'
+                     + escapeHTML(a.name) + (p ? ' +\u20b9' + Math.round(p) : '') + '</button>';
+            }).join('');
+        }
+        window.toggleAddon = function(safeName){
+            const name = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
+            const from = window.addonKey;
+            const line = window.cart[from]; if (!line) return;
+            const mods = (line.mods || []).slice();
+            const i = mods.indexOf(name);
+            if (i >= 0) mods.splice(i, 1); else mods.push(name);
+            mods.sort();
+            const cat = catOfLine(from);
+            const price = (parseFloat(line.basePrice) || 0) + mods.reduce((a, m) => a + addonPrice(cat, m), 0);
+            const target = { base: line.base, cat: cat, basePrice: line.basePrice, opt: line.opt, mods: mods, price: price };
+            cartRemove(from, 1);
+            window.addonKey = cartAdd(target, 1);
+            if (navigator.vibrate) navigator.vibrate(30);
+            saveLocalCart();
+            renderAddons();
         };
 
         window.modifyCartItem = function(item, delta) {
@@ -2116,8 +2273,12 @@
             }
 
             for (let item in window.cart) {
-                if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += window.cart[item].qty;
-                else window.activeTables[tableID].items[item] = { price: window.cart[item].price, qty: window.cart[item].qty };
+                const c = window.cart[item];
+                if (window.activeTables[tableID].items[item]) window.activeTables[tableID].items[item].qty += c.qty;
+                // mods/base ride along so add-ons stay countable in pos/bills and orders/history
+                else window.activeTables[tableID].items[item] = { price: c.price, qty: c.qty,
+                                                                  base: c.base || baseNameOf(item),
+                                                                  mods: (c.mods && c.mods.length) ? c.mods.slice() : null };
             }
             
             let safeTotal = parseFloat(window.totalAmount) || 0;
@@ -2127,8 +2288,11 @@
             // INCREMENT (both orders kept) instead of one overwriting the other. The local update
             // above is just instant on-screen feedback; the listener reconciles to the cloud value.
             for (let it in window.cart) {
-                db.ref('pos/activeTables/' + tableID + '/items/' + it + '/price').set(window.cart[it].price);
-                db.ref('pos/activeTables/' + tableID + '/items/' + it + '/qty').set(firebase.database.ServerValue.increment(window.cart[it].qty));
+                const c = window.cart[it];
+                db.ref('pos/activeTables/' + tableID + '/items/' + it + '/price').set(c.price);
+                db.ref('pos/activeTables/' + tableID + '/items/' + it + '/qty').set(firebase.database.ServerValue.increment(c.qty));
+                db.ref('pos/activeTables/' + tableID + '/items/' + it + '/base').set(c.base || baseNameOf(it));
+                if (c.mods && c.mods.length) db.ref('pos/activeTables/' + tableID + '/items/' + it + '/mods').set(c.mods);
             }
             db.ref('pos/activeTables/' + tableID + '/total').set(firebase.database.ServerValue.increment(safeTotal));
             if (notes) db.ref('pos/activeTables/' + tableID + '/notes').transaction(c => c ? c + " | " + notes : notes);
