@@ -58,6 +58,8 @@
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: calc(12px + env(safe-area-inset-top)) 0 calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-overlay { cursor: pointer; }
+        .modal-content { cursor: auto; }
                 /* ============================================================
            MODAL CARD — seamless brand surface with depth
            Same brand brown as the background; separation comes from a
@@ -689,6 +691,19 @@
 
         function saveCart() { localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); localStorage.setItem('ila_customer_amount', window.totalAmount); localStorage.setItem('ila_customer_items', window.totalItems); updateCartUI(); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        // Tap the backdrop to dismiss — only when the tap lands on the overlay itself.
+        // The payment modal is excluded: the customer is mid-flow and an accidental dismissal
+        // there loses the screen telling them what to pay.
+        (function bindBackdropClose(){
+            const NEVER = { 'payment-modal': true };
+            document.querySelectorAll('.modal-overlay').forEach(ov => {
+                ov.addEventListener('click', e => {
+                    if (e.target !== ov || NEVER[ov.id]) return;
+                    closeModal(ov.id);
+                });
+            });
+        })();
         
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
