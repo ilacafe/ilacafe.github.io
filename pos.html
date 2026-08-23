@@ -140,6 +140,8 @@
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: flex-start; padding: calc(5vh + env(safe-area-inset-top)) 0 calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-overlay { cursor: pointer; }
+        .modal-content { cursor: auto; }
                 /* ============================================================
            MODAL CARD — seamless brand surface with depth
            Same brand brown as the background; separation comes from a
@@ -1939,6 +1941,27 @@
         }
 
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        // Tap the backdrop to dismiss. Only fires when the tap lands on the overlay itself, so a
+        // tap anywhere inside the card is unaffected. Some modals need their own teardown rather
+        // than a bare close, and one is deliberately excluded.
+        (function bindBackdropClose(){
+            const CUSTOM = {
+                'split-bill-modal':  () => window.closeSplitBill(),      // clears the share and reopens checkout
+                'transaction-modal': () => window.closeTransactionModal()// returns you to the Ledger
+            };
+            // The UPI modal is held out to the customer while they scan. A stray touch on the
+            // brown around the QR must not cancel the payment watch mid-scan — that one keeps
+            // its explicit CANCEL.
+            const NEVER = { 'upi-modal': true };
+            document.querySelectorAll('.modal-overlay').forEach(ov => {
+                ov.addEventListener('click', e => {
+                    if (e.target !== ov) return;             // the tap was inside the card
+                    if (NEVER[ov.id]) return;
+                    if (CUSTOM[ov.id]) CUSTOM[ov.id](); else closeModal(ov.id);
+                });
+            });
+        })();
 
         // Choosing IS confirming — one tap per choice instead of choose-then-Add.
         window.selectSweetness = function(val, price, btn) {
