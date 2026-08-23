@@ -333,6 +333,7 @@
                 </div>
             </aside>
         </div>
+        <div id="build-stamp" style="text-align:center; font-size:0.6rem; opacity:0.22; letter-spacing:1px; margin-top:22px;"></div>
     </div>
 
     <div id="cart-banner">
@@ -966,6 +967,10 @@
             }, 60000);
         }
 
+        // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
+        // you're looking at a cached build — no more guessing which version is live.
+        const ILA_BUILD = '2026-08-12.2';
+
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
         const OWNER_WHATSAPP = "918882946526"; 
@@ -1597,7 +1602,9 @@
             localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
             localStorage.setItem('ila_pos_amount', window.totalAmount);
             localStorage.setItem('ila_pos_items', window.totalItems);
-            updateCartUI();
+            try { const _b = document.getElementById('build-stamp'); if (_b) _b.textContent = 'build ' + ILA_BUILD; } catch(e){}
+
+        updateCartUI();
         }
 
         function renderSideRail(){
