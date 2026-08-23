@@ -42,6 +42,12 @@
         label { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; opacity: 0.8; margin-bottom: 5px; }
         input[type="text"], input[type="number"], input[type="password"], select { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; background: rgba(255,255,255,0.9); color: #333; }
         .checkbox-group { display: flex; align-items: center; gap: 10px; font-weight: bold; margin-top: 10px; }
+        /* Used by the Inventory Manager and Recipe Builder controls. It is a pos.html class name
+           and was never defined here, so those selects and inputs rendered as raw browser
+           defaults. Matched to this page's own input styling. */
+        .remark-input { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2);
+                        font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box;
+                        background: rgba(255,255,255,0.9); color: #333; }
         
         .btn { padding: 12px 20px; border-radius: 6px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; transition: opacity 0.2s; text-transform: uppercase; letter-spacing: 1px; }
         .btn:active { opacity: 0.7; }
@@ -395,6 +401,7 @@
                 </div>
             </details>
         </div>
+        <div id="build-stamp" style="text-align:center; font-size:0.6rem; opacity:0.22; letter-spacing:1px; margin:24px 0 8px;"></div>
     </div>
 
     <script>
@@ -409,6 +416,7 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        const ILA_BUILD = '2026-08-12.2';   // shown at the foot of the page, so a cached build is obvious
 
         const auth = firebase.auth();
         window.currentAdmin = { uid: null, name: null };
@@ -1522,6 +1530,7 @@
                 status.innerHTML = '<span style="color:#7CFC9A;">Test push sent to ' + (out.sent != null ? out.sent : subscriptions.length) + ' device(s). Lock the screen \u2014 it should still arrive.</span>';
             } catch (e) { console.error(e); status.innerText = 'Test push failed: ' + (e && e.message ? e.message : e); }
         };
+        try { const _b = document.getElementById('build-stamp'); if (_b) _b.textContent = 'build ' + ILA_BUILD; } catch(e){}
         notifInit();
 
             </script>
