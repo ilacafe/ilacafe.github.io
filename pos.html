@@ -46,7 +46,7 @@
             .rail-eta { font-size: 0.78rem; opacity: 0.7; margin-top: 6px; }
             .pane-cart .table-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0; }
             #cart-banner { display: none; }
-            .cat-strip { top: 0; }
+            .cat-strip { top: env(safe-area-inset-top); }
         }
         header { text-align: center; margin-bottom: 25px; }
         .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
@@ -54,15 +54,24 @@
         /* 5-ITEM DASHBOARD - Tuned to fit perfectly on mobile */
         /* Every drink order used to mean scrolling past the pizzas. Sticks under the top of the
            screen so the jump targets are always where your thumb already is. */
-        .cat-strip { position: sticky; top: 0; z-index: 900; display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; margin-bottom: 6px;
-                     background: var(--brand-bg); -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-        .cat-strip::-webkit-scrollbar { display: none; }
+        /* WRAPS — a horizontal scroller hid half the categories, which is the opposite of the
+           point. Every category is visible and one tap away.
+           top: uses the safe-area inset because the status bar is translucent: at top:0 the strip
+           slid under the clock and network icons on a notched iPhone. */
+        .cat-strip { position: sticky; top: env(safe-area-inset-top); z-index: 900; display: flex; flex-wrap: wrap; gap: 6px;
+                     padding: 9px 0 10px; margin-bottom: 4px; background: var(--brand-bg);
+                     box-shadow: 0 8px 12px -8px rgba(0,0,0,0.45); }
         .cat-strip:empty { display: none; }
-        .cat-chip { flex: 0 0 auto; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: var(--brand-text);
-                    border-radius: 20px; padding: 7px 14px; font-family: 'Quicksand', sans-serif; font-size: 0.78rem; font-weight: 700;
+        .cat-chip { flex: 0 1 auto; background: transparent; border: 1px solid rgba(255,255,255,0.3); color: var(--brand-text);
+                    border-radius: 20px; padding: 6px 12px; font-family: 'Quicksand', sans-serif; font-size: 0.72rem; font-weight: 700;
                     text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
         .cat-chip:active, .cat-chip.active { background: var(--brand-text); color: var(--brand-bg); border-color: var(--brand-text); }
-        h2[id^="cat-"] { scroll-margin-top: 58px; }
+        h2[id^="cat-"] { scroll-margin-top: calc(64px + env(safe-area-inset-top)); }
+
+        /* The web view runs under the translucent status bar, so page content scrolls up behind
+           the clock. This keeps that strip solid brown instead. */
+        body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top);
+                       background: var(--brand-bg); z-index: 950; pointer-events: none; }
 
         .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1 1 0; min-width: 0; transition: opacity 0.2s; }
