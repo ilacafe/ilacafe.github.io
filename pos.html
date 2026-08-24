@@ -65,7 +65,7 @@
                      justify-content: center; gap: 2px 4px; padding: 8px 0; margin-bottom: 2px; background: var(--brand-bg);
                      border-bottom: 1px solid rgba(255,255,255,0.14); }
         .cat-strip:empty { display: none; }
-        .cat-chip { flex: 0 1 auto; background: transparent; border: none; color: var(--brand-text); opacity: 0.45;
+        .cat-chip { flex: 0 1 auto; background: transparent; border: none; color: var(--brand-text); opacity: 0.6;
                     border-radius: 4px; padding: 5px 8px; font-family: 'Quicksand', sans-serif; font-size: 0.7rem; font-weight: 700;
                     text-transform: uppercase; letter-spacing: 1px; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
         .cat-chip.active { opacity: 1; }
@@ -118,14 +118,14 @@
         .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
 
         /* Marks a row whose + opens options rather than adding straight away. */
-        .opt-mark { display: inline-block; margin-left: 6px; font-size: 0.7rem; opacity: 0.4; vertical-align: middle; }
+        .opt-mark { display: inline-block; margin-left: 6px; font-size: 0.7rem; opacity: 0.6; vertical-align: middle; }
         /* A cart line you can tap to attach add-ons. Looks like text, behaves like a button. */
         .cart-name { flex: 1 1 0; min-width: 0; background: transparent; border: none; color: var(--brand-text);
                      font-family: 'Quicksand', sans-serif; font-size: inherit; font-weight: inherit; text-align: left;
                      padding: 4px 0; cursor: pointer; }
         .cart-name .opt-mark { opacity: 0.55; font-weight: 700; }
         .cart-name:active { opacity: 0.6; }
-        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.75); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; }
         #cart-banner.visible { transform: translateY(0); }
@@ -187,9 +187,9 @@
         .link-quiet { background: transparent; border: none; color: var(--brand-text); opacity: 0.45; font-family: 'Quicksand', sans-serif; font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; padding: 10px 2px; cursor: pointer; flex: 0 0 auto; }
 
         .stat-row { display: flex; justify-content: space-around; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
-        .stat-row .lbl { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.6; display: block; margin-bottom: 1px; }
+        .stat-row .lbl { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.72; display: block; margin-bottom: 1px; }
         .stat-row .val { font-size: 1.5rem; font-weight: 700; line-height: 1.15; white-space: nowrap; }
-        .section-label { text-align: left; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.55; margin: 2px 0 6px; }
+        .section-label { text-align: left; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.7; margin: 2px 0 6px; }
                 
         .remark-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); }
@@ -244,7 +244,7 @@
         .split-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px dashed rgba(255,255,255,0.18); }
         .split-row:last-child { border-bottom: none; }
         .split-row .nm { flex: 1; min-width: 0; font-size: 0.9rem; }
-        .split-row .sub { font-size: 0.72rem; opacity: 0.55; }
+        .split-row .sub { font-size: 0.72rem; opacity: 0.7; }
         /* "÷ heads" needs ~66px of text and only gets 41-56px across four columns on a phone,
            and .btn is nowrap so it spilled instead of wrapping. Two columns below 430px. */
         .split-ops { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -253,7 +253,7 @@
         .split-line:last-child { border-bottom: none; }
         .split-line-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 7px; }
         .split-line-head .nm { font-size: 0.92rem; font-weight: 500; min-width: 0; }
-        .split-line-head .sub { font-size: 0.74rem; opacity: 0.6; flex-shrink: 0; white-space: nowrap; }
+        .split-line-head .sub { font-size: 0.74rem; opacity: 0.72; flex-shrink: 0; white-space: nowrap; }
         .split-line-ctrl { display: flex; align-items: center; gap: 8px; }
         .split-chips { display: flex; gap: 5px; flex: 1 1 0; min-width: 0; flex-wrap: wrap; }
         .split-chip { flex: 1 1 38px; min-width: 0; background: transparent; border: 1px solid rgba(255,255,255,0.35); color: var(--brand-text); border-radius: 5px; padding: 7px 0; font-family: 'Quicksand', sans-serif; font-size: 0.78rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
@@ -262,7 +262,7 @@
            which happens on every single share of a split bill. */
         .split-amt { width: 80px; flex-shrink: 0; padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 16px; font-weight: bold; text-align: right; outline: none; box-sizing: border-box; }
         .split-amt::placeholder { color: rgba(255,255,255,0.35); font-weight: normal; }
-        .split-paid { opacity: 0.35; }
+        .split-paid { opacity: 0.5; }
 
         .staff-reveal { background: transparent; border: none; color: var(--brand-text); opacity: 0.3; font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 10px 16px; margin-top: 6px; cursor: pointer; }
 
@@ -279,8 +279,9 @@
         .bill-receipt { background-color: transparent; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px; }
         .bill-receipt-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0;}
-        .bill-grand-total { font-size: 1.2rem; font-weight: bold; text-align: right; margin-top: 10px; border-top: 1px solid white; padding-top: 10px;}
-        .item-remove-x { color: rgba(255,255,255,0.5); font-weight: normal; font-size: 1.2rem; cursor: pointer; padding: 5px 12px 5px 0; }
+        .bill-grand-total { font-size: 1.5rem; font-weight: bold; text-align: right; margin-top: 8px; border-top: 1px solid white; padding-top: 10px; }
+        .bill-sub { font-size: 0.85rem; opacity: 0.7; text-align: right; margin-top: 10px; }
+        .item-remove-x { color: rgba(255,255,255,0.6); font-weight: normal; font-size: 1.2rem; cursor: pointer; padding: 5px 12px 5px 0; }
         
         #qr-image { width: 150px; height: 150px; margin: 15px auto; border-radius: 8px; display: block; background: white; padding: 5px; }
         /* Stands in for the code until one for the CURRENT amount has actually loaded. A code is
@@ -303,7 +304,7 @@
         .ledger-item:last-child { border-bottom: none; }
         .ledger-income { color: white; font-weight: bold; }
         .ledger-out { color: rgba(255, 255, 255, 0.6); }
-        .ledger-meta { font-size: 0.75rem; opacity: 0.5; display: block; margin-top: 2px;}
+        .ledger-meta { font-size: 0.75rem; opacity: 0.68; display: block; margin-top: 2px;}
     </style>
 </head>
 <body>
@@ -538,7 +539,7 @@
                     <label style="margin:0; flex:1 1 0; min-width:0; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:1px; opacity:0.65;">Other (not an item)</label>
                     <input type="number" id="split-other" class="split-amt" inputmode="numeric" placeholder="₹0" oninput="window.setSplitOther(this.value)">
                 </div>
-                <div id="split-alloc-note" style="font-size:0.72rem; opacity:0.6; text-align:left; min-height:1em;"></div>
+                <div id="split-alloc-note" style="font-size:0.75rem; opacity:0.75; text-align:left; min-height:1em;"></div>
                 <div style="font-size:1.4rem; font-weight:700; margin:8px 0 4px;">Collecting ₹<span id="split-share-total">0</span></div>
                 <div class="modal-buttons" style="margin: 6px 0 0;">
                     <button class="btn btn-primary" id="split-pay-upi" onclick="processSplit('upi')">UPI</button>
@@ -553,7 +554,7 @@
 
     <div id="upi-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3>Scan</h3>
+            <h3 id="upi-title">Scan</h3>
             <p id="upi-amount-text" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 5px;">₹0</p>
             <div id="upi-tip-line" class="tip-note" style="display:none;"></div>
             <div class="tip-row">
@@ -596,7 +597,18 @@
                 <div id="tip-pool-box" style="display:none; border:1px solid rgba(255,255,255,0.25); border-radius:8px; padding:14px; margin-bottom:12px; text-align:left;">
                     <div class="section-label" style="margin:0;">Tips today</div>
                     <div id="tip-pool-amount" style="font-size:1.5rem; font-weight:700; line-height:1.2;">₹0</div>
-                    <div id="tip-pool-sub" style="font-size:0.78rem; opacity:0.65; margin-top:2px;"></div>
+                    <div id="tip-pool-sub" style="font-size:0.78rem; opacity:0.7; margin-top:2px;"></div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px;">
+                        <div style="text-align:left; min-width:0;">
+                            <span class="lbl" style="font-size:0.64rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.65; display:block;">Sharing between</span>
+                            <div id="tip-heads-each" style="font-size:0.82rem; opacity:0.8;"></div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                            <button class="mini-btn" onclick="window.setTipHeads(-1)">−</button>
+                            <span id="tip-heads" style="width:26px; text-align:center; font-weight:bold; font-size:1.1rem;">0</span>
+                            <button class="mini-btn" onclick="window.setTipHeads(1)">+</button>
+                        </div>
+                    </div>
                     <button class="btn btn-primary" id="tip-payout-btn" style="width:100%; margin-top:12px;" onclick="window.payOutTips()">Pay out from drawer</button>
                 </div>
 
@@ -917,6 +929,8 @@
             db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
             db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
             db.ref('upiReview').on('value', snap => { window.upiReviewMap = snap.val() || {}; renderLedger(); });
+            db.ref('pos/lastSplitHeads').on('value', s => { window.lastSplitHeads = parseInt(s.val()) || 0; });
+            db.ref('pos/tips/lastHeads').on('value', s => { window.lastTipHeads = parseInt(s.val()) || 0; renderTipPool(); });
             startTipFeed();
             startVerificationReconciler();
             db.ref('pos/ledgerEntries').on('value', snap => {
@@ -1005,7 +1019,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-12.5';
+        const ILA_BUILD = '2026-08-12.6';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -1682,7 +1696,10 @@
                 const e = (window.totalItems > 0 && window.estimateETA) ? window.estimateETA(window.cart) : null;
                 eta.innerText = e ? ('\u23f1 Est. ready in ~' + e.label) : '';
             } catch(err){ eta.innerText = ''; }
-            renderTableGrid('rail-table-grid', "window.sendOrderFromRail");
+            const empty = !(window.totalItems > 0);
+            renderTableGrid('rail-table-grid', empty ? "window.openCheckout" : "window.sendOrderFromRail", empty ? 'bill' : 'send');
+            const ta = document.querySelector('.pane-cart .takeaway-btn');
+            if (ta) ta.style.display = empty ? 'none' : '';
         }
         window.sendOrderFromRail = function(tableID){
             const n = document.getElementById('rail-notes');
@@ -1695,7 +1712,11 @@
         function updateCartUI() {
             const banner = document.getElementById('cart-banner');
             if (window.totalItems > 0) { 
-                document.getElementById('cart-total-text').innerText = `₹${Math.round(window.totalAmount)}`; 
+                document.getElementById('cart-total-text').innerText = `₹${Math.round(window.totalAmount)}`;
+                // The last thing seen before Send Order should say how many, so a mis-tap is
+                // caught here rather than in the kitchen.
+                const cc = document.querySelector('#cart-banner .cart-clear');
+                if (cc) cc.innerText = window.totalItems + (window.totalItems === 1 ? ' item · View' : ' items · View');
                 banner.classList.add('visible'); 
             } 
             else { banner.classList.remove('visible'); }
@@ -1921,7 +1942,7 @@
                         const optMark = item.requiresSweetness ? '<span class="opt-mark" title="has options">\u2022</span>' : '';
                         catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}${optMark}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
+                        catHTML += `<div class="menu-row" style="opacity: 0.55;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
                     }
                 });
 
@@ -1938,7 +1959,7 @@
                             if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
                         }
                         const optMarkS = item.requiresSweetness ? '<span class="opt-mark" title="has options">\u2022</span>' : '';
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}${optMarkS}</span>${regHTML}${lrgHTML}</div>`;
+                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.55;' : ''}"><span>${item.originalName}${optMarkS}</span>${regHTML}${lrgHTML}</div>`;
                     });
                 }
                 catHTML += `</section>`;
@@ -2331,7 +2352,9 @@
 
         // Ten identical buttons told you nothing. Showing what is already on each table means
         // you pick the right one, and spot the wrong one BEFORE the kitchen sees it.
-        function renderTableGrid(gridId, fnName){
+        // mode 'bill' is used by the rail when the cart is empty: sending is impossible then, so
+        // the same grid opens the table's bill instead. Empty tables are simply not tappable.
+        function renderTableGrid(gridId, fnName, mode){
             const grid = document.getElementById(gridId); if (!grid) return;
             let html = '';
             for (let i = 1; i <= 10; i++) {
@@ -2339,7 +2362,11 @@
                 const occ = t ? 'occupied' : '';
                 const due = t ? Math.max(0, (parseFloat(t.total) || 0) - (parseFloat(t.paid) || 0)) : 0;
                 const sub = t ? `<span class="table-sub">\u20b9${Math.round(due || (parseFloat(t.total) || 0))}</span>` : '';
-                html += `<button class="table-btn ${occ}" onclick="${fnName}('${i}')">${i}${sub}</button>`;
+                if (mode === 'bill' && !t){
+                    html += `<button class="table-btn" disabled style="opacity:0.28;">${i}</button>`;
+                } else {
+                    html += `<button class="table-btn ${occ}" onclick="${fnName}('${i}')">${i}${sub}</button>`;
+                }
             }
             grid.innerHTML = html;
         }
@@ -2390,12 +2417,20 @@
                 const paidMark = lp > 0
                     ? `<span style="font-size:0.7rem; opacity:0.6; margin-left:6px;">${ll > 0 ? ('₹' + Math.round(lp) + ' paid') : 'paid'}</span>`
                     : '';
-                receiptHTML += `<div class="bill-receipt-row" style="${ll <= 0 ? 'opacity:0.45;' : ''}"><span><span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span> ${it.qty}x ${escapeHTML(item)}${paidMark}</span><span>₹${Math.round(lt)}</span></div>`;
+                // The void trigger sits on the RIGHT, past the price — away from the line the eye and
+                // finger travel while reading the bill. Tapping it starts a reason + PIN + a
+                // cancellation ticket, so it must not be adjacent to a scanning target.
+                receiptHTML += `<div class="bill-receipt-row" style="${ll <= 0 ? 'opacity:0.5;' : ''}"><span style="flex:1; min-width:0;">${it.qty}x ${escapeHTML(item)}${paidMark}</span><span style="display:flex; align-items:center; gap:2px; flex-shrink:0;">₹${Math.round(lt)}<span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span></span></div>`;
             }
-            receiptHTML += `<div class="bill-grand-total">Total: ₹${total}</div>`;
+            // Once anything has been paid, DUE is the number staff act on — it is what they charge.
+            // Total used to be the biggest thing on the screen and Due a footnote under it.
             if (paid > 0) {
-                receiptHTML += `<div style="text-align: right; opacity: 0.8; font-size: 0.9rem; margin-top: 5px;">Paid: ₹${paid}</div>`;
-                receiptHTML += `<div style="text-align: right; font-weight: bold; font-size: 1.1rem; margin-top: 2px;">Due: ₹${remaining}</div>`;
+                receiptHTML += `<div class="bill-sub">Total ₹${total} · Paid ₹${paid}</div>`;
+                receiptHTML += `<div class="bill-grand-total">Due ₹${remaining}</div>`;
+            } else {
+                receiptHTML += `<div class="bill-grand-total">Total ₹${total}</div>`;
+            }
+            if (paid > 0) {
                 // Naming WHAT is unpaid is far easier to raise with a group than a bare number.
                 if (stillDue.length && remaining > 0) receiptHTML += `<div style="text-align:right; font-size:0.78rem; opacity:0.75; margin-top:4px;">Still unpaid: ${stillDue.join(', ')}</div>`;
             }
@@ -2490,10 +2525,23 @@
             const t = window.activeTables[window.checkoutTableID];
             if (!t) return;
             window.splitSel = {}; window.splitOther = 0;
+            // Carry over the last headcount instead of asking again. It is visible on the stepper,
+            // so changing it is one tap when the table is a different size.
+            if (!t.shares) t.shares = { count: 0, paid: 0 };
+            if (!parseInt(t.shares.count) && parseInt(window.lastSplitHeads) > 0){
+                t.shares.count = parseInt(window.lastSplitHeads);
+                db.ref('pos/activeTables/' + window.checkoutTableID + '/shares/count').set(t.shares.count);
+            }
             renderSplit();
             closeModal('checkout-modal'); document.getElementById('split-bill-modal').classList.add('active');
         };
-        window.closeSplitBill = function() { window.splitSel = {}; window.splitOther = 0; closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
+        window.closeSplitBill = function() { window.splitSel = {}; window.splitOther = 0; window.splitFlow = false; closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
+        // After a share is taken, return to the split screen rather than the checkout. A five-way
+        // table used to mean four round trips out to the bill and back in again.
+        function afterPartial(tableID){
+            if (window.splitFlow && window.activeTables[tableID]) window.openSplitBill();
+            else window.openCheckout(tableID);
+        }
 
         window.setShareCount = function(delta){
             const t = window.activeTables[window.checkoutTableID]; if (!t) return;
@@ -2501,6 +2549,7 @@
             if (!t.shares) t.shares = { count: 0, paid: 0 };
             t.shares.count = next;
             db.ref('pos/activeTables/' + window.checkoutTableID + '/shares/count').set(next);
+            if (next > 0) db.ref('pos/lastSplitHeads').set(next);   // remembered for the next table
             renderSplit();
         };
 
@@ -2631,6 +2680,7 @@
             if (!(amount > 0)) return;
             if (amount > due) amount = due;
             window.pendingSplitAlloc = Object.keys(window.splitSel).length ? JSON.parse(JSON.stringify(window.splitSel)) : null;
+            window.splitFlow = true;   // come back here after this share, not to the checkout
             if (method === 'upi') window.payWithUPI(amount); else window.payWithCash(amount);
         };
 
@@ -2679,11 +2729,13 @@
             applySplitAllocation(window.checkoutTableID);
             
             if (tableData.paid >= total) {
+                window.splitFlow = false;
                 tableData._lastPay = null; archivePOSTable(window.checkoutTableID, tableData, "Cash");
                 delete window.activeTables[window.checkoutTableID]; syncToCloud(window.checkoutTableID); 
                 closeModal('checkout-modal'); closeModal('split-bill-modal');
             } else {
-                syncToCloud(window.checkoutTableID); closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID);
+                const _t = window.checkoutTableID;
+                syncToCloud(_t); closeModal('split-bill-modal'); afterPartial(_t);
             }
         };
 
@@ -2767,6 +2819,9 @@
             const upiString = `upi://pay?pa=${vpa}&pn=ILA&am=${total}&cu=INR`;
             showQR(`https://quickchart.io/qr?size=250&text=${encodeURIComponent(upiString)}`);
             document.getElementById('upi-amount-text').innerText = `₹${total}`;
+            // Which bill this is, in front of the cashier at the moment they hand the screen over.
+            const ttl = document.getElementById('upi-title');
+            if (ttl) ttl.innerText = (window.checkoutTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + window.checkoutTableID) + ' \u00b7 \u20b9' + total;
             const line = document.getElementById('upi-tip-line');
             const clr = document.getElementById('upi-tip-clear');
             if (tip > 0){ line.style.display = 'block'; line.innerHTML = '\u20b9' + base + ' bill + <b>\u20b9' + tip + ' tip</b>'; if (clr) clr.style.display = ''; }
@@ -2936,12 +2991,13 @@
             applySplitAllocation(tableID);
             clearQR();
             if (tableData.paid >= total){
+                window.splitFlow = false;
                 archivePOSTable(tableID, tableData, "UPI");
                 delete window.tableUPIVPA[tableID];
                 delete window.activeTables[tableID]; syncToCloud(tableID);
                 closeModal('upi-modal');
             } else {
-                syncToCloud(tableID); closeModal('upi-modal'); window.openCheckout(tableID);
+                syncToCloud(tableID); closeModal('upi-modal'); afterPartial(tableID);
             }
         }
         window.cancelUPI = function(){
@@ -3265,14 +3321,24 @@
                 : ('\u20b9' + Math.round(window.tipPool.accrued) + ' collected today');
             const btn = document.getElementById('tip-payout-btn');
             if (btn){ btn.style.display = due > 0 ? '' : 'none'; }
+            const hEl = document.getElementById('tip-heads'), eEl = document.getElementById('tip-heads-each');
+            const heads = parseInt(window.lastTipHeads) || 0;
+            if (hEl) hEl.innerText = heads;
+            if (eEl) eEl.innerText = heads > 0 ? ('\u20b9' + Math.floor(due / heads) + ' each') : 'set the number';
         }
+        // The headcount is on the card with steppers and carries over from last time, so a payout
+        // is one tap on the usual night instead of retyping the same number.
+        window.setTipHeads = function(delta){
+            const next = Math.max(1, (parseInt(window.lastTipHeads) || 1) + delta);
+            window.lastTipHeads = next;
+            db.ref('pos/tips/lastHeads').set(next);
+            renderTipPool();
+        };
         window.payOutTips = async function(){
             const due = Math.max(0, (window.tipPool.accrued || 0) - (window.tipPool.paidOut || 0));
             if (!(due > 0)) return;
-            const headsRaw = prompt('Paying out \u20b9' + Math.round(due) + ' in tips.\n\nHow many people are sharing it?', '');
-            if (headsRaw === null) return;
-            const heads = parseInt(headsRaw);
-            if (isNaN(heads) || heads < 1) return alert('Enter how many people are sharing.');
+            const heads = parseInt(window.lastTipHeads) || 0;
+            if (heads < 1) return alert('Set how many people are sharing it first.');
             const each = Math.floor(due / heads);
             const pinStr = prompt('\u20b9' + Math.round(due) + ' \u00f7 ' + heads + ' = \u20b9' + each + ' each.\nThis takes \u20b9' + Math.round(due) + ' OUT of the cash drawer.\n\nStaff PIN to authorise:');
             if (!pinStr) return;
