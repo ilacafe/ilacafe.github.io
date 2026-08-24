@@ -1019,7 +1019,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-12.6';
+        const ILA_BUILD = '2026-08-12.7';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -1130,7 +1130,7 @@
         function ensureWebVerifyFeeds(){
             if (window._wvFeeds) return; window._wvFeeds = true;
             try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
-            try { db.ref('payments/incoming').orderByChild('at').limitToLast(60).on('value', s => { window._wvCredits = s.val() || {}; sweepWebPayments(); }); } catch(e){}
+            // credits come from the single shared feed in startVerificationReconciler
             try { db.ref('payments/claims').limitToLast(150).on('value', s => { window._wvClaims = s.val() || {}; sweepWebPayments(); }); } catch(e){}
         }
 
@@ -1732,6 +1732,10 @@
             return qty;
         };
 
+        // Same output as before, row for row. The only change: a row is rewritten ONLY when its
+        // rendered state differs. Previously one tap re-parsed the HTML of all ~60 menu rows to
+        // change one number — which is both the tap latency and the reason a button could be
+        // destroyed mid-touch. The quantity matching itself is untouched, so nothing can go stale.
         window.renderInlineControls = function() {
             const containers = document.querySelectorAll('.swap-container');
             containers.forEach(container => {
@@ -1740,8 +1744,10 @@
                 let reqSweet = container.getAttribute('data-sweet') === 'true';
                 let qty = window.getCartQty(safeName);
 
-                // No inline onclick on the + any more: it is bound by delegation below so that a
-                // TAP adds the default and a LONG-PRESS opens the options.
+                const sig = qty + '|' + price + '|' + reqSweet;
+                if (container.dataset.sig === sig) return;   // nothing about this row changed
+                container.dataset.sig = sig;
+
                 const addAttrs = `data-add="${safeName}" data-price="${price}" data-sweet="${reqSweet}"`;
                 if (qty > 0) {
                     container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" ${addAttrs}>+</button></div>`;
@@ -1821,16 +1827,27 @@
             
             let coffeeKeys = Object.keys(window.coffeeItemsMap).sort((a,b) => b.length - a.length);
 
+            // A bill never changes once archived, so its cup count is computed once and reused.
+            // Same arithmetic, same total — just not recomputed for every earlier bill each time
+            // a new one lands. The cache is versioned on the coffee map so a menu edit rebuilds it.
+            const mapVer = coffeeKeys.join('|');
+            if (window._cupCacheVer !== mapVer){ window._cupCache = {}; window._cupCacheVer = mapVer; }
+            const cache = window._cupCache || (window._cupCache = {});
+
             window.pastBills.forEach(bill => {
                 if(bill.id >= startOfTodayMs && bill.items) {
+                    if (cache[bill.id] != null){ cupTotal += cache[bill.id]; return; }
+                    let billCups = 0;
                     for(let itemName in bill.items) {
                         let matchedCoffee = coffeeKeys.find(key => itemName.startsWith(key));
                         if(matchedCoffee) {
                             let qty = bill.items[itemName].qty || 0;
-                            if(itemName.includes("(Large)")) { cupTotal += (qty * 3); } 
-                            else { cupTotal += (qty * 2); }
+                            if(itemName.includes("(Large)")) { billCups += (qty * 3); } 
+                            else { billCups += (qty * 2); }
                         }
                     }
+                    cache[bill.id] = billCups;
+                    cupTotal += billCups;
                 }
             });
             document.getElementById('cups-display').innerText = cupTotal;
@@ -1877,8 +1894,22 @@
         });
 
 
-        db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
-        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) renderPOSMenu(currentMenuData, liveCategoryOrder); });
+        // menu, categoryOrder and itemOrder all arrive at login and each used to trigger a full
+        // menu rebuild. Coalesce into one render on the next frame; the latest arguments win, so
+        // the result is identical to letting the last of them run.
+        let _menuRenderArgs = null, _menuRenderQueued = false;
+        function scheduleMenuRender(data, order){
+            _menuRenderArgs = [data, order];
+            if (_menuRenderQueued) return;
+            _menuRenderQueued = true;
+            requestAnimationFrame(() => {
+                _menuRenderQueued = false;
+                const a = _menuRenderArgs; _menuRenderArgs = null;
+                if (a) renderPOSMenu(a[0], a[1]);
+            });
+        }
+        db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) scheduleMenuRender(currentMenuData, liveCategoryOrder); });
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) scheduleMenuRender(currentMenuData, liveCategoryOrder); });
         
         db.ref('menu').on('value', snap => { 
             currentMenuData = snap.val() || {}; 
@@ -1906,7 +1937,7 @@
                     }
                 }
             }
-            renderPOSMenu(currentMenuData, liveCategoryOrder); 
+            scheduleMenuRender(currentMenuData, liveCategoryOrder);
             calculateDailyCups(); 
         });
 
@@ -1979,6 +2010,13 @@
         // The line the spy measures against, and the offset the jump lands on, must be the SAME
         // number or the two disagree. Both come from the strip's real height, which changes when
         // the chips wrap to a second row.
+        // Queried once per menu render instead of on every animation frame while scrolling.
+        // syncCatOffsets() clears it, and that runs on every render and on resize.
+        let _catHeads = null;
+        function catHeads(){
+            if (!_catHeads) _catHeads = Array.prototype.slice.call(document.querySelectorAll('h2[id^="cat-"]'));
+            return _catHeads;
+        }
         function catStripOffset(){
             const strip = document.getElementById('cat-strip');
             const inset = parseInt(getComputedStyle(document.body).paddingTop) || 0;
@@ -1989,7 +2027,7 @@
             function spy(){
                 ticking = false;
                 if (Date.now() < lockUntil) return;   // a smooth scroll is in flight; don't fight it
-                const heads = Array.prototype.slice.call(document.querySelectorAll('h2[id^="cat-"]'));
+                const heads = catHeads();
                 if (!heads.length) return;
                 // At the bottom of the page the last heading never reaches the line, so it could
                 // never be highlighted — tapping the last category lit up the wrong one.
@@ -2012,8 +2050,9 @@
         })();
         // Keep every heading's scroll target in step with the strip's current height.
         function syncCatOffsets(){
+            _catHeads = null;                      // the menu may have just been rebuilt
             const off = catStripOffset() + 'px';
-            document.querySelectorAll('h2[id^="cat-"]').forEach(h => { h.style.scrollMarginTop = off; });
+            catHeads().forEach(h => { h.style.scrollMarginTop = off; });
         }
 
         // Tracks the VISIBLE viewport. On iOS the software keyboard shrinks visualViewport but
@@ -3090,8 +3129,21 @@
             if (window._reconFeed) return; window._reconFeed = true;
             try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
             try {
+                // One listener instead of two overlapping ones (was 120 here and 60 for the web
+                // sweep). The sweep is handed exactly the newest 60 — ordered by 'at' then key,
+                // which is precisely what limitToLast(60) on orderByChild('at') returns — so its
+                // matching and ambiguity guards see byte-for-byte the same input as before.
                 db.ref('payments/incoming').orderByChild('at').limitToLast(120).on('value', s => {
-                    window._reconCredits = s.val() || {};
+                    const all = s.val() || {};
+                    window._reconCredits = all;
+                    const keys = Object.keys(all).sort((a, b) => {
+                        const d = ((all[a] && all[a].at) || 0) - ((all[b] && all[b].at) || 0);
+                        return d !== 0 ? d : (a < b ? -1 : a > b ? 1 : 0);
+                    }).slice(-60);
+                    const newest = {};
+                    keys.forEach(k => { newest[k] = all[k]; });
+                    window._wvCredits = newest;
+                    try { sweepWebPayments(); } catch(e){}
                     try { reconcileLedgerVerification(); } catch(e){}
                 });
             } catch(e){}
@@ -3208,6 +3260,11 @@
         }
 
         function renderLedger() {
+            // The data is never limited — promptEOD archives the FULL window.salesLedger and
+            // window.pastBills, so truncating either would silently archive a partial day.
+            // What is skipped is only the rendering, when nobody is looking at it.
+            const modal = document.getElementById('cash-modal');
+            if (modal && !modal.classList.contains('active')) return;
             const list = document.getElementById('ledger-list'); list.innerHTML = "";
             if (window.salesLedger.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; return; }
             window.salesLedger.forEach(entry => {
@@ -3356,7 +3413,9 @@
             } catch(e){}
         };
 
-        window.openCashManagement = function() { renderLedger(); renderTipPool(); document.getElementById('cash-modal').classList.add('active'); };
+        // .active FIRST: renderLedger() now no-ops while the Ledger is closed, so rendering
+        // before showing would have left it empty until the next data change.
+        window.openCashManagement = function() { document.getElementById('cash-modal').classList.add('active'); renderLedger(); renderTipPool(); };
         window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
         window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
 
