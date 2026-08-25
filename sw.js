@@ -57,6 +57,11 @@ self.addEventListener('fetch', (event) => {
   let url;
   try { url = new URL(req.url); } catch (e) { return; }
   const sameOrigin = url.origin === self.location.origin;
+  // build.json is how an open page notices a newer build exists. Serving it from
+  // this cache would answer with the build the page already has, forever, and the
+  // update banner would never appear — a mechanism that looks wired up and cannot
+  // possibly fire. Always go to the network for it.
+  if (sameOrigin && url.pathname === '/build.json') return;
   if (!sameOrigin && CACHEABLE_HOSTS.indexOf(url.hostname) === -1) return;  // Firebase etc: untouched
   event.respondWith(swr(event, req, sameOrigin));
 });

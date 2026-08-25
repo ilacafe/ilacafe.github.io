@@ -64,7 +64,10 @@ costs money:
   bill ever recorded, and no read pulls an append-only node whole.
 - **third-party** — every external script names an exact version, comes from a
   known origin, and is actually used by the page that loads it. CI additionally
-  fetches each one and reports its SHA-384.
+  fetches each one and verifies its SHA-384 against the live file.
+- **table cache** — a till reloaded during a wifi drop restores the open tables
+  rather than showing an empty floor, and refuses a cache old enough to be
+  yesterday's.
 
 CI runs these on every pull request and on `main`.
 
@@ -92,10 +95,12 @@ are the database rules; neither ships with a push.
 
 Two things to know:
 
-- `sw.js` serves the cached shell and applies a new build on the **next** open,
-  so a tablet that has been open all day will not have picked up a fix. The
-  build stamp at the foot of `pos.html`, `admin.html` and `index.html` is there
-  to make a stale build obvious — check it on each device after a deploy that
-  matters.
+- `sw.js` serves the cached shell and applies a new build on the **next** open.
+  A tablet open all day has no next open, so `pos.html`, `admin.html` and
+  `index.html` poll `build.json` and offer a **Reload now** banner when they are
+  behind. They never reload themselves — a till reloading mid-transaction is a
+  worse bug than a stale one.
+
+  `build.json` must be bumped with the pages; `npm test` fails if it drifts.
 - Database rules do **not** deploy with a push. They are a separate step:
   `firebase deploy --only database`.

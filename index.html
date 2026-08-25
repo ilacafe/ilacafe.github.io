@@ -309,7 +309,76 @@
         const db = firebase.database();
         // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
         // page being served is cached, not the one just pushed.
-        const ILA_BUILD = '2026-08-25.6';
+        const ILA_BUILD = '2026-08-25.7';
+
+        // A TILL THAT STAYS OPEN NEVER GETS THE FIX
+        //
+        // sw.js serves the cached shell and revalidates in the background, so a new
+        // build lands in the cache but is only applied on the NEXT open. A tablet
+        // propped up all day never has a next open, and a single reload serves the
+        // previous fetch — which is why fixing anything here has meant walking round
+        // reloading tablets twice each.
+        //
+        // The page now watches for a newer build and offers the reload. It never takes
+        // it: a till reloading itself mid-transaction is a worse bug than the one this
+        // is fixing, so the banner waits to be tapped.
+        const BUILD_POLL_MS = 10 * 60 * 1000;
+
+        // True only when both are real strings and they differ — a failed fetch, an
+        // HTML error page or a missing field must never look like a new version, or the
+        // banner cries wolf until nobody reads it.
+        function buildIsNewer(mine, theirs){
+            return typeof mine === 'string' && mine.length > 0 &&
+                   typeof theirs === 'string' && theirs.length > 0 &&
+                   mine !== theirs;
+        }
+
+        async function checkForNewBuild(){
+            try {
+                const res = await fetch('/build.json', { cache: 'no-store' });
+                if (!res.ok) return false;
+                const v = await res.json();
+                if (!buildIsNewer(ILA_BUILD, v && v.build)) return false;
+                showUpdateBanner(v.build);
+                return true;
+            } catch(e){ return false; }
+        }
+
+        function showUpdateBanner(latest){
+            if (document.getElementById('ila-update-banner')) return;
+            const b = document.createElement('div');
+            b.id = 'ila-update-banner';
+            b.setAttribute('role', 'status');
+            b.style.cssText = 'position:fixed; left:0; right:0; bottom:0; z-index:9999;' +
+                'background:#1f6f3f; color:#fff; padding:14px 16px; font-weight:700;' +
+                'display:flex; gap:12px; align-items:center; justify-content:center;' +
+                'font-size:0.95rem; box-shadow:0 -2px 12px rgba(0,0,0,0.35);';
+            b.innerHTML = '<span>Update ready \u00b7 ' + escapeHTML(latest) + '</span>' +
+                '<button type="button" id="ila-update-now" style="background:#fff; color:#1f6f3f;' +
+                'border:none; border-radius:6px; padding:8px 14px; font-weight:700; cursor:pointer;">' +
+                'Reload now</button>' +
+                '<button type="button" id="ila-update-later" aria-label="Dismiss until later"' +
+                ' style="background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.5);' +
+                'border-radius:6px; padding:8px 12px; cursor:pointer;">Later</button>';
+            document.body.appendChild(b);
+            document.getElementById('ila-update-later').onclick = () => b.remove();
+            document.getElementById('ila-update-now').onclick = applyNewBuild;
+        }
+
+        // A plain reload would be served the cached shell again. Drop the shell cache
+        // first, so the reload actually fetches the build that is being offered.
+        async function applyNewBuild(){
+            try {
+                const keys = await caches.keys();
+                await Promise.all(keys.filter(k => k.indexOf('ila-shell') === 0).map(k => caches.delete(k)));
+            } catch(e){}
+            location.reload();
+        }
+
+        setTimeout(checkForNewBuild, 30000);
+        setInterval(checkForNewBuild, BUILD_POLL_MS);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForNewBuild(); });
+
 
         // Register the shared service worker (push + instant-open caching).
         // A cache-first service worker serves the PREVIOUS build until it decides to update,
