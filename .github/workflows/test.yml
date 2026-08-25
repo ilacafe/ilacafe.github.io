@@ -45,8 +45,13 @@ jobs:
             [ -n "$url" ] || continue
             curl -fsSL --max-time 30 "$url" -o /tmp/lib.js || { echo "::error::could not fetch $url"; exit 1; }
             got="sha384-$(openssl dgst -sha384 -binary /tmp/lib.js | openssl base64 -A)"
-            want=$(grep -ho "src=\"$(echo "$url" | sed 's/[\/&]/\\&/g')\"[^>]*integrity=\"[^\"]*\"" *.html \
-                     | head -1 | sed 's/.*integrity="//;s/".*//')
+            # No match is the expected case until the hashes are committed. Without the
+            # `|| true` grep exits 1, pipefail propagates it, and the step's implicit
+            # `bash -e` kills the job before it prints a single line — which is how
+            # this failed the first time: exit 1, no output, nothing to read.
+            esc=$(printf '%s' "$url" | sed 's/[\/&]/\\&/g')
+            want=$(grep -ho "src=\"$esc\"[^>]*integrity=\"[^\"]*\"" *.html 2>/dev/null \
+                     | head -1 | sed 's/.*integrity="//;s/".*//' || true)
             if [ -z "$want" ]; then
               echo "  $url"
               echo "      $got   (no integrity attribute yet)"
