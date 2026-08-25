@@ -20,13 +20,13 @@ npx wrangler whoami >/dev/null 2>&1 || npx wrangler login
 
 # ---------------------------------------------------------------- compatibility date
 CURRENT=$(grep -E '^compatibility_date' wrangler.toml | cut -d'"' -f2)
-if [ "$CURRENT" = "2025-01-01" ]; then
+if [ -z "$CURRENT" ]; then
   warn ""
-  warn "wrangler.toml still has the placeholder compatibility_date (2025-01-01)."
+  warn "wrangler.toml has no compatibility_date."
   warn "The live Worker's date is in the dashboard under:"
   warn "  Workers & Pages -> ila-push -> Settings -> Runtime"
   warn "Deploying with a different date can change runtime behaviour."
-  read -rp "Enter the date shown there (or press Enter to keep $CURRENT): " D
+  read -rp "Enter the date shown there: " D
   if [ -n "$D" ]; then
     sed -i.bak "s/^compatibility_date = .*/compatibility_date = \"$D\"/" wrangler.toml && rm -f wrangler.toml.bak
     echo "set to $D"

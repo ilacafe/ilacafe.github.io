@@ -60,9 +60,9 @@ today only as literals inside the deployed script, and deploying replaces it:
 dashboard → Workers & Pages → ila-push → Edit code → the constants at the top.
 Losing `VAPID_PRIVATE` means every admin device must re-subscribe.
 
-`wrangler deploy` on its own works too; read `wrangler.toml` first for the two
-warnings that matter on a first deploy (the compatibility date, and cron triggers
-being made authoritative).
+`wrangler deploy` on its own works too. One warning still applies either way:
+deploying makes the cron list in `wrangler.toml` authoritative, so a schedule
+configured in the dashboard but missing from that file is removed.
 
 ## Secrets
 

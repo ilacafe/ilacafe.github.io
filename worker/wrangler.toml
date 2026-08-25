@@ -1,12 +1,16 @@
 name = "ila-push"
 main = "worker.js"
 
-# ⚠️ BEFORE THE FIRST DEPLOY FROM THIS FILE
-# Set this to the compatibility date the live Worker already uses (Cloudflare
-# dashboard → Workers & Pages → ila-push → Settings → Runtime). Deploying with a
-# different date can change runtime behaviour under you. The date below is a
-# placeholder chosen to be conservative, not a reading of production.
-compatibility_date = "2025-06-17"
+# Matched to the live Worker: the dashboard (ila-push → Settings → Runtime) reads
+# 2026-06-17, which is also the Worker's creation date — Cloudflare defaults a new
+# Worker's compatibility date to the day it was made.
+#
+# Do not change this casually. The compatibility date decides which runtime
+# behaviours this code gets, so moving it can alter the email parsing and the
+# payment path without a line of code changing. It was briefly committed as
+# 2025-06-17, a year adrift; deploying that would have rolled the runtime back
+# twelve months.
+compatibility_date = "2026-06-17"
 
 # Cron triggers. worker.js branches on the matched schedule string, so these two
 # expressions are load-bearing — "0 20 1 * *" is compared literally in scheduled().
