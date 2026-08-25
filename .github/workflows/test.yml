@@ -20,6 +20,47 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  # SRI hashes cannot be invented — they have to be computed from the bytes the CDN
+  # actually serves. This fetches each external script the pages reference and prints
+  # its sha384, so the integrity attributes can be filled in from a real reading.
+  #
+  # Once they are present it stops being a report and starts being a check: a hash
+  # that no longer matches means the file changed at a version that is supposed to be
+  # fixed, which is the whole thing SRI exists to catch.
+  hashes:
+    name: third-party hashes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: fetch each pinned script and compare
+        run: |
+          set -uo pipefail
+          fail=0
+          # Collected first, then read from a here-string. A `while` on the right of a
+          # pipe runs in a subshell, so `fail=1` set inside it would be discarded and
+          # the job would report success on a mismatch — which is the one outcome this
+          # job exists to prevent.
+          urls=$(grep -ho 'src="https://[^"]*"' *.html | sed 's/src="//;s/"//' | sort -u)
+          while read -r url; do
+            [ -n "$url" ] || continue
+            curl -fsSL --max-time 30 "$url" -o /tmp/lib.js || { echo "::error::could not fetch $url"; exit 1; }
+            got="sha384-$(openssl dgst -sha384 -binary /tmp/lib.js | openssl base64 -A)"
+            want=$(grep -ho "src=\"$(echo "$url" | sed 's/[\/&]/\\&/g')\"[^>]*integrity=\"[^\"]*\"" *.html \
+                     | head -1 | sed 's/.*integrity="//;s/".*//')
+            if [ -z "$want" ]; then
+              echo "  $url"
+              echo "      $got   (no integrity attribute yet)"
+            elif [ "$got" = "$want" ]; then
+              echo "  OK  $url"
+            else
+              echo "::error::$url changed at a pinned version"
+              echo "::error::  committed $want"
+              echo "::error::  served    $got"
+              fail=1
+            fi
+          done <<< "$urls"
+          exit $fail
+
   browser:
     name: QR on a real page
     runs-on: ubuntu-latest
