@@ -83,7 +83,8 @@ if (!fs.existsSync(RULES_FILE)) {
   note('The live rules are the only thing standing between a stranger and the till,');
   note('and nobody can review or diff what is not checked in. Export them with:');
   note('');
-  note('    firebase database:get /.settings/rules --pretty > database.rules.json');
+  note('    curl "https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json\\');
+  note('          ?access_token=$(gcloud auth print-access-token)" > database.rules.json');
   note('');
   note('or copy them out of the console (Realtime Database → Rules), then commit.');
   note('See docs/database-access.md. This suite starts checking them once they land.');
@@ -91,12 +92,34 @@ if (!fs.existsSync(RULES_FILE)) {
   return;
 }
 
+// A rules file is JSON *with comments* — Firebase accepts them and its own
+// getRules() returns "the rules source including comments", so an exported file
+// very plausibly has them. Strip them before parsing, tracking string state so a
+// // inside a rule expression is not mistaken for a comment.
+function stripComments(text) {
+  let out = '', i = 0, inString = false;
+  while (i < text.length) {
+    const c = text[i], next = text[i + 1];
+    if (inString) {
+      if (c === '\\') { out += c + (next || ''); i += 2; continue; }
+      if (c === '"') inString = false;
+      out += c; i++; continue;
+    }
+    if (c === '"') { inString = true; out += c; i++; continue; }
+    if (c === '/' && next === '/') { const nl = text.indexOf('\n', i); if (nl < 0) break; i = nl; continue; }
+    if (c === '/' && next === '*') { const end = text.indexOf('*/', i); if (end < 0) break; i = end + 2; continue; }
+    out += c; i++;
+  }
+  return out;
+}
+
 let rules = null;
+const raw = fs.readFileSync(RULES_FILE, 'utf8');
 try {
-  rules = JSON.parse(fs.readFileSync(RULES_FILE, 'utf8'));
-  check('database.rules.json parses as JSON', true);
+  rules = JSON.parse(stripComments(raw));
+  check('database.rules.json parses (comments allowed)', true);
 } catch (e) {
-  check('database.rules.json parses as JSON', false, e.message);
+  check('database.rules.json parses (comments allowed)', false, e.message);
   done();
   return;
 }
