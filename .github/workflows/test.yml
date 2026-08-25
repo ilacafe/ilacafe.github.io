@@ -20,6 +20,27 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  # SRI hashes cannot be invented — they have to be computed from the bytes the CDN
+  # actually serves. This fetches each external script the pages reference and prints
+  # its sha384, so the integrity attributes can be filled in from a real reading.
+  #
+  # Once they are present it stops being a report and starts being a check: a hash
+  # that no longer matches means the file changed at a version that is supposed to be
+  # fixed, which is the whole thing SRI exists to catch.
+  # Verifies the integrity hashes in the pages against the bytes the CDNs actually
+  # serve, and that each CDN allows a cross-origin read. Runs here rather than in the
+  # node suite because nothing offline can tell a correct digest from a plausible one.
+  #
+  # This was shell using grep to pair a src with its integrity. grep is line-based and
+  # the attributes sit on separate lines, so it matched nothing, reported every script
+  # as unhashed, and passed — a green check that checked nothing.
+  hashes:
+    name: third-party hashes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 test/verify-sri.py
+
   browser:
     name: QR on a real page
     runs-on: ubuntu-latest

@@ -62,6 +62,9 @@ costs money:
   the secret the public pages carry, and an unset binding fails closed.
 - **analytics** — the page fetches the date range it is showing rather than every
   bill ever recorded, and no read pulls an append-only node whole.
+- **third-party** — every external script names an exact version, comes from a
+  known origin, and is actually used by the page that loads it. CI additionally
+  fetches each one and reports its SHA-384.
 
 CI runs these on every pull request and on `main`.
 

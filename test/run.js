@@ -18,6 +18,7 @@ const suites = [
   'worker.test.js',
   'analytics-range.test.js',
   'escaping.test.js',
+  'third-party.test.js',
 ];
 
 let failed = [];
