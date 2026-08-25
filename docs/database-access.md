@@ -8,18 +8,14 @@ role lookup, a confirmation dialog. Anyone who opens devtools can skip all of it
 The Realtime Database rules are the only thing that actually stops a read or a
 write. They are the security boundary for this entire project.
 
-## The rules are not in this repo yet
+## Exporting the rules
 
-They exist and they are not trivial — `analytics.html` refers to "the locked
-rules" and expects `orders/completed` to be role-readable via `users/{uid}` —
-but they live only in the Firebase console. That means:
+The rules are committed at `database.rules.json`. If you change them in the
+console, export them again so the file stays the source of truth — otherwise
+nobody can review the change, see when it happened, or roll it back, and an
+accidental `".read": true` stays invisible until someone notices the leak.
 
-- nobody can review them,
-- nobody can see when they last changed, or who changed them,
-- an accidental `".read": true` is invisible until someone notices the leak,
-- and there is no way to roll one back.
-
-**Export them and commit them.** Two ways, easiest first.
+Two ways, easiest first.
 
 ### From the console
 
@@ -45,11 +41,9 @@ A rules file is JSON **with comments** — Firebase accepts them, and an export
 may well contain them. The checks here strip comments before parsing, so leave
 them in: they are usually the most useful thing in the file.
 
-Once that file lands, `npm test` starts checking it (see below) and every future
-change to it shows up as a reviewable diff.
-
-`firebase.json` is already committed and points at that filename, so
-`firebase deploy --only database` will deploy it once it exists.
+`npm test` checks that file (see below), so every change to it shows up as a
+reviewable diff. `firebase.json` points at that filename, so
+`firebase deploy --only database` deploys it.
 
 > **Do not deploy rules that were not exported from production first.**
 > Deploying a guess can either lock the café out of its own till mid-service or
@@ -160,6 +154,29 @@ breaking, but there is no reason to accept even that.
 The ordering page keeps the old direct reads as a fallback for exactly this
 window. Once the rules are deployed those reads fail, which is harmless: the
 values stay at their neutral defaults and `eta/live` is doing the work.
+
+## The robot account, and what refits the ETA model
+
+`eta/model` is not static. The Cloudflare Worker in [`worker/`](../worker/)
+refits it monthly from 75 days of completions — per-item base times, the oven
+curve, both saturation curves, the quantity curve, cushions and margins — behind
+guardrails that reject a refit whose numbers are absurd, and a snapshot at
+`eta/modelPrevious` to roll back to. `eta/recalMeta` records what the last run
+did.
+
+That Worker signs in as `robot@cafeila.app`, which is why the rules name that
+address explicitly: it is the only identity allowed to write `eta/model`,
+`eta/modelPrevious`, `eta/recalMeta` and `payments/incoming`. No browser holds
+that credential, and nothing in a page can obtain it.
+
+Two consequences worth keeping in mind when reading the rules:
+
+- A rule that grants `orders/completed` to staff must still admit the robot, or
+  the monthly refit reads nothing and the model silently stops improving.
+- `pushSubscriptions` is read by the Worker to notify the owner. Anything that
+  closes it to the robot turns off the recalibration result, the unverified-
+  payment alert, the per-bank alarm and the weekly digest — all of which fail
+  quietly, because a push that cannot be sent has nowhere to report.
 
 ## Deploying rules
 

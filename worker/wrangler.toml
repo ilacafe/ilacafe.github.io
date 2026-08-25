@@ -1,0 +1,32 @@
+name = "ila-push"
+main = "worker.js"
+
+# ⚠️ BEFORE THE FIRST DEPLOY FROM THIS FILE
+# Set this to the compatibility date the live Worker already uses (Cloudflare
+# dashboard → Workers & Pages → ila-push → Settings → Runtime). Deploying with a
+# different date can change runtime behaviour under you. The date below is a
+# placeholder chosen to be conservative, not a reading of production.
+compatibility_date = "2025-01-01"
+
+# Cron triggers. worker.js branches on the matched schedule string, so these two
+# expressions are load-bearing — "0 20 1 * *" is compared literally in scheduled().
+#
+# ⚠️ `wrangler deploy` makes this list authoritative: any cron configured in the
+# dashboard but absent here is REMOVED. Check the dashboard's Triggers tab against
+# this list before the first deploy.
+[triggers]
+crons = [
+  "0 20 1 * *",   # monthly, 20:00 UTC on the 1st — ETA model recalibration
+  "0 * * * *"     # hourly — UPI verification monitor (+ weekly digest on Mondays 04:00 UTC)
+]
+
+# Public by design. All three already appear in the site's own page source, so
+# committing them here leaks nothing that ila.cafe does not already serve.
+[vars]
+VAPID_PUBLIC     = "BGghzKe8sBiO764Kti2SSkg2Kpvr_ODBza-EONxJzri5IcIcAH956KNw2SO6TTTUKrXp8f4d-RmopfN1eU-pgGM"
+FIREBASE_API_KEY = "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ"
+DB_URL           = "https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+# Everything else is a secret binding — see README.md. Never add them here:
+#   VAPID_PRIVATE  SHARED_SECRET  INGEST_SECRET  RECAL_SECRET  ROBOT_PASSWORD
+#   VAPID_SUBJECT  ROBOT_EMAIL    EMAIL_FORWARD_TO

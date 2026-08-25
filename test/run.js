@@ -15,6 +15,7 @@ const suites = [
   'eta-summary.test.js',
   'eta-agreement.test.js',
   'rules.test.js',
+  'worker.test.js',
 ];
 
 let failed = [];
