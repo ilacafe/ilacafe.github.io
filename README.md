@@ -39,7 +39,7 @@ Everything talks to the live database, so treat the till pages as live.
 
 ```sh
 npm install
-npm test              # syntax, settlement, pricing, QR, rules
+npm test              # syntax, settlement, pricing, QR, rules, Worker
 npm run test:browser  # loads pos.html in Chromium (needs a browser download)
 npm run access-map    # prints every database path each app reads and writes
 ```
@@ -57,19 +57,33 @@ costs money:
 - **QR** — the payment code is checked against a reference encoder, decoded back
   by an independent decoder, and rendered on a real page with the network off.
 - **rules** — see below.
+- **Worker** — no secret is ever a literal in `worker/worker.js` (the repo is
+  served raw, so that file is public), the recalibration route is not gated by
+  the secret the public pages carry, and an unset binding fails closed.
 
 CI runs these on every pull request and on `main`.
 
 ## Database rules
 
 The rules are the only real security boundary: every check inside a page is
-advice to a cooperating browser. They are **not in this repo yet** — see
-[`docs/database-access.md`](docs/database-access.md) for how to export them and
-what the checks cover once they land.
+advice to a cooperating browser. They live in
+[`database.rules.json`](database.rules.json) and `npm test` checks them — see
+[`docs/database-access.md`](docs/database-access.md) for what it can and cannot
+verify.
+
+## The Worker
+
+[`worker/`](worker/) holds the Cloudflare Worker that sends push notifications,
+ingests bank credit alerts, and refits the ETA model each month. It is the only
+component that runs somewhere a customer's browser cannot reach, and the only
+holder of the credential allowed to write `eta/model` and `payments/incoming`.
+
+It does **not** deploy with the pages — see [`worker/README.md`](worker/README.md).
 
 ## Deploying
 
-Push to `main`. GitHub Pages serves the result.
+Push to `main`. GitHub Pages serves the result. The Worker is separate, and so
+are the database rules; neither ships with a push.
 
 Two things to know:
 

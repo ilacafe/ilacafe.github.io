@@ -799,8 +799,8 @@
           window.etaLoad = { chef: 0, barista: 0 };
           window.etaLastPizzaOutMs = 0;
           try {
-            db.ref('orders/active/chef').on('value', s => { window.etaLoad.chef = s.numChildren(); });
-            db.ref('orders/active/barista').on('value', s => { window.etaLoad.barista = s.numChildren(); });
+            db.ref('orders/active/chef').on('value', s => { window.etaLoad.chef = s.numChildren(); publishEtaLive(); });
+            db.ref('orders/active/barista').on('value', s => { window.etaLoad.barista = s.numChildren(); publishEtaLive(); });
             // most recent pizza completion -> for oven idle. orders/ready carries items + timestamp.
             db.ref('orders/ready').limitToLast(40).on('value', s => {
               let last = 0;
@@ -808,9 +808,108 @@
                 const v = ch.val()||{};
                 if (v.items && isPizza(v.items) && v.timestamp && v.timestamp>last) last = v.timestamp;
               });
-              if (last) window.etaLastPizzaOutMs = last;
+              if (last) { window.etaLastPizzaOutMs = last; publishEtaLive(); }
             });
+            db.ref('orders/completed/chef').limitToLast(30).on('value', s => { window.etaPace.chef = etaPaceFrom(s); recomputeEtaTempo(); publishEtaLive(); });
+            db.ref('orders/completed/barista').limitToLast(30).on('value', s => { window.etaPace.barista = etaPaceFrom(s); recomputeEtaTempo(); publishEtaLive(); });
           } catch(e){}
+
+          // ---- 4b. THE PUBLIC SUMMARY (eta/live) ----
+          // The ordering page needs four things to quote a wait: how many orders are ahead
+          // at each station, when a pizza last left the oven, and how fast the kitchen is
+          // currently running. It used to get them by reading orders/active, orders/ready
+          // and orders/completed directly — which is why those nodes were world-readable.
+          //
+          // They carry every order's items, notes and (for delivery) the customer's
+          // address, and completed/ready are never pruned, so serving four numbers meant
+          // publishing the café's whole order history to anyone who asked for it.
+          //
+          // The POS publishes just those numbers here instead. `pace` is one ratio per
+          // recent completion — how long it actually took against what the model expects —
+          // carrying no item names, no destination and no notes, so the ordering page can
+          // still run its own median and smoothing over real signal.
+          //
+          // The POS is the writer because it is open throughout service and already holds
+          // every input. If no POS is open the node just goes stale; `updatedAt` lets the
+          // ordering page notice and fall back to a neutral estimate rather than a wrong one.
+          window.etaPace = { chef: [], barista: [] };
+
+          // ---- KITCHEN TEMPO ----
+          // How fast the kitchen is actually running against what the model expects.
+          // The ordering page has had this since it was written; the POS never did, so
+          // the counter and the app quoted different waits for the same cart in the same
+          // kitchen — up to about five minutes apart on a backlogged pizza. Worse, the POS
+          // stamps its estimate onto the order (predLow/predHigh), and admin's accuracy
+          // report scores THAT, so the report was grading a number no customer ever saw.
+          //
+          // Computed here and published, so there is one tempo and both sides use it.
+          // Same five guards as the ordering page, deliberately: median (one slow order
+          // cannot move it), a six-sample floor, a hard clamp, exponential smoothing, and
+          // it scales only the condition-driven part of the estimate — never the base item
+          // time or the cushion.
+          const TEMPO_WINDOW_MS = 45*60000, TEMPO_MIN_SAMPLES = 6;
+          const TEMPO_CLAMP_LO = 0.85, TEMPO_CLAMP_HI = 1.25, TEMPO_SMOOTH = 0.25;
+          window.etaTempo = 1.0;
+          function recomputeEtaTempo(){
+            const now = serverNowSafe();
+            const ratios = [];
+            window.etaPace.chef.concat(window.etaPace.barista).forEach(p => {
+              if (!p || !p.at || !p.r) return;
+              if (now - p.at > TEMPO_WINDOW_MS) return;
+              if (p.r <= 0 || p.r > 60) return;
+              ratios.push(p.r);
+            });
+            let target = 1.0;
+            if (ratios.length >= TEMPO_MIN_SAMPLES){
+              ratios.sort((a,b) => a-b);
+              const med = ratios[Math.floor(ratios.length/2)];
+              target = Math.max(TEMPO_CLAMP_LO, Math.min(TEMPO_CLAMP_HI, med));
+            }
+            window.etaTempo = TEMPO_SMOOTH*target + (1-TEMPO_SMOOTH)*window.etaTempo;
+          }
+
+          function etaPaceFrom(snap){
+            const out = [];
+            snap.forEach(ch => {
+              const o = ch.val() || {};
+              if (!o.completedAt || !o.createdAt) return;
+              const durMin = (o.completedAt - o.createdAt) / 60000;
+              if (durMin < 1 || durMin > 60) return;            // clock skew, or a ticket left open
+              let base = 0;
+              for (const nm in (o.items || {})) { const b = itemBaseTime(nm); if (b > base) base = b; }
+              if (!(base > 0)) return;
+              // published unrounded: rounding here moves the median the ordering page
+              // takes, so the estimate would drift from what reading the orders gave.
+              out.push({ at: o.completedAt, r: durMin / base });
+            });
+            return out;
+          }
+          let etaPubTimer = null, etaPubLast = '';
+          function publishEtaLive(){
+            if (etaPubTimer) return;                            // coalesce a burst of listener fires
+            etaPubTimer = setTimeout(() => {
+              etaPubTimer = null;
+              try {
+                const pace = window.etaPace.chef.concat(window.etaPace.barista)
+                                 .sort((a, b) => a.at - b.at).slice(-30);
+                const payload = {
+                  activeChef: window.etaLoad.chef || 0,
+                  activeBarista: window.etaLoad.barista || 0,
+                  lastPizzaOut: window.etaLastPizzaOutMs || 0,
+                  // Published so the ordering page uses the SAME tempo the counter used,
+                  // rather than deriving its own and drifting. `pace` stays as the fallback
+                  // for a build that predates this.
+                  tempo: window.etaTempo,
+                  pace: pace
+                };
+                const sig = JSON.stringify(payload);
+                if (sig === etaPubLast) return;                 // nothing actually moved
+                etaPubLast = sig;
+                payload.updatedAt = firebase.database.ServerValue.TIMESTAMP;
+                db.ref('eta/live').set(payload);
+              } catch(e){}
+            }, 4000);
+          }
         
           function serverNowSafe(){ return (typeof serverNow==='function') ? serverNow() : Date.now(); }
         
@@ -840,14 +939,17 @@
         
             // per-station total = base + qty penalty + (oven if pizza) + saturation
             const idleMin = window.etaLastPizzaOutMs ? Math.max(0,(serverNowSafe()-window.etaLastPizzaOutMs)/60000) : 999;
+            // base is FIXED (the physical prep time); qty, oven and saturation all describe
+            // CURRENT kitchen state, so only those are scaled by live tempo. Base and cushion
+            // are untouched — the same split the ordering page uses.
+            const tempo = (typeof window.etaTempo === 'number' && window.etaTempo > 0) ? window.etaTempo : 1.0;
             function stationTime(s, key){
               if (s.base===0 && s.qty===0) return 0;
-              let t = s.base;
-              t += interp(M.qtyCurve, s.qty);
-              if (s.pizza) t += interp(M.ovenCurve, idleMin);
+              let conditionAdd = interp(M.qtyCurve, s.qty);
+              if (s.pizza) conditionAdd += interp(M.ovenCurve, idleMin);
               const satCurve = (key==='chef') ? M.satCurveChef : M.satCurveBarista;
-              t += interp(satCurve, (window.etaLoad[key]||0));
-              return t;
+              conditionAdd += interp(satCurve, (window.etaLoad[key]||0));
+              return s.base + conditionAdd*tempo;
             }
             // determine the DOMINANT category (the one driving the estimate) for cushion selection
             function categoryOf(s, isChef){
@@ -1033,7 +1135,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-25.1';
+        const ILA_BUILD = '2026-08-25.4';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -2416,8 +2518,13 @@
                 }
             } catch(e){}
             try {
+                // Same rule as the customer app: orders/track is world-readable, and for a
+                // web delivery order `destination` IS the customer's address. Only a table
+                // label goes in; the kitchen ticket keeps the real destination.
+                const publicTrackLabel = /^Table \d+$/.test(String(destination || '').trim())
+                    ? String(destination).trim() : 'Order';
                 db.ref('orders/track/' + trackId).update(Object.assign({
-                    status: 'preparing', items: cartObj, table: destination,
+                    status: 'preparing', items: cartObj, table: publicTrackLabel,
                     stations: stationCount, stationsDone: 0,
                     acceptedAt: firebase.database.ServerValue.TIMESTAMP
                 }, predBlock));

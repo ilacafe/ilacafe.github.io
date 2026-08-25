@@ -303,7 +303,7 @@
         const db = firebase.database();
         // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
         // page being served is cached, not the one just pushed.
-        const ILA_BUILD = '2026-08-25.1';
+        const ILA_BUILD = '2026-08-25.4';
 
         // Register the shared service worker (push + instant-open caching).
         // A cache-first service worker serves the PREVIOUS build until it decides to update,
@@ -358,10 +358,34 @@
                 });
             } catch(e){}
             let loadChef=0, loadBar=0, lastPizzaOut=0;
+            // The POS publishes exactly the numbers this page needs to quote a wait, so
+            // the order nodes themselves no longer have to be readable from here — they
+            // carry every order's items, notes and delivery address and are never pruned.
+            //
+            // The direct reads are kept as a fallback for the window where eta/live has
+            // not been written yet, and they are harmless once the rules close those nodes:
+            // the reads simply fail and these values stay at their neutral defaults.
+            let etaLiveFresh = false;
+            const ETA_LIVE_STALE_MS = 15*60000;   // no POS open for 15 min -> stop trusting it
             try {
-                db.ref('orders/active/chef').on('value', s=>{ loadChef=s.numChildren(); });
-                db.ref('orders/active/barista').on('value', s=>{ loadBar=s.numChildren(); });
-                db.ref('orders/ready').limitToLast(40).on('value', s=>{ let last=0; s.forEach(c=>{const v=c.val()||{}; if(v.items&&v.timestamp&&v.timestamp>last&&isPizza(v.items))last=v.timestamp;}); if(last)lastPizzaOut=last; });
+                db.ref('eta/live').on('value', s=>{
+                    const v = s.val();
+                    if (!v || !v.updatedAt || (Date.now() - v.updatedAt) > ETA_LIVE_STALE_MS) { etaLiveFresh = false; return; }
+                    etaLiveFresh = true;
+                    loadChef = parseInt(v.activeChef) || 0;
+                    loadBar  = parseInt(v.activeBarista) || 0;
+                    if (v.lastPizzaOut) lastPizzaOut = v.lastPizzaOut;
+                    // Prefer the tempo the POS computed: one number, so the counter and this
+                    // page cannot quote different waits for the same cart. Falling back to
+                    // deriving it from the ratios covers a POS running an older build.
+                    if (typeof v.tempo === 'number' && v.tempo > 0) kitchenTempo = v.tempo;
+                    else recomputeTempoFromPace(v.pace || []);
+                });
+            } catch(e){}
+            try {
+                db.ref('orders/active/chef').on('value', s=>{ if(!etaLiveFresh) loadChef=s.numChildren(); });
+                db.ref('orders/active/barista').on('value', s=>{ if(!etaLiveFresh) loadBar=s.numChildren(); });
+                db.ref('orders/ready').limitToLast(40).on('value', s=>{ if(etaLiveFresh) return; let last=0; s.forEach(c=>{const v=c.val()||{}; if(v.items&&v.timestamp&&v.timestamp>last&&isPizza(v.items))last=v.timestamp;}); if(last)lastPizzaOut=last; });
             } catch(e){}
 
             // ===== LIVE KITCHEN TEMPO (conservative, smoothed, NON-jumpy) =====
@@ -397,6 +421,10 @@
                     const exp=tempoExpected(o.items, o.completedAt);
                     if(exp && exp>0) ratios.push(dur/exp);
                 });
+                applyTempo(ratios);
+            }
+            // The five anti-jump guards live here, so both sources of ratios get them.
+            function applyTempo(ratios){
                 let target;
                 if(ratios.length >= TEMPO_MIN_SAMPLES){
                     ratios.sort((a,b)=>a-b);
@@ -407,6 +435,19 @@
                 }
                 // exponential smoothing: drift toward target, never jump
                 kitchenTempo = TEMPO_SMOOTH*target + (1-TEMPO_SMOOTH)*kitchenTempo;
+            }
+            // Same maths, fed by the ratios the POS already computed, so this page never
+            // has to see the orders they came from.
+            function recomputeTempoFromPace(pace){
+                const now = Date.now();
+                const ratios = [];
+                (pace||[]).forEach(p=>{
+                    if(!p || !p.at || !p.r) return;
+                    if(now - p.at > TEMPO_WINDOW_MS) return;    // same 45-minute window
+                    if(p.r <= 0 || p.r > 60) return;            // same sanity bound
+                    ratios.push(p.r);
+                });
+                applyTempo(ratios);
             }
             try {
                 // watch recent completions from BOTH stations for the tempo signal
@@ -426,7 +467,7 @@
             window.custEstimateETA = function(items){
                 const st={chef:{base:0,qty:0,pizza:false,bakedOnly:true},barista:{base:0,qty:0,pizza:false,bakedOnly:true}};
                 let any=false;
-                for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const station=isPizza(nm)?'chef':'barista'; const b=itemBase(nm); if(b>st[station].base)st[station].base=b; st[station].qty+=q; if(isPizza(nm))st[station].pizza=true; if(!isBaked(nm))st[station].bakedOnly=false; any=true; }
+                for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const rt=custRouteFor(nm); const station = rt==='chef' ? 'chef' : (rt==='barista' ? 'barista' : (isPizza(nm)?'chef':'barista')); const b=itemBase(nm); if(b>st[station].base)st[station].base=b; st[station].qty+=q; if(isPizza(nm))st[station].pizza=true; if(!isBaked(nm))st[station].bakedOnly=false; any=true; }
                 if(!any)return null;
                 const idle = lastPizzaOut ? Math.max(0,(Date.now()-lastPizzaOut)/60000) : 999;
                 const tempo = (typeof kitchenTempo==='number' && kitchenTempo>0) ? kitchenTempo : 1.0;
@@ -663,7 +704,40 @@
         });
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderCustomerMenu(); });
         db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; renderCustomerMenu(); });
-        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; renderCustomerMenu(); });
+        // Which station makes an item is configured per item in admin. The POS reads that
+        // map; this page used to guess from the name alone, so anything routed to the chef
+        // that is not recognised as a pizza (garlic bread, hot food) landed on the barista
+        // here and the chef there — different saturation curve, and the chef curve starts
+        // seven minutes higher. Same map, same answer.
+        window.custRouting = {};
+        function buildCustRouting(){
+            const m = {};
+            for (const cat in currentMenuData){
+                for (const item in currentMenuData[cat]){
+                    const def = currentMenuData[cat][item] || {};
+                    const r = def.routing || 'barista';
+                    m[item] = r;
+                    if (def.hasSizes){ m[item + ' (Regular)'] = r; m[item + ' (Large)'] = r; }
+                }
+            }
+            window.custRouting = m;
+        }
+        // A cart key carries its options — "Latte (Regular) (Very sweet)" — while the map is
+        // keyed by the menu name. Strip trailing "(...)" groups until something matches, so a
+        // sweetened or sized line still finds its station.
+        function custRouteFor(name){
+            const m = window.custRouting || {};
+            let k = String(name == null ? '' : name).trim();
+            if (m[k]) return m[k];
+            for (let i = 0; i < 3; i++){
+                const stripped = k.replace(/\s*\([^()]*\)\s*$/, '').trim();
+                if (!stripped || stripped === k) break;
+                k = stripped;
+                if (m[k]) return m[k];
+            }
+            return null;
+        }
+        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; buildCustRouting(); renderCustomerMenu(); });
 
         function updateCheckoutOptions() {
             const btnDel = document.getElementById('type-delivery'); const btnTak = document.getElementById('type-takeaway'); const btnDin = document.getElementById('type-dinein'); const scanMsg = document.getElementById('scan-instruction'); const payBtn = document.getElementById('btn-pay');
@@ -998,7 +1072,15 @@
                 // the whole node can be enumerated. The number the counter needs for the
                 // WhatsApp pay link lives on the order in orders/pendingWeb, which is
                 // staff-only — sendPayLink and contactRow both read it from there.
-                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: info.details, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                // Only a table label may go into the public track record. orders/track is
+                // world-readable — the table lookup below queries the whole node — so a
+                // delivery address written here is readable by anyone. Nothing reads this
+                // field except that lookup, which matches "Table N" exactly, so anything
+                // else is replaced with a generic word. The real destination stays on the
+                // order in orders/pendingWeb, which is staff-only.
+                const publicTrackLabel = d => /^Table \d+$/.test(String(d == null ? '' : d).trim())
+                    ? String(d).trim() : 'Order';
+                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: publicTrackLabel(info.details), gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 if (window.watchOrderStatus) window.watchOrderStatus();
                 window.watchPaymentStatus(trackId, info);
             }).catch(() => alert("Couldn't place the order — check your connection and try again."));

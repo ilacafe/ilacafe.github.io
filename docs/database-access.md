@@ -8,18 +8,14 @@ role lookup, a confirmation dialog. Anyone who opens devtools can skip all of it
 The Realtime Database rules are the only thing that actually stops a read or a
 write. They are the security boundary for this entire project.
 
-## The rules are not in this repo yet
+## Exporting the rules
 
-They exist and they are not trivial — `analytics.html` refers to "the locked
-rules" and expects `orders/completed` to be role-readable via `users/{uid}` —
-but they live only in the Firebase console. That means:
+The rules are committed at `database.rules.json`. If you change them in the
+console, export them again so the file stays the source of truth — otherwise
+nobody can review the change, see when it happened, or roll it back, and an
+accidental `".read": true` stays invisible until someone notices the leak.
 
-- nobody can review them,
-- nobody can see when they last changed, or who changed them,
-- an accidental `".read": true` is invisible until someone notices the leak,
-- and there is no way to roll one back.
-
-**Export them and commit them.** Two ways, easiest first.
+Two ways, easiest first.
 
 ### From the console
 
@@ -45,11 +41,9 @@ A rules file is JSON **with comments** — Firebase accepts them, and an export
 may well contain them. The checks here strip comments before parsing, so leave
 them in: they are usually the most useful thing in the file.
 
-Once that file lands, `npm test` starts checking it (see below) and every future
-change to it shows up as a reviewable diff.
-
-`firebase.json` is already committed and points at that filename, so
-`firebase deploy --only database` will deploy it once it exists.
+`npm test` checks that file (see below), so every change to it shows up as a
+reviewable diff. `firebase.json` points at that filename, so
+`firebase deploy --only database` deploys it.
 
 > **Do not deploy rules that were not exported from production first.**
 > Deploying a guess can either lock the café out of its own till mid-service or
@@ -115,6 +109,74 @@ well under a second, and PINs authorise voids, expenses, withdrawals, tip
 payouts and end-of-day. Restricting the read does not fix the design — the PIN
 check still happens in the browser and can be skipped — but it removes the
 easiest attack. The real fix is to verify PINs somewhere that isn't the client.
+
+## The public surface, and eta/live
+
+The ordering page runs before anyone signs in, so whatever it reads has to be
+world-readable. It used to read `orders/active`, `orders/ready` and
+`orders/completed` directly, to work out how many orders were ahead, when a pizza
+last left the oven, and how fast the kitchen was going.
+
+Those nodes carry every order's items, notes and — for a delivery — the
+customer's address, and `ready` and `completed` are never pruned. Serving four
+numbers meant publishing the café's whole order history to anyone who asked.
+
+The POS now publishes just those numbers to **`eta/live`**:
+
+```
+eta/live: { activeChef, activeBarista, lastPizzaOut, pace: [{at, r}…], updatedAt }
+```
+
+`pace` is one ratio per recent completion — how long it took against what the
+model expects — with no item names, no destination and no notes. The ordering
+page still runs its own median, window and smoothing over it, so the estimate is
+unchanged; `test/eta-summary.test.js` asserts that both routes produce the same
+tempo to within 1e-9.
+
+The POS is the writer because it is open throughout service and already holds
+every input. If no POS is open, the node goes stale, and the ordering page checks
+`updatedAt` and falls back to a neutral estimate rather than a wrong one.
+
+### Deploy the code before tightening these rules
+
+The rules that close `orders/active`, `orders/ready` and `orders/completed` are
+already in `database.rules.json`, but the order of operations matters:
+
+1. **Ship the pages first** (merge to `main`; GitHub Pages deploys them).
+2. **Open the POS and let it publish.** Check `eta/live` has an `updatedAt` in the
+   Firebase console. Until a POS with this build is open, nothing writes it.
+3. **Then** `firebase deploy --only database`.
+
+Do it the other way round and the ordering page loses its wait estimate for as
+long as it takes a POS to update — the estimate degrades to neutral rather than
+breaking, but there is no reason to accept even that.
+
+The ordering page keeps the old direct reads as a fallback for exactly this
+window. Once the rules are deployed those reads fail, which is harmless: the
+values stay at their neutral defaults and `eta/live` is doing the work.
+
+## The robot account, and what refits the ETA model
+
+`eta/model` is not static. The Cloudflare Worker in [`worker/`](../worker/)
+refits it monthly from 75 days of completions — per-item base times, the oven
+curve, both saturation curves, the quantity curve, cushions and margins — behind
+guardrails that reject a refit whose numbers are absurd, and a snapshot at
+`eta/modelPrevious` to roll back to. `eta/recalMeta` records what the last run
+did.
+
+That Worker signs in as `robot@cafeila.app`, which is why the rules name that
+address explicitly: it is the only identity allowed to write `eta/model`,
+`eta/modelPrevious`, `eta/recalMeta` and `payments/incoming`. No browser holds
+that credential, and nothing in a page can obtain it.
+
+Two consequences worth keeping in mind when reading the rules:
+
+- A rule that grants `orders/completed` to staff must still admit the robot, or
+  the monthly refit reads nothing and the model silently stops improving.
+- `pushSubscriptions` is read by the Worker to notify the owner. Anything that
+  closes it to the robot turns off the recalibration result, the unverified-
+  payment alert, the per-bank alarm and the weekly digest — all of which fail
+  quietly, because a push that cannot be sent has nowhere to report.
 
 ## Deploying rules
 

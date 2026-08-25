@@ -12,7 +12,10 @@ const suites = [
   'reprice.test.js',
   'menu-maps.test.js',
   'qr.test.js',
+  'eta-summary.test.js',
+  'eta-agreement.test.js',
   'rules.test.js',
+  'worker.test.js',
 ];
 
 let failed = [];
