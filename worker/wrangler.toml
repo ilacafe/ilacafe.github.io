@@ -6,7 +6,7 @@ main = "worker.js"
 # dashboard → Workers & Pages → ila-push → Settings → Runtime). Deploying with a
 # different date can change runtime behaviour under you. The date below is a
 # placeholder chosen to be conservative, not a reading of production.
-compatibility_date = "2025-01-01"
+compatibility_date = "2025-06-17"
 
 # Cron triggers. worker.js branches on the matched schedule string, so these two
 # expressions are load-bearing — "0 20 1 * *" is compared literally in scheduled().
