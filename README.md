@@ -64,7 +64,10 @@ costs money:
   bill ever recorded, and no read pulls an append-only node whole.
 - **third-party** — every external script names an exact version, comes from a
   known origin, and is actually used by the page that loads it. CI additionally
-  fetches each one and reports its SHA-384.
+  fetches each one and verifies its SHA-384 against the live file.
+- **table cache** — a till reloaded during a wifi drop restores the open tables
+  rather than showing an empty floor, and refuses a cache old enough to be
+  yesterday's.
 
 CI runs these on every pull request and on `main`.
 

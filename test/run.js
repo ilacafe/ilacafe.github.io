@@ -19,6 +19,7 @@ const suites = [
   'analytics-range.test.js',
   'escaping.test.js',
   'third-party.test.js',
+  'table-cache.test.js',
 ];
 
 let failed = [];

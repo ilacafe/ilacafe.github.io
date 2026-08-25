@@ -1046,6 +1046,9 @@
                 } else {
                     window.activeTables = data;
                 }
+                // Live data wins, and is what a later reload restores from.
+                window.tablesFromCacheAt = 0;
+                try { localStorage.setItem(TABLE_CACHE_KEY, packTables(window.activeTables, Date.now())); } catch(e){}
                 updateDashboards(); refreshActiveModals(); try { renderSideRail(); } catch(e){}
             });
             db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
@@ -1141,7 +1144,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-25.6';
+        const ILA_BUILD = '2026-08-25.7';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -1442,6 +1445,38 @@
             { name: "Very sweet", price: 0 }
         ];
 
+        // OPEN TABLES ACROSS A RELOAD
+        //
+        // The Firebase web SDK keeps no cache on disk — only in memory, which dies with
+        // the page. window.activeTables started empty and was filled only when the
+        // listener fired, so reloading a till during a wifi drop showed an empty floor:
+        // every open bill gone from the screen until the connection came back.
+        //
+        // The menu, the cart and the staff PINs were already mirrored to localStorage.
+        // Tables, the one thing made of money, were not.
+        //
+        // Two guards, because showing a stale floor has its own risks. End of day wipes
+        // the cache, and anything older than the window is refused — otherwise a till
+        // reopened offline the next morning would show yesterday's tables as live.
+        const TABLE_CACHE_KEY = 'ila_cached_tables';
+        const TABLE_CACHE_MAX_AGE = 12 * 60 * 60 * 1000;
+
+        function packTables(tables, now){
+            return JSON.stringify({ at: now, tables: tables || {} });
+        }
+        // Returns { tables, at } or null. Null for absent, unparseable, wrong-shaped or
+        // too old — a caller that cannot tell those apart just shows nothing, which is
+        // the behaviour this replaces and is always safe.
+        function unpackTables(raw, now, maxAge){
+            if (!raw) return null;
+            let v; try { v = JSON.parse(raw); } catch(e){ return null; }
+            if (!v || typeof v !== 'object' || typeof v.at !== 'number') return null;
+            if (!v.tables || typeof v.tables !== 'object') return null;
+            if (!(now - v.at >= 0) || now - v.at > (maxAge || TABLE_CACHE_MAX_AGE)) return null;
+            if (!Object.keys(v.tables).length) return null;
+            return { tables: v.tables, at: v.at };
+        }
+
         window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
         window.cart = JSON.parse(localStorage.getItem('ila_pos_cart')) || {};
         // A cart saved by an older build has no base/cat/mods. Backfill so the add-on sheet and
@@ -1459,6 +1494,13 @@
         window.totalItems = parseInt(localStorage.getItem('ila_pos_items')) || 0;
         
         window.activeTables = {}; window.cashDrawer = 0; window.upiTotal = 0; 
+        // Seed from the cache so a reload mid-outage still shows the floor. The live
+        // listener overwrites this the moment it reaches the server.
+        window.tablesFromCacheAt = 0;
+        try {
+            const restored = unpackTables(localStorage.getItem(TABLE_CACHE_KEY), Date.now());
+            if (restored){ window.activeTables = restored.tables; window.tablesFromCacheAt = restored.at; }
+        } catch(e){}
         window.salesLedger = []; window.pastBills = []; window.pendingWebOrders = {};
 
         // Escape any customer/staff free-text before it goes into innerHTML.
@@ -2092,7 +2134,22 @@
             if (snap.val() === true) {
                 document.getElementById('offline-indicator').style.display = 'none';
             } else {
-                document.getElementById('offline-indicator').style.display = 'block';
+                const ind = document.getElementById('offline-indicator');
+                ind.style.display = 'block';
+                // Say which floor is on screen. A stale table list shown as if it were
+                // live is worse than no table list: someone takes a payment against a
+                // bill that was settled on another till twenty minutes ago. The
+                // settlement transaction refuses that when the connection returns, but
+                // the person at the counter should not have to find out that way.
+                try {
+                    if (window.tablesFromCacheAt){
+                        const mins = Math.max(0, Math.round((Date.now() - window.tablesFromCacheAt) / 60000));
+                        ind.textContent = 'OFFLINE \u00b7 tables as of ' +
+                            (mins < 1 ? 'a moment ago' : mins + ' min ago');
+                    } else {
+                        ind.textContent = 'OFFLINE';
+                    }
+                } catch(e){}
                 let cachedMenu = JSON.parse(localStorage.getItem('ila_cached_menu'));
                 let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
                 window.currentItemOrder = JSON.parse(localStorage.getItem('ila_cached_item_order')) || {};
@@ -4253,6 +4310,10 @@
                     // cashDrawer is NOT reset — physical cash carries forward to the next day.
                     db.ref('pos/upiTotal').set(0);
                     db.ref('pos/activeTables').remove();
+                    // Or a till reopened offline tomorrow morning restores today's
+                    // closed tables and shows them as open.
+                    try { localStorage.removeItem(TABLE_CACHE_KEY); } catch(e){}
+                    window.tablesFromCacheAt = 0;
                 });
                 var _eodBills = Array.isArray(window.pastBills) ? window.pastBills.length : 0;
                 var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income' && !REVERSALS[e.type]) _eodExp += Math.abs(parseFloat(e.amount) || 0); });
