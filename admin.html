@@ -429,7 +429,7 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        const ILA_BUILD = '2026-08-12.3';   // shown at the foot of the page, so a cached build is obvious
+        const ILA_BUILD = '2026-08-12.12';   // shown at the foot of the page, so a cached build is obvious
 
         const auth = firebase.auth();
         window.currentAdmin = { uid: null, name: null };
@@ -841,7 +841,7 @@
                 const carried = r.carried ? '<span style="margin-left:8px; padding:2px 7px; border-radius:5px; font-size:0.65rem; font-weight:bold; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.22);">carried over'+(typeof r.carried === 'string' ? ' \u00b7 '+escapeHTML(r.carried) : '')+'</span>' : '';
                 html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);">'
                       +   '<div style="min-width:0; flex:1;">'
-                      +     '<div style="font-weight:600;">'+inr(r.amount)+acct+carried+'</div>'
+                      +     '<div style="font-weight:700;">'+inr(r.amount)+acct+carried+'</div>'
                       +     '<div style="font-size:0.78rem; opacity:0.6; margin-top:2px;">'+escapeHTML(fmt(r.ts))+' · '+escapeHTML(r.reason)+'</div>'
                       +     (r.note ? '<div style="font-size:0.75rem; opacity:0.55; margin-top:3px;">note: '+escapeHTML(r.note)+'</div>' : '')
                       +   '</div>'
@@ -1141,7 +1141,7 @@
                         : '<button class="btn-action" style="white-space:nowrap; flex-shrink:0;" onclick="voidBill(\''+r.key+'\')">Void</button>';
                     html += '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.08);'+(r.voided?' opacity:0.5;':'')+'">'
                           +   '<div style="min-width:0; flex:1;">'
-                          +     '<div style="font-weight:600;">'+escapeHTML(r.where || 'Bill')+' · '+inr(r.total)+'</div>'
+                          +     '<div style="font-weight:700;">'+escapeHTML(r.where || 'Bill')+' · '+inr(r.total)+'</div>'
                           +     '<div style="font-size:0.78rem; opacity:0.6; margin-top:2px;">'+escapeHTML(fmt(r.ts))+' · '+escapeHTML(String(r.method))+'</div>'
                           +     (r.voided && r.voidReason ? '<div style="font-size:0.75rem; opacity:0.6; margin-top:3px;">voided: '+escapeHTML(r.voidReason)+(r.o.voidBy?' — '+escapeHTML(r.o.voidBy):'')+'</div>' : '')
                           +   '</div>'
