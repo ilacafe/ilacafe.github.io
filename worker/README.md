@@ -24,6 +24,29 @@ It does four things:
 **A push to `main` does not deploy this.** The pages deploy via GitHub Pages;
 this deploys only when you run:
 
+### Automatically, on push (no terminal)
+
+Connect this directory to the Worker once, and every push to `main` deploys it:
+
+**Workers & Pages → ila-push → Settings → Builds → Connect**, then set
+
+| field | value |
+|---|---|
+| Repository | `ilacafe/ilacafe.github.io` |
+| Git branch | `main` |
+| Root directory | `worker` |
+| Build command | *leave empty* |
+| Deploy command | `npx wrangler deploy` |
+
+The root directory matters: without it the build runs at the repo root and tries
+to install the test dependencies, Playwright included.
+
+The Worker name in the dashboard must match `name` in `wrangler.toml` — both are
+`ila-push`, so it lines up. Runtime secrets stay where they are under **Settings
+→ Variables and Secrets**; Workers Builds does not touch them.
+
+### By hand
+
 ```sh
 cd worker && ./deploy.sh
 ```

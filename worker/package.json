@@ -1,0 +1,11 @@
+{
+  "name": "ila-push-worker",
+  "private": true,
+  "description": "Café Ila push relay, payment ingest and ETA recalibration. Deployed separately from the pages — see README.md.",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
