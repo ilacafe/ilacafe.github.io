@@ -41,6 +41,13 @@ Connect this directory to the Worker once, and every push to `main` deploys it:
 The root directory matters: without it the build runs at the repo root and tries
 to install the test dependencies, Playwright included.
 
+Connecting does **not** deploy anything by itself — the build fires on the next
+push to the production branch. If no build is ever listed after a push, the cause
+is upstream of the build: the production branch under **Settings → Build → Branch
+control** (it defaults to the repository's default branch, which is `main` here),
+or the Cloudflare GitHub App not having access to this specific repository. A red
+build is a different problem and its log will say what.
+
 The Worker name in the dashboard must match `name` in `wrangler.toml` — both are
 `ila-push`, so it lines up. Runtime secrets stay where they are under **Settings
 → Variables and Secrets**; Workers Builds does not touch them.
