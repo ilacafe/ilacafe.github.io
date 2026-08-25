@@ -27,55 +27,19 @@ jobs:
   # Once they are present it stops being a report and starts being a check: a hash
   # that no longer matches means the file changed at a version that is supposed to be
   # fixed, which is the whole thing SRI exists to catch.
+  # Verifies the integrity hashes in the pages against the bytes the CDNs actually
+  # serve, and that each CDN allows a cross-origin read. Runs here rather than in the
+  # node suite because nothing offline can tell a correct digest from a plausible one.
+  #
+  # This was shell using grep to pair a src with its integrity. grep is line-based and
+  # the attributes sit on separate lines, so it matched nothing, reported every script
+  # as unhashed, and passed — a green check that checked nothing.
   hashes:
     name: third-party hashes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: fetch each pinned script and compare
-        run: |
-          set -uo pipefail
-          fail=0
-          # Collected first, then read from a here-string. A `while` on the right of a
-          # pipe runs in a subshell, so `fail=1` set inside it would be discarded and
-          # the job would report success on a mismatch — which is the one outcome this
-          # job exists to prevent.
-          urls=$(grep -ho 'src="https://[^"]*"' *.html | sed 's/src="//;s/"//' | sort -u)
-          while read -r url; do
-            [ -n "$url" ] || continue
-            curl -fsSL --max-time 30 "$url" -o /tmp/lib.js || { echo "::error::could not fetch $url"; exit 1; }
-            got="sha384-$(openssl dgst -sha384 -binary /tmp/lib.js | openssl base64 -A)"
-            # crossorigin="anonymous" makes the browser send an Origin header and
-            # refuse the script unless the CDN allows it. Without this check a missing
-            # Access-Control-Allow-Origin would not show up here at all — it would show
-            # up as a blank till, because the script simply never loads.
-            acao=$(curl -fsSI --max-time 30 -H 'Origin: https://ila.cafe' "$url" \
-                     | tr -d '\r' | grep -i '^access-control-allow-origin:' || true)
-            if [ -z "$acao" ]; then
-              echo "::error::$url sends no Access-Control-Allow-Origin"
-              echo "::error::  crossorigin=\"anonymous\" will stop this script loading at all"
-              fail=1
-            fi
-            # No match is the expected case until the hashes are committed. Without the
-            # `|| true` grep exits 1, pipefail propagates it, and the step's implicit
-            # `bash -e` kills the job before it prints a single line — which is how
-            # this failed the first time: exit 1, no output, nothing to read.
-            esc=$(printf '%s' "$url" | sed 's/[\/&]/\\&/g')
-            want=$(grep -ho "src=\"$esc\"[^>]*integrity=\"[^\"]*\"" *.html 2>/dev/null \
-                     | head -1 | sed 's/.*integrity="//;s/".*//' || true)
-            if [ -z "$want" ]; then
-              echo "  $url"
-              echo "      $got   (no integrity attribute yet)"
-            elif [ "$got" = "$want" ]; then
-              echo "  OK  $url"
-            else
-              echo "::error::$url changed at a pinned version"
-              echo "::error::  committed $want"
-              echo "::error::  served    $got"
-              fail=1
-            fi
-          done <<< "$urls"
-          exit $fail
+      - run: python3 test/verify-sri.py
 
   browser:
     name: QR on a real page
