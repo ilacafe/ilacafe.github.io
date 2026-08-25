@@ -1,0 +1,57 @@
+name: deploy worker
+
+# The Worker deploys from here rather than from Cloudflare's own git integration,
+# for one reason: when this fails, the log is somewhere it can be read and fixed.
+# A Workers Build that never starts looks exactly like one that hasn't started yet,
+# and nothing outside the Cloudflare dashboard can tell the difference.
+#
+# Only worker/ changes trigger it — a page edit has no business redeploying this.
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/deploy-worker.yml']
+  workflow_dispatch:        # and a button, for deploying without a code change
+
+jobs:
+  deploy:
+    name: deploy ila-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Fail with a sentence a human can act on, rather than a wrangler stack trace.
+      - name: check the API token is configured
+        run: |
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not set. Add it under"
+            echo "::error::Settings > Secrets and variables > Actions > New repository secret."
+            echo "::error::Create the token at Cloudflare > My Profile > API Tokens"
+            echo "::error::using the 'Edit Cloudflare Workers' template."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: install wrangler
+        working-directory: worker
+        run: npm install --no-audit --no-fund
+
+      # Runtime secrets (VAPID_PRIVATE, ROBOT_PASSWORD, RECAL_SECRET, …) are NOT
+      # set here. They live in the Worker's own settings and survive a deploy;
+      # putting them in this repo's CI would be a second place to leak them from.
+      - name: deploy
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      - name: what landed
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deployments list | head -20
