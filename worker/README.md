@@ -25,13 +25,21 @@ It does four things:
 this deploys only when you run:
 
 ```sh
-cd worker
-npx wrangler deploy
+cd worker && ./deploy.sh
 ```
 
-Read `wrangler.toml` first — it carries two warnings that matter on a first
-deploy from this file (the compatibility date, and cron triggers being made
-authoritative).
+That prompts for any secret that isn't set yet, generates `RECAL_SECRET`, and
+deploys. Safe to re-run — secrets already set are left alone, so a second run is
+just `wrangler deploy`.
+
+**Copy the secrets out of the live Worker before the first run.** They exist
+today only as literals inside the deployed script, and deploying replaces it:
+dashboard → Workers & Pages → ila-push → Edit code → the constants at the top.
+Losing `VAPID_PRIVATE` means every admin device must re-subscribe.
+
+`wrangler deploy` on its own works too; read `wrangler.toml` first for the two
+warnings that matter on a first deploy (the compatibility date, and cron triggers
+being made authoritative).
 
 ## Secrets
 
