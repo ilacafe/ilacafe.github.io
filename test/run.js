@@ -21,6 +21,7 @@ const suites = [
   'third-party.test.js',
   'table-cache.test.js',
   'build-freshness.test.js',
+  'manifest.test.js',
 ];
 
 let failed = [];

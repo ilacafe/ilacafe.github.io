@@ -6,7 +6,30 @@
     <meta name="theme-color" content="#8D6E52">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>ILA | Order</title>
+    <title>Café Ila — order ahead</title>
+    <meta name="description" content="Order ahead from Café Ila. Browse the menu, see how long the kitchen is running, and pay by UPI.">
+
+    <!-- A link to this page used to unfurl as a bare URL with no title, image or
+         description, because there was nothing here to unfurl. It is shared by
+         customers and printed on the table QR codes, so it is the first thing most
+         people see of the café. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Café Ila">
+    <meta property="og:title" content="Café Ila — order ahead">
+    <meta property="og:description" content="Browse the menu, see how long the kitchen is running, and pay by UPI.">
+    <meta property="og:url" content="https://ila.cafe/">
+    <meta property="og:image" content="https://ila.cafe/icon-customer.png">
+    <meta property="og:image:width" content="1024">
+    <meta property="og:image:height" content="1024">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Café Ila — order ahead">
+    <meta name="twitter:description" content="Browse the menu, see how long the kitchen is running, and pay by UPI.">
+    <meta name="twitter:image" content="https://ila.cafe/icon-customer.png">
+
+    <!-- Without this the page could not be installed: iOS honoured the apple-* tags
+         above, Android had nothing to go on and only ever offered a bookmark. -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="canonical" href="https://ila.cafe/">
     <link rel="apple-touch-icon" href="/icon-customer.png" />
     <link rel="icon" type="image/png" href="/icon-customer.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
@@ -309,7 +332,7 @@
         const db = firebase.database();
         // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
         // page being served is cached, not the one just pushed.
-        const ILA_BUILD = '2026-08-25.7';
+        const ILA_BUILD = '2026-08-25.8';
 
         // A TILL THAT STAYS OPEN NEVER GETS THE FIX
         //

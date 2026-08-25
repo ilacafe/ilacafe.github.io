@@ -68,6 +68,8 @@ costs money:
 - **table cache** — a till reloaded during a wifi drop restores the open tables
   rather than showing an empty floor, and refuses a cache old enough to be
   yesterday's.
+- **manifest** — the ordering page is installable and its share card points at an
+  image that exists, at the size it claims. Both fail silently in a browser.
 
 CI runs these on every pull request and on `main`.
 
