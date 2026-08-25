@@ -303,7 +303,7 @@
         const db = firebase.database();
         // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
         // page being served is cached, not the one just pushed.
-        const ILA_BUILD = '2026-08-25.2';
+        const ILA_BUILD = '2026-08-25.3';
 
         // Register the shared service worker (push + instant-open caching).
         // A cache-first service worker serves the PREVIOUS build until it decides to update,
@@ -358,10 +358,30 @@
                 });
             } catch(e){}
             let loadChef=0, loadBar=0, lastPizzaOut=0;
+            // The POS publishes exactly the numbers this page needs to quote a wait, so
+            // the order nodes themselves no longer have to be readable from here — they
+            // carry every order's items, notes and delivery address and are never pruned.
+            //
+            // The direct reads are kept as a fallback for the window where eta/live has
+            // not been written yet, and they are harmless once the rules close those nodes:
+            // the reads simply fail and these values stay at their neutral defaults.
+            let etaLiveFresh = false;
+            const ETA_LIVE_STALE_MS = 15*60000;   // no POS open for 15 min -> stop trusting it
             try {
-                db.ref('orders/active/chef').on('value', s=>{ loadChef=s.numChildren(); });
-                db.ref('orders/active/barista').on('value', s=>{ loadBar=s.numChildren(); });
-                db.ref('orders/ready').limitToLast(40).on('value', s=>{ let last=0; s.forEach(c=>{const v=c.val()||{}; if(v.items&&v.timestamp&&v.timestamp>last&&isPizza(v.items))last=v.timestamp;}); if(last)lastPizzaOut=last; });
+                db.ref('eta/live').on('value', s=>{
+                    const v = s.val();
+                    if (!v || !v.updatedAt || (Date.now() - v.updatedAt) > ETA_LIVE_STALE_MS) { etaLiveFresh = false; return; }
+                    etaLiveFresh = true;
+                    loadChef = parseInt(v.activeChef) || 0;
+                    loadBar  = parseInt(v.activeBarista) || 0;
+                    if (v.lastPizzaOut) lastPizzaOut = v.lastPizzaOut;
+                    recomputeTempoFromPace(v.pace || []);
+                });
+            } catch(e){}
+            try {
+                db.ref('orders/active/chef').on('value', s=>{ if(!etaLiveFresh) loadChef=s.numChildren(); });
+                db.ref('orders/active/barista').on('value', s=>{ if(!etaLiveFresh) loadBar=s.numChildren(); });
+                db.ref('orders/ready').limitToLast(40).on('value', s=>{ if(etaLiveFresh) return; let last=0; s.forEach(c=>{const v=c.val()||{}; if(v.items&&v.timestamp&&v.timestamp>last&&isPizza(v.items))last=v.timestamp;}); if(last)lastPizzaOut=last; });
             } catch(e){}
 
             // ===== LIVE KITCHEN TEMPO (conservative, smoothed, NON-jumpy) =====
@@ -397,6 +417,10 @@
                     const exp=tempoExpected(o.items, o.completedAt);
                     if(exp && exp>0) ratios.push(dur/exp);
                 });
+                applyTempo(ratios);
+            }
+            // The five anti-jump guards live here, so both sources of ratios get them.
+            function applyTempo(ratios){
                 let target;
                 if(ratios.length >= TEMPO_MIN_SAMPLES){
                     ratios.sort((a,b)=>a-b);
@@ -407,6 +431,19 @@
                 }
                 // exponential smoothing: drift toward target, never jump
                 kitchenTempo = TEMPO_SMOOTH*target + (1-TEMPO_SMOOTH)*kitchenTempo;
+            }
+            // Same maths, fed by the ratios the POS already computed, so this page never
+            // has to see the orders they came from.
+            function recomputeTempoFromPace(pace){
+                const now = Date.now();
+                const ratios = [];
+                (pace||[]).forEach(p=>{
+                    if(!p || !p.at || !p.r) return;
+                    if(now - p.at > TEMPO_WINDOW_MS) return;    // same 45-minute window
+                    if(p.r <= 0 || p.r > 60) return;            // same sanity bound
+                    ratios.push(p.r);
+                });
+                applyTempo(ratios);
             }
             try {
                 // watch recent completions from BOTH stations for the tempo signal

@@ -21,6 +21,9 @@
       },
       "recalMeta": {
         ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      },
+      "live": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       }
     },
     "upiReview": {
@@ -49,20 +52,22 @@
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "active": {
-        ".read": true,
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "ready": {
-        ".read": true,
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "completed": {
-        ".read": true,
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "track": {
         ".read": true,
-        ".indexOn": ["table"],
+        ".indexOn": [
+          "table"
+        ],
         "$trackId": {
           ".write": "auth != null && (!data.exists() || root.child('users').child(auth.uid).child('role').exists())"
         }
@@ -70,7 +75,9 @@
       "history": {
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
-        ".indexOn": ["ts"]
+        ".indexOn": [
+          "ts"
+        ]
       }
     },
     "customers": {
@@ -80,8 +87,16 @@
     "pos": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
-      "ledgerEntries": { ".indexOn": ["ts"] },
-      "bills": { ".indexOn": ["id"] }
+      "ledgerEntries": {
+        ".indexOn": [
+          "ts"
+        ]
+      },
+      "bills": {
+        ".indexOn": [
+          "id"
+        ]
+      }
     },
     "inventory": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
@@ -114,7 +129,9 @@
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
       "incoming": {
         ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
-        ".indexOn": ["at"],
+        ".indexOn": [
+          "at"
+        ],
         "$ref": {
           ".validate": "newData.hasChildren(['amount','ref','at']) && newData.child('amount').isNumber()"
         }

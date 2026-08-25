@@ -12,6 +12,7 @@ const suites = [
   'reprice.test.js',
   'menu-maps.test.js',
   'qr.test.js',
+  'eta-summary.test.js',
   'rules.test.js',
 ];
 
