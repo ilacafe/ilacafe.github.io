@@ -1,0 +1,129 @@
+{
+  "rules": {
+    "menu": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "settings": {
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      "upiList": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      }
+    },
+    "eta": {
+      ".read": true,
+      "model": {
+        ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
+      },
+      "modelPrevious": {
+        ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      },
+      "recalMeta": {
+        ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      }
+    },
+    "upiReview": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "upiRouting": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      "config": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      },
+      "totals": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      }
+    },
+    "orders": {
+      "pendingWeb": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+        "$orderId": {
+          ".write": "auth != null && (!data.exists() || root.child('users').child(auth.uid).child('role').exists())",
+          ".validate": "newData.hasChildren(['items','total','orderType']) && newData.child('total').isNumber()"
+        }
+      },
+      "refundsDue": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "active": {
+        ".read": true,
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "ready": {
+        ".read": true,
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "completed": {
+        ".read": true,
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "track": {
+        ".read": true,
+        ".indexOn": ["table"],
+        "$trackId": {
+          ".write": "auth != null && (!data.exists() || root.child('users').child(auth.uid).child('role').exists())"
+        }
+      },
+      "history": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+        ".indexOn": ["ts"]
+      }
+    },
+    "customers": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+    },
+    "pos": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      "ledgerEntries": { ".indexOn": ["ts"] },
+      "bills": { ".indexOn": ["id"] }
+    },
+    "inventory": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+    },
+    "security": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+    },
+    "staff": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "users": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      }
+    },
+    "reconciliation": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "pushSubscriptions": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+    },
+    "payments": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      "incoming": {
+        ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".indexOn": ["at"],
+        "$ref": {
+          ".validate": "newData.hasChildren(['amount','ref','at']) && newData.child('amount').isNumber()"
+        }
+      },
+      "claims": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}
