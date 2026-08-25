@@ -810,8 +810,8 @@
               });
               if (last) { window.etaLastPizzaOutMs = last; publishEtaLive(); }
             });
-            db.ref('orders/completed/chef').limitToLast(30).on('value', s => { window.etaPace.chef = etaPaceFrom(s); publishEtaLive(); });
-            db.ref('orders/completed/barista').limitToLast(30).on('value', s => { window.etaPace.barista = etaPaceFrom(s); publishEtaLive(); });
+            db.ref('orders/completed/chef').limitToLast(30).on('value', s => { window.etaPace.chef = etaPaceFrom(s); recomputeEtaTempo(); publishEtaLive(); });
+            db.ref('orders/completed/barista').limitToLast(30).on('value', s => { window.etaPace.barista = etaPaceFrom(s); recomputeEtaTempo(); publishEtaLive(); });
           } catch(e){}
 
           // ---- 4b. THE PUBLIC SUMMARY (eta/live) ----
@@ -833,6 +833,41 @@
           // every input. If no POS is open the node just goes stale; `updatedAt` lets the
           // ordering page notice and fall back to a neutral estimate rather than a wrong one.
           window.etaPace = { chef: [], barista: [] };
+
+          // ---- KITCHEN TEMPO ----
+          // How fast the kitchen is actually running against what the model expects.
+          // The ordering page has had this since it was written; the POS never did, so
+          // the counter and the app quoted different waits for the same cart in the same
+          // kitchen — up to about five minutes apart on a backlogged pizza. Worse, the POS
+          // stamps its estimate onto the order (predLow/predHigh), and admin's accuracy
+          // report scores THAT, so the report was grading a number no customer ever saw.
+          //
+          // Computed here and published, so there is one tempo and both sides use it.
+          // Same five guards as the ordering page, deliberately: median (one slow order
+          // cannot move it), a six-sample floor, a hard clamp, exponential smoothing, and
+          // it scales only the condition-driven part of the estimate — never the base item
+          // time or the cushion.
+          const TEMPO_WINDOW_MS = 45*60000, TEMPO_MIN_SAMPLES = 6;
+          const TEMPO_CLAMP_LO = 0.85, TEMPO_CLAMP_HI = 1.25, TEMPO_SMOOTH = 0.25;
+          window.etaTempo = 1.0;
+          function recomputeEtaTempo(){
+            const now = serverNowSafe();
+            const ratios = [];
+            window.etaPace.chef.concat(window.etaPace.barista).forEach(p => {
+              if (!p || !p.at || !p.r) return;
+              if (now - p.at > TEMPO_WINDOW_MS) return;
+              if (p.r <= 0 || p.r > 60) return;
+              ratios.push(p.r);
+            });
+            let target = 1.0;
+            if (ratios.length >= TEMPO_MIN_SAMPLES){
+              ratios.sort((a,b) => a-b);
+              const med = ratios[Math.floor(ratios.length/2)];
+              target = Math.max(TEMPO_CLAMP_LO, Math.min(TEMPO_CLAMP_HI, med));
+            }
+            window.etaTempo = TEMPO_SMOOTH*target + (1-TEMPO_SMOOTH)*window.etaTempo;
+          }
+
           function etaPaceFrom(snap){
             const out = [];
             snap.forEach(ch => {
@@ -861,6 +896,10 @@
                   activeChef: window.etaLoad.chef || 0,
                   activeBarista: window.etaLoad.barista || 0,
                   lastPizzaOut: window.etaLastPizzaOutMs || 0,
+                  // Published so the ordering page uses the SAME tempo the counter used,
+                  // rather than deriving its own and drifting. `pace` stays as the fallback
+                  // for a build that predates this.
+                  tempo: window.etaTempo,
                   pace: pace
                 };
                 const sig = JSON.stringify(payload);
@@ -900,14 +939,17 @@
         
             // per-station total = base + qty penalty + (oven if pizza) + saturation
             const idleMin = window.etaLastPizzaOutMs ? Math.max(0,(serverNowSafe()-window.etaLastPizzaOutMs)/60000) : 999;
+            // base is FIXED (the physical prep time); qty, oven and saturation all describe
+            // CURRENT kitchen state, so only those are scaled by live tempo. Base and cushion
+            // are untouched — the same split the ordering page uses.
+            const tempo = (typeof window.etaTempo === 'number' && window.etaTempo > 0) ? window.etaTempo : 1.0;
             function stationTime(s, key){
               if (s.base===0 && s.qty===0) return 0;
-              let t = s.base;
-              t += interp(M.qtyCurve, s.qty);
-              if (s.pizza) t += interp(M.ovenCurve, idleMin);
+              let conditionAdd = interp(M.qtyCurve, s.qty);
+              if (s.pizza) conditionAdd += interp(M.ovenCurve, idleMin);
               const satCurve = (key==='chef') ? M.satCurveChef : M.satCurveBarista;
-              t += interp(satCurve, (window.etaLoad[key]||0));
-              return t;
+              conditionAdd += interp(satCurve, (window.etaLoad[key]||0));
+              return s.base + conditionAdd*tempo;
             }
             // determine the DOMINANT category (the one driving the estimate) for cushion selection
             function categoryOf(s, isChef){
@@ -1093,7 +1135,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-25.3';
+        const ILA_BUILD = '2026-08-25.4';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 

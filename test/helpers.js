@@ -63,6 +63,22 @@ function extractFunction(src, name) {
   return src.slice(start, matchBraces(src, open));
 }
 
+// Source text of `window.<name> = function (...) { ... }` — the pages assign most of
+// their public entry points that way rather than declaring them, so extractFunction
+// cannot see them.
+function extractAssignedFunction(src, name) {
+  const re = new RegExp('window\\.' + name + '\\s*=\\s*function');
+  const m = re.exec(src);
+  if (!m) {
+    throw new Error(
+      'could not find window.' + name + ' = function(...) in the page.\n' +
+      'It was renamed or turned into a declaration — update the suite that reads it.');
+  }
+  const open = src.indexOf('{', src.indexOf('(', m.index));
+  return 'function ' + name + src.slice(src.indexOf('(', m.index), open) +
+         src.slice(open, matchBraces(src, open));
+}
+
 // Build a callable module from extracted sources. `globals` are the names the
 // extracted code closes over (db, window, firebase, …) supplied as stubs.
 function buildModule(sources, globals, exportNames) {
@@ -182,4 +198,4 @@ function derivePaths() {
   return found;
 }
 
-module.exports = { ROOT, readPage, extractFunction, buildModule, loadQrEncoder, suite, APPS, derivePaths };
+module.exports = { ROOT, readPage, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, APPS, derivePaths };

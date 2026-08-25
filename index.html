@@ -303,7 +303,7 @@
         const db = firebase.database();
         // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
         // page being served is cached, not the one just pushed.
-        const ILA_BUILD = '2026-08-25.3';
+        const ILA_BUILD = '2026-08-25.4';
 
         // Register the shared service worker (push + instant-open caching).
         // A cache-first service worker serves the PREVIOUS build until it decides to update,
@@ -375,7 +375,11 @@
                     loadChef = parseInt(v.activeChef) || 0;
                     loadBar  = parseInt(v.activeBarista) || 0;
                     if (v.lastPizzaOut) lastPizzaOut = v.lastPizzaOut;
-                    recomputeTempoFromPace(v.pace || []);
+                    // Prefer the tempo the POS computed: one number, so the counter and this
+                    // page cannot quote different waits for the same cart. Falling back to
+                    // deriving it from the ratios covers a POS running an older build.
+                    if (typeof v.tempo === 'number' && v.tempo > 0) kitchenTempo = v.tempo;
+                    else recomputeTempoFromPace(v.pace || []);
                 });
             } catch(e){}
             try {
@@ -463,7 +467,7 @@
             window.custEstimateETA = function(items){
                 const st={chef:{base:0,qty:0,pizza:false,bakedOnly:true},barista:{base:0,qty:0,pizza:false,bakedOnly:true}};
                 let any=false;
-                for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const station=isPizza(nm)?'chef':'barista'; const b=itemBase(nm); if(b>st[station].base)st[station].base=b; st[station].qty+=q; if(isPizza(nm))st[station].pizza=true; if(!isBaked(nm))st[station].bakedOnly=false; any=true; }
+                for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const rt=custRouteFor(nm); const station = rt==='chef' ? 'chef' : (rt==='barista' ? 'barista' : (isPizza(nm)?'chef':'barista')); const b=itemBase(nm); if(b>st[station].base)st[station].base=b; st[station].qty+=q; if(isPizza(nm))st[station].pizza=true; if(!isBaked(nm))st[station].bakedOnly=false; any=true; }
                 if(!any)return null;
                 const idle = lastPizzaOut ? Math.max(0,(Date.now()-lastPizzaOut)/60000) : 999;
                 const tempo = (typeof kitchenTempo==='number' && kitchenTempo>0) ? kitchenTempo : 1.0;
@@ -700,7 +704,40 @@
         });
         db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderCustomerMenu(); });
         db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; renderCustomerMenu(); });
-        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; renderCustomerMenu(); });
+        // Which station makes an item is configured per item in admin. The POS reads that
+        // map; this page used to guess from the name alone, so anything routed to the chef
+        // that is not recognised as a pizza (garlic bread, hot food) landed on the barista
+        // here and the chef there — different saturation curve, and the chef curve starts
+        // seven minutes higher. Same map, same answer.
+        window.custRouting = {};
+        function buildCustRouting(){
+            const m = {};
+            for (const cat in currentMenuData){
+                for (const item in currentMenuData[cat]){
+                    const def = currentMenuData[cat][item] || {};
+                    const r = def.routing || 'barista';
+                    m[item] = r;
+                    if (def.hasSizes){ m[item + ' (Regular)'] = r; m[item + ' (Large)'] = r; }
+                }
+            }
+            window.custRouting = m;
+        }
+        // A cart key carries its options — "Latte (Regular) (Very sweet)" — while the map is
+        // keyed by the menu name. Strip trailing "(...)" groups until something matches, so a
+        // sweetened or sized line still finds its station.
+        function custRouteFor(name){
+            const m = window.custRouting || {};
+            let k = String(name == null ? '' : name).trim();
+            if (m[k]) return m[k];
+            for (let i = 0; i < 3; i++){
+                const stripped = k.replace(/\s*\([^()]*\)\s*$/, '').trim();
+                if (!stripped || stripped === k) break;
+                k = stripped;
+                if (m[k]) return m[k];
+            }
+            return null;
+        }
+        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; buildCustRouting(); renderCustomerMenu(); });
 
         function updateCheckoutOptions() {
             const btnDel = document.getElementById('type-delivery'); const btnTak = document.getElementById('type-takeaway'); const btnDin = document.getElementById('type-dinein'); const scanMsg = document.getElementById('scan-instruction'); const payBtn = document.getElementById('btn-pay');
