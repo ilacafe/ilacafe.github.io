@@ -60,6 +60,8 @@ costs money:
 - **Worker** — no secret is ever a literal in `worker/worker.js` (the repo is
   served raw, so that file is public), the recalibration route is not gated by
   the secret the public pages carry, and an unset binding fails closed.
+- **analytics** — the page fetches the date range it is showing rather than every
+  bill ever recorded, and no read pulls an append-only node whole.
 
 CI runs these on every pull request and on `main`.
 
