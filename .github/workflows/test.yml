@@ -1,0 +1,35 @@
+name: tests
+
+# These pages deploy straight to a live counter — a push to main IS the deploy,
+# with no build step in between. So the checks run on pull requests, where they
+# can still stop something, as well as on main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    name: syntax, settlement, pricing, QR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm test
+
+  browser:
+    name: QR on a real page
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - run: npm ci
+      # separate job because it needs a browser; the fast checks above should
+      # not wait on a Chromium download to report
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser

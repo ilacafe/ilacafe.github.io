@@ -1,0 +1,29 @@
+// Runs every suite that needs nothing but Node, and fails if any of them do.
+// The browser suite is separate (`npm run test:browser`) because it needs a
+// Chromium download, which is not worth making a precondition of running the
+// fast checks locally.
+
+const { spawnSync } = require('child_process');
+const path = require('path');
+
+const suites = [
+  'syntax.test.js',
+  'settlement.test.js',
+  'reprice.test.js',
+  'menu-maps.test.js',
+  'qr.test.js',
+  'rules.test.js',
+];
+
+let failed = [];
+for (const suite of suites) {
+  const r = spawnSync(process.execPath, [path.join(__dirname, suite)], { stdio: 'inherit' });
+  if (r.status !== 0) failed.push(suite);
+}
+
+console.log('\n' + '─'.repeat(60));
+if (failed.length) {
+  console.log('\x1b[31m' + failed.length + ' suite(s) failed:\x1b[0m ' + failed.join(', '));
+  process.exit(1);
+}
+console.log('\x1b[32mall ' + suites.length + ' suites passed\x1b[0m');
