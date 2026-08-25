@@ -797,6 +797,56 @@ function parseBankEmail(bank, t){
 const MON_UNVERIFIED_MS = 2*60*60000;     // "unverified" = manual/no-credit AND older than 2h
 const MON_BANK_STREAK   = 3;              // consecutive past-2h failures for one bank → alarm
 
+// ---- CASH LEAVING THE DRAWER ----
+// Four ledger types take money out or write it off, and all four are gated behind
+// a staff PIN that also stamps the name into `reason`.
+//
+// That stamp is not evidence. pos.html writes ledger entries straight from the
+// browser and the rule on pos/ is only "has a staff role", so anyone who can open
+// the till can push an entry with any name on it, without knowing a PIN at all.
+// Hardening the PIN would not change that; the attribution is advisory either way.
+//
+// So this does not try to prevent it. It makes it visible the same hour instead of
+// at end-of-day: the owner sees the amount, the reason and the name it claims, and
+// the named person can say whether it was them.
+const MON_CASHOUT_TYPES = ['expense', 'withdrawal', 'tip_payout', 'unpaid_writeoff'];
+const MON_CASHOUT_MIN   = 500;            // ₹ — below this it is milk and gas, and a push
+                                          //     nobody reads is worse than no push
+const MON_CASHOUT_WINDOW_MS = 6*60*60000; // don't flood on first run after a deploy
+const MON_CASHOUT_LOUD  = 2000;           // ₹ — named individually rather than summarised
+
+// Which cash-outs are new enough, big enough, and not already reported.
+// Pure, so the selection can be tested without a database.
+function monNewCashOuts(entries, alerted, nowMs){
+  const out = [];
+  for (const e of entries){
+    if (!e || !e.key || MON_CASHOUT_TYPES.indexOf(e.type) < 0) continue;
+    if (alerted && alerted[e.key]) continue;
+    if (!e.ts || (nowMs - e.ts) > MON_CASHOUT_WINDOW_MS) continue;
+    const amt = Math.abs(parseFloat(e.amount) || 0);
+    // A written-off bill is reported whatever its size — it is revenue disappearing,
+    // not money spent, and it is rare enough that every one is worth seeing.
+    if (amt < MON_CASHOUT_MIN && e.type !== 'unpaid_writeoff') continue;
+    out.push(e);
+  }
+  return out.sort((a, b) => (Math.abs(parseFloat(b.amount)||0)) - (Math.abs(parseFloat(a.amount)||0)));
+}
+
+function monCashOutMessage(list){
+  const money = n => '₹' + Math.round(n).toLocaleString('en-IN');
+  const total = list.reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
+  const top = list[0];
+  const topAmt = Math.abs(parseFloat(top.amount) || 0);
+  const label = String(top.type || '').replace(/_/g, ' ');
+  if (list.length === 1){
+    return { title: money(topAmt) + ' ' + label,
+             body: String(top.reason || '(no reason given)').slice(0, 200) };
+  }
+  return { title: money(total) + ' out of the drawer · ' + list.length + ' entries',
+           body: 'largest ' + money(topAmt) + ' ' + label + ' — ' +
+                 String(top.reason || '(no reason given)').slice(0, 140) };
+}
+
 async function monLoad(token, path){ try{ const r = await fetch(DB_URL + path + '.json?auth=' + token); return r.ok ? (await r.json()) : null; }catch(e){ return null; } }
 
 // Determine each UPI ledger entry's effective verification state, folding in admin decisions.
@@ -816,9 +866,14 @@ async function runVerificationMonitor(nowMs, isWeekly){
   const alerted   = monState.alertedPayIds || {};     // payId -> true (already pinged for #1)
   const bankAlarm = monState.bankAlarm || {};         // bank -> true (alarm currently active)
 
-  // all UPI entries, newest first
-  const entries = [];
-  for (const k in ledgerObj){ const e = ledgerObj[k]; if (e && e.type === 'upi_income') entries.push(e); }
+  // all UPI entries, newest first. `all` keeps every entry WITH its push key, which
+  // the cash-out check needs to remember what it has already reported.
+  const entries = [], all = [];
+  for (const k in ledgerObj){
+    const e = ledgerObj[k]; if (!e) continue;
+    all.push(Object.assign({ key: k }, e));
+    if (e.type === 'upi_income') entries.push(e);
+  }
   entries.sort((a,b)=> (b.ts||0) - (a.ts||0));
 
   // ---- #1: payments unverified past 2h (exclude admin-ignored — those are resolved) ----
@@ -864,6 +919,20 @@ async function runVerificationMonitor(nowMs, isWeekly){
       updates['monitor/bankAlarm/' + bank] = null;   // pipeline recovered — clear so it can alarm again later
     }
   }
+
+  // ---- cash leaving the drawer ----
+  const cashOuts = monNewCashOuts(all, monState.alertedCashOut || {}, nowMs);
+  if (cashOuts.length){
+    const loud = cashOuts.filter(e => Math.abs(parseFloat(e.amount)||0) >= MON_CASHOUT_LOUD);
+    const msg = monCashOutMessage(loud.length ? loud : cashOuts);
+    await pushOwner(token, '💸 ' + msg.title, msg.body, 'cashout', '/admin.html');
+    for (const e of cashOuts) updates['monitor/alertedCashOut/' + e.key] = true;
+  }
+  // prune alertedCashOut alongside alertedPayIds — EOD wipes the ledger, so the keys
+  // it refers to stop existing and the map would otherwise grow forever
+  const liveKeys = new Set(all.map(e => e.key));
+  const alertedCash = monState.alertedCashOut || {};
+  for (const k in alertedCash){ if (!liveKeys.has(k)) updates['monitor/alertedCashOut/' + k] = null; }
 
   // prune alertedPayIds that are no longer in the ledger (EOD wiped them) to bound growth
   if (Object.keys(alerted).length){
