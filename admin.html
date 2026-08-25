@@ -429,7 +429,7 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        const ILA_BUILD = '2026-08-12.12';   // shown at the foot of the page, so a cached build is obvious
+        const ILA_BUILD = '2026-08-25.5';   // shown at the foot of the page, so a cached build is obvious
 
         const auth = firebase.auth();
         window.currentAdmin = { uid: null, name: null };
@@ -1186,7 +1186,8 @@
                 });
                 // 4. notify (same push path as item-voids)
                 try {
-                    await fetch(ALERT_WORKER_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({ secret: ALERT_SECRET, notification: { title: '🚫 Bill voided', body: where + ' · ₹' + Math.round(total) + ' · by ' + by + ' — ' + reason.trim(), tag: 'billvoid-' + now, url: '/admin.html' }, subscriptions: Object.values((await db.ref('pushSubscriptions').once('value')).val() || {}).map(x=>x&&x.subscription).filter(Boolean) }) });
+                    const pushBody = await ilaPushBody({ title: '🚫 Bill voided', body: where + ' · ₹' + Math.round(total) + ' · by ' + by + ' — ' + reason.trim(), tag: 'billvoid-' + now, url: '/admin.html' });
+                    if (pushBody) await fetch(ALERT_WORKER_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: pushBody });
                 } catch(e){}
                 if (voidBillsCache[key]) { voidBillsCache[key].voided = true; voidBillsCache[key].voidReason = reason.trim(); voidBillsCache[key].voidBy = by; }
                 loadVoidBills();
@@ -1592,13 +1593,37 @@
         };
         const ALERT_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';
         const ALERT_SECRET = '60765ac4763b2df758331f5dea3a145862078c27b72d3efb';
+        // The relay authenticates the caller with a Firebase ID token now, not with
+        // ALERT_SECRET — a secret this page has to hold is a secret anyone can read
+        // out of view-source, and with it they could send any notification they liked
+        // to every admin device. The token is signed by Google, expires in an hour,
+        // and the Worker checks users/{uid}.role behind it.
+        //
+        // TRANSITIONAL: `secret` and `subscriptions` are still sent so that a page
+        // deployed before the new Worker keeps working against the old one. The new
+        // Worker ignores both. Remove this block once the Worker is deployed and the
+        // tablets have reloaded.
+        async function ilaPushBody(notification){
+            const u = firebase.auth().currentUser;
+            const token = u ? await u.getIdToken() : null;
+            if (!token) return null;
+            let legacy = [];
+            try {
+                const snap = await db.ref('pushSubscriptions').once('value');
+                legacy = Object.values(snap.val() || {}).map(function(x){ return x && x.subscription; }).filter(Boolean);
+            } catch (e) {}
+            return JSON.stringify({ token: token, notification: notification,
+                                    secret: ALERT_SECRET, subscriptions: legacy });
+        }
         window.notifTestPush = async function(){
             const status = document.getElementById('notif-status');
             try {
                 const snap = await db.ref('pushSubscriptions').once('value');
                 const subscriptions = Object.values(snap.val() || {}).map(function(x){ return x && x.subscription; }).filter(Boolean);
                 if (!subscriptions.length) { status.innerText = 'No devices registered yet \u2014 tap "Enable alerts on this device" first.'; return; }
-                const res = await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ secret: ALERT_SECRET, notification: { title: '\u23f0 Test alert', body: 'If you can read this, closed-app alerts work on this device.', tag: 'test-push', url: '/admin.html' }, subscriptions: subscriptions }) });
+                const pushBody = await ilaPushBody({ title: '\u23f0 Test alert', body: 'If you can read this, closed-app alerts work on this device.', tag: 'test-push', url: '/admin.html' });
+                if (!pushBody) { status.innerText = 'Not signed in \u2014 reload and sign in, then try again.'; return; }
+                const res = await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: pushBody });
                 const out = await res.json().catch(function(){ return {}; });
                 status.innerHTML = '<span style="color:#7CFC9A;">Test push sent to ' + (out.sent != null ? out.sent : subscriptions.length) + ' device(s). Lock the screen \u2014 it should still arrive.</span>';
             } catch (e) { console.error(e); status.innerText = 'Test push failed: ' + (e && e.message ? e.message : e); }

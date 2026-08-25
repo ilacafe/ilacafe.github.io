@@ -25,8 +25,9 @@ crons = [
 [vars]
 VAPID_PUBLIC     = "BGghzKe8sBiO764Kti2SSkg2Kpvr_ODBza-EONxJzri5IcIcAH956KNw2SO6TTTUKrXp8f4d-RmopfN1eU-pgGM"
 FIREBASE_API_KEY = "AIzaSyAgUmy9NjbDnYXX_TBBjF8-qj36aW21qsQ"
+FIREBASE_PROJECT = "ila-cafe"
 DB_URL           = "https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app"
 
 # Everything else is a secret binding — see README.md. Never add them here:
-#   VAPID_PRIVATE  SHARED_SECRET  INGEST_SECRET  RECAL_SECRET  ROBOT_PASSWORD
+#   VAPID_PRIVATE  INGEST_SECRET  RECAL_SECRET  ROBOT_PASSWORD
 #   VAPID_SUBJECT  ROBOT_EMAIL    EMAIL_FORWARD_TO

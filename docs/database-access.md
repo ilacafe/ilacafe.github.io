@@ -169,14 +169,27 @@ address explicitly: it is the only identity allowed to write `eta/model`,
 `eta/modelPrevious`, `eta/recalMeta` and `payments/incoming`. No browser holds
 that credential, and nothing in a page can obtain it.
 
+**Every write the robot needs was granted to it by email; not one read was.**
+Reads were all gated on `users/{auth.uid}/role` existing, and a service account
+has no `users` entry — so the robot could write `eta/model` but could not read
+`orders/completed` to derive one, and could not read `pushSubscriptions` to
+notify anyone. `monitor`, the Worker's own alert state, had no rule at all and
+fell to the root's default deny. The rules now name the robot on each of those
+reads; `test/worker.test.js` extracts the paths from the Worker's source and
+fails if one is unreachable.
+
 Two consequences worth keeping in mind when reading the rules:
 
 - A rule that grants `orders/completed` to staff must still admit the robot, or
   the monthly refit reads nothing and the model silently stops improving.
-- `pushSubscriptions` is read by the Worker to notify the owner. Anything that
-  closes it to the robot turns off the recalibration result, the unverified-
-  payment alert, the per-bank alarm and the weekly digest — all of which fail
-  quietly, because a push that cannot be sent has nowhere to report.
+- `pushSubscriptions` is read by the Worker both to notify the owner and to
+  address a staff-sent alert. Anything that closes it to the robot turns off the
+  recalibration result, the unverified-payment alert, the per-bank alarm, the
+  weekly digest *and* every overdue-order push — all of which fail quietly,
+  because a push that cannot be sent has nowhere to report.
+- `users/$uid` is readable by the robot so the push relay can check the sender's
+  role. The parent `users` node stays admin-only, so that grants a lookup by uid,
+  never a listing.
 
 ## Deploying rules
 

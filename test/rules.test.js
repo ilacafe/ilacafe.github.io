@@ -19,7 +19,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ROOT, suite, APPS, derivePaths } = require('./helpers');
+const { ROOT, suite, APPS, derivePaths, stripComments } = require('./helpers');
 
 const RULES_FILE = path.join(ROOT, 'database.rules.json');
 
@@ -99,27 +99,6 @@ if (!fs.existsSync(RULES_FILE)) {
   note('See docs/database-access.md. This suite starts checking them once they land.');
   done();
   return;
-}
-
-// A rules file is JSON *with comments* — Firebase accepts them and its own
-// getRules() returns "the rules source including comments", so an exported file
-// very plausibly has them. Strip them before parsing, tracking string state so a
-// // inside a rule expression is not mistaken for a comment.
-function stripComments(text) {
-  let out = '', i = 0, inString = false;
-  while (i < text.length) {
-    const c = text[i], next = text[i + 1];
-    if (inString) {
-      if (c === '\\') { out += c + (next || ''); i += 2; continue; }
-      if (c === '"') inString = false;
-      out += c; i++; continue;
-    }
-    if (c === '"') { inString = true; out += c; i++; continue; }
-    if (c === '/' && next === '/') { const nl = text.indexOf('\n', i); if (nl < 0) break; i = nl; continue; }
-    if (c === '/' && next === '*') { const end = text.indexOf('*/', i); if (end < 0) break; i = end + 2; continue; }
-    out += c; i++;
-  }
-  return out;
 }
 
 let rules = null;

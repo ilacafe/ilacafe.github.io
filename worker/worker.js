@@ -17,8 +17,8 @@
 // Secrets arrive as env bindings and are cached per isolate. Cloudflare passes
 // env to each handler rather than to module scope, so every entry point
 // (fetch, scheduled, email) calls loadConfig(env) before doing any work.
-let VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT;
-let SHARED_SECRET, INGEST_SECRET, RECAL_SECRET;
+let VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, FIREBASE_PROJECT;
+let INGEST_SECRET, RECAL_SECRET;
 let ROBOT_EMAIL, ROBOT_PASSWORD, FIREBASE_API_KEY, DB_URL, EMAIL_FORWARD_TO;
 
 function loadConfig(env){
@@ -26,10 +26,10 @@ function loadConfig(env){
   // public by design — all three already appear in the site's own source
   VAPID_PUBLIC     = env.VAPID_PUBLIC;
   FIREBASE_API_KEY = env.FIREBASE_API_KEY;
+  FIREBASE_PROJECT = env.FIREBASE_PROJECT;
   DB_URL           = env.DB_URL;
   // secret
   VAPID_PRIVATE    = env.VAPID_PRIVATE;
-  SHARED_SECRET    = env.SHARED_SECRET;
   INGEST_SECRET    = env.INGEST_SECRET;
   RECAL_SECRET     = env.RECAL_SECRET;
   ROBOT_PASSWORD   = env.ROBOT_PASSWORD;
@@ -143,6 +143,111 @@ async function handleIngest(data){
 
 const CORS = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Methods':'POST, OPTIONS', 'Access-Control-Allow-Headers':'Content-Type', 'Access-Control-Max-Age':'86400' };
 function json(obj, status){ return new Response(JSON.stringify(obj), { status: status||200, headers: { 'Content-Type':'application/json', ...CORS } }); }
+
+// ============================================================================
+//  WHO IS ALLOWED TO SEND A PUSH
+//
+//  The relay used to accept SHARED_SECRET, which is a literal in pos.html,
+//  admin.html, barista.html and chef.html — all served from ila.cafe. Anyone who
+//  opened view-source could send any notification they liked to every admin
+//  device: a fabricated "Bill voided ₹50,000" arrives looking exactly like the
+//  real thing, because it came down the real pipe. The caller also supplied the
+//  recipient list, so the Worker doubled as an open push relay signed with the
+//  café's own VAPID key.
+//
+//  No secret can fix that. A secret a browser must hold is a public secret. So
+//  the caller now proves it is a signed-in staff member with a Firebase ID
+//  token, which is signed by Google, expires in an hour, and cannot be read out
+//  of a page. Recipients are no longer taken from the caller at all — the Worker
+//  reads pushSubscriptions itself.
+// ============================================================================
+
+const STAFF_ROLES = ['admin', 'cashier', 'barista', 'chef'];
+
+// Google's public keys for Firebase ID tokens, cached for as long as the
+// response says they are good for.
+let _jwkCache = null, _jwkExp = 0;
+async function googleJwks(){
+  if (_jwkCache && Date.now() < _jwkExp) return _jwkCache;
+  const res = await fetch('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com');
+  if (!res.ok) throw new Error('jwks fetch failed: ' + res.status);
+  const body = await res.json();
+  const m = /max-age=(\d+)/.exec(res.headers.get('cache-control') || '');
+  _jwkExp = Date.now() + (m ? parseInt(m[1], 10) : 3600) * 1000;
+  _jwkCache = body.keys || [];
+  return _jwkCache;
+}
+
+// Verify a Firebase ID token and return its payload, or null. Every failure
+// returns null rather than throwing: a caller must never be able to tell a bad
+// signature from an expired token from the wrong project.
+async function verifyIdToken(jwt){
+  const parts = String(jwt || '').split('.');
+  if (parts.length !== 3) return null;
+  const [h, p, sig] = parts;
+  let header, payload;
+  try {
+    const dec = new TextDecoder();
+    header  = JSON.parse(dec.decode(b64urlToBytes(h)));
+    payload = JSON.parse(dec.decode(b64urlToBytes(p)));
+  } catch(e){ return null; }
+
+  if (header.alg !== 'RS256' || !header.kid) return null;   // never trust alg:none
+  if (!FIREBASE_PROJECT) return null;                        // fail closed on a missing binding
+
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.iss !== 'https://securetoken.google.com/' + FIREBASE_PROJECT) return null;
+  if (payload.aud !== FIREBASE_PROJECT) return null;
+  if (!payload.sub || typeof payload.sub !== 'string') return null;
+  if (!(payload.exp > now)) return null;
+  if (!(payload.iat <= now + 300)) return null;              // allow a little clock skew
+
+  let keys; try { keys = await googleJwks(); } catch(e){ return null; }
+  const jwk = keys.find(k => k.kid === header.kid);
+  if (!jwk) return null;
+
+  let key;
+  try {
+    key = await crypto.subtle.importKey('jwk',
+      { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: 'RS256', ext: true },
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+  } catch(e){ return null; }
+
+  const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key,
+    b64urlToBytes(sig), _enc.encode(h + '.' + p));
+  return ok ? payload : null;
+}
+
+// A verified token is not enough. The ordering page signs in anonymously, so
+// every customer holds a valid ID token for this project — what separates staff
+// is an entry under users/{uid}. That lookup needs the robot credential, since
+// the rules do not let one user read another's role.
+async function staffRoleOf(uid){
+  let token; try { token = await getRobotToken(); } catch(e){ return null; }
+  const res = await fetch(DB_URL + '/users/' + encodeURIComponent(uid) + '/role.json?auth=' + token);
+  if (!res.ok) return null;
+  const role = await res.json();
+  return STAFF_ROLES.indexOf(role) >= 0 ? role : null;
+}
+
+// The notification is still free text — staff legitimately send amounts, table
+// names and item names — but it reaches a lock screen, so it is bounded and
+// stripped of control characters. `url` is the one field with teeth: sw.js hands
+// it to clients.openWindow() on tap, so an absolute URL would open an attacker's
+// site from a notification that looks like the café's. Same-origin paths only.
+function safeText(v, max){
+  return String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+}
+function safeNotification(n){
+  n = n || {};
+  const url = safeText(n.url, 200);
+  return {
+    title: safeText(n.title, 80) || 'Café Ila',
+    body:  safeText(n.body, 300),
+    tag:   safeText(n.tag, 64) || 'ila',
+    url:   /^\/[^\/\\]/.test(url) ? url : '/admin.html'
+  };
+}
 
 // ---- reusable single-push sender (shared by the relay loop and by the
 //      recalibration / monitoring notifications, so there is one VAPID path) ----
@@ -811,11 +916,11 @@ export default {
     let data;
     try { data = JSON.parse(await request.text()); } catch (e) { return json({ error:'bad json' }, 400); }
 
-    // Recalibration is gated by RECAL_SECRET, NOT the push secret.
+    // Recalibration is gated by RECAL_SECRET, NOT the old push secret.
     //
-    // SHARED_SECRET is a literal in pos.html, admin.html, barista.html and
-    // chef.html — served from ila.cafe, so it is public by construction and
-    // anyone can read it with view-source. It used to authorise these two
+    // That secret was a literal in pos.html, admin.html, barista.html and
+    // chef.html — served from ila.cafe, so it was public by construction and
+    // anyone could read it with view-source. It used to authorise these two
     // routes as well, which meant a stranger could force a refit. The refit
     // itself is fenced by rcCheckGates, but each run does
     // modelPrevious = current before writing: call it twice and the snapshot
@@ -844,11 +949,30 @@ export default {
     }
 
     // Default route: push relay.
-    if (!data || !authOk(data.secret, SHARED_SECRET)) return json({ error:'unauthorized' }, 401);
+    //
+    // data.secret is deliberately ignored here. It is still sent by pages built
+    // before this change (see the transitional block in each page), and honouring
+    // it would leave the hole open, because that secret is public.
+    const claims = await verifyIdToken(data && data.token);
+    if (!claims) return json({ error:'unauthorized' }, 401);
+    // The ordering page signs in anonymously; a customer must not be able to push.
+    if (claims.firebase && claims.firebase.sign_in_provider === 'anonymous') {
+      return json({ error:'forbidden' }, 403);
+    }
+    const role = await staffRoleOf(claims.sub);
+    if (!role) return json({ error:'forbidden' }, 403);
 
-    const subs = Array.isArray(data.subscriptions) ? data.subscriptions : [];
-    const n = data.notification || {};
-    const payload = _enc.encode(JSON.stringify({ title: n.title || 'Café Ila', body: n.body || '', tag: n.tag, url: n.url }));
+    // Recipients come from the database, never from the caller — otherwise the
+    // Worker is an open relay that signs anyone's push with the café's VAPID key.
+    let subs = [];
+    try {
+      const rt = await getRobotToken();
+      const res = await fetch(DB_URL + '/pushSubscriptions.json?auth=' + rt);
+      subs = unwrapSubs(res.ok ? (await res.json()) : null);
+    } catch (e) { return json({ error:'could not read subscriptions' }, 502); }
+    if (!subs.length) return json({ ok:true, sent:0, failed:0, results:[] });
+
+    const payload = _enc.encode(JSON.stringify(safeNotification(data.notification)));
 
     let sent = 0, failed = 0; const results = [];
     for (const sub of subs) {
@@ -858,7 +982,7 @@ export default {
         else { failed++; results.push({ status, expired: status === 404 || status === 410 }); }
       } catch (e) { failed++; results.push({ error: String((e && e.message) || e) }); }
     }
-    return json({ ok:true, sent, failed, results });
+    return json({ ok:true, sent, failed, results, by: role });
   },
 
   async scheduled(event, env, ctx){

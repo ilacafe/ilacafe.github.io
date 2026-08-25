@@ -48,9 +48,11 @@ function skipString(src, i) {
   throw new Error('unterminated string from offset ' + i);
 }
 
-// Source text of `function <name>(...) { ... }`, braces balanced.
+// Source text of `function <name>(...) { ... }`, braces balanced. `async` is
+// captured when present — dropping it would silently turn an async function into
+// a sync one that returns a Promise nobody awaits.
 function extractFunction(src, name) {
-  const re = new RegExp('(?:^|\\n)\\s*function\\s+' + name + '\\s*\\(');
+  const re = new RegExp('(?:^|\\n)\\s*(async\\s+)?function\\s+' + name + '\\s*\\(');
   const m = re.exec(src);
   if (!m) {
     throw new Error(
@@ -58,8 +60,8 @@ function extractFunction(src, name) {
       'It was renamed, moved, or turned into an expression — update the suite ' +
       'that reads it so the tests keep covering the code that actually ships.');
   }
-  const start = src.indexOf('function', m.index);
-  const open = src.indexOf('{', start);
+  const start = src.indexOf(m[1] ? 'async' : 'function', m.index);
+  const open = src.indexOf('{', src.indexOf('(', start));
   return src.slice(start, matchBraces(src, open));
 }
 
@@ -123,6 +125,27 @@ function loadQrEncoder(opts) {
   new Function('window', 'module', 'globalThis', body)(root, undefined, root);
   if (!root.ilaQR) throw new Error('the QR encoder did not export ilaQR');
   return root.ilaQR;
+}
+
+// A rules file is JSON *with comments* — Firebase accepts them and its own
+// getRules() returns "the rules source including comments", so an exported file
+// very plausibly has them. Strip them before parsing, tracking string state so a
+// // inside a rule expression is not mistaken for a comment.
+function stripComments(text) {
+  let out = '', i = 0, inString = false;
+  while (i < text.length) {
+    const c = text[i], next = text[i + 1];
+    if (inString) {
+      if (c === '\\') { out += c + (next || ''); i += 2; continue; }
+      if (c === '"') inString = false;
+      out += c; i++; continue;
+    }
+    if (c === '"') { inString = true; out += c; i++; continue; }
+    if (c === '/' && next === '/') { const nl = text.indexOf('\n', i); if (nl < 0) break; i = nl; continue; }
+    if (c === '/' && next === '*') { const end = text.indexOf('*/', i); if (end < 0) break; i = end + 2; continue; }
+    out += c; i++;
+  }
+  return out;
 }
 
 // Minimal reporter. Suites print one line per check and exit non-zero on failure.
@@ -198,4 +221,4 @@ function derivePaths() {
   return found;
 }
 
-module.exports = { ROOT, readPage, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, APPS, derivePaths };
+module.exports = { ROOT, readPage, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, stripComments, APPS, derivePaths };
