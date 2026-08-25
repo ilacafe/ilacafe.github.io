@@ -303,7 +303,7 @@
         const db = firebase.database();
         // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
         // page being served is cached, not the one just pushed.
-        const ILA_BUILD = '2026-08-25.1';
+        const ILA_BUILD = '2026-08-25.2';
 
         // Register the shared service worker (push + instant-open caching).
         // A cache-first service worker serves the PREVIOUS build until it decides to update,
@@ -998,7 +998,15 @@
                 // the whole node can be enumerated. The number the counter needs for the
                 // WhatsApp pay link lives on the order in orders/pendingWeb, which is
                 // staff-only — sendPayLink and contactRow both read it from there.
-                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: info.details, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                // Only a table label may go into the public track record. orders/track is
+                // world-readable — the table lookup below queries the whole node — so a
+                // delivery address written here is readable by anyone. Nothing reads this
+                // field except that lookup, which matches "Table N" exactly, so anything
+                // else is replaced with a generic word. The real destination stays on the
+                // order in orders/pendingWeb, which is staff-only.
+                const publicTrackLabel = d => /^Table \d+$/.test(String(d == null ? '' : d).trim())
+                    ? String(d).trim() : 'Order';
+                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: publicTrackLabel(info.details), gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
                 if (window.watchOrderStatus) window.watchOrderStatus();
                 window.watchPaymentStatus(trackId, info);
             }).catch(() => alert("Couldn't place the order — check your connection and try again."));

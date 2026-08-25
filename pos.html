@@ -1033,7 +1033,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-25.1';
+        const ILA_BUILD = '2026-08-25.2';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -2416,8 +2416,13 @@
                 }
             } catch(e){}
             try {
+                // Same rule as the customer app: orders/track is world-readable, and for a
+                // web delivery order `destination` IS the customer's address. Only a table
+                // label goes in; the kitchen ticket keeps the real destination.
+                const publicTrackLabel = /^Table \d+$/.test(String(destination || '').trim())
+                    ? String(destination).trim() : 'Order';
                 db.ref('orders/track/' + trackId).update(Object.assign({
-                    status: 'preparing', items: cartObj, table: destination,
+                    status: 'preparing', items: cartObj, table: publicTrackLabel,
                     stations: stationCount, stationsDone: 0,
                     acceptedAt: firebase.database.ServerValue.TIMESTAMP
                 }, predBlock));
