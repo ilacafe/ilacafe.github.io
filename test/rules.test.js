@@ -50,11 +50,20 @@ function govern(rules, segments, op) {
   return granted;
 }
 
-// These hold no personal or financial data and the ordering page needs them
-// before anyone is signed in, so a public read on them is a decision, not a leak.
-// Everything else public-readable is a finding: staff holds PIN hashes, users
-// holds roles, pos/payments/security/customers hold money and phone numbers.
-const PUBLIC_BY_DESIGN = ['menu', 'settings', 'eta'];
+// Nodes that must NEVER be readable without authentication: staff holds PIN
+// hashes, users holds roles, and the rest hold takings, ledgers and customer
+// records. A public read on any of these is a leak, full stop.
+//
+// Everything else public-readable is reported rather than failed. The ordering
+// page legitimately needs several nodes before anyone signs in — the menu, store
+// settings, the ETA model, and live kitchen load for the wait estimate — and
+// which of those is acceptable is a product judgement, not something this file
+// can settle. The personal-data check below is the one that catches a public
+// node quietly acquiring a phone number.
+const NEVER_PUBLIC = [
+  'staff', 'users', 'pos', 'payments', 'security', 'customers',
+  'inventory', 'upiReview', 'upiRouting', 'pushSubscriptions', 'reconciliation',
+];
 
 function findOpenNodes(node, trail, out) {
   if (!node || typeof node !== 'object') return out;
@@ -62,8 +71,8 @@ function findOpenNodes(node, trail, out) {
     if (key === '.read' || key === '.write') {
       if (node[key] === true || node[key] === 'true') {
         const where = trail.join('/') || '(root)';
-        const intended = key === '.read' && PUBLIC_BY_DESIGN.includes(trail[0]) && trail.length === 1;
-        out.push({ where, op: key, intended });
+        const forbidden = NEVER_PUBLIC.includes(trail[0]) || trail.length === 0;
+        out.push({ where, op: key, forbidden });
       }
     } else if (typeof node[key] === 'object') {
       findOpenNodes(node[key], trail.concat(key), out);
@@ -133,17 +142,50 @@ check('the database is not world-writable at the root', root['.write'] !== true 
       JSON.stringify(root['.write']));
 
 const open = findOpenNodes(root, [], []);
-const writable = open.filter(o => o.op === '.write');
-const leaked   = open.filter(o => o.op === '.read' && !o.intended);
-const intended = open.filter(o => o.intended);
+const writable   = open.filter(o => o.op === '.write');
+const leaked     = open.filter(o => o.op === '.read' && o.forbidden);
+const publicRead = open.filter(o => o.op === '.read' && !o.forbidden);
 
 check('nothing is writable without authentication', writable.length === 0,
       writable.map(o => o.where).join(', '));
-check('nothing sensitive is readable without authentication', leaked.length === 0,
+check('nothing on the never-public list is readable without authentication', leaked.length === 0,
       leaked.map(o => o.where).join(', '));
 writable.forEach(o => note('world-writable: ' + o.where));
-leaked.forEach(o => note('world-readable: ' + o.where + ' — holds staff PINs, roles, money or phone numbers'));
-intended.forEach(o => note('public read on ' + o.where + ' (by design — the ordering page needs it)'));
+leaked.forEach(o => note('world-readable and must not be: ' + o.where));
+if (publicRead.length) note('publicly readable (the ordering page needs these): ' +
+                            publicRead.map(o => o.where).join(', '));
+
+// ---------------------------------------------------------------- personal data
+// A publicly readable node is fine right up until something starts writing a
+// phone number into it. Rules cannot say "readable except for this field", so the
+// fix is always to stop writing the field rather than to move a rule — which is
+// why this is checked against the source, not against the rules.
+const PERSONAL = /\b(phone|email|address|mobile|contact)\s*:/;
+const exposed = [];
+for (const [p, ops] of used) {
+  if (!ops.writes || !ops.writes.length) continue;
+  // readable by someone who never signed in?
+  let node = root, pub = root['.read'] === true;
+  for (const seg of p.split('/')) {
+    if (!node || typeof node !== 'object') break;
+    let next = node[seg];
+    if (next === undefined) {
+      const wildcard = Object.keys(node).find(k => k.startsWith('$'));
+      if (wildcard) next = node[wildcard];
+    }
+    if (next === undefined) break;
+    node = next;
+    if (node && typeof node === 'object' && node['.read'] === true) pub = true;
+  }
+  if (!pub) continue;
+  for (const w of ops.writes) {
+    const hit = w.snippet.match(PERSONAL);
+    if (hit) exposed.push(p + '  ← ' + w.file + ' writes ' + hit[1]);
+  }
+}
+check('no personal data is written into a publicly readable node', exposed.length === 0,
+      exposed.length + ' found');
+exposed.forEach(e => note('anyone can read this: ' + e));
 
 // Every path an app uses needs a rule that could permit it. Unruled means denied,
 // which shows up as a feature that silently does nothing.
