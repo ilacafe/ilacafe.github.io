@@ -24,7 +24,6 @@ preview_urls = false
 
 [observability]
 enabled = true
-redact_query_string = false
 
 [observability.logs]
 enabled = true
