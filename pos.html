@@ -1462,13 +1462,22 @@
                         ? `<div style="font-size:0.78rem; color:#ffb3b3; margin-top:6px;">⏰ Unpaid 20+ min — ${o.payLinkSentAt ? 'likely abandoned' : 'no pay link was ever sent'}</div>`
                         : '';
 
+                    // The total on the card is the customer's browser's arithmetic. Price the
+                    // order from the menu and say so here when the two disagree, so it is caught
+                    // on the card rather than first met in a confirmation box.
+                    const rp = repriceWebOrder(o);
+                    const priceBanner = rp.mismatch
+                        ? `<div style="font-size:0.78rem; color:#ffd08a; margin-top:6px; overflow-wrap:anywhere;">\u26a0\ufe0f Ordered at \u20b9${rp.sentTotal}, menu price \u20b9${rp.total}${rp.unknown.length ? ' \u00b7 ' + rp.unknown.length + ' item(s) not on the menu' : ''}</div>`
+                        : '';
+
                     list.innerHTML += `<div style="border:1px solid rgba(255,255,255,${stale?'0.12':'0.2'}); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left; ${stale?'opacity:0.6;':''}">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                             <strong style="font-size:1.1rem; text-transform:uppercase; min-width:0; overflow-wrap:anywhere;">${escapeHTML(o.tableOrAddress)}</strong>
                             <span id="wv-${id}"></span>
                         </div>
                         ${itemsHTML}
-                        <strong style="font-size: 1.1rem;">Total: ₹${o.total}</strong>
+                        <strong style="font-size: 1.1rem;">Total: ₹${rp.mismatch ? rp.total : o.total}</strong>
+                        ${priceBanner}
                         ${staleBanner}
                         <span id="cust-${id}"></span>
                         <div id="cr-${id}">${contactRow(o, verified, id)}</div>
@@ -1504,13 +1513,94 @@
             }
         }
 
+        // ===== WEB ORDER RE-PRICING =====
+        // The customer's browser works out its own cart total and sends it with the order.
+        // Those numbers used to be booked verbatim — into the table, the ledger, pos/bills and
+        // orders/history — so anyone who could open devtools could set their own prices, and
+        // a tampered order that paid its own fake total even matched a bank credit and showed
+        // as VERIFIED. The menu is the only price this café charges, so every line is priced
+        // from it here before an order is worth anything.
+        //
+        // Add-ons don't exist in the customer app; the only suffix it appends is sweetness,
+        // which is never charged for. So a key that isn't in the menu is retried once with a
+        // trailing "(...)" removed before it's treated as unknown.
+        function menuPriceFor(name){
+            const m = window.itemPriceMap || {};
+            const key = String(name == null ? '' : name).trim();
+            if (Object.prototype.hasOwnProperty.call(m, key)) return m[key];
+            const stripped = key.replace(/\s*\([^()]*\)\s*$/, '').trim();
+            if (stripped && stripped !== key && Object.prototype.hasOwnProperty.call(m, stripped)) return m[stripped];
+            return null;
+        }
+        // Returns the order as the MENU prices it, plus what changed. Never mutates the order.
+        function repriceWebOrder(order){
+            const src = (order && order.items) || {};
+            const items = {};
+            const moved = [], unknown = [];
+            let total = 0;
+            for (const nm in src){
+                const line = src[nm] || {};
+                const qty = Math.max(0, parseInt(line.qty) || 0);
+                if (!qty) continue;
+                const sent = Math.round((parseFloat(line.price) || 0) * 100) / 100;
+                const real = menuPriceFor(nm);
+                if (real === null){
+                    // Not on the menu: an item deleted or renamed since the order was placed,
+                    // or a name that was never on it. Can't be priced, so it's carried at the
+                    // submitted price and named in the confirmation staff have to clear.
+                    unknown.push(nm + ' \u00d7' + qty + ' @ \u20b9' + sent);
+                    items[nm] = Object.assign({}, line, { qty: qty, price: sent });
+                    total += sent * qty;
+                    continue;
+                }
+                const price = Math.round((parseFloat(real) || 0) * 100) / 100;
+                if (Math.abs(price - sent) >= 0.01) moved.push(nm + ': \u20b9' + sent + ' \u2192 \u20b9' + price);
+                items[nm] = Object.assign({}, line, { qty: qty, price: price });
+                total += price * qty;
+            }
+            total = Math.round(total * 100) / 100;
+            const sentTotal = Math.round((parseFloat(order && order.total) || 0) * 100) / 100;
+            return {
+                items: items, total: total, sentTotal: sentTotal,
+                moved: moved, unknown: unknown,
+                mismatch: moved.length > 0 || unknown.length > 0 || Math.abs(total - sentTotal) >= 0.01
+            };
+        }
+        // The wording staff see when the submitted total and the menu disagree.
+        function repriceWarning(rp){
+            const lines = [];
+            lines.push('This order\u2019s prices do not match the menu.');
+            lines.push('');
+            lines.push('Ordered as:  \u20b9' + rp.sentTotal);
+            lines.push('Menu price:  \u20b9' + rp.total);
+            if (rp.moved.length){ lines.push(''); lines.push('Lines re-priced:'); rp.moved.forEach(l => lines.push('  \u2022 ' + l)); }
+            if (rp.unknown.length){ lines.push(''); lines.push('Not on the menu (kept at the submitted price):'); rp.unknown.forEach(l => lines.push('  \u2022 ' + l)); }
+            return lines.join('\n');
+        }
+
         window.acceptWebOrder = function(id) {
-            const order = window.pendingWebOrders[id];
-            if (!order) return;
+            const submitted = window.pendingWebOrders[id];
+            if (!submitted) return;
             if (!window._webActing) window._webActing = {};
             if (window._webActing[id]) return;              // already accepting/rejecting this one
             window._webActing[id] = true;
             setTimeout(function(){ delete window._webActing[id]; }, 3000);
+
+            // Price it from the menu before anything downstream trusts a number. If the menu
+            // has no items yet (a cold start on a bad connection) there is nothing to check
+            // against, so don't pretend to: hold the order rather than wave it through.
+            if (!window.itemPriceMap || Object.keys(window.itemPriceMap).length === 0){
+                alert("The menu hasn't loaded yet, so this order's prices can't be checked.\n\nWait for the menu to appear and try again.");
+                delete window._webActing[id];
+                return;
+            }
+            const rp = repriceWebOrder(submitted);
+            if (rp.mismatch && !confirm(repriceWarning(rp) + '\n\nAccept at the MENU price of \u20b9' + rp.total + '?')){
+                delete window._webActing[id];
+                return;
+            }
+            // Everything from here uses the menu's prices, not the browser's.
+            const order = Object.assign({}, submitted, { items: rp.items, total: rp.total });
 
             // Large-order gate: if this order is gated and payment is NOT yet verified, warn the
             // operator before starting the kitchen (guards against phantom bulk orders). They can
@@ -1889,7 +1979,7 @@
                 let cachedMenu = JSON.parse(localStorage.getItem('ila_cached_menu'));
                 let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
                 window.currentItemOrder = JSON.parse(localStorage.getItem('ila_cached_item_order')) || {};
-                if(cachedMenu) renderPOSMenu(cachedMenu, cachedOrder || []);
+                if(cachedMenu) { buildMenuMaps(cachedMenu); renderPOSMenu(cachedMenu, cachedOrder || []); }
             }
         });
 
@@ -1911,32 +2001,48 @@
         db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) scheduleMenuRender(currentMenuData, liveCategoryOrder); });
         db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) scheduleMenuRender(currentMenuData, liveCategoryOrder); });
         
-        db.ref('menu').on('value', snap => { 
-            currentMenuData = snap.val() || {}; 
-            localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
-            
+        // Flattens the menu into the lookup maps the rest of the POS works from. itemPriceMap
+        // is flattened exactly the way the customer app flattens it to build cart keys, so a
+        // name that came off a menu render can always be priced again — it is the reference
+        // every web order is re-priced against (see repriceWebOrder).
+        // Called from the live listener AND from the offline cache path, which used to render a
+        // menu while leaving every map empty: kitchen tickets then fell back to 'barista' and
+        // add-ons lost their category.
+        function buildMenuMaps(menuData){
             window.itemRoutingMap = {};
-            window.coffeeItemsMap = {}; 
-
-            for(let cat in currentMenuData) {
-                let isCoffeeCat = cat.toLowerCase().includes('coffee');
-
-                for(let item in currentMenuData[cat]) {
-                    let route = currentMenuData[cat][item].routing || 'barista';
+            window.coffeeItemsMap = {};
+            window.itemCategoryMap = {};
+            window.itemPriceMap = {};
+            for (let cat in (menuData || {})) {
+                const isCoffeeCat = cat.toLowerCase().includes('coffee');
+                for (let item in menuData[cat]) {
+                    const def = menuData[cat][item] || {};
+                    const route = def.routing || 'barista';
                     window.itemRoutingMap[item] = route;
                     window.itemCategoryMap[item] = cat;
-                    if(isCoffeeCat) window.coffeeItemsMap[item] = true;
+                    if (isCoffeeCat) window.coffeeItemsMap[item] = true;
 
-                    if(currentMenuData[cat][item].hasSizes) {
-                        window.itemRoutingMap[item + " (Regular)"] = route;
-                        window.itemRoutingMap[item + " (Large)"] = route;
-                        window.itemCategoryMap[item + " (Regular)"] = cat;
-                        window.itemCategoryMap[item + " (Large)"] = cat;
-                        if(isCoffeeCat) window.coffeeItemsMap[item + " (Regular)"] = true;
-                        if(isCoffeeCat) window.coffeeItemsMap[item + " (Large)"] = true;
+                    if (def.hasSizes) {
+                        ["Regular", "Large"].forEach(sz => {
+                            const key = item + " (" + sz + ")";
+                            window.itemRoutingMap[key] = route;
+                            window.itemCategoryMap[key] = cat;
+                            if (isCoffeeCat) window.coffeeItemsMap[key] = true;
+                        });
+                        if (def.priceReg != null) window.itemPriceMap[item + " (Regular)"] = parseFloat(def.priceReg) || 0;
+                        if (def.priceLrg != null) window.itemPriceMap[item + " (Large)"]   = parseFloat(def.priceLrg) || 0;
+                    } else if (def.price != null) {
+                        window.itemPriceMap[item] = parseFloat(def.price) || 0;
                     }
                 }
             }
+        }
+
+        db.ref('menu').on('value', snap => {
+            currentMenuData = snap.val() || {}; 
+            localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
+            
+            buildMenuMaps(currentMenuData);
             scheduleMenuRender(currentMenuData, liveCategoryOrder);
             calculateDailyCups(); 
         });
