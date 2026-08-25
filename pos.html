@@ -213,7 +213,14 @@
         .takeaway-btn:active { background: white; color: var(--brand-bg); }
 
         .modal-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 15px; margin-bottom: 15px; }
-        .upi-status { min-height: 22px; font-size: 0.95rem; font-weight: 700; margin: 6px 0 2px; text-align: center; }
+        /* The dot is drawn in CSS, not typed as a character. Quicksand has no U+25CF (or U+2713),
+           so those glyphs fell back to the system font and sat next to Quicksand text at a
+           different weight and baseline — the one thing on this screen not in the typeface. */
+        .upi-status { min-height: 22px; font-size: 0.85rem; font-weight: 700; margin: 10px 0 2px; text-align: center; }
+        .upi-status.waiting::before, .upi-status.verified::before {
+            content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+            background: currentColor; margin-right: 8px; vertical-align: middle; position: relative; top: -1px;
+        }
         .upi-status.waiting { color: #ffffff; animation: upiPulse 1.2s ease-in-out infinite; }
         .upi-status.verified { color: #6effa0; }
         @keyframes upiPulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
@@ -238,11 +245,10 @@
         .tip-row { display: flex; gap: 6px; justify-content: center; margin: 14px 0 0; }
         .tip-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: var(--brand-text); border-radius: 6px; padding: 10px 0; flex: 1 1 0; min-width: 0; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; font-weight: bold; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; }
         .tip-btn:active { background: var(--brand-text); color: var(--brand-bg); }
-        /* visibility, not display: the slot stays reserved so the other four buttons don't
-           shrink the instant a tip is added — the row must not move under a tapping finger. */
-        .tip-btn.tip-clear { flex: 0 0 42px; }
-        .tip-btn.tip-clear[hidden] { visibility: hidden; display: block; }
-        .tip-note { font-size: 0.85rem; opacity: 0.85; margin: 4px 0 0; min-height: 1.3em; }
+        .tip-clear-link { background: none; border: none; color: inherit; font-family: 'Quicksand', sans-serif;
+                          font-size: 0.8rem; font-weight: 700; text-decoration: underline; cursor: pointer;
+                          padding: 0 0 0 6px; }
+        .tip-note { font-size: 0.8rem; opacity: 0.7; margin: 2px 0 0; }
         /* Deliberately quiet: a customer looking at the QR shouldn't notice it, staff know it's there. */
         .split-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px dashed rgba(255,255,255,0.18); }
         .split-row:last-child { border-bottom: none; }
@@ -292,7 +298,7 @@
         .qr-wait { width: 160px; height: 160px; margin: 16px auto 0; border-radius: 8px; display: none;
                    align-items: center; justify-content: center; text-align: center; padding: 12px;
                    box-sizing: border-box; border: 1px dashed rgba(255,255,255,0.35);
-                   font-size: 0.8rem; opacity: 0.75; line-height: 1.4; cursor: default; }
+                   font-size: 0.85rem; opacity: 0.75; line-height: 1.4; cursor: default; }
         .qr-wait.qr-err { border-color: rgba(255,150,150,0.6); color: #ffb3b3; opacity: 1; cursor: pointer; }
 
         /* NO inner scroller. This sits inside .modal-content, which already scrolls — nesting two
@@ -421,7 +427,7 @@
     <div id="table-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Send Order</h3>
-            <div id="eta-estimate" style="text-align:center; font-size:0.95rem; font-weight:600; color:#6effa0; background:rgba(110,255,160,0.08); border:1px solid rgba(110,255,160,0.25); border-radius:8px; padding:10px; margin-bottom:12px; display:none;"></div>
+            <div id="eta-estimate" style="text-align:center; font-size:0.95rem; font-weight:700; color:#6effa0; background:rgba(110,255,160,0.08); border:1px solid rgba(110,255,160,0.25); border-radius:8px; padding:10px; margin-bottom:12px; display:none;"></div>
             <textarea id="pos-order-notes" class="remark-input" placeholder="Order notes (e.g. To-go cup, extra hot...)" style="height: 50px; resize: none; margin-top: 5px; margin-bottom: 15px;"></textarea>
             
             <div class="table-grid" id="sender-table-grid"></div>
@@ -562,12 +568,13 @@
             <!-- Always present, even when empty. It used to appear the moment a tip was tapped,
                  pushing the buttons and the QR ~26px down under the customer's finger. -->
             <div id="upi-tip-line" class="tip-note"></div>
+            <!-- Clearing lives on the note line, not in the button row: a reserved slot at the
+                 end of the row left a permanent 42px gap that pushed the four buttons left. -->
             <div class="tip-row">
                 <button class="tip-btn" onclick="window.setTip(10)">+₹10</button>
                 <button class="tip-btn" onclick="window.setTip(20)">+₹20</button>
                 <button class="tip-btn" onclick="window.setTip(50)">+₹50</button>
                 <button class="tip-btn" onclick="window.setTip('custom')">Tip</button>
-                <button class="tip-btn tip-clear" id="upi-tip-clear" hidden onclick="window.setTip(0)">✖</button>
             </div>
             <img id="qr-image" src="" alt="QR">
             <div id="qr-wait" class="qr-wait">Preparing code…</div>
@@ -1024,7 +1031,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-12.9';
+        const ILA_BUILD = '2026-08-12.13';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -2867,11 +2874,17 @@
             const ttl = document.getElementById('upi-title');
             if (ttl) ttl.innerText = (window.checkoutTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + window.checkoutTableID);
             const line = document.getElementById('upi-tip-line');
-            const clr = document.getElementById('upi-tip-clear');
             // The line and the ✖ slot are always laid out; only their content/visibility changes,
             // so nothing below them shifts when a tip is added or cleared.
-            if (tip > 0){ line.innerHTML = '\u20b9' + base + ' bill + <b>\u20b9' + tip + ' tip</b>'; if (clr) clr.hidden = false; }
-            else { line.innerHTML = '&nbsp;'; if (clr) clr.hidden = true; }
+            // One line, always populated: a label when there's no tip, the breakdown when there is.
+            // Reserving the space stops the layout jumping mid-tap; leaving it blank just left a
+            // hole under the amount on every ordinary payment.
+            if (tip > 0){
+                line.innerHTML = '\u20b9' + base + ' bill + <b>\u20b9' + tip + ' tip</b>'
+                              + '<button class="tip-clear-link" onclick="window.setTip(0)">clear</button>';
+            } else {
+                line.innerHTML = 'Amount due';
+            }
 
             startUPIWatch(total);   // also invalidates the previous amount's watcher
         };
@@ -2912,8 +2925,8 @@
         // the fallback for the slow tail and accounts that don't alert in time.
         function setUPIStatus(state, info){
             const el = document.getElementById('upi-status'); if(!el) return;
-            if (state === 'waiting'){ el.className = 'upi-status waiting'; el.innerText = '● Waiting for payment…'; }
-            else if (state === 'verified'){ el.className = 'upi-status verified'; el.innerText = '✓ Received' + (info && info.payer ? ' — ' + info.payer : '') + ' · ₹' + (info ? info.amount : ''); }
+            if (state === 'waiting'){ el.className = 'upi-status waiting'; el.innerText = 'Waiting for payment…'; }
+            else if (state === 'verified'){ el.className = 'upi-status verified'; el.innerText = 'Received' + (info && info.payer ? ' — ' + info.payer : '') + ' · ₹' + (info ? info.amount : ''); }
             else { el.className = 'upi-status'; el.innerText = ''; }
         }
         // The watcher attaches with on('value'). Detaching with a DIFFERENT event type is a
