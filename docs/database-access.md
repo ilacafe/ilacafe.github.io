@@ -19,17 +19,31 @@ but they live only in the Firebase console. That means:
 - an accidental `".read": true` is invisible until someone notices the leak,
 - and there is no way to roll one back.
 
-**Export them and commit them.** From a machine with the Firebase CLI and
-access to the `ila-cafe` project:
+**Export them and commit them.** Two ways, easiest first.
+
+### From the console
+
+**Realtime Database → Rules**, select all, paste into `database.rules.json` at
+the repo root. No tooling, and it always works.
+
+### Over REST
+
+Rules live at the special `/.settings/rules.json` path on the database itself.
+This project's database is in `asia-southeast1`, so it must be that host — the
+generic `<project>.firebaseio.com` form will not reach it:
 
 ```sh
-firebase login
-firebase use ila-cafe
-firebase database:get /.settings/rules --pretty > database.rules.json
+curl "https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app/.settings/rules.json\
+?access_token=$(gcloud auth print-access-token)" > database.rules.json
 ```
 
-Or copy them out of the console: **Realtime Database → Rules**, select all,
-paste into `database.rules.json` at the repo root.
+The token needs an account with access to the `ila-cafe` project. Firebase's
+own docs describe this path for reading rules; note that `firebase database:get`
+is for reading *data* and does not serve `.settings`.
+
+A rules file is JSON **with comments** — Firebase accepts them, and an export
+may well contain them. The checks here strip comments before parsing, so leave
+them in: they are usually the most useful thing in the file.
 
 Once that file lands, `npm test` starts checking it (see below) and every future
 change to it shows up as a reviewable diff.

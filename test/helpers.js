@@ -163,14 +163,20 @@ function derivePaths() {
       if (/^\s*\+/.test(after)) p += '/$key';        // a dynamic child appended to the literal
       if (p.startsWith('.info') || !p) continue;      // .info is always readable
       if (p.includes('${')) continue;                 // template segment; its literal sibling covers it
-      let kind = null, best = Infinity;
+      let kind = null, best = Infinity, op = null;
       for (const [rx, k] of OPS) {
         const i = after.search(rx);
-        if (i >= 0 && i < best) { best = i; kind = k; }
+        if (i >= 0 && i < best) { best = i; kind = k; op = rx; }
       }
       if (!kind) continue;
-      if (!found.has(p)) found.set(p, { read: new Set(), write: new Set() });
+      // push() does not write the node — it writes a generated child of it, and the
+      // rules for that live under a $wildcard. So the effective path is one level
+      // down; treating it as the node itself reports a rule as missing when it is
+      // sitting right there.
+      if (op && /push/.test(op.source) && !p.endsWith('/$key')) p += '/$key';
+      if (!found.has(p)) found.set(p, { read: new Set(), write: new Set(), writes: [] });
       found.get(p)[kind].add(role);
+      if (kind === 'write') found.get(p).writes.push({ role, file, snippet: after.slice(0, 400) });
     }
   }
   return found;
