@@ -235,11 +235,14 @@
            inverting to solid white when chosen. (These were briefly styled with .btn-action,
            which is an admin.html class and doesn't exist here, so they rendered as raw
            browser buttons.) */
-        .tip-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; }
+        .tip-row { display: flex; gap: 6px; justify-content: center; margin: 14px 0 0; }
         .tip-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: var(--brand-text); border-radius: 6px; padding: 10px 0; flex: 1 1 0; min-width: 0; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; font-weight: bold; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; }
         .tip-btn:active { background: var(--brand-text); color: var(--brand-bg); }
+        /* visibility, not display: the slot stays reserved so the other four buttons don't
+           shrink the instant a tip is added — the row must not move under a tapping finger. */
         .tip-btn.tip-clear { flex: 0 0 42px; }
-        .tip-note { font-size: 0.85rem; opacity: 0.85; margin: -2px 0 10px; }
+        .tip-btn.tip-clear[hidden] { visibility: hidden; display: block; }
+        .tip-note { font-size: 0.85rem; opacity: 0.85; margin: 4px 0 0; min-height: 1.3em; }
         /* Deliberately quiet: a customer looking at the QR shouldn't notice it, staff know it's there. */
         .split-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px dashed rgba(255,255,255,0.18); }
         .split-row:last-child { border-bottom: none; }
@@ -283,10 +286,10 @@
         .bill-sub { font-size: 0.85rem; opacity: 0.7; text-align: right; margin-top: 10px; }
         .item-remove-x { color: rgba(255,255,255,0.6); font-weight: normal; font-size: 1.2rem; cursor: pointer; padding: 5px 12px 5px 0; }
         
-        #qr-image { width: 150px; height: 150px; margin: 15px auto; border-radius: 8px; display: block; background: white; padding: 5px; }
+        #qr-image { width: 150px; height: 150px; margin: 16px auto 0; border-radius: 8px; display: block; background: white; padding: 5px; }
         /* Stands in for the code until one for the CURRENT amount has actually loaded. A code is
            money: showing a stale one is worse than showing none. */
-        .qr-wait { width: 160px; height: 160px; margin: 15px auto; border-radius: 8px; display: none;
+        .qr-wait { width: 160px; height: 160px; margin: 16px auto 0; border-radius: 8px; display: none;
                    align-items: center; justify-content: center; text-align: center; padding: 12px;
                    box-sizing: border-box; border: 1px dashed rgba(255,255,255,0.35);
                    font-size: 0.8rem; opacity: 0.75; line-height: 1.4; cursor: default; }
@@ -554,15 +557,17 @@
 
     <div id="upi-modal" class="modal-overlay">
         <div class="modal-content">
-            <h3 id="upi-title">Scan</h3>
-            <p id="upi-amount-text" style="font-size: 1.9rem; font-weight: 700; line-height:1.15; margin: 0 0 4px;">₹0</p>
-            <div id="upi-tip-line" class="tip-note" style="display:none;"></div>
+            <h3 id="upi-title" style="margin-bottom: 6px;">Scan</h3>
+            <p id="upi-amount-text" style="font-size: 1.9rem; font-weight: 700; line-height:1.15; margin: 0;">₹0</p>
+            <!-- Always present, even when empty. It used to appear the moment a tip was tapped,
+                 pushing the buttons and the QR ~26px down under the customer's finger. -->
+            <div id="upi-tip-line" class="tip-note"></div>
             <div class="tip-row">
                 <button class="tip-btn" onclick="window.setTip(10)">+₹10</button>
                 <button class="tip-btn" onclick="window.setTip(20)">+₹20</button>
                 <button class="tip-btn" onclick="window.setTip(50)">+₹50</button>
                 <button class="tip-btn" onclick="window.setTip('custom')">Tip</button>
-                <button class="tip-btn tip-clear" id="upi-tip-clear" style="display:none;" onclick="window.setTip(0)">✖</button>
+                <button class="tip-btn tip-clear" id="upi-tip-clear" hidden onclick="window.setTip(0)">✖</button>
             </div>
             <img id="qr-image" src="" alt="QR">
             <div id="qr-wait" class="qr-wait">Preparing code…</div>
@@ -1019,7 +1024,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-12.8';
+        const ILA_BUILD = '2026-08-12.9';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -2863,8 +2868,10 @@
             if (ttl) ttl.innerText = (window.checkoutTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + window.checkoutTableID);
             const line = document.getElementById('upi-tip-line');
             const clr = document.getElementById('upi-tip-clear');
-            if (tip > 0){ line.style.display = 'block'; line.innerHTML = '\u20b9' + base + ' bill + <b>\u20b9' + tip + ' tip</b>'; if (clr) clr.style.display = ''; }
-            else { line.style.display = 'none'; if (clr) clr.style.display = 'none'; }
+            // The line and the ✖ slot are always laid out; only their content/visibility changes,
+            // so nothing below them shifts when a tip is added or cleared.
+            if (tip > 0){ line.innerHTML = '\u20b9' + base + ' bill + <b>\u20b9' + tip + ' tip</b>'; if (clr) clr.hidden = false; }
+            else { line.innerHTML = '&nbsp;'; if (clr) clr.hidden = true; }
 
             startUPIWatch(total);   // also invalidates the previous amount's watcher
         };
