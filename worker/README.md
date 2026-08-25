@@ -24,6 +24,29 @@ It does four things:
 **A push to `main` does not deploy this.** The pages deploy via GitHub Pages;
 this deploys only when you run:
 
+### Automatically, on push (no terminal)
+
+Connect this directory to the Worker once, and every push to `main` deploys it:
+
+**Workers & Pages → ila-push → Settings → Builds → Connect**, then set
+
+| field | value |
+|---|---|
+| Repository | `ilacafe/ilacafe.github.io` |
+| Git branch | `main` |
+| Root directory | `worker` |
+| Build command | *leave empty* |
+| Deploy command | `npx wrangler deploy` |
+
+The root directory matters: without it the build runs at the repo root and tries
+to install the test dependencies, Playwright included.
+
+The Worker name in the dashboard must match `name` in `wrangler.toml` — both are
+`ila-push`, so it lines up. Runtime secrets stay where they are under **Settings
+→ Variables and Secrets**; Workers Builds does not touch them.
+
+### By hand
+
 ```sh
 cd worker && ./deploy.sh
 ```
@@ -37,9 +60,9 @@ today only as literals inside the deployed script, and deploying replaces it:
 dashboard → Workers & Pages → ila-push → Edit code → the constants at the top.
 Losing `VAPID_PRIVATE` means every admin device must re-subscribe.
 
-`wrangler deploy` on its own works too; read `wrangler.toml` first for the two
-warnings that matter on a first deploy (the compatibility date, and cron triggers
-being made authoritative).
+`wrangler deploy` on its own works too. One warning still applies either way:
+deploying makes the cron list in `wrangler.toml` authoritative, so a schedule
+configured in the dashboard but missing from that file is removed.
 
 ## Secrets
 
