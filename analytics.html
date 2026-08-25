@@ -348,7 +348,8 @@
         });
 
         // ---------- data ----------
-        let DATA = {};       // orders/history
+        let DATA = {};       // orders/history — only the span the chosen range needs
+        let historyQuery = null, historyFrom = null;
         let CATMAP = {};     // menu item name -> category
         let VOIDS = {};      // security/voids
         let RANGE = null;    // {start, end, key, label}
@@ -364,8 +365,9 @@
             document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.range)));
             setPreset('30d');
             db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); render(); });
-            db.ref('orders/history').on('value', s => { DATA = s.val()||{}; render(); });
-            db.ref('security/voids').on('value', s => { VOIDS = s.val()||{}; render(); });
+            // Voids are rare — a few a week — so 2000 is years of them, and it stops
+            // this being the next node that grows without limit.
+            db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; render(); });
             db.ref('pos/eodArchive').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
             demandBoot();
         }
@@ -408,7 +410,35 @@
             document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
             setRange(start, end, 'custom', fmtRange(start, end-1));
         };
-        function setRange(start, end, key, label){ RANGE = {start, end, key, label}; const el=document.getElementById('range-label'); if(el) el.textContent = label; render(); }
+        // The page defaulted to a 30-day view while downloading every bill ever
+        // recorded, then filtering in the browser. orders/history keys are
+        // `${Date.now()}-${random}`, so they sort chronologically and orderByKey
+        // needs no index — the range the user actually picked can be asked for.
+        //
+        // Widening the range refetches; narrowing it does not, because the data is
+        // already here. Getting that comparison backwards would either refetch on
+        // every click or quietly show a window with nothing in it, so it is a named
+        // function with a test rather than an inline `<=`.
+        function historyNeedsRefetch(have, want){ return have === null || have > want; }
+
+        function ensureHistory(start){
+            if(!historyNeedsRefetch(historyFrom, start)){ render(); return; }
+            if(historyQuery){ try { historyQuery.off(); } catch(e){} }
+            historyFrom = start;
+            // Paint the new range immediately with whatever is already held, the way
+            // setRange used to before the fetch moved in here. Waiting for the round
+            // trip would blank the page on every widening instead of just redrawing it.
+            render();
+            // 'All time' deliberately drops the key filter rather than starting at 0:
+            // any legacy key not of the timestamp form sorts before every digit, and a
+            // startAt would silently exclude it from the one view that promises everything.
+            historyQuery = start > 0
+                ? db.ref('orders/history').orderByKey().startAt(String(Math.floor(start)))
+                : db.ref('orders/history');
+            historyQuery.on('value', s => { DATA = s.val()||{}; render(); });
+        }
+
+        function setRange(start, end, key, label){ RANGE = {start, end, key, label}; const el=document.getElementById('range-label'); if(el) el.textContent = label; ensureHistory(start); }
         function fmtRange(a, b){ const o={day:'numeric',month:'short',year:'numeric'}; return new Date(a).toLocaleDateString('en-GB',o) + "  \u2192  " + new Date(b).toLocaleDateString('en-GB',o); }
 
         // ---------- bucketing for trend ----------
@@ -976,7 +1006,13 @@ if (typeof module !== "undefined") module.exports = {
         const CFG = {
             paths: { chef: "orders/completed/chef", barista: "orders/completed/barista" },
             place: { lat: 29.647, lon: 79.654, elevation: 2100 },          // Kasar Devi ridge
-            model: { halfLifeDays: 28, shrinkK: 6, weatherK: 4, minLiveRecords: 200 },
+            // maxPerStation bounds the demand-map load. The model weights each record
+            // by an exponential with a 28-day half-life, so a record 200 days old
+            // carries 2^(-200/28) ≈ 0.7% of a fresh one — at roughly 30 completions a
+            // day per station, 6000 records is about 200 days. Reading further back
+            // costs download time to move the fit by less than a rounding error, and
+            // the node is never pruned, so unbounded means slower every month forever.
+            model: { halfLifeDays: 28, shrinkK: 6, weatherK: 4, minLiveRecords: 200, maxPerStation: 6000 },
             hours: { open: 7, close: 22 },                                  // display window
             prep:  { mozPerPizzaG: 60, doughBufferPct: 10 },
             roast: { espShare: 0.75, doseG: 18, weightLossPct: 15, restDays: 6,
@@ -1029,8 +1065,8 @@ if (typeof module !== "undefined") module.exports = {
         async function loadAll(){
             try {
                 const [sc, sb] = await Promise.all([
-                    db.ref(CFG.paths.chef).once("value"),
-                    db.ref(CFG.paths.barista).once("value")
+                    db.ref(CFG.paths.chef).limitToLast(CFG.model.maxPerStation).once("value"),
+                    db.ref(CFG.paths.barista).limitToLast(CFG.model.maxPerStation).once("value")
                 ]);
                 records = snapToRecords("chef", sc.val()).concat(snapToRecords("barista", sb.val()));
             } catch (e) {
