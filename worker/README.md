@@ -45,7 +45,6 @@ Set each of these once, with `npx wrangler secret put <NAME>`:
 | binding | what it is |
 |---|---|
 | `VAPID_PRIVATE` | Web Push signing key. Rotating it invalidates every existing subscription — every admin device must re-subscribe. |
-| `SHARED_SECRET` | Authorises the push relay. **Public by construction** — it is a literal in `pos.html`, `admin.html`, `barista.html`, `chef.html`, all served from ila.cafe. Rotating it means editing those four pages too. |
 | `INGEST_SECRET` | Authorises `POST /ingest`. Must never appear in a page. Lives here and in your Shortcuts / email forwarder. |
 | `RECAL_SECRET` | Authorises `recalibrate-now` / `recalibrate-dryrun`. Must never appear in a page. |
 | `ROBOT_PASSWORD` | Firebase password for `ROBOT_EMAIL`. |
@@ -56,9 +55,56 @@ Set each of these once, with `npx wrangler secret put <NAME>`:
 The last three are addresses rather than secrets, but they are personal, so they
 stay out of the repo on the same principle.
 
-`VAPID_PUBLIC`, `FIREBASE_API_KEY` and `DB_URL` are in `wrangler.toml` instead —
-all three already appear in the site's own source, so committing them leaks
-nothing new.
+`SHARED_SECRET` is **retired**. It authorised the push relay and was a literal in
+four public pages, so anyone who viewed source could send any notification they
+liked to every admin device — and, because the caller also supplied the recipient
+list, could use the café's VAPID key to push to endpoints of their own. No secret
+a browser must hold can fix that. The relay now takes a Firebase ID token and
+checks `users/{uid}.role`; recipients come from the database. Once the pages have
+shipped and the tablets have reloaded, delete the binding:
+`npx wrangler secret delete SHARED_SECRET`.
+
+`VAPID_PUBLIC`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT` and `DB_URL` are in
+`wrangler.toml` instead — all four already appear in the site's own source, so
+committing them leaks nothing new.
+
+## Who may send a push
+
+`POST /` takes a **Firebase ID token**, not a secret:
+
+```json
+{ "token": "<firebase idToken>", "notification": { "title": "…", "body": "…", "tag": "…", "url": "/admin.html" } }
+```
+
+The Worker verifies the signature against Google's published keys, checks `iss`,
+`aud` and `exp` for this project, refuses an anonymous sign-in, and then requires
+`users/{uid}.role` to be one of `admin`, `cashier`, `barista`, `chef`. That last
+lookup is why the robot needs read on `users/$uid`.
+
+**Recipients are not a parameter.** The Worker reads `pushSubscriptions` itself.
+When the caller supplied the list, the Worker was an open relay: anyone with the
+page's secret could push to any endpoint, signed with the café's VAPID key.
+
+`notification` is still free text — staff legitimately send amounts and table
+names — but it is bounded and stripped of control characters, and `url` must be a
+same-site path. `sw.js` passes `url` to `clients.openWindow()` when the
+notification is tapped, so an absolute URL would open someone else's site from
+what looks like a café alert.
+
+### Deploying this without dropping alerts
+
+The pages and the Worker deploy separately, so they are briefly out of step. The
+pages send the token **and** the old `secret`/`subscriptions` fields, so a page
+that ships before the Worker still works against the old one. Order:
+
+1. Merge the pages.
+2. `npx wrangler secret put FIREBASE_PROJECT`-adjacent bindings, then `npx wrangler deploy`.
+3. Reload the tills and kitchen screens — `sw.js` serves the cached shell and
+   applies a new build on the *next* open, so a tablet open all day is still
+   running the old page and its pushes will 401 until it reloads. Check the build
+   stamp reads `2026-08-25.5`.
+4. Deploy the rules (below), then delete the retired secret and ask for the
+   transitional block to be stripped from the four pages.
 
 ### If a binding is missing
 

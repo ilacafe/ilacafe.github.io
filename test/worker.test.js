@@ -10,13 +10,16 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ROOT, readPage, extractFunction, buildModule, suite } = require('./helpers');
+const { ROOT, readPage, extractFunction, buildModule, suite, stripComments } = require('./helpers');
 
 const src  = readPage('worker/worker.js');
 const toml = fs.readFileSync(path.join(ROOT, 'worker', 'wrangler.toml'), 'utf8');
 const doc  = fs.readFileSync(path.join(ROOT, 'worker', 'README.md'), 'utf8');
 
 const { check, note, done } = suite('Worker — secrets, auth routing and the recalibration gate');
+
+main();
+async function main() {
 
 // ---------------------------------------------------------------- no secrets in source
 // Deliberately pattern-based, never value-based: writing the real secrets into this
@@ -48,7 +51,7 @@ const { check, note, done } = suite('Worker — secrets, auth routing and the re
   note('worker.js is world-readable at ila.cafe/worker/worker.js — this is what keeps that safe');
 
   // wrangler.toml is committed, so its [vars] must stay to values the site already publishes.
-  const PUBLIC_OK = ['VAPID_PUBLIC', 'FIREBASE_API_KEY', 'DB_URL'];
+  const PUBLIC_OK = ['VAPID_PUBLIC', 'FIREBASE_API_KEY', 'FIREBASE_PROJECT', 'DB_URL'];
   const varsBlock = (toml.split('[vars]')[1] || '').split(/^\[/m)[0];
   const declared = [...varsBlock.matchAll(/^\s*([A-Z_]+)\s*=/gm)].map(m => m[1]);
   const unexpected = declared.filter(n => !PUBLIC_OK.includes(n));
@@ -223,4 +226,194 @@ const { check, note, done } = suite('Worker — secrets, auth routing and the re
   note('these guard the hand-port out of the dashboard, not the banks\' formats');
 }
 
+// ---------------------------------------------------------------- the robot can reach what it reads
+// Every write the Worker needs was granted to robot@cafeila.app by email. Not one
+// read was — they were all gated on users/{auth.uid}/role, and a service account
+// has no users entry. So the robot could write eta/model but could not read
+// orders/completed to derive one, and could not read pushSubscriptions to notify
+// anyone. Recalibration and the whole verification monitor were shut out of their
+// own inputs.
+//
+// Paths are extracted from the Worker's source, so adding a new read without a
+// matching rule fails here instead of failing silently at 3am on the 1st.
+{
+  const rules = JSON.parse(stripComments(fs.readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8'))).rules;
+  const ROBOT = 'robot@cafeila.app';
+
+  // nearest ancestor carrying the rule wins — Firebase rules cascade down
+  function granted(p, kind) {
+    let cur = rules, best = cur[kind];
+    for (const seg of p.split('/').filter(Boolean)) {
+      if (!cur) break;
+      const wild = Object.keys(cur).find(k => k.startsWith('$'));
+      const next = Object.prototype.hasOwnProperty.call(cur, seg) ? cur[seg] : (wild ? cur[wild] : null);
+      if (!next) { cur = null; break; }
+      cur = next;
+      if (cur[kind] != null) best = cur[kind];
+    }
+    return best === true || (typeof best === 'string' && best.includes(ROBOT));
+  }
+
+  // every literal database path in the Worker, with whether that call writes
+  const found = new Map();
+  for (const m of src.matchAll(/DB_URL \+ '([^']+)'/g)) {
+    // A literal ending in '/' has a dynamic segment concatenated after it
+    // ('/users/' + uid). Keep a placeholder so the path resolves against the
+    // wildcard rule that governs it ($uid) rather than against its parent.
+    let p = m[1].replace(/\.json.*$/, '');
+    p = p.endsWith('/') && p !== '/' ? p + '$dynamic' : (p || '/');
+    const after = src.slice(m.index, m.index + 260);
+    const writes = /method\s*:\s*'(PUT|PATCH|POST|DELETE)'/.test(after);
+    found.set(p, (found.get(p) || false) || writes);
+  }
+  for (const m of src.matchAll(/monLoad\([^,]+,\s*'([^']+)'\)/g)) {
+    if (!found.has(m[1])) found.set(m[1], false);          // monLoad only ever reads
+  }
+
+  // '/' is the root PATCH that writes the monitor/* alert state in one call
+  const ROOT_PATCH = { '/': 'monitor' };
+  const WRITE_ONLY = ['/payments/incoming'];                // never read back
+
+  const unreachable = [];
+  for (const [p, writes] of found) {
+    const target = ROOT_PATCH[p] || p;
+    if (writes && !granted(target, '.write')) unreachable.push(p + ' (write)');
+    const readOnlyNeeded = !WRITE_ONLY.some(w => p.startsWith(w)) && p !== '/';
+    if (readOnlyNeeded && !granted(target, '.read')) unreachable.push(p + ' (read)');
+  }
+  check('the robot can reach every database path the Worker uses',
+        unreachable.length === 0, unreachable.join(', '));
+  note([...found.keys()].sort().join('  '));
+
+  // discriminating: strip the robot from one rule and the check must notice
+  const saved = JSON.stringify(rules.pushSubscriptions['.read']);
+  rules.pushSubscriptions['.read'] = "auth != null && root.child('users').child(auth.uid).child('role').exists()";
+  check('and it notices when a rule stops naming the robot', !granted('/pushSubscriptions', '.read'),
+        'the audit would have passed a rule that locks the Worker out');
+  rules.pushSubscriptions['.read'] = JSON.parse(saved);
+
+  // the grants must not have opened anything to the world
+  const PUBLIC_OK = ['menu', 'settings', 'eta', 'orders/track'];
+  const leaked = [];
+  (function walk(n, p) {
+    if (!n || typeof n !== 'object') return;
+    if (n['.read'] === true && !PUBLIC_OK.some(x => (p || '').startsWith(x))) leaked.push(p || '(root)');
+    for (const k of Object.keys(n)) if (!k.startsWith('.')) walk(n[k], p ? p + '/' + k : k);
+  })(rules, '');
+  check('and nothing became world-readable in the process', leaked.length === 0, leaked.join(', '));
+}
+
+// ---------------------------------------------------------------- the token check itself
+// The relay's only defence now. Rejecting a good token is visible — nobody gets
+// alerts. Accepting a bad one is invisible, and puts a fabricated "Bill voided
+// ₹50,000" on the owner's lock screen through the café's own pipe. So this signs
+// real tokens with a real key and checks each rejection reason separately.
+{
+  const { webcrypto } = require('crypto');
+  const b64url = b => Buffer.from(b).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  const kp = await webcrypto.subtle.generateKey(
+    { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+  const pubJwk = await webcrypto.subtle.exportKey('jwk', kp.publicKey);
+  const KID = 'test-kid';
+
+  // the JWKS endpoint the Worker fetches, stubbed
+  const fetchStub = async () => ({
+    ok: true,
+    headers: { get: () => 'max-age=3600' },
+    json: async () => ({ keys: [{ kty: pubJwk.kty, n: pubJwk.n, e: pubJwk.e, alg: 'RS256', kid: KID }] })
+  });
+
+  const api = buildModule([
+    'let _jwkCache = null, _jwkExp = 0;',
+    'const _enc = new TextEncoder();',
+    extractFunction(src, 'b64urlToBytes'),
+    extractFunction(src, 'googleJwks'),
+    extractFunction(src, 'verifyIdToken'),
+    'function setProject(p){ FIREBASE_PROJECT = p; }',
+  ], { FIREBASE_PROJECT: 'ila-cafe', fetch: fetchStub, crypto: webcrypto,
+       TextEncoder, TextDecoder, Date, Math, JSON, String, parseInt },
+     ['verifyIdToken']);
+
+  const now = () => Math.floor(Date.now() / 1000);
+  async function mint(over, signWith) {
+    const header = Object.assign({ alg: 'RS256', kid: KID, typ: 'JWT' }, (over || {}).header || {});
+    const payload = Object.assign({
+      iss: 'https://securetoken.google.com/ila-cafe', aud: 'ila-cafe',
+      sub: 'staff-uid-1', iat: now() - 60, exp: now() + 3600,
+      firebase: { sign_in_provider: 'password' }
+    }, (over || {}).payload || {});
+    const h = b64url(JSON.stringify(header)), p = b64url(JSON.stringify(payload));
+    const sig = new Uint8Array(await webcrypto.subtle.sign('RSASSA-PKCS1-v1_5',
+      signWith || kp.privateKey, new TextEncoder().encode(h + '.' + p)));
+    return h + '.' + p + '.' + b64url(sig);
+  }
+
+  check('a properly signed, current token for this project is accepted',
+        (await api.verifyIdToken(await mint())) !== null);
+
+  check('a token signed by somebody else is rejected',
+        (await api.verifyIdToken(await mint({}, (await webcrypto.subtle.generateKey(
+          { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048,
+            publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
+          true, ['sign', 'verify'])).privateKey))) === null,
+        'a forged signature was accepted');
+
+  check('a tampered payload is rejected',
+        await (async () => {
+          const t = await mint(); const [h, p, sg] = t.split('.');
+          const bad = b64url(JSON.stringify(Object.assign(
+            JSON.parse(Buffer.from(p, 'base64url').toString()), { sub: 'someone-else' })));
+          return (await api.verifyIdToken(h + '.' + bad + '.' + sg)) === null;
+        })(), 'the signature did not cover the payload');
+
+  check('an expired token is rejected',
+        (await api.verifyIdToken(await mint({ payload: { exp: now() - 10 } }))) === null);
+  check('a token for a different Firebase project is rejected',
+        (await api.verifyIdToken(await mint({ payload: { aud: 'some-other-app' } }))) === null);
+  check('a token from a different issuer is rejected',
+        (await api.verifyIdToken(await mint({ payload: { iss: 'https://evil.example/ila-cafe' } }))) === null);
+  check('an unsigned alg:none token is rejected',
+        (await api.verifyIdToken(await mint({ header: { alg: 'none' } }))) === null,
+        'alg:none is the classic JWT bypass');
+  check('a token whose kid names no known key is rejected',
+        (await api.verifyIdToken(await mint({ header: { kid: 'not-a-real-kid' } }))) === null);
+  check('garbage is rejected without throwing',
+        (await api.verifyIdToken('not.a.token')) === null &&
+        (await api.verifyIdToken('')) === null &&
+        (await api.verifyIdToken(null)) === null);
+  note('an anonymous customer token is caught separately, by sign_in_provider and by the role lookup');
+}
+
+// ---------------------------------------------------------------- the relay's own wiring
+{
+  check('the relay no longer authenticates with the public push secret',
+        !/authOk\(data\.secret,\s*SHARED_SECRET\)/.test(src) && !/SHARED_SECRET\s*=/.test(src),
+        'the retired secret is still wired up');
+  check('recipients come from the database, not from the caller',
+        !/Array\.isArray\(data\.subscriptions\)/.test(src) &&
+        /unwrapSubs\(res\.ok/.test(src),
+        'the caller can still choose who gets pushed');
+  check('an anonymous sign-in is refused before the role lookup',
+        /sign_in_provider === 'anonymous'/.test(src));
+  check('the payload is sanitised before it is sent',
+        /safeNotification\(data\.notification\)/.test(src));
+
+  const api = buildModule([extractFunction(src, 'safeText'), extractFunction(src, 'safeNotification')],
+                          { String }, ['safeNotification']);
+  const n = api.safeNotification({ title: 'x'.repeat(500), body: 'a\u0000b', tag: 't',
+                                   url: 'https://evil.example/steal' });
+  check('an absolute url cannot ride in — sw.js hands it to openWindow() on tap',
+        n.url === '/admin.html', n.url);
+  check('a protocol-relative url is refused too', api.safeNotification({ url: '//evil.example' }).url === '/admin.html');
+  check('a same-site path is kept', api.safeNotification({ url: '/pos.html' }).url === '/pos.html');
+  check('the title is bounded', n.title.length === 80);
+  check('control characters are stripped from the body', !/\u0000/.test(n.body), JSON.stringify(n.body));
+  check('an empty notification still yields something sendable',
+        api.safeNotification({}).title === 'Café Ila' && api.safeNotification(null).tag === 'ila');
+}
+
 done();
+}
