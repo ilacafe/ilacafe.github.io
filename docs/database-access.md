@@ -191,6 +191,37 @@ Two consequences worth keeping in mind when reading the rules:
   role. The parent `users` node stays admin-only, so that grants a lookup by uid,
   never a listing.
 
+## The staff PIN is attribution, not authorisation
+
+`staff` maps `SHA-256(fixed salt + PIN) → name`, the salt is a literal in the
+page source, and every signed-in role can read the map. Any staff account can
+therefore recover every PIN in under a second, and PINs gate voids, expenses,
+withdrawals, tip payouts and end-of-day.
+
+Restricting that read looks like the fix and mostly is not, because the PIN is
+not what authorises the action. `pos.html` pushes ledger entries straight from
+the browser:
+
+```js
+db.ref('pos/ledgerEntries').push(entry);
+```
+
+and `pos` is writable by anyone holding a staff role. So a staff member does not
+need anyone's PIN to record a withdrawal against a colleague's name — they can
+write the entry directly. The PIN prompt is a speed bump in the UI, and the name
+it stamps into `reason` is advisory.
+
+Making it real means moving those writes into the Worker: verify the staff token
+and the PIN there, write the entry from there, and stop clients writing those
+types at all. That is a change to the till's money path and has not been made.
+
+What has been made is **visibility**. The hourly monitor reports cash leaving the
+drawer — `expense`, `withdrawal`, `tip_payout`, `unpaid_writeoff` — with the
+amount, the reason and the name it claims, so the owner sees it the same hour
+rather than at end-of-day, and the named person can say whether it was them.
+Routine spend under ₹500 is not reported, because a notification nobody reads is
+worse than none; a written-off bill is reported at any size.
+
 ## Deploying rules
 
 ```sh

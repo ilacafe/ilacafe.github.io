@@ -415,5 +415,67 @@ async function main() {
         api.safeNotification({}).title === 'Café Ila' && api.safeNotification(null).tag === 'ila');
 }
 
+// ---------------------------------------------------------------- cash leaving the drawer
+// The PIN that gates a withdrawal also stamps the staff name into `reason` — but
+// pos.html pushes ledger entries straight from the browser and the rule on pos/ is
+// only "has a staff role", so that name is advisory. This does not try to prevent
+// that; it makes it visible within the hour. What matters is that the selection is
+// neither noisy (a push nobody reads is worse than none) nor silent.
+{
+  const api = buildModule([
+    "const MON_CASHOUT_TYPES = ['expense','withdrawal','tip_payout','unpaid_writeoff'];",
+    'const MON_CASHOUT_MIN = 500, MON_CASHOUT_WINDOW_MS = 6*60*60000;',
+    extractFunction(src, 'monNewCashOuts'),
+    extractFunction(src, 'monCashOutMessage'),
+  ], { Math, parseFloat, String, Number }, ['monNewCashOuts', 'monCashOutMessage']);
+
+  const now = Date.now(), min = 60000;
+  const E = (key, type, amount, reason, agoMin) =>
+    ({ key, type, amount, reason, ts: now - (agoMin || 5) * min });
+
+  const ledger = [
+    E('k1', 'withdrawal',      2400, 'Float top-up (Priya)'),
+    E('k2', 'expense',          180, 'Milk (Arjun)'),
+    E('k3', 'expense',          900, 'Gas cylinder (Priya)'),
+    E('k4', 'unpaid_writeoff',  120, 'UNPAID: Table 4 — walked out (Arjun)'),
+    E('k5', 'cash_income',     5000, 'Table 2'),
+    E('k6', 'upi_income',      1200, 'Table 7'),
+    E('k7', 'withdrawal',      3000, 'Banking (Priya)', 600),   // outside the window
+  ];
+
+  const picked = api.monNewCashOuts(ledger, {}, now);
+  const keys = picked.map(e => e.key);
+  check('income is never reported as cash leaving', !keys.includes('k5') && !keys.includes('k6'));
+  check('routine small spend is not reported', !keys.includes('k2'), 'a ₹180 milk run would push');
+  check('a large withdrawal is reported', keys.includes('k1'));
+  check('spend over the threshold is reported', keys.includes('k3'));
+  check('a written-off bill is reported at any size',
+        keys.includes('k4'), 'revenue disappearing is rare enough to always show');
+  check('nothing older than the window is reported', !keys.includes('k7'),
+        'a deploy would otherwise flood the phone with the whole day');
+  check('largest first', keys[0] === 'k1', keys.join(','));
+  note('picked ' + keys.join(', ') + ' from ' + ledger.length + ' entries');
+
+  check('an entry already reported is not reported again',
+        api.monNewCashOuts(ledger, { k1: true, k3: true, k4: true }, now).length === 0,
+        'the same withdrawal would push every hour, forever');
+
+  const one = api.monCashOutMessage([ledger[0]]);
+  check('a single cash-out names the amount, the type and the reason',
+        one.title === '₹2,400 withdrawal' && one.body === 'Float top-up (Priya)',
+        JSON.stringify(one));
+  const many = api.monCashOutMessage(picked);
+  check('several are summarised with the largest named',
+        /₹3,420 out of the drawer · 3 entries/.test(many.title) && /largest ₹2,400 withdrawal/.test(many.body),
+        JSON.stringify(many));
+  note('one → "' + one.title + '"');
+  note('many → "' + many.title + '"');
+
+  check('an entry with no reason still produces a sendable message',
+        api.monCashOutMessage([{ key: 'x', type: 'expense', amount: 700 }]).body === '(no reason given)');
+  check('a missing timestamp is skipped rather than crashing',
+        api.monNewCashOuts([{ key: 'z', type: 'expense', amount: 900 }], {}, now).length === 0);
+}
+
 done();
 }
