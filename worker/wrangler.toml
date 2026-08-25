@@ -12,6 +12,23 @@ main = "worker.js"
 # twelve months.
 compatibility_date = "2026-06-17"
 
+# These two were set in the dashboard and are repeated here because a deploy
+# makes this file authoritative: the first deploy from it silently turned
+# observability OFF and preview URLs ON, which is exactly the kind of drift a
+# config file is supposed to prevent rather than cause.
+#
+# Logging is not optional here — the email ingest logs its failing stage on
+# purpose, so that a bank changing its alert format can be diagnosed by tailing
+# the Worker rather than by guessing.
+preview_urls = false
+
+[observability]
+enabled = true
+redact_query_string = false
+
+[observability.logs]
+enabled = true
+
 # Cron triggers. worker.js branches on the matched schedule string, so these two
 # expressions are load-bearing — "0 20 1 * *" is compared literally in scheduled().
 #

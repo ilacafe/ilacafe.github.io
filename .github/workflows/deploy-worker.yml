@@ -49,9 +49,27 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy
 
-      - name: what landed
+      # Names only — wrangler never prints secret values. This is the one check
+      # that catches the failure mode nothing else does: a deploy succeeds, the
+      # Worker runs, and a missing binding makes it fail closed in silence.
+      - name: confirm the runtime secrets are present
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deployments list | head -20
+        run: |
+          set -o pipefail
+          have=$(npx wrangler secret list | tr -d ' "' | tr ',' '\n' | sed -n 's/^name://p')
+          echo "$have"
+          missing=""
+          for s in VAPID_PRIVATE INGEST_SECRET RECAL_SECRET ROBOT_PASSWORD ROBOT_EMAIL VAPID_SUBJECT; do
+            echo "$have" | grep -qx "$s" || missing="$missing $s"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::missing secret(s):$missing — the routes they guard will 401 and the crons will do nothing"
+            exit 1
+          fi
+          echo "all required secrets present"
+          # EMAIL_FORWARD_TO is deliberately not required: the code guards it, and
+          # without it bank emails simply are not forwarded on.
+          echo "$have" | grep -qx EMAIL_FORWARD_TO || echo "::warning::EMAIL_FORWARD_TO unset — bank emails will not be forwarded to an inbox"
