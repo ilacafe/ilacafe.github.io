@@ -45,6 +45,17 @@ jobs:
             [ -n "$url" ] || continue
             curl -fsSL --max-time 30 "$url" -o /tmp/lib.js || { echo "::error::could not fetch $url"; exit 1; }
             got="sha384-$(openssl dgst -sha384 -binary /tmp/lib.js | openssl base64 -A)"
+            # crossorigin="anonymous" makes the browser send an Origin header and
+            # refuse the script unless the CDN allows it. Without this check a missing
+            # Access-Control-Allow-Origin would not show up here at all — it would show
+            # up as a blank till, because the script simply never loads.
+            acao=$(curl -fsSI --max-time 30 -H 'Origin: https://ila.cafe' "$url" \
+                     | tr -d '\r' | grep -i '^access-control-allow-origin:' || true)
+            if [ -z "$acao" ]; then
+              echo "::error::$url sends no Access-Control-Allow-Origin"
+              echo "::error::  crossorigin=\"anonymous\" will stop this script loading at all"
+              fail=1
+            fi
             # No match is the expected case until the hashes are committed. Without the
             # `|| true` grep exits 1, pipefail propagates it, and the step's implicit
             # `bash -e` kills the job before it prints a single line — which is how

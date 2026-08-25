@@ -74,18 +74,34 @@ check('there is third-party code to check at all', tags.length > 0);
 }
 
 {
+  // Pinning stops the version moving. SRI stops the file moving at that version —
+  // a CDN account compromise, or a cache poisoned in front of it, is otherwise
+  // indistinguishable from a normal load on a page that takes card payments.
   const without = tags.filter(t => !/\bintegrity=/.test(t.attrs));
-  // Not yet a failure: an integrity hash cannot be invented, it has to be computed
-  // from the file the CDN actually serves. The deploy workflow prints them — see
-  // .github/workflows/test.yml, job "third-party hashes" — and once they are in the
-  // pages this turns into a hard check.
-  check('every script carrying an integrity hash also declares crossorigin',
-        tags.filter(t => /\bintegrity=/.test(t.attrs) && !/\bcrossorigin=/.test(t.attrs)).length === 0,
-        'integrity without crossorigin is silently ignored by the browser');
-  if (without.length) {
-    note(without.length + ' of ' + tags.length + ' script tags have no integrity hash yet');
-    note('pinning stops the version moving; SRI stops the file moving at that version');
+  check('every external script declares an integrity hash',
+        without.length === 0, without.map(t => t.page + ' → ' + t.url).join(', '));
+
+  check('and declares crossorigin alongside it',
+        tags.filter(t => !/\bcrossorigin=/.test(t.attrs)).length === 0,
+        'integrity without crossorigin is ignored by the browser — SRI in name only');
+
+  const bad = tags.filter(t => !/integrity="sha(256|384|512)-[A-Za-z0-9+/]+=*"/.test(t.attrs));
+  check('every hash is a well-formed sha256/384/512 digest', bad.length === 0,
+        bad.map(t => t.page + ' → ' + t.url).join(', '));
+
+  // The same URL must carry the same hash on every page, or one page is loading a
+  // file the others would reject.
+  const byUrl = new Map();
+  for (const t of tags) {
+    const h = /integrity="([^"]+)"/.exec(t.attrs)[1];
+    if (!byUrl.has(t.url)) byUrl.set(t.url, new Map());
+    byUrl.get(t.url).set(h, (byUrl.get(t.url).get(h) || 0) + 1);
   }
+  const split = [...byUrl.entries()].filter(([, hs]) => hs.size > 1);
+  check('and one URL never carries two different hashes', split.length === 0,
+        split.map(([u]) => u).join(', '));
+  note('the hashes themselves are verified against the live files by CI, not here —');
+  note('nothing offline can tell a correct digest from a plausible one');
 }
 
 done();
