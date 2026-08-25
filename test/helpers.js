@@ -20,20 +20,56 @@ function readPage(name) {
 }
 
 // Walk to the brace that closes the one at openIdx, stepping over strings,
-// template substitutions and comments. Regex literals containing a quote or a
-// brace would fool this; none of the extracted functions has one.
+// template substitutions, comments and regex literals.
+//
+// Regex literals matter: escapeHTML is `.replace(/[&<>"']/g, …)`, and reading that
+// quote as the start of a string walks off the end of the function and silently
+// extracts the next several functions with it. That failed loudly here, but only
+// because the extra code referenced `window`.
 function matchBraces(src, openIdx) {
   let depth = 0, i = openIdx;
   while (i < src.length) {
     const c = src[i];
     if (c === '/' && src[i + 1] === '/') { i = src.indexOf('\n', i); if (i < 0) break; continue; }
     if (c === '/' && src[i + 1] === '*') { i = src.indexOf('*/', i) + 2; continue; }
+    if (c === '/' && startsRegex(src, i)) { i = skipRegex(src, i); continue; }
     if (c === '"' || c === "'" || c === '`') { i = skipString(src, i); continue; }
     if (c === '{') depth++;
     else if (c === '}') { depth--; if (depth === 0) return i + 1; }
     i++;
   }
   throw new Error('unbalanced braces from offset ' + openIdx);
+}
+
+// `/` is division after a value and a regex after an operator. Looking back at the
+// last significant character separates the two — the standard heuristic, and exact
+// for every shape that appears in these pages.
+function startsRegex(src, i) {
+  let j = i - 1;
+  while (j >= 0 && /\s/.test(src[j])) j--;
+  if (j < 0) return true;
+  if ('(,=:[!&|?{};+-*%~^'.includes(src[j])) return true;
+  const word = /[A-Za-z_$][\w$]*$/.exec(src.slice(0, j + 1));
+  return !!word && ['return', 'typeof', 'case', 'in', 'of', 'do', 'else', 'void', 'delete']
+    .includes(word[0]);
+}
+
+// From the opening slash to the one that closes it. A `/` inside a character class
+// is literal, so the class has to be tracked or `/[&<>"']/` ends at the wrong place.
+function skipRegex(src, i) {
+  i++;
+  let inClass = false;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '\\') { i += 2; continue; }
+    if (c === '[') inClass = true;
+    else if (c === ']') inClass = false;
+    else if (c === '/' && !inClass) { i++; break; }
+    else if (c === '\n') break;
+    i++;
+  }
+  while (i < src.length && /[gimsuyvd]/.test(src[i])) i++;   // flags
+  return i;
 }
 
 function skipString(src, i) {

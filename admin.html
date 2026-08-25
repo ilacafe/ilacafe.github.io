@@ -429,7 +429,7 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        const ILA_BUILD = '2026-08-25.5';   // shown at the foot of the page, so a cached build is obvious
+        const P26-08-25.6';   // shown at the foot of the page, so a cached build is obvious
 
         const auth = firebase.auth();
         window.currentAdmin = { uid: null, name: null };
@@ -442,6 +442,19 @@
         }
         function escapeHTML(str) {
             return String(str == null ? "" : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        // A value landing in a JS string literal inside an HTML attribute passes
+        // through two decoders: the HTML parser first, then the JS parser. Escaping
+        // for only one of them is what breaks on an apostrophe.
+        //
+        // escapeHTML alone is not enough — it turns ' into &#39;, the parser turns
+        // that back into ' before the JS is compiled, and the string ends early. The
+        // idiom escapeHTML(x).replace(/'/g,"\\'") looks like it handles this and
+        // does nothing at all, because escapeHTML already consumed every apostrophe.
+        //
+        // Escape for JS first, then for HTML, so each decoder undoes exactly one layer.
+        function jsAttr(str) {
+            return escapeHTML(String(str == null ? "" : str).replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
         }
         function showLogin(msg) { document.getElementById('login-overlay').classList.remove('hidden'); if (msg) document.getElementById('login-error').innerText = msg; }
         function hideLogin() { document.getElementById('login-overlay').classList.add('hidden'); document.getElementById('login-error').innerText = ""; }
@@ -469,7 +482,7 @@
                 container.innerHTML = "";
                 for (let key in staffData) {
                     const name = staffData[key];
-                    container.innerHTML += `<div class="list-item"><div><strong>${escapeHTML(name)}</strong> <span style="opacity: 0.5; margin-left: 10px; font-size: 0.85rem;">PIN set</span></div><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${key}', '${escapeHTML(name).replace(/'/g, "\\'")}')">✖</button></div>`;
+                    container.innerHTML += `<div class="list-item"><div><strong>${escapeHTML(name)}</strong> <span style="opacity: 0.5; margin-left: 10px; font-size: 0.85rem;">PIN set</span></div><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${key}', '${jsAttr(name)}')">✖</button></div>`;
                 }
             });
 
@@ -482,7 +495,7 @@
                 ids.forEach(uid => {
                     const u = users[uid];
                     const isSelf = window.currentAdmin && window.currentAdmin.uid === uid;
-                    const safeName = escapeHTML(u.name || u.email || 'user').replace(/'/g, "\\'");
+                    const safeName = jsAttr(u.name || u.email || 'user');
                     container.innerHTML += `<div class="list-item"><div><strong>${escapeHTML(u.name || u.email || uid)}</strong> <span style="opacity:0.6; margin-left:8px; font-size:0.85rem;">${escapeHTML(u.email || "")}</span></div><div style="display:flex; align-items:center; gap:8px;"><select onchange="changeRole('${uid}', this.value)" ${isSelf ? 'disabled' : ''} style="padding:6px; border-radius:6px; background:rgba(255,255,255,0.95); color:#333; border:none;"><option value="cashier" ${u.role==='cashier'?'selected':''}>Cashier</option><option value="barista" ${u.role==='barista'?'selected':''}>Barista</option><option value="chef" ${u.role==='chef'?'selected':''}>Chef</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select>${isSelf ? '<span style="opacity:0.5; font-size:0.8rem;">you</span>' : `<button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeAccess('${uid}', '${safeName}')">✖</button>`}</div></div>`;
                 });
             });
@@ -613,9 +626,9 @@
 
                 validItems.forEach((itemName, index) => {
                     const item = currentMenuData[category][itemName];
-                    const safeCategory = category.replace(/'/g, "\\'"); const safeName = itemName.replace(/'/g, "\\'");
-                    const safeVisibility = item.visibility ? item.visibility : 'both';
-                    const safeRouting = item.routing ? item.routing : 'barista';
+                    const safeCategory = jsAttr(category); const safeName = jsAttr(itemName);
+                    const safeVisibility = jsAttr(item.visibility ? item.visibility : 'both');
+                    const safeRouting = jsAttr(item.routing ? item.routing : 'barista');
                     
                     let upDisabled = index === 0 ? 'opacity:0.2; pointer-events:none;' : '';
                     let downDisabled = index === validItems.length - 1 ? 'opacity:0.2; pointer-events:none;' : '';
@@ -884,7 +897,7 @@
                 const rows = (addonCfg[c] || []).map((a, i) =>
                     `<div class="list-item"><div class="item-details"><span class="item-name">${escapeHTML(a.name)}</span>`
                     + `<div class="item-meta">${(parseFloat(a.price) || 0) ? '+₹' + Math.round(a.price) : 'free'}</div></div>`
-                    + `<button class="btn-action" style="border-color:rgba(255,255,255,0.2);" onclick="addonRemove('${escapeHTML(c).replace(/'/g,"\\'")}', ${i})">✖</button></div>`
+                    + `<button class="btn-action" style="border-color:rgba(255,255,255,0.2);" onclick="addonRemove('${jsAttr(c)}', ${i})">✖</button></div>`
                 ).join('');
                 return `<div class="category-block"><div class="category-title">${escapeHTML(c)}</div>${rows}</div>`;
             }).join('');

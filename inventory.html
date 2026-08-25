@@ -130,6 +130,20 @@
 
         const auth = firebase.auth();
         let inventoryStarted = false;
+        // Ingredient names come from admin and land in both the visible text and a JS
+        // string inside an onclick attribute. Neither was escaped, so "Baker's
+        // chocolate" ended the string early and the button stopped working — the whole
+        // point of this page being to press that button.
+        //
+        // escapeHTML for text; jsAttr for anything crossing into a handler argument,
+        // which has to survive the HTML parser and then the JS parser.
+        function escapeHTML(str) {
+            return String(str == null ? "" : str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        function jsAttr(str) {
+            return escapeHTML(String(str == null ? "" : str).replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
+        }
+
         const PIN_SALT = "ila-cafe-pin-v1::8D6E52";
         async function hashPin(pin) {
             const data = new TextEncoder().encode(PIN_SALT + String(pin).trim());
@@ -202,8 +216,8 @@
                     tabHtml += `<h2>Log New Prep</h2><div class="grid-layout">`;
                     preppedArr.forEach(item => {
                         let stockLevel = currentStock[item] ? parseFloat(currentStock[item]).toFixed(1) : "0";
-                        tabHtml += `<button class="action-btn" onclick="openModal('prep', '${item}')">
-                                        + ${item}
+                        tabHtml += `<button class="action-btn" onclick="openModal('prep', '${jsAttr(item)}')">
+                                        + ${escapeHTML(item)}
                                         <span class="stock-badge">Stock: ${stockLevel}</span>
                                     </button>`;
                     });
@@ -216,8 +230,8 @@
                     tabHtml += `<h2>Receive Delivery</h2><div class="grid-layout">`;
                     rawArr.forEach(item => {
                         let stockLevel = currentStock[item] ? parseFloat(currentStock[item]).toFixed(1) : "0";
-                        tabHtml += `<button class="action-btn outline" onclick="openModal('receive', '${item}')">
-                                        + ${item}
+                        tabHtml += `<button class="action-btn outline" onclick="openModal('receive', '${jsAttr(item)}')">
+                                        + ${escapeHTML(item)}
                                         <span class="stock-badge">Stock: ${stockLevel}</span>
                                     </button>`;
                     });
