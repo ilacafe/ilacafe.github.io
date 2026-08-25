@@ -17,6 +17,7 @@ const suites = [
   'rules.test.js',
   'worker.test.js',
   'analytics-range.test.js',
+  'escaping.test.js',
 ];
 
 let failed = [];

@@ -1135,7 +1135,7 @@
 
         // Shown faintly at the bottom of the menu. If this doesn't change after you deploy,
         // you're looking at a cached build — no more guessing which version is live.
-        const ILA_BUILD = '2026-08-25.5';
+        const ILA_BUILD = '2026-08-25.6';
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -1456,6 +1456,13 @@
         window.salesLedger = []; window.pastBills = []; window.pendingWebOrders = {};
 
         // Escape any customer/staff free-text before it goes into innerHTML.
+        function jsAttr(str) {
+            // Escape for JS, then for HTML, so the HTML parser and then the JS parser
+            // each undo exactly one layer. Doing only one of them is what an
+            // apostrophe in an item name used to break.
+            return escapeHTML(String(str == null ? "" : str).replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
+        }
+
         function escapeHTML(str) {
             return String(str == null ? "" : str).replace(/[&<>"']/g, c => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -1883,7 +1890,7 @@
                 box.innerHTML = "<div style='opacity:0.45; font-size:0.9rem; padding:6px 0;'>Nothing yet — tap items to build the order.</div>";
             } else {
                 box.innerHTML = names.map(item => {
-                    const safe = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    const safe = jsAttr(item);
                     const hasAddons = window.addonsForLine(item).length > 0;
                     const nm = hasAddons
                         ? `<button class="cart-name nm" onclick="window.openAddons('${safe}')">${escapeHTML(item)}<span class="opt-mark">+</span></button>`
@@ -2178,7 +2185,7 @@
                 let catHTML = `<section><h2 id="${catId}">${category}</h2>`;
 
                 standardItems.forEach(item => {
-                    const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    const safeName = jsAttr(item.originalName);
                     if (item.inStock) {
                         const optMark = item.requiresSweetness ? '<span class="opt-mark" title="has options">\u2022</span>' : '';
                         catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}${optMark}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
@@ -2190,8 +2197,8 @@
                 if (sizedItems.length > 0) {
                     catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
                     sizedItems.forEach(item => {
-                        let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                        let safeNameReg = jsAttr(item.originalName + " (Regular)");
+                        let safeNameLrg = jsAttr(item.originalName + " (Large)");
                         let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
                         let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
 
@@ -2410,7 +2417,7 @@
             if (window.totalItems === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.5;'>Empty</p>"; } 
             else {
                 for (let item in window.cart) {
-                    const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    const safeItemName = jsAttr(item);
                     const hasAddons = window.addonsForLine(item).length > 0;
                     const nameCell = hasAddons
                         ? `<button class="cart-name" onclick="window.openAddons('${safeItemName}')">${escapeHTML(item)}<span class="opt-mark">+</span></button>`
@@ -2448,7 +2455,7 @@
             empty.style.display = 'none';
             grid.innerHTML = list.map(a => {
                 const on = (line.mods || []).indexOf(a.name) >= 0;
-                const safe = String(a.name).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                const safe = jsAttr(a.name);
                 const p = parseFloat(a.price) || 0;
                 return '<button class="choice-btn' + (on ? ' selected' : '') + '" onclick="window.toggleAddon(\'' + safe + '\')">'
                      + escapeHTML(a.name) + (p ? ' +\u20b9' + Math.round(p) : '') + '</button>';
@@ -2640,7 +2647,7 @@
                     } else if ((parseFloat(t.paid) || 0) > 0 && due > 0){
                         sub = `<span class="ledger-meta">\u20b9${Math.round(due)} still due</span>`;
                     }
-                    list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${table}')"><div><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span>${sub}</div><span>₹${t.total}</span></div>`;
+                    list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${jsAttr(table)}')"><div><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span>${sub}</div><span>₹${t.total}</span></div>`;
                 }
             }
             document.getElementById('active-bills-modal').classList.add('active');
@@ -2662,7 +2669,7 @@
             const stillDue = [];
             for (let item in tableData.items) {
                 const it = tableData.items[item];
-                const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                const safeItemName = jsAttr(item);
                 const lt = (parseFloat(it.price) || 0) * (parseFloat(it.qty) || 0);
                 const lp = (it.paidAmt != null) ? (parseFloat(it.paidAmt) || 0) : ((parseFloat(it.paidQty) || 0) * (parseFloat(it.price) || 0));
                 const ll = (lt - lp) < 0.5 ? 0 : Math.round((lt - lp) * 100) / 100;
@@ -2674,7 +2681,7 @@
                 // The void trigger sits on the RIGHT, past the price — away from the line the eye and
                 // finger travel while reading the bill. Tapping it starts a reason + PIN + a
                 // cancellation ticket, so it must not be adjacent to a scanning target.
-                receiptHTML += `<div class="bill-receipt-row" style="${ll <= 0 ? 'opacity:0.5;' : ''}"><span style="flex:1; min-width:0;">${it.qty}x ${escapeHTML(item)}${paidMark}</span><span style="display:flex; align-items:center; gap:2px; flex-shrink:0;">₹${Math.round(lt)}<span class="item-remove-x" onclick="window.removeTableItem('${tableID}', '${safeItemName}')">✖</span></span></div>`;
+                receiptHTML += `<div class="bill-receipt-row" style="${ll <= 0 ? 'opacity:0.5;' : ''}"><span style="flex:1; min-width:0;">${it.qty}x ${escapeHTML(item)}${paidMark}</span><span style="display:flex; align-items:center; gap:2px; flex-shrink:0;">₹${Math.round(lt)}<span class="item-remove-x" onclick="window.removeTableItem('${jsAttr(tableID)}', '${safeItemName}')">✖</span></span></div>`;
             }
             // Once anything has been paid, DUE is the number staff act on — it is what they charge.
             // Total used to be the biggest thing on the screen and Due a footnote under it.
@@ -2904,7 +2911,7 @@
             for (const nm in t.items){
                 const it = t.items[nm];
                 const left = lineLeft(it), unit = parseFloat(it.price) || 0, qty = parseFloat(it.qty) || 0;
-                const safe = nm.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                const safe = jsAttr(nm);
                 if (left <= 0){
                     html += '<div class="split-row split-paid"><div class="nm">' + escapeHTML(nm) + '<div class="sub">paid</div></div><div>\u2713</div></div>';
                     continue;
