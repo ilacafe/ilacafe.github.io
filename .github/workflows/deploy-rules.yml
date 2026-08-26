@@ -1,0 +1,108 @@
+name: deploy database rules
+
+# The rules are the only real security boundary in this project: every PIN prompt
+# and role check inside a page is advice to a cooperating browser. They are also
+# the one thing that does not deploy with a push, so the file in git and the rules
+# actually enforced can drift apart with nothing to say so.
+#
+# This runs the deploy where a credential can live, and then reads the live rules
+# back and diffs them, so a run that says it worked has checked that it did.
+#
+# Deliberately manual. Rules deploying automatically on a push would mean a bad
+# commit could lock the till out of the database, or open it, with no one in the
+# loop — a worse trade than the drift.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DEPLOY to confirm'
+        required: true
+
+jobs:
+  rules:
+    name: deploy database.rules.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: refuse unless confirmed, and unless the rules are the ones tested
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          [ "$CONFIRM" = "DEPLOY" ] || {
+            echo "::error::confirm must be the word DEPLOY"; exit 1; }
+          npm ci
+          node test/rules.test.js
+          echo "the rules in this commit pass their suite"
+
+      # Without this the deploy step fails with an opaque auth error. Say what is
+      # missing and what fixes it, once, rather than leaving a 403 to be decoded.
+      - name: check the credential is here
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SA" ]; then
+            echo "::error::Repository secret FIREBASE_SERVICE_ACCOUNT is not set."
+            echo "::error::Firebase console -> Project settings -> Service accounts ->"
+            echo "::error::Generate new private key. Paste the whole JSON file as that secret."
+            exit 1
+          fi
+          echo "FIREBASE_SERVICE_ACCOUNT is present (${#SA} bytes)"
+
+      - name: deploy
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx --yes firebase-tools@14 deploy --only database --project ila-cafe --non-interactive
+
+      # A deploy that reported success and changed nothing is the failure this whole
+      # workflow exists to rule out. Read the live rules back and compare.
+      # Google's own action, so the token comes from the same credential the deploy
+      # used without this job needing gcloud to be on the runner.
+      - id: gauth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/firebase.database,https://www.googleapis.com/auth/userinfo.email
+
+      - name: prove the live rules are these rules
+        env:
+          TOKEN: ${{ steps.gauth.outputs.access_token }}
+          DB: https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app
+        run: |
+          set -euo pipefail
+          curl -sS --fail -H "Authorization: Bearer $TOKEN" "$DB/.settings/rules.json" > "$RUNNER_TEMP/live.json"
+          python3 - "$RUNNER_TEMP/live.json" database.rules.json <<'PY'
+          import json, re, sys
+
+          # The live copy comes back without the comments the file carries, and with
+          # its own spacing, so compare the parsed structures rather than the bytes.
+          def load(path):
+              raw = open(path, encoding='utf-8').read()
+              raw = re.sub(r'/\*.*?\*/', '', raw, flags=re.S)
+              raw = re.sub(r'^\s*//.*$', '', raw, flags=re.M)
+              return json.loads(raw)
+
+          live, repo = load(sys.argv[1]), load(sys.argv[2])
+          if live == repo:
+              print('the live rules match database.rules.json')
+              raise SystemExit(0)
+
+          print('::error::the live rules do NOT match database.rules.json')
+          a = json.dumps(repo, indent=2, sort_keys=True).splitlines()
+          b = json.dumps(live, indent=2, sort_keys=True).splitlines()
+          import difflib
+          for line in difflib.unified_diff(a, b, 'repo', 'live', lineterm='', n=2):
+              print(line)
+          raise SystemExit(1)
+          PY

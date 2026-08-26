@@ -180,6 +180,44 @@ check('every path the apps use has a rule that could permit it', unruled.length 
       unruled.length + ' unruled');
 unruled.forEach(u => note('no rule governs: ' + u));
 
+// ---------------------------------------------------------------- public reads are the narrow ones
+// Rules cascade downwards and cannot be revoked lower down: a `.read: true` on a
+// parent grants read to everything beneath it, whatever the children say. So a
+// public read has to sit on the exact node the public needs and nowhere above it.
+//
+// This is the whole list of what a stranger can read. Everything on it is here
+// because index.html needs it before anyone signs in; nothing else belongs.
+//
+// eta is the branch that went wrong: the public read sat on `eta` itself, so it
+// also published eta/recalMeta — the refit's own record, carrying how many orders
+// the café completed in the last 75 days. Only model and live are needed.
+{
+  const PUBLIC_READS_ALLOWED = [
+    'menu',          // the customer needs prices to order
+    'settings',      // opening hours, whether ordering is on
+    'eta/model',     // the wait-time model
+    'eta/live',      // current load, for the wait estimate
+    'orders/track',  // a customer following their own order
+  ];
+
+  const publicReads = findOpenNodes(root, [], [])
+    .filter(o => o.op === '.read')
+    .map(o => o.where);
+
+  const unexpected = publicReads.filter(w => !PUBLIC_READS_ALLOWED.includes(w));
+  check('the world-readable list is exactly what the ordering page needs',
+        unexpected.length === 0, unexpected.join(', '));
+  unexpected.forEach(w => note('anyone on the internet can read: ' + w));
+  note('a .read on a parent grants read to everything under it and cannot be');
+  note('revoked lower down, so widening one of these opens whatever it contains');
+
+  // The other half: the public reads must still cover what the customer page
+  // needs, or the ordering page silently shows nothing and says nothing about why.
+  const missing = PUBLIC_READS_ALLOWED.filter(w => !publicReads.includes(w));
+  check('and every one of them is still actually public',
+        missing.length === 0, missing.join(', ') + ' is no longer readable by a customer');
+}
+
 note('this checks shape and coverage only — whether a condition is CORRECT for a');
 note('given role needs the Firebase emulator against real auth tokens');
 

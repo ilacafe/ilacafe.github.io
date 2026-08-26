@@ -12,17 +12,20 @@
       }
     },
     "eta": {
-      ".read": true,
       "model": {
+        ".read": true,
         ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
       },
       "modelPrevious": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
       },
       "recalMeta": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
       },
       "live": {
+        ".read": true,
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       }
     },

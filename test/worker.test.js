@@ -477,5 +477,39 @@ async function main() {
         api.monNewCashOuts([{ key: 'z', type: 'expense', amount: 900 }], {}, now).length === 0);
 }
 
+// ---------------------------------------------------------------- a cron that says nothing
+// This Worker is the only thing here that runs where nobody is watching. Its
+// monthly job has four ways to end — refit written, refit rejected, refit skipped
+// for want of evidence, or a throw — and three of them used to be invisible. From
+// the outside, a model that had quietly stopped being refitted looked exactly like
+// a healthy one; the only symptom was the wait estimates slowly going wrong.
+{
+  // The gate-skipped exit, found by its own return, must notify before returning.
+  const gate = src.slice(src.indexOf('const fresh = rcCountFresh'),
+                         src.indexOf('// current model'));
+  check('a refit skipped for too few new orders tells the owner',
+        /rcNotifyOwner\(/.test(gate),
+        'the model silently stops being refitted and nothing says so');
+  check('and records the attempt without advancing lastRunAt',
+        /lastSkippedAt/.test(gate) && !/lastRunAt.json/.test(gate),
+        'advancing lastRunAt on a skip resets the count, so it could never accumulate');
+
+  // Both crons run inside ctx.waitUntil, where a rejected promise is swallowed.
+  const sched = src.slice(src.indexOf('async scheduled('));
+  const waits = [...sched.matchAll(/ctx\.waitUntil\(([^)]*)/g)].map(m => m[1]);
+  check('every scheduled job has somewhere for a throw to go',
+        waits.length > 0 && waits.every(w => /reportIfItThrows/.test(w)),
+        waits.join(' | ') || 'no ctx.waitUntil found — has scheduled() changed shape?');
+
+  const reporter = extractFunction(src, 'reportIfItThrows');
+  check('and reporting a failure cannot itself throw',
+        /catch\s*\(inner\)/.test(reporter),
+        'the usual cause is the database being unreachable, which is also what notifying needs');
+  check('a failed job is logged as well as pushed',
+        /console\.log\(/.test(reporter),
+        'a push needs a subscription; the log is the fallback when there is none');
+  note('the refit runs once a month — a tick that silently does nothing costs a month');
+}
+
 done();
 }

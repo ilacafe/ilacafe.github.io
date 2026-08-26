@@ -60,7 +60,7 @@ be confused by this repo:
 | what | how | when |
 |---|---|---|
 | the pages | push to `main` | immediately, via GitHub Pages |
-| the database rules | `firebase deploy --only database` | never automatic |
+| the database rules | the **deploy database rules** workflow, by hand | never on a push |
 | the Worker | push to `main` touching `worker/` | via GitHub Actions |
 
 ## Running it
@@ -128,6 +128,12 @@ advice to a cooperating browser. They live in
 [`docs/database-access.md`](docs/database-access.md) for what it can and cannot
 verify.
 
+Rules cascade downwards and cannot be revoked lower down: a `.read` on a parent
+grants read to everything beneath it, whatever the children say. So the public
+read sits on the exact nodes a customer needs and nowhere above them. `npm test`
+holds that list — `menu`, `settings`, `eta/model`, `eta/live`, `orders/track` —
+and fails on anything added to it or removed from it.
+
 ## The Worker
 
 [`worker/`](worker/) holds the Cloudflare Worker that sends push notifications,
@@ -164,5 +170,11 @@ Two things to know:
   npm run bump              # next build for today
   npm run bump 2026-09-01.1 # or say which
   ```
-- Database rules do **not** deploy with a push. They are a separate step:
-  `firebase deploy --only database`.
+- Database rules do **not** deploy with a push. Run the **deploy database rules**
+  workflow from the Actions tab and type `DEPLOY`. It runs the rules suite first,
+  deploys, then reads the live rules back and diffs them against the file — a run
+  that says it worked has checked that it did.
+
+  Deliberately not automatic: rules are the only real security boundary, and a bad
+  commit deploying itself could lock the till out of the database or open it with
+  nobody in the loop. Locally, `firebase deploy --only database` still works.
