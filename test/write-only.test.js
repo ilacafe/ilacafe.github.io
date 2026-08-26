@@ -16,7 +16,34 @@
 // of it. Writing orders/active/chef/$id and reading orders/active/chef is one
 // feature, not an orphan.
 
-const { derivePaths, unresolvedWrites, suite } = require('./helpers');
+const fs = require('fs');
+const path = require('path');
+const { ROOT, derivePaths, unresolvedWrites, suite } = require('./helpers');
+
+// The Worker is not one of the apps, so derivePaths does not see it — and it is
+// the component most likely to have a write nobody reads, because none of it is
+// on a screen. eta/modelPrevious was found by hand for exactly that reason.
+function workerPaths() {
+  const src = fs.readFileSync(path.join(ROOT, 'worker', 'worker.js'), 'utf8');
+  const out = new Map();
+  const touch = (p, kind) => {
+    const key = p.replace(/^\//, '');
+    if (!key) return;                       // the root PATCH, handled below
+    const rec = out.get(key) || { read: false, write: false };
+    rec[kind] = true;
+    out.set(key, rec);
+  };
+  for (const m of src.matchAll(/DB_URL \+ '([^']+)'/g)) {
+    let p = m[1].replace(/\.json.*$/, '');
+    p = p.endsWith('/') && p !== '/' ? p + '$key' : p;
+    const after = src.slice(m.index, m.index + 260);
+    touch(p, /method\s*:\s*'(PUT|PATCH|POST|DELETE)'/.test(after) ? 'write' : 'read');
+  }
+  // monLoad only ever reads, and the root PATCH writes monitor/* in one call.
+  for (const m of src.matchAll(/monLoad\([^,]+,\s*'([^']+)'\)/g)) touch(m[1], 'read');
+  touch('/monitor', 'write');
+  return out;
+}
 
 const { check, note, done } = suite('Write-only paths — recorded and unreadable');
 
@@ -28,7 +55,20 @@ const DELIBERATELY_WRITE_ONLY = {
 };
 
 const used = derivePaths();
-const paths = [...used.keys()];
+const worker = workerPaths();
+
+// One view of the whole system: the pages and the Worker together. A path the
+// Worker writes and a page reads is a working feature, and so is the reverse —
+// splitting them would report both halves as orphans.
+const all = new Map();
+for (const [p, v] of used) all.set(p, { read: v.read.size > 0, write: v.write.size > 0, who: [...v.write] });
+for (const [p, v] of worker) {
+  const rec = all.get(p) || { read: false, write: false, who: [] };
+  if (v.read) rec.read = true;
+  if (v.write) { rec.write = true; rec.who = rec.who.concat('the Worker'); }
+  all.set(p, rec);
+}
+const paths = [...all.keys()];
 
 // $key stands for a segment the deriver could not resolve — an id, or a variable
 // like KDS_STATION. It matches any single segment, so writing
@@ -43,15 +83,16 @@ function related(a, b) {
   return true;   // one is the other, or an ancestor of it
 }
 
-const readable = paths.filter(p => used.get(p).read.size > 0);
+const readable = paths.filter(p => all.get(p).read);
+const written = paths.filter(p => all.get(p).write);
 
 const orphans = [];
 for (const p of paths) {
-  const { write } = used.get(p);
-  if (!write.size) continue;
+  const rec = all.get(p);
+  if (!rec.write) continue;
   if (p in DELIBERATELY_WRITE_ONLY) continue;
   if (readable.some(r => related(p, r))) continue;
-  orphans.push(p + ' (written by ' + [...write].sort().join(', ') + ')');
+  orphans.push(p + ' (written by ' + rec.who.sort().join(', ') + ')');
 }
 
 check('every path an app writes is read back somewhere',
@@ -59,7 +100,41 @@ check('every path an app writes is read back somewhere',
       orphans.join('; '));
 orphans.forEach(o => note('nothing can see: ' + o));
 
-note(paths.length + ' paths, ' + readable.length + ' of them read by something');
+note(paths.length + ' paths across the pages and the Worker, ' +
+     readable.length + ' read by something, ' + written.length + ' written by something');
+
+// ---------------------------------------------------------------- and the reverse
+// A path something reads and nothing writes is a screen that will always be
+// empty. Harder to notice than a write-only path, because an empty list looks
+// like a quiet day.
+{
+  const NOTHING_WRITES_THESE = {
+    // Written by a person, in the Firebase console or by hand.
+    'staff': 'PIN hashes, set up by the owner rather than by any page',
+  };
+
+  const unfed = [];
+  for (const p of paths) {
+    const rec = all.get(p);
+    if (!rec.read) continue;
+    if (p in NOTHING_WRITES_THESE) continue;
+    if (written.some(w => related(p, w))) continue;
+    unfed.push(p);
+  }
+  check('every path something reads is written by something', unfed.length === 0,
+        unfed.join(', '));
+  unfed.forEach(u => note('always empty: ' + u));
+  note('an empty list looks like a quiet day, which is why this one hides well');
+
+  // What this pair cannot see: a node the Worker both writes and reads, and
+  // nothing else touches. ops/cronFailure is one — the throttle reads back what
+  // it wrote — so it counts as read here even while no person can see it. That
+  // is a real category and it is left alone deliberately: a job keeping its own
+  // state is legitimate, and flagging every instance would bury the ones that
+  // matter. eta/recalMeta was in that position until analytics started reading
+  // it, and it took a person asking to notice.
+  note('a node the Worker writes and only the Worker reads still counts as read');
+}
 
 // The check above passes trivially if derivePaths ever returns nothing, which is
 // exactly how a green tick comes to mean nothing. It has happened twice in this
