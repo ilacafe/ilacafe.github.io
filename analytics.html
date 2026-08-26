@@ -159,6 +159,11 @@
                 <div class="sub">Refitted from what the kitchen actually did, on the 1st of each month.</div>
                 <div id="recal-summary" style="margin-top:10px; font-size:0.95rem;">Loading…</div>
                 <div id="cron-health" style="margin-top:12px;"></div>
+                <!-- The refit snapshots the outgoing model to eta/modelPrevious before
+                     it writes a new one. Putting it back was a documented trip to the
+                     Firebase console; this is that, with the two numbers that differ
+                     shown first so it is a decision rather than a leap. -->
+                <div id="model-restore" style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.12);"></div>
             </div>
 
             <!-- DEMAND SURFACE -->
@@ -394,6 +399,8 @@
         let historyQuery = null, historyFrom = null;
         let CATMAP = {};     // menu item name -> category
         let VOIDS = {};      // security/voids
+        let MODEL = null;    // eta/model — the wait-time model in use right now
+        let MODELPREV = null;// eta/modelPrevious — the one the last accepted refit replaced
         let RECAL = null;    // eta/recalMeta — what the last monthly refit did
         let CRONFAIL = null; // ops/cronFailure — scheduled jobs that are failing now
         let UNPAID = {};     // security/unpaid — bills written off unpaid at cash-up
@@ -420,6 +427,8 @@
             // Small fixed-size nodes — the refit's record and the cron failure record.
             // Neither grows, so neither needs a cap.
             db.ref('eta/recalMeta').on('value', s => { RECAL = s.val()||null; renderWorkerHealth(); });
+            db.ref('eta/model').on('value', s => { MODEL = s.val()||null; renderWorkerHealth(); });
+            db.ref('eta/modelPrevious').on('value', s => { MODELPREV = s.val()||null; renderWorkerHealth(); });
             db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); });
             db.ref('pos/eodArchive').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
             demandBoot();
@@ -774,7 +783,93 @@
             if (el) el.innerHTML = recalLine();
             const ch = document.getElementById('cron-health');
             if (ch) ch.innerHTML = cronLine();
+            const mr = document.getElementById('model-restore');
+            if (mr) renderRestore(mr);
         }
+
+        // A model is only usable if the engine can read a base time out of it. The
+        // pages fall back to their built-in defaults when it cannot, so restoring a
+        // half-written snapshot would not break the café — it would quietly stop the
+        // model mattering, which is worse, because nothing would say so.
+        function modelIsUsable(m){
+            return !!(m && typeof m === 'object' && m.itemBase && typeof m.itemBase === 'object' &&
+                      Object.keys(m.itemBase).length && m.fallback && Number(m.fallback.pizza) > 0);
+        }
+
+        // The two numbers most likely to differ, and the ones a person can judge.
+        function modelSummary(m){
+            if (!m) return null;
+            return {
+                version: (m.version != null) ? String(m.version) : '—',
+                pizza: Number(m.fallback && m.fallback.pizza) || 0,
+                items: (m.itemBase && Object.keys(m.itemBase).length) || 0
+            };
+        }
+
+        function sameModel(a, b){
+            try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; }
+        }
+
+        function renderRestore(el){
+            if (!MODELPREV) {
+                el.innerHTML = '<div style="opacity:0.55; font-size:0.85rem;">' +
+                    'No previous model has been kept yet. The refit saves one each time it ' +
+                    'accepts a new model.</div>';
+                return;
+            }
+            if (!modelIsUsable(MODELPREV)) {
+                el.innerHTML = '<div style="color:#ffcc66; font-size:0.85rem;">' +
+                    'The saved previous model is incomplete, so it is not offered for restore. ' +
+                    'Putting it back would leave the pages quietly running on their built-in defaults.</div>';
+                return;
+            }
+            const prev = modelSummary(MODELPREV), now = modelSummary(MODEL);
+            if (MODEL && sameModel(MODEL, MODELPREV)) {
+                el.innerHTML = '<div style="opacity:0.55; font-size:0.85rem;">' +
+                    'The previous model is identical to the one in use — nothing to restore.</div>';
+                return;
+            }
+            el.innerHTML =
+                '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.55;">If the current model is wrong</div>' +
+                '<div style="margin-top:6px; font-size:0.9rem;">In use: <strong>v' + escapeHTML(now ? now.version : '—') + '</strong>' +
+                    (now ? ' &middot; pizza base ' + escapeHTML(now.pizza) + ' min &middot; ' + escapeHTML(now.items) + ' items' : '') + '</div>' +
+                '<div style="font-size:0.9rem; opacity:0.8;">Saved: <strong>v' + escapeHTML(prev.version) + '</strong>' +
+                    ' &middot; pizza base ' + escapeHTML(prev.pizza) + ' min &middot; ' + escapeHTML(prev.items) + ' items</div>' +
+                '<button class="lnk" id="restore-btn" onclick="window.restorePreviousModel()" ' +
+                    'style="margin-top:10px;">Put the saved model back</button>' +
+                '<div id="restore-note" style="font-size:0.85rem; margin-top:6px;"></div>';
+        }
+
+        // Writes eta/model wholesale, which is what a restore is. Every page reads
+        // that node live, so this takes effect on the next estimate rather than on a
+        // reload — which is the point, and also why it asks first.
+        window.restorePreviousModel = async function(){
+            const note = document.getElementById('restore-note');
+            const btn = document.getElementById('restore-btn');
+            if (!modelIsUsable(MODELPREV)) { if (note) note.textContent = 'That snapshot is incomplete — not restoring it.'; return; }
+            const prev = modelSummary(MODELPREV), now = modelSummary(MODEL);
+
+            if (!confirm('Put the saved model back?\n\n' +
+                    'In use now:  v' + (now ? now.version : '—') + ', pizza base ' + (now ? now.pizza : '—') + ' min\n' +
+                    'Restoring:   v' + prev.version + ', pizza base ' + prev.pizza + ' min\n\n' +
+                    'Every till and the ordering page use this for wait estimates, and they pick it up straight away.')) return;
+
+            if (btn) { btn.disabled = true; btn.textContent = 'Restoring…'; }
+            try {
+                await db.ref('eta/model').set(MODELPREV);
+                // Without this the panel above would go on saying "Refitted 3 days ago,
+                // version 2" while version 1 is what the tills are using — a screen that
+                // is confidently wrong, which is worse than one that says nothing.
+                await db.ref('eta/recalMeta').update({
+                    lastRestoredAt: Date.now(),
+                    lastRestoredTo: prev.version
+                });
+                if (note) { note.style.color = '#7CFC9A'; note.textContent = 'Restored. The tills are using v' + prev.version + ' now.'; }
+            } catch (e) {
+                if (note) { note.style.color = '#ff9d9d'; note.textContent = 'Could not restore: ' + (e && e.message ? e.message : e); }
+                if (btn) { btn.disabled = false; btn.textContent = 'Put the saved model back'; }
+            }
+        };
 
         function recalLine(){
             const m = RECAL;
@@ -801,6 +896,16 @@
                     if (why.length) parts.push('<div style="opacity:0.75; font-size:0.85rem; margin-top:4px;">' +
                         why.map(r => escapeHTML(String(r))).join(' &middot; ') + '</div>');
                 }
+            }
+
+            // A restore overrides everything above it: whatever the refit did, somebody
+            // has since put an older model back, and that is what the tills are using.
+            const restored = Number(m.lastRestoredAt) || 0;
+            if (restored && restored > ran && restored > skipped) {
+                return '<strong style="color:#ffcc66;">Restored by hand</strong> ' + agoText(restored) +
+                       (m.lastRestoredTo != null ? ' &middot; back to version ' + escapeHTML(m.lastRestoredTo) : '') +
+                       '<div style="opacity:0.75; font-size:0.85rem; margin-top:4px;">' +
+                       'The last refit was undone. The next one runs on the 1st as usual.</div>';
             }
 
             // A skip is not a failure either: it is waiting for enough new evidence.
