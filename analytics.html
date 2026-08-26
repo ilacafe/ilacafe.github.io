@@ -149,6 +149,18 @@
             <div class="err-card" id="notice"></div>
             <div class="err-card" id="errBox"></div>
 
+            <!-- THE MODEL'S OWN RECORD
+                 The refit writes what it did to eta/recalMeta and the Worker writes
+                 failed cron runs to ops/cronFailure. Both were readable only by
+                 opening the Firebase console, so the honest answer to "is the wait
+                 estimate still being retrained?" was that nobody could tell. -->
+            <div class="card" id="worker-card">
+                <h2>The wait-time model</h2>
+                <div class="sub">Refitted from what the kitchen actually did, on the 1st of each month.</div>
+                <div id="recal-summary" style="margin-top:10px; font-size:0.95rem;">Loading…</div>
+                <div id="cron-health" style="margin-top:12px;"></div>
+            </div>
+
             <!-- DEMAND SURFACE -->
             <div class="card">
                 <h2>When We're Busy</h2>
@@ -382,6 +394,8 @@
         let historyQuery = null, historyFrom = null;
         let CATMAP = {};     // menu item name -> category
         let VOIDS = {};      // security/voids
+        let RECAL = null;    // eta/recalMeta — what the last monthly refit did
+        let CRONFAIL = null; // ops/cronFailure — scheduled jobs that are failing now
         let UNPAID = {};     // security/unpaid — bills written off unpaid at cash-up
         let UNPAID_ROWS = [];
         let RANGE = null;    // {start, end, key, label}
@@ -403,6 +417,10 @@
             // Bounded like the voids beside it: append-only, and a café that ran for
             // years would otherwise pull every walkout it ever had into a phone.
             db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; render(); });
+            // Small fixed-size nodes — the refit's record and the cron failure record.
+            // Neither grows, so neither needs a cap.
+            db.ref('eta/recalMeta').on('value', s => { RECAL = s.val()||null; renderWorkerHealth(); });
+            db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); });
             db.ref('pos/eodArchive').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
             demandBoot();
         }
@@ -736,6 +754,88 @@
             rows.forEach(r => out.push([r.time, r.by, r.device, r.table, r.item, Math.round(r.value), r.reason]));
             downloadCSV(out, 'ila-voids-' + stamp() + '.csv');
         };
+
+        // ---------- the model's own record ----------
+        // The refit has four ways to end and all four are recorded here. Before
+        // this the only way to read any of it was the Firebase console, so a model
+        // that had quietly stopped being retrained looked exactly like one that
+        // was fine — and the push that reports each run is gone the moment it is
+        // swiped away.
+        function agoText(ms){
+            const mins = Math.round((Date.now() - ms) / 60000);
+            if (mins < 60) return mins + ' minutes ago';
+            const hrs = Math.round(mins / 60);
+            if (hrs < 48) return hrs + ' hours ago';
+            return Math.round(hrs / 24) + ' days ago';
+        }
+
+        function renderWorkerHealth(){
+            const el = document.getElementById('recal-summary');
+            if (el) el.innerHTML = recalLine();
+            const ch = document.getElementById('cron-health');
+            if (ch) ch.innerHTML = cronLine();
+        }
+
+        function recalLine(){
+            const m = RECAL;
+            if (!m || (!m.lastRunAt && !m.lastSkippedAt)) {
+                return '<span style="opacity:0.7;">No refit has been recorded yet. ' +
+                       'The first one runs at 20:00 UTC on the 1st.</span>';
+            }
+            const ran = Number(m.lastRunAt) || 0;
+            const skipped = Number(m.lastSkippedAt) || 0;
+            const parts = [];
+
+            if (ran) {
+                const result = String(m.lastResult || 'unknown');
+                if (result === 'updated') {
+                    parts.push('<strong style="color:#7CFC9A;">Refitted</strong> ' + agoText(ran) +
+                               (m.version ? ' &middot; now version ' + escapeHTML(m.version) : '') +
+                               (m.orders ? ' &middot; from ' + escapeHTML(m.orders) + ' orders' : ''));
+                } else {
+                    // Rejected keeps the old model on purpose — that is the guardrail
+                    // working, not a failure, so say which one tripped.
+                    parts.push('<strong style="color:#ffcc66;">Refit rejected</strong> ' + agoText(ran) +
+                               ' &middot; the previous model is still in use');
+                    const why = Array.isArray(m.reasons) ? m.reasons : (m.reasons ? [m.reasons] : []);
+                    if (why.length) parts.push('<div style="opacity:0.75; font-size:0.85rem; margin-top:4px;">' +
+                        why.map(r => escapeHTML(String(r))).join(' &middot; ') + '</div>');
+                }
+            }
+
+            // A skip is not a failure either: it is waiting for enough new evidence.
+            // Worth showing how much more it needs, so "nothing happened again" is a
+            // number rather than a mystery.
+            if (skipped && skipped > ran) {
+                const fresh = Number(m.lastSkippedFresh) || 0;
+                parts.push('<div style="margin-top:6px;"><strong>Skipped</strong> ' + agoText(skipped) +
+                           ' &middot; ' + fresh + ' new orders since the last refit' +
+                           '<div style="opacity:0.7; font-size:0.85rem;">It waits for 1,500 before refitting, so the model is unchanged.</div></div>');
+            }
+
+            return parts.join('');
+        }
+
+        function cronLine(){
+            const f = CRONFAIL;
+            if (!f || typeof f !== 'object') {
+                return '<div style="opacity:0.6; font-size:0.85rem;">Scheduled jobs: nothing failing.</div>';
+            }
+            const rows = [];
+            for (const job in f) {
+                const v = f[job] || {};
+                const since = Number(v.failingSince) || Number(v.lastAt) || 0;
+                rows.push('<div style="color:#ff9d9d; font-size:0.9rem; margin-top:4px;">' +
+                    '<strong>' + escapeHTML(job) + '</strong> has failed ' +
+                    escapeHTML(Number(v.consecutive) || 1) + ' time(s)' +
+                    (since ? ', since ' + escapeHTML(agoText(since)) : '') +
+                    (v.lastError ? '<div style="opacity:0.8; font-size:0.82rem;">' + escapeHTML(v.lastError) + '</div>' : '') +
+                    '</div>');
+            }
+            if (!rows.length) return '<div style="opacity:0.6; font-size:0.85rem;">Scheduled jobs: nothing failing.</div>';
+            return '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.55;">Scheduled jobs</div>' +
+                   rows.join('');
+        }
 
         // ---------- security / walkouts written off ----------
         // Same shape of question as the void log: who, when, how much, why. The

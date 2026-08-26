@@ -64,7 +64,10 @@ const ago = d => now - d * DAY;
   // current configuration — a few dozen keys that get edited, not appended to — so
   // reading them whole is correct and always will be. The nodes that bite are the
   // ones a service adds a row to and nothing ever removes.
-  const CONFIG_NODES = ['menu', 'settings', 'eta'];
+  // `ops` holds one record per scheduled job — cronFailure keyed by job name,
+  // pushHealth a single object. Two keys, both overwritten in place. It is status,
+  // not a log, so reading it whole stays correct however long the café runs.
+  const CONFIG_NODES = ['menu', 'settings', 'eta', 'ops'];
   const unbounded = [];
   for (const m of idx.matchAll(/db\.ref\((['"][^'"]+['"]|CFG\.paths\.\w+)\)((?:\.\w+\([^)]*\))*)/g)) {
     const path = m[1].replace(/['"]/g, ''), chain = m[2] || '';
