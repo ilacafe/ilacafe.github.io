@@ -13,6 +13,7 @@ const suites = [
   'walkouts-browser.test.js',
   'model-health-browser.test.js',
   'model-restore-browser.test.js',
+  'push-health-browser.test.js',
 ];
 
 let failed = [];
