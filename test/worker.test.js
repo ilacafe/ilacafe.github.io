@@ -145,7 +145,7 @@ async function main() {
   const stored = { dev1: { subscription: sub, uid: 'u1', name: 'Admin', at: 1 },
                    dev2: { subscription: sub, uid: 'u2', name: 'Phone', at: 2 } };
   check('the wrapper admin.html actually writes is unwrapped to a real subscription',
-        api.unwrapSubs(stored).length === 2 && api.unwrapSubs(stored)[0].endpoint === sub.endpoint,
+        api.unwrapSubs(stored).length === 2 && api.unwrapSubs(stored)[0].sub.endpoint === sub.endpoint,
         JSON.stringify(api.unwrapSubs(stored)));
   note('passing the wrapper straight through made sendOne throw into a swallowed catch,');
   note('so recal results, payment alerts, the bank alarm and the digest all sent nothing');
@@ -154,6 +154,65 @@ async function main() {
   check('a device with no subscription is dropped rather than thrown',
         api.unwrapSubs({ a: { uid: 'u' }, b: null, c: sub }).length === 1);
   check('nothing stored yields nothing', api.unwrapSubs(null).length === 0);
+
+  // A subscription that no longer exists can only be deleted by name, and the
+  // record is keyed by a hash of the endpoint — so the key has to survive the
+  // unwrap or pruning is impossible however well the rest is written.
+  check('each one keeps the database key it was stored under',
+        api.unwrapSubs(stored).map(e => e.key).join(',') === 'dev1,dev2',
+        JSON.stringify(api.unwrapSubs(stored).map(e => e.key)));
+}
+
+// ---------------------------------------------------------------- a dead phone is noticed
+// Every automatic notification — cash-out reports, the unverified-payment alert,
+// the bank alarm, the weekly digest, the recalibration result, the cron-failure
+// report — goes through pushOwner. It used to discard every status, so a café
+// whose registered devices had all gone stale would send into the void on every
+// tick and nothing, anywhere, would say so.
+//
+// Subscriptions die routinely: the app is reinstalled, site data is cleared, the
+// push service rotates an endpoint. The record is keyed by endpoint, so a new one
+// lands beside the dead one instead of replacing it.
+{
+  const owner = extractFunction(src, 'pushOwner');
+
+  check('pushOwner looks at what the push service answered',
+        /sendOne\(/.test(owner) && /status/.test(owner),
+        'it discarded the status, so gone and delivered were the same thing');
+
+  check('and treats 404 and 410 as gone for good',
+        /404/.test(owner) && /410/.test(owner),
+        'a dead device would be retried on every notification, forever');
+
+  check('and deletes those records rather than reporting them',
+        /method:\s*'DELETE'/.test(owner),
+        'dead subscriptions accumulate and the count stops meaning anything');
+
+  check('and writes down whether anything actually landed',
+        /recordPushHealth\(/.test(owner),
+        'you cannot send a notification saying notifications are broken');
+
+  const health = extractFunction(src, 'recordPushHealth');
+  check('lastDeliveredAt moves only on a delivery',
+        /lastDeliveredAt:\s*r\.delivered > 0/.test(health),
+        'if an attempt moved it, its age would say nothing about whether alerts work');
+  check('and an undelivered run is counted rather than forgotten',
+        /consecutiveUndelivered/.test(health));
+
+  // The relay route saw expiry all along and left the record in place.
+  const relay = src.slice(src.indexOf('let subs = [], relayToken'), src.indexOf('async scheduled('));
+  check('the relay route prunes what it already knew was expired',
+        /expired\+\+/.test(relay) && /method:\s*'DELETE'/.test(relay),
+        'it reported expired: true in the response and did nothing about it');
+
+  // Deleting needs write access, and the robot is not a member of staff.
+  const rules = JSON.parse(stripComments(fs.readFileSync(
+    path.join(ROOT, 'database.rules.json'), 'utf8'))).rules;
+  const w = (rules.pushSubscriptions || {})['.write'] || '';
+  check('and the robot is allowed to do it',
+        w.includes('robot@cafeila.app'),
+        'the write rule required a users/{uid}.role, which the robot has not got — ' +
+        'every delete would have been denied and the prune silently does nothing');
 }
 
 // ---------------------------------------------------------------- cron wiring

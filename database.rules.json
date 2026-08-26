@@ -33,6 +33,10 @@
       "cronFailure": {
         ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      },
+      "pushHealth": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
+        ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
       }
     },
     "upiReview": {
@@ -140,7 +144,7 @@
     },
     "pushSubscriptions": {
       ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
     },
     "payments": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
