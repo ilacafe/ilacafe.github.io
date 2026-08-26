@@ -196,8 +196,17 @@ just wrote.
 ## Rolling back a bad model
 
 `eta/modelPrevious` holds the model as it was before the last accepted refit.
-Copy it over `eta/model` in the Firebase console. `eta/recalMeta` records what
-happened on the last run (`lastRunAt`, `lastResult`, `version`, `reasons`).
+
+Restore it from **analytics.html → Demand Map → The wait-time model**. It shows
+both models' version and pizza base first, asks before writing, and records the
+restore to `eta/recalMeta` so the panel stops reporting a refit that has since
+been undone. It refuses when the snapshot is missing, incomplete, or identical
+to the model already in use.
+
+That panel is also where `eta/recalMeta` is read back: what the last run did,
+why a refit was rejected, or how many new orders a skipped one is still waiting
+for. `ops/cronFailure` sits beside it, naming any scheduled job that is failing
+now. None of that needs the Firebase console any more.
 
 ## What the guardrails actually stop
 

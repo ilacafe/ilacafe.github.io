@@ -77,11 +77,16 @@ function stub(recal, cron) {
     await page.route('**/*', (route) =>
       route.request().url().startsWith(base) ? route.continue() : route.abort());
     await page.goto(base + '/analytics.html', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(400);
+    // The card lives on the Demand Map view, which is hidden until you switch to
+    // it. Reading it while hidden would pass on text nobody can actually see.
+    await page.click('#view-demand').catch(() => {});
+    await page.waitForTimeout(300);
     const out = await page.evaluate(() => ({
       recal: document.getElementById('recal-summary').innerText.replace(/\s+/g, ' ').trim(),
       cron: document.getElementById('cron-health').innerText.replace(/\s+/g, ' ').trim(),
       injected: !!document.querySelector('#worker-card script, #worker-card img, #worker-card b'),
+      visible: !!(document.getElementById('worker-card') || {}).offsetParent,
     }));
     await ctx.close();
     return { ...out, errors };
@@ -124,6 +129,10 @@ function stub(recal, cron) {
           !bad.injected && /<script>/.test(bad.cron),
           bad.injected ? 'markup was injected' : 'the error text was swallowed: ' + bad.cron);
     note('that string is whatever a failure threw, and it goes on a page');
+
+    check('the card is actually on screen, not just in the DOM',
+          never.visible && ok.visible,
+          'it sits on the Demand Map view — a hidden card would pass a text check and help nobody');
 
     const allErrors = [never, ok, rej, skip, bad].flatMap(r => r.errors);
     check('none of these threw', allErrors.length === 0, allErrors.join(' | '));

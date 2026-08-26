@@ -17,7 +17,7 @@ the file the counter loads.
 | `chef.html` | kitchen | kitchen display for food |
 | `inventory.html` | staff (PIN) | prep logs, deliveries, stock |
 | `admin.html` | owner | menu, prices, staff, accounts, refunds, UPI routing |
-| `analytics.html` | owner | sales history, demand model, cash-up archive |
+| `analytics.html` | owner | sales history, demand model, cash-up archive, Worker health |
 | `sw.js` | — | push notifications, and caches the app shell |
 | `build-check.js` | — | tells a screen that has been open all day that a newer build exists |
 
