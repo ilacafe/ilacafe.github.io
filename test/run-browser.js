@@ -9,6 +9,7 @@ const path = require('path');
 const suites = [
   'qr-browser.test.js',
   'build-banner-browser.test.js',
+  'inventory-browser.test.js',
 ];
 
 let failed = [];
