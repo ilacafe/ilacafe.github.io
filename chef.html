@@ -114,28 +114,17 @@
         window.kdsAlarmed = {};                 // id -> true (already beeped)
         const KDS_STATION = 'chef';
         const ALERT_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';
-        const ALERT_SECRET = '60765ac4763b2df758331f5dea3a145862078c27b72d3efb';
-        // The relay authenticates the caller with a Firebase ID token now, not with
-        // ALERT_SECRET — a secret this page has to hold is a secret anyone can read
-        // out of view-source, and with it they could send any notification they liked
-        // to every admin device. The token is signed by Google, expires in an hour,
-        // and the Worker checks users/{uid}.role behind it.
-        //
-        // TRANSITIONAL: `secret` and `subscriptions` are still sent so that a page
-        // deployed before the new Worker keeps working against the old one. The new
-        // Worker ignores both. Remove this block once the Worker is deployed and the
-        // tablets have reloaded.
+        // The relay authenticates the caller with a Firebase ID token, not with a
+        // secret held by this page — a secret a browser has to hold is a secret
+        // anyone can read out of view-source, and with the old one they could send
+        // any notification they liked to every admin device. The token is signed by
+        // Google, expires in an hour, and the Worker checks users/{uid}.role behind
+        // it. Recipients come from the database, so they are not ours to send either.
         async function ilaPushBody(notification){
             const u = firebase.auth().currentUser;
             const token = u ? await u.getIdToken() : null;
             if (!token) return null;
-            let legacy = [];
-            try {
-                const snap = await db.ref('pushSubscriptions').once('value');
-                legacy = Object.values(snap.val() || {}).map(function(x){ return x && x.subscription; }).filter(Boolean);
-            } catch (e) {}
-            return JSON.stringify({ token: token, notification: notification,
-                                    secret: ALERT_SECRET, subscriptions: legacy });
+            return JSON.stringify({ token: token, notification: notification });
         }
         async function kdsPushAlert(id, t){
             if (!ALERT_WORKER_URL) return;
