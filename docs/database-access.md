@@ -49,6 +49,17 @@ updates[`inventory/stock/${item}`] = increment(n);
 db.ref().update(updates);
 ```
 
+An update can also be handed its object inline, which is the natural shape when
+the keys are fixed — the end-of-day reset clears four nodes that way:
+
+```js
+db.ref('pos').update({ ledgerEntries: null, bills: null, upiTotal: 0 });
+```
+
+Read as a `db.ref()` alone that is a write to `pos`, which is true and useless:
+what the rules get reviewed against is which children it clears. Both forms are
+parsed for their keys.
+
 Those keys are relative to whatever ref `.update()` was called on, which is not
 always the root, so the base is read from the call site. What the map still cannot
 place — a key whose prefix is in a variable — it prints at the bottom rather than

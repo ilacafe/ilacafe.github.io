@@ -295,6 +295,72 @@ function multiPathWrites(src) {
   return out;
 }
 
+// An update can also be handed its object inline, which is the natural shape when
+// the keys are fixed:
+//
+//     db.ref('pos').update({ ledgerEntries: null, bills: null, upiTotal: 0 });
+//
+// That is the same multi-path write as the bag form above, and just as invisible to
+// a scan for db.ref('literal') — the paths are keys, not refs. It reads here as a
+// write to `pos`, which is true and useless: what the rules are reviewed against is
+// which children it clears.
+function inlineUpdateWrites(src) {
+  const out = [];
+  for (const m of src.matchAll(/db\.ref\(\s*(?:(['"`])([^'"`]*)\1)?\s*\)\s*\.update\(\s*\{/g)) {
+    const base = (m[2] || '').replace(/\/+$/, '');
+    // db.ref(`orders/active/${station}/${id}`).update({...}) — the same rule the
+    // literal scan in derivePaths uses: a template segment is covered by its
+    // literal sibling, so placing it under a made-up path would only add noise.
+    if (base.includes('${')) continue;
+    const open = src.lastIndexOf('{', m.index + m[0].length);
+    let body;
+    try { body = src.slice(open + 1, matchBraces(src, open) - 1); } catch (e) { continue; }
+    for (const key of topLevelKeys(body)) {
+      // `orders/active/${station}/${id}/destination` resolves as far as its literal
+      // head and no further, exactly as the bag form above does.
+      const dyn = key.indexOf('${');
+      out.push(joinPath(base, dyn < 0 ? key : key.slice(0, dyn)) + (dyn < 0 ? '' : '/$key'));
+    }
+  }
+  return out;
+}
+
+// The keys of one object literal, ignoring anything nested inside a value. A key
+// the scan cannot read — a computed one — becomes $key rather than being dropped,
+// on the same principle as unresolvedWrites: a map that looks complete and is not
+// is worse than one that says where it stops.
+function topLevelKeys(body) {
+  const keys = [];
+  let depth = 0, i = 0, atKey = true;
+  while (i < body.length) {
+    const c = body[i];
+    if (c === '/' && body[i + 1] === '/') { const nl = body.indexOf('\n', i); if (nl < 0) break; i = nl; continue; }
+    if (c === '/' && body[i + 1] === '*') { const e = body.indexOf('*/', i); if (e < 0) break; i = e + 2; continue; }
+    if (c === '"' || c === "'" || c === '`') {
+      if (depth === 0 && atKey) {
+        const end = skipString(body, i);
+        const after = /^\s*:/.test(body.slice(end));
+        if (after) { keys.push(body.slice(i + 1, end - 1)); atKey = false; i = end; continue; }
+      }
+      i = skipString(body, i); continue;
+    }
+    if (c === '{' || c === '[' || c === '(') {
+      if (depth === 0 && atKey && c === '[') { keys.push('$key'); atKey = false; }
+      depth++; i++; continue;
+    }
+    if (c === '}' || c === ']' || c === ')') { depth--; i++; continue; }
+    if (depth === 0 && c === ',') { atKey = true; i++; continue; }
+    if (depth === 0 && atKey && /[A-Za-z_$]/.test(c)) {
+      const w = /^[A-Za-z_$][\w$]*/.exec(body.slice(i))[0];
+      if (/^\s*:/.test(body.slice(i + w.length))) { keys.push(w); atKey = false; i += w.length; continue; }
+      atKey = false; i += w.length; continue;
+    }
+    if (depth === 0 && !/\s/.test(c)) atKey = false;
+    i++;
+  }
+  return keys;
+}
+
 // The keys the scan above could not place. Reported rather than dropped, so the
 // access map can say how much of itself is missing instead of looking complete.
 function unresolvedWrites() {
@@ -322,7 +388,7 @@ function derivePaths() {
   for (const [file, role] of Object.entries(APPS)) {
     const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
 
-    for (const p of multiPathWrites(src)) {
+    for (const p of multiPathWrites(src).concat(inlineUpdateWrites(src))) {
       if (!found.has(p)) found.set(p, { read: new Set(), write: new Set(), writes: [] });
       found.get(p).write.add(role);
       found.get(p).writes.push({ role, file, snippet: 'multi-path update' });

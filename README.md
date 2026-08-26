@@ -121,6 +121,12 @@ costs money:
   when the live model does not carry those curves. `etaInterp` reads a missing
   curve as zero, so the alarm would come in short and start calling on-time
   tickets late, silently.
+- **cash-up** — the day's archive lands before the till is cleared, and the till is
+  cleared before the report is handed off to WhatsApp. That hand-off is a real
+  navigation, and it takes the socket — and any un-acked write still on it — with
+  it. The reset is one atomic update rather than four writes, because a till that
+  comes back half-reset carries yesterday's UPI total into today's takings. A write
+  that never answers ends the cash-up with a message rather than a frozen screen.
 - **write-only paths** — across the pages and the Worker, every database path
   something writes is read back somewhere, and every path something reads is
   written by something. A screen that will always be empty is harder to spot than

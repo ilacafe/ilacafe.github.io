@@ -327,7 +327,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.9"></script>
+    <script src="/build-check.js" data-build="2026-08-26.10"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -4198,6 +4198,23 @@
                 await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: body });
             } catch (e) { console.error('push failed', e); }
         }
+        // A Realtime Database write that cannot reach the server neither resolves nor
+        // rejects: the SDK queues it and waits, for as long as it takes. Awaiting one
+        // on a dropped connection would leave the cash-up sitting on a dead screen with
+        // nothing to read, so every step of it is bounded here instead.
+        //
+        // 'timeout' is not 'failed'. A write that has not been confirmed in twenty
+        // seconds may still land a minute later, and the messages below say that
+        // rather than claiming a failure nobody can verify.
+        const EOD_STEP_MS = 20000;
+        function eodStep(promise, ms) {
+            let timer = null;
+            return Promise.race([
+                Promise.resolve(promise).then(() => 'ok', e => { console.error('EOD step failed', e); return 'failed'; }),
+                new Promise(r => { timer = setTimeout(() => r('timeout'), ms || EOD_STEP_MS); })
+            ]).then(v => { if (timer) clearTimeout(timer); return v; });
+        }
+
         window.promptEOD = async function() {
             const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
             const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
@@ -4277,45 +4294,70 @@
                     if (rv && rv.by) out.verifyBy = rv.by;
                     return out;
                 });
-                db.ref('pos/eodArchive/' + todayKey + '-' + Date.now()).set({
+                // Counted before the reset, not after it. pos/bills and pos/ledgerEntries have
+                // live listeners behind them, so the moment the reset lands both of these arrays
+                // are emptied — and the notification the owner gets would read 0 bills, no expenses.
+                var _eodBills = Array.isArray(window.pastBills) ? window.pastBills.length : 0;
+                var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income' && !REVERSALS[e.type]) _eodExp += Math.abs(parseFloat(e.amount) || 0); });
+
+                // Archive, carry-forward and reset all used to be fire-and-forget: the reset
+                // ran inside a .then() while the code below carried straight on to the WhatsApp
+                // hand-off, and `location.href` tears down the socket those un-acked writes are
+                // still sitting on. On a bad connection that loses the archive, or the reset, or
+                // both — and nothing said so, because the report went out either way and the day
+                // looked closed. Each step is waited for now, and the first one that does not
+                // land stops the cash-up and says which.
+                const archived = await eodStep(db.ref('pos/eodArchive/' + todayKey + '-' + Date.now()).set({
                     report: report, upi: safeUPI, cash: safeCash,
                     bills: window.pastBills, ledger: enrichedLedger,
                     closedBy: staffName, closedAt: firebase.database.ServerValue.TIMESTAMP
-                }).then(() => {
-                    // Park anything still unverified BEFORE wiping. This is the only reason the
-                    // last bills of the night can ever auto-verify: their ledger rows are about
-                    // to be deleted, and the bank email may not have arrived yet. Money is not
-                    // moved or recounted here — the day's totals are already archived. This is
-                    // purely so a late credit can still find the payment it belongs to.
-                    try {
-                        const carry = {};
-                        const rvMap = window.upiReviewMap || {};
-                        (window.salesLedger || []).forEach(function(e){
-                            if (!e || e.type !== 'upi_income' || !e.payId) return;
-                            if (e.state === 'verified') return;
-                            const rv = rvMap[e.payId];
-                            if (rv && (rv.state === 'verified' || rv.state === 'ignored')) return;
-                            carry[e.payId] = {
-                                amount: parseFloat(e.amount) || 0, reason: e.reason || '',
-                                ts: e.ts || 0, bankTag: e.bankTag || null,
-                                day: todayKey, state: 'unverified'
-                            };
-                        });
-                        if (Object.keys(carry).length) db.ref('pos/unverified').update(carry);
-                    } catch(e){ console.error('EOD carry-forward', e); }
+                }));
+                if (archived !== 'ok') {
+                    alert("Today's sales could not be saved" + (archived === 'timeout' ? ' — the till did not hear back from the database.' : '.')
+                        + "\n\nThe day is still open and nothing has been cleared. Check the connection and close the day again.");
+                    return;
+                }
 
-                    db.ref('pos/ledgerEntries').remove();
-                    db.ref('pos/bills').remove();
-                    // cashDrawer is NOT reset — physical cash carries forward to the next day.
-                    db.ref('pos/upiTotal').set(0);
-                    db.ref('pos/activeTables').remove();
-                    // Or a till reopened offline tomorrow morning restores today's
-                    // closed tables and shows them as open.
-                    try { localStorage.removeItem(TABLE_CACHE_KEY); } catch(e){}
-                    window.tablesFromCacheAt = 0;
-                });
-                var _eodBills = Array.isArray(window.pastBills) ? window.pastBills.length : 0;
-                var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income' && !REVERSALS[e.type]) _eodExp += Math.abs(parseFloat(e.amount) || 0); });
+                // Park anything still unverified BEFORE wiping. This is the only reason the
+                // last bills of the night can ever auto-verify: their ledger rows are about
+                // to be deleted, and the bank email may not have arrived yet. Money is not
+                // moved or recounted here — the day's totals are already archived. This is
+                // purely so a late credit can still find the payment it belongs to.
+                try {
+                    const carry = {};
+                    const rvMap = window.upiReviewMap || {};
+                    (window.salesLedger || []).forEach(function(e){
+                        if (!e || e.type !== 'upi_income' || !e.payId) return;
+                        if (e.state === 'verified') return;
+                        const rv = rvMap[e.payId];
+                        if (rv && (rv.state === 'verified' || rv.state === 'ignored')) return;
+                        carry[e.payId] = {
+                            amount: parseFloat(e.amount) || 0, reason: e.reason || '',
+                            ts: e.ts || 0, bankTag: e.bankTag || null,
+                            day: todayKey, state: 'unverified'
+                        };
+                    });
+                    if (Object.keys(carry).length) await eodStep(db.ref('pos/unverified').update(carry));
+                } catch(e){ console.error('EOD carry-forward', e); }
+
+                // One multi-path update rather than four separate writes, because an update is
+                // atomic and four writes are not. Half a reset is the worst outcome available
+                // here: yesterday's UPI total left standing while its ledger is gone is a number
+                // nothing on the till can explain, and it goes straight into tomorrow's takings.
+                // cashDrawer is NOT reset — physical cash carries forward to the next day.
+                const reset = await eodStep(db.ref('pos').update({
+                    ledgerEntries: null, bills: null, upiTotal: 0, activeTables: null
+                }));
+                if (reset !== 'ok') {
+                    alert("Today's sales are archived, but the till did not confirm it reset"
+                        + (reset === 'timeout' ? ' — the till did not hear back from the database.' : '.')
+                        + "\n\nReload the POS before starting tomorrow. If today's ledger is still on screen, close the day again.");
+                    return;
+                }
+                // Or a till reopened offline tomorrow morning restores today's
+                // closed tables and shows them as open.
+                try { localStorage.removeItem(TABLE_CACHE_KEY); } catch(e){}
+                window.tablesFromCacheAt = 0;
                 // IMPORTANT: await the push so it actually completes before we navigate to WhatsApp.
                 // (Previously this was fire-and-forget and the wa.me redirect 300ms later aborted the
                 //  in-flight Firebase read + Worker POST, so the EOD notification usually never sent.)
