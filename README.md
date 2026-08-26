@@ -19,6 +19,7 @@ the file the counter loads.
 | `admin.html` | owner | menu, prices, staff, accounts, refunds, UPI routing |
 | `analytics.html` | owner | sales history, demand model, cash-up archive |
 | `sw.js` | — | push notifications, and caches the app shell |
+| `build-check.js` | — | tells a screen that has been open all day that a newer build exists |
 
 Each page is self-contained: its own HTML, CSS and JavaScript in one file, with
 Firebase loaded from a CDN. Sign-in is Firebase Auth; the role in
@@ -78,8 +79,9 @@ Everything talks to the live database, so treat the till pages as live.
 ```sh
 npm install
 npm test              # syntax, settlement, pricing, QR, rules, Worker
-npm run test:browser  # loads pos.html in Chromium (needs a browser download)
+npm run test:browser  # loads the real pages in Chromium (needs a browser download)
 npm run access-map    # prints every database path each app reads and writes
+npm run bump          # moves every page and build.json to a new build
 ```
 
 The suites read the real functions out of the pages rather than a copy, so they
@@ -106,6 +108,11 @@ costs money:
 - **table cache** — a till reloaded during a wifi drop restores the open tables
   rather than showing an empty floor, and refuses a cache old enough to be
   yesterday's.
+- **build freshness** — every screen staff leave open carries the build it was
+  deployed as, and that stamp matches `build.json`. The browser suite goes further
+  and loads each of those pages with a newer build.json in place: the banner has to
+  appear, name the new build, and be tappable rather than sitting underneath the
+  sign-in overlay.
 - **manifest** — the ordering page is installable and its share card points at an
   image that exists, at the size it claims. Both fail silently in a browser.
 - **accessibility** — on the customer page, everything clickable is reachable from
@@ -138,11 +145,24 @@ are the database rules; neither ships with a push.
 Two things to know:
 
 - `sw.js` serves the cached shell and applies a new build on the **next** open.
-  A tablet open all day has no next open, so `pos.html`, `admin.html` and
-  `index.html` poll `build.json` and offer a **Reload now** banner when they are
-  behind. They never reload themselves — a till reloading mid-transaction is a
-  worse bug than a stale one.
+  A tablet open all day has no next open, and neither does a kitchen screen. So
+  every page staff leave open loads [`build-check.js`](build-check.js), which polls
+  `build.json` and offers a **Reload now** banner when the page is behind. It never
+  reloads by itself — a till reloading mid-transaction, or a kitchen screen blanking
+  while someone reads a ticket, is a worse bug than a stale one.
 
-  `build.json` must be bumped with the pages; `npm test` fails if it drifts.
+  Each page declares its own build on the tag that loads it:
+
+  ```html
+  <script src="/build-check.js" data-build="2026-08-26.2"></script>
+  ```
+
+  `build.json` must be bumped with the pages, and `npm test` fails if any page
+  drifts from it. Move all of them together:
+
+  ```sh
+  npm run bump              # next build for today
+  npm run bump 2026-09-01.1 # or say which
+  ```
 - Database rules do **not** deploy with a push. They are a separate step:
   `firebase deploy --only database`.
