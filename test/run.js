@@ -10,6 +10,7 @@ const suites = [
   'syntax.test.js',
   'settlement.test.js',
   'reprice.test.js',
+  'reversal.test.js',
   'menu-maps.test.js',
   'qr.test.js',
   'eta-summary.test.js',

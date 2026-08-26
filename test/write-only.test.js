@@ -83,6 +83,22 @@ function related(a, b) {
   return true;   // one is the other, or an ancestor of it
 }
 
+// Before asking anything of the map, check the map is a map.
+//
+// A derived path is a database path: segments of ordinary key characters, with $key
+// standing for one the deriver could not resolve. When the parser mistook
+// `'orders/history/' + key + '/voided'` for a single literal, it produced rows named
+// after their own source text — and every question below was still answerable about
+// them, so nothing failed. A path that is not a path is worse than a missing one: it
+// reports a rule as present at somewhere that does not exist.
+{
+  const wellFormed = /^[A-Za-z0-9_$.-]+(\/[A-Za-z0-9_$.-]+)*$/;
+  const malformed = paths.filter(p => !wellFormed.test(p));
+  check('every path the map derived is a path',
+        malformed.length === 0,
+        malformed.slice(0, 3).map(p => JSON.stringify(p)).join(', '));
+}
+
 const readable = paths.filter(p => all.get(p).read);
 const written = paths.filter(p => all.get(p).write);
 

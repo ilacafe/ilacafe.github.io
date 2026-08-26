@@ -134,6 +134,13 @@ costs money:
   counter again and count the station done twice. On a split order that second
   count tells the customer their food is ready while the bar has not started the
   drinks. Both kitchen pages carry the same code, so both are checked.
+- **refunds and voids** — the two ways money goes back out are each one atomic
+  write. Flagging the record, reversing the till and writing the compensating
+  ledger line used to be three awaits in a row, so any one of them could be the
+  last to land: a refund recorded but never taken off the UPI total, or taken off
+  and still listed as owed, or a bill reading VOIDED with the till untouched and no
+  button left to finish it. Each said "Nothing was changed — try again", and doing
+  as it asked made the second copy.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with

@@ -104,8 +104,13 @@ function extractFunction(src, name) {
 // Source text of `window.<name> = function (...) { ... }` — the pages assign most of
 // their public entry points that way rather than declaring them, so extractFunction
 // cannot see them.
+//
+// `async` is captured when present, for the reason extractFunction gives: dropping it
+// turns an async function into a sync one returning a Promise nobody awaits. This did
+// not handle it, so every async entry point — refundDone, voidBill, promptEOD — simply
+// could not be reached from a suite at all.
 function extractAssignedFunction(src, name) {
-  const re = new RegExp('window\\.' + name + '\\s*=\\s*function');
+  const re = new RegExp('window\\.' + name + '\\s*=\\s*(async\\s+)?function');
   const m = re.exec(src);
   if (!m) {
     throw new Error(
@@ -113,7 +118,8 @@ function extractAssignedFunction(src, name) {
       'It was renamed or turned into a declaration — update the suite that reads it.');
   }
   const open = src.indexOf('{', src.indexOf('(', m.index));
-  return 'function ' + name + src.slice(src.indexOf('(', m.index), open) +
+  return (m[1] ? 'async ' : '') + 'function ' + name +
+         src.slice(src.indexOf('(', m.index), open) +
          src.slice(open, matchBraces(src, open));
 }
 
@@ -252,6 +258,16 @@ function updateBags(src) {
   return bags;
 }
 
+// The text of `e` when `e` is a single string literal and nothing else, or null.
+// skipString finds where the literal ends; if that is not the end of the expression,
+// what follows is a concatenation and the whole thing is not a key.
+function oneLiteral(e) {
+  if (!/^['"`]/.test(e)) return null;
+  let end;
+  try { end = skipString(e, 0); } catch (err) { return null; }
+  return end === e.length ? e.slice(1, -1) : null;
+}
+
 function joinPath(base, rest) {
   const r = String(rest).replace(/^\/+|\/+$/g, '');
   if (!base) return r;
@@ -271,10 +287,14 @@ function multiPathWrites(src) {
     const base = bags.get(bag);
     const e = expr.trim();
 
-    // 'a/b/c' or `a/b/${x}` — a literal, possibly with a dynamic tail.
-    const lit = /^(['"`])([\s\S]*)\1$/.exec(e);
-    if (lit) {
-      const key = lit[2];
+    // 'a/b/c' or `a/b/${x}` — ONE literal, possibly with a dynamic tail.
+    //
+    // Testing that with /^(['"`])[\s\S]*\1$/ was wrong: 'a/' + k + '/b' also starts and
+    // ends with a quote, so the whole expression was taken as a key and the map grew rows
+    // named after their own source text. The string has to end where the expression does.
+    const lit = oneLiteral(e);
+    if (lit !== null) {
+      const key = lit;
       const dyn = key.includes('${');
       const head = (dyn ? key.slice(0, key.indexOf('${')) : key);
       out.push(joinPath(base, head) + (dyn ? '/$key' : ''));
@@ -374,7 +394,7 @@ function unresolvedWrites() {
       if (!bags.has(bag)) continue;
       const e = expr.trim();
       const base = bags.get(bag);
-      if (/^(['"`])[\s\S]*\1$/.test(e)) continue;                 // literal
+      if (oneLiteral(e) !== null) continue;                       // literal
       if (/^(['"`])[^'"`]*\1\s*\+/.test(e)) continue;             // literal head
       if (base && !e.includes('+')) continue;                       // one child of a known base
       out.push({ file, role, expr: e });
