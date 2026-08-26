@@ -157,7 +157,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.2"></script>
+    <script src="/build-check.js" data-build="2026-08-26.3"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -419,6 +419,10 @@
             <button class="btn btn-primary" style="width:auto;" id="notif-enable" onclick="notifEnable()">Enable alerts on this device</button>
             <button class="btn-action" style="width:auto; margin-top:8px;" id="notif-testpush" onclick="notifTestPush()">Send test push (all devices)</button>
             <div id="notif-status" class="rec-note" style="margin-top:12px;"></div>
+            <!-- Whether the cafe is reaching ANY phone, as opposed to whether this
+                 browser is subscribed. The two are unrelated, and only this one
+                 answers "are my alerts still working?" -->
+            <div id="notif-health" class="rec-note" style="margin-top:6px; opacity:0.85;"></div>
         </div>
 
                 </div>
@@ -1586,6 +1590,7 @@
             try { notifReg = await navigator.serviceWorker.register('/sw.js'); }
             catch (e) { if (status) status.innerText = 'Could not start the notification service: ' + (e && e.message ? e.message : e); return; }
             await notifRefresh();
+            notifHealth();
         }
         async function notifRefresh(){
             const status = document.getElementById('notif-status'); const btn = document.getElementById('notif-enable');
@@ -1596,6 +1601,49 @@
             if (btn) { btn.style.display = ''; btn.innerText = 'Enable alerts on this device'; }
             if (status) status.innerText = '';
         }
+        // "Alerts enabled on this device" is this browser's own subscription state.
+        // It stays green on a phone whose subscription the push service has since
+        // dropped, and it says nothing at all about the other devices. The Worker
+        // records what actually landed at ops/pushHealth; this reads it back.
+        //
+        // It has to be shown here rather than sent, for the obvious reason: a
+        // notification reporting that notifications are broken cannot arrive.
+        function notifAgo(ms){
+            const mins = Math.round((Date.now() - ms) / 60000);
+            if (mins < 2) return 'just now';
+            if (mins < 60) return mins + ' minutes ago';
+            const hrs = Math.round(mins / 60);
+            if (hrs < 24) return hrs + (hrs === 1 ? ' hour ago' : ' hours ago');
+            const days = Math.round(hrs / 24);
+            return days + (days === 1 ? ' day ago' : ' days ago');
+        }
+        async function notifHealth(){
+            const el = document.getElementById('notif-health');
+            if (!el) return;
+            let h = null;
+            try { h = (await db.ref('ops/pushHealth').once('value')).val(); } catch (e) { return; }
+            if (!h || !h.lastAttemptAt) {
+                el.textContent = 'No alert has been sent yet, so there is nothing to report on delivery.';
+                return;
+            }
+            const delivered = Number(h.lastDeliveredAt) || 0;
+            const misses = Number(h.consecutiveUndelivered) || 0;
+            if (delivered && misses === 0) {
+                el.textContent = 'Last alert reached ' + (h.delivered || 0) + ' of ' +
+                                 (h.devices || 0) + ' device(s), ' + notifAgo(delivered) + '.';
+                el.style.color = '';
+                return;
+            }
+            // Nothing landed. This is the state that used to be invisible.
+            el.style.color = '#ffcc66';
+            el.textContent = delivered
+                ? 'No alert has reached a device since ' + notifAgo(delivered) + ' (' + misses +
+                  ' since). ' + (h.expired ? h.expired + ' subscription(s) had expired. ' : '') +
+                  'Tap "Enable alerts on this device" to re-register this one.'
+                : 'No alert has ever reached a device (' + misses + ' attempt(s)). ' +
+                  'Tap "Enable alerts on this device" to register one.';
+        }
+
         window.notifEnable = async function(){
             const status = document.getElementById('notif-status');
             if (!notifSupported()) { return; }
@@ -1614,6 +1662,7 @@
                 await db.ref('pushSubscriptions/' + key).set({ subscription: json, uid: u ? u.uid : null, name: u ? (u.displayName || u.email || '') : '', at: Date.now() });
                 await notifReg.showNotification('Caf\u00e9 Ila', { body: 'Alerts enabled. You will be notified here when an order runs late.', icon: '/icon.png', tag: 'ila-enabled' });
                 await notifRefresh();
+                notifHealth();
             } catch (e) { console.error(e); status.innerText = 'Could not enable alerts: ' + (e && e.message ? e.message : e); }
         };
         const ALERT_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';

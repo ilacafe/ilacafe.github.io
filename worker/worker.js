@@ -783,24 +783,98 @@ async function rcNotifyOwner(token, title, body){
 // scheduled notification — recalibration result, the 2-hour unverified-payment
 // alert, the per-bank alarm, the weekly digest — silently sent nothing at all.
 // Tolerates a bare subscription too, in case one was ever stored unwrapped.
+//
+// The database key comes back with each one. A push service answers 404 or 410
+// for a subscription that no longer exists — a reinstalled app, cleared site
+// data, a rotated endpoint — and the only way to delete that record is to know
+// what it is called.
 function unwrapSubs(subsObj){
-  return Object.values(subsObj || {})
-    .map(x => (x && x.subscription) ? x.subscription : x)
-    .filter(s => s && s.endpoint && s.keys && s.keys.p256dh && s.keys.auth);
+  return Object.entries(subsObj || {})
+    .map(([key, x]) => ({ key, sub: (x && x.subscription) ? x.subscription : x }))
+    .filter(e => e.sub && e.sub.endpoint && e.sub.keys && e.sub.keys.p256dh && e.sub.keys.auth);
 }
 
 // generalized owner push (arbitrary tag + url) — used by the scheduled verification checks
+//
+// EVERY AUTOMATIC NOTIFICATION GOES THROUGH HERE
+//
+// The cash-out reports, the unverified-payment alert, the per-bank alarm, the
+// weekly digest, the recalibration result and the cron-failure report are all
+// this function. It used to throw every status away, so if every registered
+// device had gone stale it would loop, be told "gone" each time, swallow it and
+// return as though it had delivered. Nothing anywhere recorded that the café's
+// alerting had stopped.
+//
+// That is not a hypothetical. A push subscription dies whenever the app is
+// reinstalled, site data is cleared, or the push service rotates an endpoint —
+// and the record is keyed by endpoint, so a new one is written alongside the
+// dead one rather than replacing it. Left alone, the dead ones accumulate and
+// the live one can disappear entirely.
+//
+// So: count what actually landed, delete what the push service says is gone,
+// and write down the outcome. The outcome cannot be a notification, for the
+// obvious reason.
 async function pushOwner(token, title, body, tag, url){
+  let devices = 0, delivered = 0, expired = 0, failed = 0;
   try{
     const res = await fetch(DB_URL + '/pushSubscriptions.json?auth=' + token);
     const subsObj = res.ok ? (await res.json()) : null;
-    if(!subsObj) return;
     const subs = unwrapSubs(subsObj);
+    devices = subs.length;
     const payload = _enc.encode(JSON.stringify({ title, body, tag: tag||'ila', url: url||'/admin.html' }));
-    for(const sub of subs){
-      try{ await sendOne(sub, payload); }catch(e){}
+    for(const { key, sub } of subs){
+      try{
+        const status = await sendOne(sub, payload);
+        if(status >= 200 && status < 300){ delivered++; continue; }
+        if(status === 404 || status === 410){
+          expired++;
+          // Gone for good, not a transient error — drop it so the next send is
+          // not slowed by a device that no longer exists, and so "devices" means
+          // devices that could still be reached.
+          await fetch(DB_URL + '/pushSubscriptions/' + encodeURIComponent(key) + '.json?auth=' + token,
+                      { method:'DELETE' }).catch(()=>{});
+          console.log('push: dropped expired subscription ' + key + ' (' + status + ')');
+        } else {
+          failed++;
+          console.log('push: ' + key + ' returned ' + status);
+        }
+      }catch(e){
+        failed++;
+        console.log('push: ' + key + ' threw: ' + (e && e.message));
+      }
     }
-  }catch(e){}
+  }catch(e){
+    console.log('push: could not read subscriptions: ' + (e && e.message));
+  }
+
+  console.log('push "' + title + '": ' + delivered + '/' + devices + ' delivered, ' +
+              expired + ' expired, ' + failed + ' failed');
+  await recordPushHealth(token, { devices, delivered, expired, failed, title });
+  return { devices, delivered, expired, failed };
+}
+
+// Where "did anyone actually get that?" is answerable. admin.html reads this and
+// says when the café last reached a phone, because a notification saying that
+// notifications are broken is not a thing that can be sent.
+async function recordPushHealth(token, r){
+  try{
+    const path = DB_URL + '/ops/pushHealth.json?auth=' + token;
+    const prevRes = await fetch(path);
+    const prev = prevRes.ok ? (await prevRes.json()) || {} : {};
+    const now = Date.now();
+    await fetch(path, { method:'PUT', body: JSON.stringify({
+      lastAttemptAt: now,
+      lastAttemptTitle: safeText(r.title, 80),
+      devices: r.devices,
+      delivered: r.delivered,
+      expired: r.expired,
+      failed: r.failed,
+      // Only moved by a send that truly landed, so its age is the real answer to
+      // "are alerts still working?"
+      lastDeliveredAt: r.delivered > 0 ? now : (prev.lastDeliveredAt || null),
+      consecutiveUndelivered: r.delivered > 0 ? 0 : (Number(prev.consecutiveUndelivered) || 0) + 1
+    }) });
+  }catch(e){ console.log('push: could not record health: ' + (e && e.message)); }
 }
 
 // ===== EMAIL INGEST (bank credit alerts -> payments/incoming) =====
@@ -1126,25 +1200,35 @@ export default {
 
     // Recipients come from the database, never from the caller — otherwise the
     // Worker is an open relay that signs anyone's push with the café's VAPID key.
-    let subs = [];
+    let subs = [], relayToken = null;
     try {
-      const rt = await getRobotToken();
-      const res = await fetch(DB_URL + '/pushSubscriptions.json?auth=' + rt);
+      relayToken = await getRobotToken();
+      const res = await fetch(DB_URL + '/pushSubscriptions.json?auth=' + relayToken);
       subs = unwrapSubs(res.ok ? (await res.json()) : null);
     } catch (e) { return json({ error:'could not read subscriptions' }, 502); }
     if (!subs.length) return json({ ok:true, sent:0, failed:0, results:[] });
 
     const payload = _enc.encode(JSON.stringify(safeNotification(data.notification)));
 
-    let sent = 0, failed = 0; const results = [];
-    for (const sub of subs) {
+    let sent = 0, failed = 0, expired = 0; const results = [];
+    for (const { key, sub } of subs) {
       try {
         const status = await sendOne(sub, payload);
-        if (status >= 200 && status < 300) { sent++; results.push({ status }); }
-        else { failed++; results.push({ status, expired: status === 404 || status === 410 }); }
+        if (status >= 200 && status < 300) { sent++; results.push({ status }); continue; }
+        failed++;
+        const gone = status === 404 || status === 410;
+        results.push({ status, expired: gone });
+        // This route used to report `expired` and leave the record in place, so the
+        // same dead device was retried on every push from every till, forever.
+        if (gone) {
+          expired++;
+          await fetch(DB_URL + '/pushSubscriptions/' + encodeURIComponent(key) + '.json?auth=' + relayToken,
+                      { method:'DELETE' }).catch(()=>{});
+        }
       } catch (e) { failed++; results.push({ error: String((e && e.message) || e) }); }
     }
-    return json({ ok:true, sent, failed, results, by: role });
+    await recordPushHealth(relayToken, { devices: subs.length, delivered: sent, expired, failed, title: 'relay' });
+    return json({ ok:true, sent, failed, expired, results, by: role });
   },
 
   async scheduled(event, env, ctx){
