@@ -41,6 +41,20 @@ A rules file is JSON **with comments** — Firebase accepts them, and an export
 may well contain them. The checks here strip comments before parsing, so leave
 them in: they are usually the most useful thing in the file.
 
+The map is derived from the source, including multi-path updates — writes whose
+path lives in an object key rather than in `ref()`:
+
+```js
+updates[`inventory/stock/${item}`] = increment(n);
+db.ref().update(updates);
+```
+
+Those keys are relative to whatever ref `.update()` was called on, which is not
+always the root, so the base is read from the call site. What the map still cannot
+place — a key whose prefix is in a variable — it prints at the bottom rather than
+omitting, because a map that looks complete and is not is worse than one that says
+where it stops.
+
 `npm test` checks that file (see below), so every change to it shows up as a
 reviewable diff. `firebase.json` points at that filename, so the **deploy
 database rules** workflow — and `firebase deploy --only database` locally —

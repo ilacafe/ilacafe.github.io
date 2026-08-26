@@ -226,10 +226,108 @@ const OPS = [
   [/\.on\s*\(/, 'read'], [/\.once\s*\(/, 'read'],
 ];
 
+// A multi-path update writes several paths at once through a single ref:
+//
+//     updates[`inventory/stock/${item}`] = increment(n);
+//     db.ref().update(updates);
+//
+// The path is in the object key, not in ref(), so the db.ref('literal') scan below
+// cannot see any of it. Real writes were invisible for this reason, and the access
+// map is what the database rules get reviewed against — a write nobody can see is
+// a rule nobody checks.
+//
+// The keys are relative to whatever ref .update() was called on, which is not
+// always the root:
+//
+//     db.ref().update(updates)                  -> keys are full paths
+//     db.ref('pos/unverified').update(carry)    -> keys are children of that
+//
+// Getting that wrong would file a write under the wrong path, which is worse than
+// not seeing it, so the base is read from the call site rather than assumed.
+function updateBags(src) {
+  const bags = new Map();   // identifier -> base path ('' means the database root)
+  for (const m of src.matchAll(/db\.ref\(\s*(?:(['"`])([^'"`]*)\1)?\s*\)\s*\.update\(\s*(\w+)\s*\)/g)) {
+    bags.set(m[3], (m[2] || '').replace(/\/+$/, ''));
+  }
+  return bags;
+}
+
+function joinPath(base, rest) {
+  const r = String(rest).replace(/^\/+|\/+$/g, '');
+  if (!base) return r;
+  return r ? base + '/' + r : base;
+}
+
+function multiPathWrites(src) {
+  const bags = updateBags(src);
+  if (!bags.size) return [];
+
+  const out = [];
+  // The bracket expression, whatever shape it is. Ordinary object writes like
+  // byStaff[name] = ... are excluded by the bag check, not by guesswork.
+  for (const m of src.matchAll(/(\w+)\s*\[([^\]\n]*)\]\s*=/g)) {
+    const [, bag, expr] = m;
+    if (!bags.has(bag)) continue;
+    const base = bags.get(bag);
+    const e = expr.trim();
+
+    // 'a/b/c' or `a/b/${x}` — a literal, possibly with a dynamic tail.
+    const lit = /^(['"`])([\s\S]*)\1$/.exec(e);
+    if (lit) {
+      const key = lit[2];
+      const dyn = key.includes('${');
+      const head = (dyn ? key.slice(0, key.indexOf('${')) : key);
+      out.push(joinPath(base, head) + (dyn ? '/$key' : ''));
+      continue;
+    }
+
+    // 'a/b/' + something — the literal head is enough to place it.
+    const head = /^(['"`])([^'"`]*)\1\s*\+/.exec(e);
+    if (head) { out.push(joinPath(base, head[2]) + '/$key'); continue; }
+
+    // A bare expression under a known base is one child of it: carry[e.payId]
+    // under pos/unverified is pos/unverified/$key.
+    if (base && !e.includes('+')) { out.push(base + '/$key'); continue; }
+
+    // Anything else — base + '/state', with the prefix in a variable — is left to
+    // unresolvedWrites() rather than guessed at.
+  }
+  return out;
+}
+
+// The keys the scan above could not place. Reported rather than dropped, so the
+// access map can say how much of itself is missing instead of looking complete.
+function unresolvedWrites() {
+  const out = [];
+  for (const [file, role] of Object.entries(APPS)) {
+    const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    const bags = updateBags(src);
+    if (!bags.size) continue;
+    for (const m of src.matchAll(/(\w+)\s*\[([^\]\n]*)\]\s*=/g)) {
+      const [, bag, expr] = m;
+      if (!bags.has(bag)) continue;
+      const e = expr.trim();
+      const base = bags.get(bag);
+      if (/^(['"`])[\s\S]*\1$/.test(e)) continue;                 // literal
+      if (/^(['"`])[^'"`]*\1\s*\+/.test(e)) continue;             // literal head
+      if (base && !e.includes('+')) continue;                       // one child of a known base
+      out.push({ file, role, expr: e });
+    }
+  }
+  return out;
+}
+
 function derivePaths() {
   const found = new Map();
   for (const [file, role] of Object.entries(APPS)) {
     const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
+
+    for (const p of multiPathWrites(src)) {
+      if (!found.has(p)) found.set(p, { read: new Set(), write: new Set(), writes: [] });
+      found.get(p).write.add(role);
+      found.get(p).writes.push({ role, file, snippet: 'multi-path update' });
+    }
+
     const re = /db\.ref\(\s*(['"`])([^'"`]*)\1/g;
     let m;
     while ((m = re.exec(src))) {
@@ -257,4 +355,4 @@ function derivePaths() {
   return found;
 }
 
-module.exports = { ROOT, readPage, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, stripComments, APPS, derivePaths };
+module.exports = { ROOT, readPage, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, stripComments, APPS, derivePaths, unresolvedWrites };

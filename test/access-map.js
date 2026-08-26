@@ -5,7 +5,7 @@
 // right if it permits exactly these and nothing more. It is generated rather
 // than written down, so it cannot drift from the code that ships.
 
-const { derivePaths, APPS } = require('./helpers');
+const { derivePaths, APPS, unresolvedWrites } = require('./helpers');
 
 const used = derivePaths();
 const rows = [...used.keys()].sort();
@@ -29,4 +29,17 @@ for (const p of rows) {
 
 console.log('\n  ' + rows.length + ' paths across ' + Object.keys(APPS).length + ' apps.  ' +
             '\x1b[33mHighlighted\x1b[0m rows are reachable by an anonymous visitor —');
-console.log('  the ordering page signs in with signInAnonymously(), so "anon" means anyone.\n');
+console.log('  the ordering page signs in with signInAnonymously(), so "anon" means anyone.');
+
+// This map is the reference the database rules are reviewed against, so where it
+// is incomplete it has to say so. A multi-path update whose key is built from a
+// variable cannot be placed from the source alone.
+const unresolved = unresolvedWrites();
+if (unresolved.length) {
+  console.log('\n  \x1b[33m' + unresolved.length + ' write(s) could not be placed:\x1b[0m');
+  for (const u of unresolved) console.log('    ' + u.file + '  ' + u.expr);
+  console.log('  These are multi-path update keys built from a variable. Their parent');
+  console.log('  nodes appear above; the exact child does not.\n');
+} else {
+  console.log('  Every write in the apps was placed.\n');
+}
