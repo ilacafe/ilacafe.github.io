@@ -55,7 +55,18 @@ jobs:
           fi
           echo "FIREBASE_SERVICE_ACCOUNT is present (${#SA} bytes)"
 
+      # Before anything changes, keep a copy of what is live. The checks below run
+      # after the deploy — they have to, since they are checking the deploy — so
+      # without this a rules file that fails them is simply left in force, and
+      # putting it back is a manual job at exactly the worst moment.
+      - name: keep the rules that are live now
+        id: save
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node tools/verify-rules.js --save "$RUNNER_TEMP/rules-before.json"
+
       - name: deploy
+        id: deploy
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
@@ -87,3 +98,25 @@ jobs:
       # No secret: that is the point. It is the request an attacker would make.
       - name: and that they permit only what they should
         run: node tools/probe-rules.js
+
+      # Only when something after the deploy went wrong. The rules being enforced
+      # are the only real security boundary here, so the wrong ones staying live
+      # while someone reads a failed workflow is not an acceptable resting state.
+      #
+      # This restores the exact bytes that were live before, then re-runs the same
+      # outside probe against them — a rollback that is not itself checked is just
+      # a second unverified deploy.
+      - name: put the old rules back
+        if: failure() && steps.save.outcome == 'success' && steps.deploy.outcome == 'success'
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          echo "::warning::a check after the deploy failed — restoring the rules that were live before it"
+          cp "$RUNNER_TEMP/rules-before.json" database.rules.json
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx --yes firebase-tools@14 deploy --only database --project ila-cafe --non-interactive
+          echo "restored. checking what is live now:"
+          node tools/probe-rules.js
+          echo "::error::the deploy was undone. database.rules.json in git is NOT what is live."
