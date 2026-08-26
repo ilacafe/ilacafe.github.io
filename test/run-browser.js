@@ -11,6 +11,7 @@ const suites = [
   'build-banner-browser.test.js',
   'inventory-browser.test.js',
   'walkouts-browser.test.js',
+  'model-health-browser.test.js',
 ];
 
 let failed = [];
