@@ -70,6 +70,8 @@ costs money:
   yesterday's.
 - **manifest** — the ordering page is installable and its share card points at an
   image that exists, at the size it claims. Both fail silently in a browser.
+- **accessibility** — on the customer page, everything clickable is reachable from
+  a keyboard, every field has a name, and the wait estimate announces itself.
 
 CI runs these on every pull request and on `main`.
 

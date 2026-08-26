@@ -22,6 +22,7 @@ const suites = [
   'table-cache.test.js',
   'build-freshness.test.js',
   'manifest.test.js',
+  'accessibility.test.js',
 ];
 
 let failed = [];
