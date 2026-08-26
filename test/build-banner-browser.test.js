@@ -107,6 +107,19 @@ async function poke(page) {
             await page.evaluate(() => window.ILA_BUILD) === MINE,
             'document.currentScript did not resolve — the watcher can never fire');
 
+      // The pages print the build in a corner so a stale screen can be spotted from
+      // the floor. Every part of that is easy to get subtly wrong and impossible to
+      // notice: an element created further down the page than the script that fills
+      // it reads as null, and the corner stays empty rather than erroring.
+      const stamp = await page.evaluate(() => {
+        const el = document.getElementById('build-stamp');
+        return el ? el.textContent.trim() : null;
+      });
+      check(name + ' prints the build where someone can read it',
+            stamp !== null && stamp.includes(MINE),
+            stamp === null ? 'no #build-stamp on the page'
+                           : 'it says: ' + JSON.stringify(stamp));
+
       await poke(page);
       check(name + ' stays quiet when the build has not moved',
             await page.evaluate(() => !document.getElementById('ila-update-banner')));

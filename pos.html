@@ -1149,6 +1149,13 @@
 
         // ILA_BUILD, the build.json poll and the update banner now live in
         // /build-check.js, loaded from the <head> with this page's build on it.
+        //
+        // Printed at the foot of the till at load. This used to sit inside
+        // saveLocalCart(), so the build only appeared once a cashier had put
+        // something in a cart — blank at sign-in and blank at open, which is
+        // exactly when someone looks.
+        try { const _b = document.getElementById('build-stamp');
+              if (_b) _b.textContent = 'build ' + (window.ILA_BUILD || '?'); } catch(e){}
 
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
@@ -1931,8 +1938,6 @@
             localStorage.setItem('ila_pos_cart', JSON.stringify(window.cart));
             localStorage.setItem('ila_pos_amount', window.totalAmount);
             localStorage.setItem('ila_pos_items', window.totalItems);
-            try { const _b = document.getElementById('build-stamp'); if (_b) _b.textContent = 'build ' + ILA_BUILD; } catch(e){}
-
         updateCartUI();
         }
 
