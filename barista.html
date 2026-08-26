@@ -59,7 +59,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.11"></script>
+    <script src="/build-check.js" data-build="2026-08-26.12"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -265,8 +265,27 @@
             });
         }
 
+        // One DONE tap, however many times the button is pressed.
+        //
+        // This used to read the ticket and act on whatever it read. The card only fades
+        // once that read comes back, so on a slow connection it is still on screen and
+        // still tappable — and two taps both found the order and both did everything:
+        // two bells at the counter, and stationsDone incremented twice. On a split order
+        // that second increment is what tells the customer their order is ready while the
+        // other station has not started it. Two screens open on this station is the same
+        // story without the slow connection.
+        //
+        // Claim the ticket first, with the lock kdsPushAlert already uses on this node:
+        // the tap that stamps doneAt owns it, and every other tap aborts. A guard on the
+        // button could not do this — the second tap is often on another device.
         window.markOrderDone = function(id) {
-            db.ref('orders/active/barista/' + id).once('value').then(snapshot => {
+            db.ref('orders/active/barista/' + id).transaction(function(cur){
+                if (!cur) return cur;              // already cleared by the tap that won
+                if (cur.doneAt) return;            // abort: another tap owns this ticket
+                cur.doneAt = Date.now();
+                return cur;
+            }, function(err, committed, snapshot){
+                if (err || !committed || !snapshot || !snapshot.exists()) return;
                 const order = snapshot.val();
                 if (!order) return;
                 let summaryList = [];

@@ -128,6 +128,12 @@ costs money:
   pending web order is shown "✓ paid" against money the counter has already taken.
   The claim state is watched per credit in the window instead, and the suite drives
   the real feed against a stub that sorts the way Firebase does.
+- **kitchen DONE** — one tap on a ticket is one ticket, however many times the
+  button is pressed. The card only fades once the read behind it comes back, so on
+  a slow connection it is still tappable — and a second tap used to ring the
+  counter again and count the station done twice. On a split order that second
+  count tells the customer their food is ready while the bar has not started the
+  drinks. Both kitchen pages carry the same code, so both are checked.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with
