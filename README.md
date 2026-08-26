@@ -80,6 +80,7 @@ Everything talks to the live database, so treat the till pages as live.
 npm install
 npm test              # syntax, settlement, pricing, QR, rules, Worker
 npm run test:browser  # loads the real pages in Chromium (needs a browser download)
+npm run test:rules    # runs database.rules.json in the Firebase emulator (needs Java)
 npm run access-map    # prints every database path each app reads and writes
 npm run bump          # moves every page and build.json to a new build
 ```
@@ -148,6 +149,15 @@ costs money:
   has ever written, while the first skipped every order whose link *had* gone out on
   the grounds that the second covered it. A customer sent a link who never paid
   produced no alert at all, for as long as the order existed.
+- **rules, in the emulator** — `database.rules.json` is loaded into a real database
+  and asked what each *role* may read and write. The offline suite can only read the
+  file, and `tools/probe-rules.js` asks the live database with no credentials, so it
+  can only ever ask what a stranger can read, after a deploy. This asks the question
+  the other two cannot, on every pull request. Half of it is derived from the access
+  map — every path an app uses must be permitted to the app that uses it, which is
+  what makes tightening a rule safe: a locked-out till fails here rather than at the
+  counter. The other half is written by hand, because a list derived from the rules
+  would agree with them by construction and check nothing.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with

@@ -93,7 +93,52 @@ that and does nothing else. Once the file exists it checks:
 What it **cannot** check is whether a condition is *correct* for a given role.
 `".read": "auth != null"` and `".read": "root.child('users').child(auth.uid).child('role').val() === 'admin'"`
 both pass every check above, and only one of them is right for `pos/ledgerEntries`.
-Verifying that needs the Firebase emulator running against real auth tokens.
+
+## Running the rules in the emulator
+
+That gap is what `npm run test:rules` closes. It loads `database.rules.json` into a
+real Realtime Database — the Firebase emulator, so it needs Java — and asks what
+each role may actually read and write. It runs on every pull request.
+
+```sh
+npm run test:rules
+```
+
+Identities are unsigned JWTs passed as `?auth=`. **It has to be `?auth=`.** The
+emulator treats *any* bearer token in an `Authorization` header as the owner
+credential, which bypasses rules altogether: written that way every denial passes
+without testing anything, and a database that is wide open reports as one that is
+locked down. `Bearer owner` is used to seed, and for nothing else.
+
+The suite has two halves, and they answer opposite questions:
+
+- **Coverage.** Every path an app uses is permitted to the app that uses it,
+  derived from the access map so it cannot drift from the code. This is the half
+  that makes tightening a rule safe — a change that locks the café out of its own
+  till fails here rather than at the counter.
+- **Denials, and a table of who can read what.** Written by hand, for the reason
+  [`tools/probe-rules.js`](../tools/probe-rules.js) gives: derived from the rules,
+  it would agree with them by construction and check nothing. The table states what
+  *is* true rather than what ought to be, so closing one of the wide rows below
+  fails the suite and brings someone back to update it with the good news.
+
+### Two rows that are wider than the café needs
+
+**The bar and the kitchen can read the till ledger.** `pos` grants `.read` to any
+role, and a rule cannot be revoked lower down, so `pos/ledgerEntries`, `pos/bills`
+and `pos/cashDrawer` all come with it. The access map says only the till and the
+owner read the ledger, so nothing needs this.
+
+Closing it means splitting `pos` — dropping the blanket `.read` and granting each
+child on its own — and then gating the ledger on the role *value* rather than on a
+role existing. That last part is the bit that needs a decision rather than a patch:
+every page except `admin.html` and `analytics.html` admits any role, so whether
+`admin | cashier` is the right gate depends on what the café's own accounts
+actually hold.
+
+**Every role can read `staff`.** Covered below — the PIN is attribution, not
+authorisation, and restricting this read is the easiest attack removed rather than
+the design fixed.
 
 ## The access map
 
