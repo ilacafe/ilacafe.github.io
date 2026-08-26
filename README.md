@@ -121,6 +121,13 @@ costs money:
   when the live model does not carry those curves. `etaInterp` reads a missing
   curve as zero, so the alarm would come in short and start calling on-time
   tickets late, silently.
+- **web-order payments** — the till knows which bank credits are already spoken
+  for. `payments/claims` is keyed by the bank's own reference, which is not a
+  clock, so a `limitToLast` on it is a limit on keys: after a few hundred credits
+  the visible set stops containing today's, a claimed credit reads as free, and a
+  pending web order is shown "✓ paid" against money the counter has already taken.
+  The claim state is watched per credit in the window instead, and the suite drives
+  the real feed against a stub that sorts the way Firebase does.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with

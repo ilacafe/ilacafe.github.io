@@ -15,6 +15,7 @@ const suites = [
   'model-restore-browser.test.js',
   'push-health-browser.test.js',
   'eod-browser.test.js',
+  'web-verify-claims-browser.test.js',
 ];
 
 let failed = [];

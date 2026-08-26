@@ -327,7 +327,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.10"></script>
+    <script src="/build-check.js" data-build="2026-08-26.11"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -1267,8 +1267,46 @@
         function ensureWebVerifyFeeds(){
             if (window._wvFeeds) return; window._wvFeeds = true;
             try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
-            // credits come from the single shared feed in startVerificationReconciler
-            try { db.ref('payments/claims').limitToLast(150).on('value', s => { window._wvClaims = s.val() || {}; sweepWebPayments(); }); } catch(e){}
+            // credits come from the single shared feed in startVerificationReconciler, and the
+            // claim on each of them from watchClaimsFor() below
+        }
+
+        // Which credits are already spoken for.
+        //
+        // This used to be one read of payments/claims with limitToLast(150). That node is keyed
+        // by the bank's own reference, and a bank reference is not a clock: with no orderBy the
+        // limit sorts by KEY, so once more than 150 credits have ever been claimed the visible
+        // set is a fixed lexicographic slice that mostly does not contain today's. A claim
+        // missing from the slice reads as UNCLAIMED — and wvFindMatch would then offer a credit
+        // that a table at the counter has already taken, showing a pending web order "✓ paid"
+        // against money that is not its own. Staff hand food over on that badge.
+        //
+        // The claims that matter are only ever the ones on the credits in view, and those are
+        // known: one leaf watch per credit in _wvCredits, dropped as a credit falls out of the
+        // window. Fewer bytes than the old read, and always the right ones.
+        window._wvClaimWatch = {};
+        function watchClaimsFor(credits){
+            const want = credits || {};
+            for (const ref in window._wvClaimWatch){
+                if (want[ref]) continue;
+                const w = window._wvClaimWatch[ref];
+                try { w.ref.off('value', w.handler); } catch(e){}
+                delete window._wvClaimWatch[ref];
+                delete window._wvClaims[ref];
+            }
+            for (const ref in want){
+                if (window._wvClaimWatch[ref]) continue;
+                try {
+                    const r = db.ref('payments/claims/' + ref);
+                    const handler = s => {
+                        const v = s.val();
+                        if (v == null) delete window._wvClaims[ref]; else window._wvClaims[ref] = v;
+                        try { sweepWebPayments(); } catch(e){}
+                    };
+                    r.on('value', handler);
+                    window._wvClaimWatch[ref] = { ref: r, handler: handler };
+                } catch(e){}
+            }
         }
 
         // ===== HEADLESS PAYMENT SWEEP =====
@@ -3889,6 +3927,9 @@
                     const newest = {};
                     keys.forEach(k => { newest[k] = all[k]; });
                     window._wvCredits = newest;
+                    // before the sweep: a credit whose claim is not known yet is a credit the
+                    // sweep would read as free
+                    try { watchClaimsFor(newest); } catch(e){}
                     try { sweepWebPayments(); } catch(e){}
                     try { reconcileLedgerVerification(); } catch(e){}
                 });
