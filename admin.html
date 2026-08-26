@@ -157,7 +157,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.8"></script>
+    <script src="/build-check.js" data-build="2026-08-26.9"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -1629,9 +1629,21 @@
             const delivered = Number(h.lastDeliveredAt) || 0;
             const misses = Number(h.consecutiveUndelivered) || 0;
             if (delivered && misses === 0) {
-                el.textContent = 'Last alert reached ' + (h.delivered || 0) + ' of ' +
-                                 (h.devices || 0) + ' device(s), ' + notifAgo(delivered) + '.';
-                el.style.color = '';
+                // "4 of 9" on its own does not say whether the other five are being
+                // dealt with. Expired ones were deleted as they were found, so that
+                // count falls to nothing by itself; anything else is still being
+                // retried on every alert and wants looking at. The difference is the
+                // whole story, so show it.
+                const gone = Number(h.expired) || 0;
+                const stuck = Number(h.failed) || 0;
+                let line = 'Last alert reached ' + (h.delivered || 0) + ' of ' +
+                           (h.devices || 0) + ' device(s), ' + notifAgo(delivered) + '.';
+                if (gone) line += ' ' + gone + ' had been uninstalled or cleared and ' +
+                                  (gone === 1 ? 'was' : 'were') + ' removed.';
+                if (stuck) line += ' ' + stuck + ' could not be reached for another reason ' +
+                                   'and ' + (stuck === 1 ? 'is' : 'are') + ' still being retried.';
+                el.textContent = line;
+                el.style.color = stuck ? '#ffcc66' : '';
                 return;
             }
             // Nothing landed. This is the state that used to be invisible.
