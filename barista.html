@@ -51,7 +51,15 @@
         .ticket-card.overdue { border-color: #ff4d4d; background: rgba(255, 77, 77, 0.15); animation: kdsPulse 1.2s infinite; }
         .ticket-card.overdue .ticket-elapsed { color: #ff6b6b; }
         @keyframes kdsPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,77,77,0.5); } 50% { box-shadow: 0 0 0 7px rgba(255,77,77,0); } }
+        /* Faint, bottom-right, out of the way. A kitchen screen is never reloaded,
+           so "which build is this one on?" is otherwise unanswerable from the floor. */
+        .build-stamp { position: fixed; right: 8px; bottom: 6px; font-size: 0.7rem; opacity: 0.35; pointer-events: none; letter-spacing: 1px; }
     </style>
+
+    <!-- Watches for a newer deploy and offers a reload. This screen may be open
+         all day, and the service worker only applies a new build on the next
+         open. Keep data-build in step with build.json — npm test checks it. -->
+    <script src="/build-check.js" data-build="2026-08-26.2"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -91,6 +99,10 @@
         const db = firebase.database();
         // register the shared service worker (push + instant-open caching)
         if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.js').catch(function(){}); } catch(e){} }
+
+        // build-check.js publishes the build this page was deployed as.
+        try { const _b = document.getElementById('build-stamp');
+              if (_b) _b.textContent = 'build ' + (window.ILA_BUILD || '?'); } catch(e){}
         const auth = firebase.auth();
         let displayStarted = false;
 
@@ -271,5 +283,6 @@
             });
         };
     </script>
+    <div class="build-stamp" id="build-stamp"></div>
 </body>
 </html>
