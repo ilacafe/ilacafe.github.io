@@ -78,3 +78,12 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node tools/verify-rules.js
+
+      # The step above proves the deployed text matches the file. This asks the
+      # database the same question from outside, with no credentials — a condition
+      # can be exactly what the file says and still permit the wrong thing, because
+      # rules cascade and because reading a rule is not the same as predicting it.
+      #
+      # No secret: that is the point. It is the request an attacker would make.
+      - name: and that they permit only what they should
+        run: node tools/probe-rules.js

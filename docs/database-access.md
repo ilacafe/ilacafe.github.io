@@ -244,6 +244,15 @@ the rules suite against the commit, deploys, then reads the live rules back from
 `/.settings/rules.json` and diffs them against the file. A run that reports
 success has checked that the rules being enforced are the rules in git.
 
+It then asks the database the same question from outside, with no credentials at
+all — an unauthenticated GET against every path that should be public and every
+path that should not, which is the request an attacker would make. A condition can
+be exactly what the file says and still permit the wrong thing: rules cascade, and
+reading a rule is not the same skill as predicting its effect. The deny list in
+[`tools/probe-rules.js`](../tools/probe-rules.js) is written down separately from
+the rules on purpose — derived from them, it would agree with them by construction
+and check nothing.
+
 Locally, if you have the credentials:
 
 ```sh
