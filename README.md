@@ -117,6 +117,10 @@ costs money:
   image that exists, at the size it claims. Both fail silently in a browser.
 - **accessibility** — on the customer page, everything clickable is reachable from
   a keyboard, every field has a name, and the wait estimate announces itself.
+- **kitchen alarm** — the overdue threshold still adds saturation and oven time
+  when the live model does not carry those curves. `etaInterp` reads a missing
+  curve as zero, so the alarm would come in short and start calling on-time
+  tickets late, silently.
 - **write-only paths** — every database path an app writes is read back somewhere.
   Two features had been recording faithfully for as long as they existed and were
   readable from nowhere: the prep and delivery log, and the record of bills written

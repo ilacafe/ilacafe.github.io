@@ -59,7 +59,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.7"></script>
+    <script src="/build-check.js" data-build="2026-08-26.8"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -177,7 +177,21 @@
             satCurveChef:[[0,7],[2,7],[4,10],[7,22],[8,23]],
             qtyCurve:[[1,0],[2,4],[4,9],[5,15]]
         };
-        function etaCfg(){ return window.etaModel || KDS_ETA_DEF; }
+        // Falls back per field, not wholesale. eta/model is taken as-is once it
+        // loads, so a model that predates one of these curves — or an older snapshot
+        // put back by the restore in analytics — would leave it undefined, and
+        // etaInterp reads a missing curve as zero. The saturation or oven term would
+        // silently vanish, the overdue threshold would come in short, and the board
+        // would start flagging tickets early with nothing to say why. A kitchen that
+        // learns to ignore the alarm is the real cost.
+        function etaCfg(){
+            const m = window.etaModel;
+            if (!m) return KDS_ETA_DEF;
+            return Object.assign({}, KDS_ETA_DEF, m, {
+                fallback: Object.assign({}, KDS_ETA_DEF.fallback, m.fallback),
+                itemBase: Object.assign({}, KDS_ETA_DEF.itemBase, m.itemBase)
+            });
+        }
         function etaInterp(c,x){ if(!c||!c.length)return 0; if(x<=c[0][0])return c[0][1]; if(x>=c[c.length-1][0])return c[c.length-1][1]; for(let i=1;i<c.length;i++){ if(x<=c[i][0]){ const[a,b]=c[i-1],[d,e]=c[i]; return b+(e-b)*(x-a)/(d-a);} } return c[c.length-1][1]; }
         function etaIsPizza(items){ const M=etaCfg(); const n=Object.keys(items||{}).join(' ').toLowerCase(); return M.pizzaKeys.some(k=>n.includes(k)); }
         function etaItemBase(name){ const M=etaCfg(), n=(name||'').toLowerCase(); let best=null,bl=-1; for(const k in M.itemBase){ if(n.includes(k)&&k.length>bl){best=M.itemBase[k];bl=k.length;} } if(best!=null)return best; if(M.pizzaKeys.some(k=>n.includes(k)))return M.fallback.pizza; if(M.bakedKeys.some(k=>n.includes(k)))return M.fallback.baked; return M.fallback.hotfood; }
