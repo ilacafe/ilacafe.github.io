@@ -477,5 +477,77 @@ async function main() {
         api.monNewCashOuts([{ key: 'z', type: 'expense', amount: 900 }], {}, now).length === 0);
 }
 
+// ---------------------------------------------------------------- a cron that says nothing
+// This Worker is the only thing here that runs where nobody is watching. Its
+// monthly job has four ways to end — refit written, refit rejected, refit skipped
+// for want of evidence, or a throw — and three of them used to be invisible. From
+// the outside, a model that had quietly stopped being refitted looked exactly like
+// a healthy one; the only symptom was the wait estimates slowly going wrong.
+{
+  // The gate-skipped exit, found by its own return, must notify before returning.
+  const gate = src.slice(src.indexOf('const fresh = rcCountFresh'),
+                         src.indexOf('// current model'));
+  check('a refit skipped for too few new orders tells the owner',
+        /rcNotifyOwner\(/.test(gate),
+        'the model silently stops being refitted and nothing says so');
+  check('and records the attempt without advancing lastRunAt',
+        /lastSkippedAt/.test(gate) && !/lastRunAt.json/.test(gate),
+        'advancing lastRunAt on a skip resets the count, so it could never accumulate');
+
+  // Both crons run inside ctx.waitUntil, where a rejected promise is swallowed.
+  const sched = src.slice(src.indexOf('async scheduled('));
+  const waits = [...sched.matchAll(/ctx\.waitUntil\(([^)]*)/g)].map(m => m[1]);
+  check('every scheduled job has somewhere for a throw to go',
+        waits.length > 0 && waits.every(w => /reportIfItThrows/.test(w)),
+        waits.join(' | ') || 'no ctx.waitUntil found — has scheduled() changed shape?');
+
+  const reporter = extractFunction(src, 'reportIfItThrows');
+  check('and reporting a failure cannot itself throw',
+        /catch\s*\(inner\)/.test(reporter),
+        'the usual cause is the database being unreachable, which is also what notifying needs');
+  check('a failed job is logged as well as pushed',
+        /console\.log\(/.test(reporter),
+        'a push needs a subscription; the log is the fallback when there is none');
+
+  // One of the two crons is hourly and sw.js sets renotify on every tagged
+  // notification. Reporting each failing tick would buzz the owner's phone
+  // twenty-four times a day, and the practical response to that is turning
+  // notifications off — which silences the payment alerts too.
+  check('a job that fails every hour does not push every hour',
+        /lastNotifiedAt/.test(reporter) && /CRON_REPORT_GAP_MS/.test(reporter),
+        'an hourly failure would notify 24 times a day until someone silenced the app');
+  const gap = /CRON_REPORT_GAP_MS\s*=\s*([^;]+);/.exec(src);
+  const gapMs = gap ? Function('return ' + gap[1])() : 0;
+  check('and the quiet gap is long enough to be one push a day',
+        gapMs >= 12 * 3600 * 1000 && gapMs <= 26 * 3600 * 1000,
+        gap ? gap[1].trim() + ' = ' + (gapMs / 3600000) + 'h' : 'no gap defined');
+  check('but every failing tick is still recorded, pushed or not',
+        /method:\s*'PUT'/.test(reporter) && /consecutive/.test(reporter),
+        'a quiet hour must still leave a trace, or the throttle becomes the silence');
+  check('and a job that recovers stops looking broken',
+        /method:\s*'DELETE'/.test(reporter),
+        'failingSince and consecutive would otherwise only ever grow');
+
+  // The Worker ships on a push to main; the rules do not. Between those two
+  // moments this node is unwritable, every read looks like "never notified", and
+  // an ungated throttle would let every hourly tick through.
+  const pushGuard = /if\s*\(([^)]*)\)\s*\{\s*await pushOwner/.exec(reporter);
+  check('a failure it cannot record is not one it pushes',
+        !!pushGuard && /wrote\.ok/.test(pushGuard[1]) && /due/.test(pushGuard[1]),
+        pushGuard ? 'the push is guarded by: ' + pushGuard[1]
+                  : 'could not find the guard on the push at all');
+  note('an unrecordable notification is exactly the one that repeats every tick');
+
+  // The record needs somewhere it is allowed to go, or every write above is
+  // rejected and the whole mechanism is a no-op that logs success.
+  const rules = JSON.parse(stripComments(fs.readFileSync(
+    path.join(ROOT, 'database.rules.json'), 'utf8'))).rules;
+  check('the robot is allowed to write where it records this',
+        !!(rules.ops && rules.ops.cronFailure && rules.ops.cronFailure['.write']),
+        'no rule means denied, and the failure record would silently never appear');
+
+  note('the refit runs once a month — a tick that silently does nothing costs a month');
+}
+
 done();
 }

@@ -615,6 +615,78 @@ function rcCheckGates(current, derived, counts){
   return { ok: reasons.length===0, reasons };
 }
 
+// A cron job that throws is the quietest failure there is. ctx.waitUntil takes the
+// rejected promise, the Worker's own log records it, and nobody reads a log they
+// have no reason to open — the monthly refit would simply stop happening.
+//
+// This never rethrows: the aim is to leave a trace, not to change what the runtime
+// does with a failed tick. Notifying is itself best-effort, because the usual cause
+// of a throw here is the robot token or the database being unreachable, which is
+// also what a notification needs.
+//
+// At most one push a day per job. The monitor cron runs hourly and sw.js sets
+// renotify on every tagged notification, so an unthrottled report would buzz the
+// owner's phone twenty-four times a day until someone fixed it — and the practical
+// response to that is turning notifications off, which also silences the payment
+// alerts this Worker exists to send. Every tick is still logged, and every tick
+// still updates ops/cronFailure, so the record is complete even when the phone is
+// quiet.
+const CRON_REPORT_GAP_MS = 20 * 3600 * 1000;
+
+async function reportIfItThrows(job, promise){
+  let result;
+  try {
+    result = await promise;
+  } catch(e){
+    const detail = (e && (e.message || String(e))) || 'unknown error';
+    console.log('cron ' + job + ' threw: ' + (e && e.stack ? e.stack : detail));
+    try {
+      const token = await getRobotToken();
+      const path = DB_URL + '/ops/cronFailure/' + encodeURIComponent(job) + '.json?auth=' + token;
+      const prevRes = await fetch(path);
+      const prev = prevRes.ok ? (await prevRes.json()) || {} : {};
+      const now = Date.now();
+      const due = !prev.lastNotifiedAt || (now - Number(prev.lastNotifiedAt)) > CRON_REPORT_GAP_MS;
+      const wrote = await fetch(path, { method:'PUT', body: JSON.stringify({
+        lastAt: now,
+        lastError: String(detail).slice(0, 300),
+        lastNotifiedAt: due ? now : (prev.lastNotifiedAt || null),
+        failingSince: prev.failingSince || now,
+        consecutive: (Number(prev.consecutive) || 0) + 1
+      }) });
+
+      // The push is gated on the record having been written, not just on the gap.
+      // If this node cannot be written — the rules for it are not deployed yet, say,
+      // since the Worker ships on a push to main and the rules do not — then a
+      // failed read looks like "never notified" on every single tick, and the
+      // throttle would let every one of them through. An unrecordable notification
+      // is precisely the one that repeats forever, so it is not sent. The log line
+      // above still goes out on every tick.
+      if (due && wrote.ok){
+        await pushOwner(token, '\u274c Scheduled job failed: ' + job, detail, 'cron-' + job, '/admin.html');
+      } else if (!wrote.ok){
+        console.log('cron ' + job + ': could not record the failure (' + wrote.status +
+                    '), so not pushing — an unthrottled report would repeat every tick');
+      } else {
+        console.log('cron ' + job + ': reported within the last 20h, not pushing again');
+      }
+    } catch(inner){
+      console.log('cron ' + job + ': could not report the failure either: ' + (inner && inner.message));
+    }
+    return { ran:false, threw:true, error:detail };
+  }
+
+  // Finished. Clear the record, so failingSince and consecutive mean what they say
+  // and a job that recovered does not sit there looking broken — and so the next
+  // failure after a good run pushes immediately instead of waiting out the gap.
+  try {
+    const token = await getRobotToken();
+    await fetch(DB_URL + '/ops/cronFailure/' + encodeURIComponent(job) + '.json?auth=' + token,
+                { method:'DELETE' });
+  } catch(inner){ /* a clean run that could not clear its flag is not worth failing over */ }
+  return result;
+}
+
 // ---- main recalibration entry (dryRun => derive + gate, but DON'T write) ----
 async function runRecalibration(dryRun){
   const token = await getRobotToken();
@@ -627,6 +699,27 @@ async function runRecalibration(dryRun){
   // would do right now.
   const fresh = rcCountFresh(orders, meta.lastRunAt);
   if(!dryRun && fresh < RECAL_MIN_NEW_ORDERS){
+    // Say so. This was the one exit from the monthly run that told nobody
+    // anything: a rejected refit notifies, a successful refit notifies, and a
+    // skipped one used to return a reason string into a discarded promise. From
+    // the outside a frozen model looked exactly like a healthy one, and the only
+    // way to find out was to notice the ETAs drifting.
+    //
+    // lastRunAt is deliberately NOT advanced: the café is waiting to accumulate
+    // enough new evidence, and resetting the count each month would mean it never
+    // does. lastSkippedAt records the attempt without touching that.
+    const waiting = RECAL_MIN_NEW_ORDERS - fresh;
+    console.log('recal: skipped, ' + fresh + '/' + RECAL_MIN_NEW_ORDERS + ' new orders since ' +
+                (meta.lastRunAt ? new Date(meta.lastRunAt).toISOString() : 'ever'));
+    await fetch(DB_URL + '/eta/recalMeta/lastSkippedAt.json?auth=' + token, {
+      method:'PUT', body: JSON.stringify(Date.now())
+    });
+    await fetch(DB_URL + '/eta/recalMeta/lastSkippedFresh.json?auth=' + token, {
+      method:'PUT', body: JSON.stringify(fresh)
+    });
+    await rcNotifyOwner(token, '\u23f8\ufe0f ETA refit skipped',
+      fresh + ' new orders since the last refit \u00b7 needs ' + RECAL_MIN_NEW_ORDERS +
+      ' \u00b7 ' + waiting + ' to go. The model is unchanged.');
     return { ran:false, reason:'volume gate: only '+fresh+' completed since the last run (need '+RECAL_MIN_NEW_ORDERS+')',
              ordersConsidered: orders.length, freshOrders: fresh, lastRunAt: meta.lastRunAt || null };
   }
@@ -1062,11 +1155,11 @@ export default {
     const cron = event && event.cron ? event.cron : '';
     const now = Date.now();
     if (cron === '0 20 1 * *'){
-      ctx.waitUntil(runRecalibration(false));
+      ctx.waitUntil(reportIfItThrows('recalibration', runRecalibration(false)));
     } else {
       const isMonday = new Date(now).getUTCDay() === 1;   // digest once a week on Monday ticks
       const isWeeklySlot = isMonday && new Date(now).getUTCHours() === 4;   // ~one tick/week (04:00 UTC Mon)
-      ctx.waitUntil(runVerificationMonitor(now, isWeeklySlot));
+      ctx.waitUntil(reportIfItThrows('monitor', runVerificationMonitor(now, isWeeklySlot)));
     }
   },
 

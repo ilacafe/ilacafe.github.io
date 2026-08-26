@@ -152,6 +152,28 @@ omits the field, so one forgotten `wrangler secret put` would silently publish
 an authenticated route. A missing binding fails closed — the route 401s — rather
 than opening.
 
+### If a scheduled job fails
+
+Both crons run through `reportIfItThrows`. Every failing tick is logged, and the
+failure is recorded at `ops/cronFailure/{job}` with `failingSince`, `consecutive`
+and the last error. A finished run deletes that record, so what is there is
+always a job that is failing *now*.
+
+The owner is pushed at most once a day per job. The monitor cron runs hourly and
+`sw.js` sets `renotify` on every tagged notification, so reporting each tick would
+buzz the phone twenty-four times a day — and the practical answer to that is
+turning notifications off, which silences the payment alerts too.
+
+The push is also gated on that record having been written. `ops/cronFailure` needs
+its rule deployed, and **rules do not ship with the Worker** — this Worker deploys
+on a push to `main`, the rules need the *deploy database rules* workflow. In the
+window between the two, the node is unwritable, every read looks like "never
+notified", and an ungated throttle would let every tick through. So a failure that
+cannot be recorded is not pushed; only logged, with the status code.
+
+If cron failures are logging but never reaching a phone, that is the first thing
+to check: deploy the rules.
+
 ## Triggering a recalibration by hand
 
 ```sh

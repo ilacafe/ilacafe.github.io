@@ -42,8 +42,9 @@ may well contain them. The checks here strip comments before parsing, so leave
 them in: they are usually the most useful thing in the file.
 
 `npm test` checks that file (see below), so every change to it shows up as a
-reviewable diff. `firebase.json` points at that filename, so
-`firebase deploy --only database` deploys it.
+reviewable diff. `firebase.json` points at that filename, so the **deploy
+database rules** workflow — and `firebase deploy --only database` locally —
+deploys it.
 
 > **Do not deploy rules that were not exported from production first.**
 > Deploying a guess can either lock the café out of its own till mid-service or
@@ -145,7 +146,7 @@ already in `database.rules.json`, but the order of operations matters:
 1. **Ship the pages first** (merge to `main`; GitHub Pages deploys them).
 2. **Open the POS and let it publish.** Check `eta/live` has an `updatedAt` in the
    Firebase console. Until a POS with this build is open, nothing writes it.
-3. **Then** `firebase deploy --only database`.
+3. **Then** run the **deploy database rules** workflow.
 
 Do it the other way round and the ordering page loses its wait estimate for as
 long as it takes a POS to update — the estimate degrades to neutral rather than
@@ -224,9 +225,23 @@ worse than none; a written-off bill is reported at any size.
 
 ## Deploying rules
 
+Actions → **deploy database rules** → Run workflow, and type `DEPLOY`. It runs
+the rules suite against the commit, deploys, then reads the live rules back from
+`/.settings/rules.json` and diffs them against the file. A run that reports
+success has checked that the rules being enforced are the rules in git.
+
+Locally, if you have the credentials:
+
 ```sh
 firebase deploy --only database          # deploys database.rules.json
 ```
 
 The pages themselves deploy on push to `main` via GitHub Pages. Rules do not —
-they are a separate, deliberate step.
+they are a separate, deliberate step, and they stay that way on purpose. A bad
+rules commit deploying itself could lock the till out of the database mid-service
+or open data that was closed, with nobody in the loop.
+
+The workflow needs a repository secret `FIREBASE_SERVICE_ACCOUNT` holding a
+service-account JSON with rights over the Realtime Database (Firebase console →
+Project settings → Service accounts → Generate new private key). If it is
+missing, the run stops and says so rather than failing on an opaque 403.
