@@ -41,6 +41,11 @@
 
         .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
         .tab-content.active { display: block; }
+        .log-row { border-bottom: 1px solid rgba(255,255,255,0.12); padding: 12px 2px; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+        .log-what { font-weight: 700; }
+        .log-who { opacity: 0.75; font-size: 0.85rem; }
+        .log-when { opacity: 0.55; font-size: 0.8rem; white-space: nowrap; }
+        .log-detail { opacity: 0.6; font-size: 0.8rem; margin-top: 3px; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
         h2 { font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-top: 0; margin-bottom: 15px; opacity: 0.9; }
@@ -96,10 +101,21 @@
             <button class="tab-btn" onclick="switchTab('kitchen')">Kitchen</button>
             <button class="tab-btn" onclick="switchTab('bakery')">Bakery</button>
             <button class="tab-btn" onclick="switchTab('packaging')">Packaging</button>
+            <!-- Every prep and delivery has been recorded since this page was
+                 written, and nothing has ever shown any of it. When a count does
+                 not match the shelf, this is the thing you want to look at. -->
+            <button class="tab-btn" onclick="switchTab('log')">Log</button>
         </div>
 
         <div id="dynamic-tabs-container">
             <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading Database...</p>
+        </div>
+
+        <div id="tab-log" class="tab-content">
+            <h2>Recent activity</h2>
+            <div id="log-list">
+                <p style="opacity:0.5;">Loading…</p>
+            </div>
         </div>
 
     </div>
@@ -178,6 +194,9 @@
             db.ref('inventory/recipes').on('value', snap => { recipeData = snap.val() || {}; });
             db.ref('staff').on('value', snap => { staffPins = snap.val() || {}; });
             db.ref('inventory/config/items').on('value', snap => { dynamicInventoryMap = snap.val() || {}; renderUI(); });
+            // Bounded: this node only grows, and the tab is for "what happened
+            // recently", not for the whole history of the café.
+            db.ref('inventory/logs').limitToLast(80).on('value', snap => renderLog(snap));
         }
 
         let currentStock = {};
@@ -199,6 +218,62 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             event.target.classList.add('active');
             document.getElementById(`tab-${tabId}`).classList.add('active');
+        }
+
+        // Sorted here, on a number, rather than by leaning on the order the keys
+        // come back in. Two kinds of key are mixed in this node — the millisecond
+        // timestamps written before this change, and push IDs after it — and
+        // getting newest-first from that depends on how Firebase collates
+        // integer-like keys against string ones. It does the right thing, but a
+        // log that quietly lists itself backwards is not worth the cleverness.
+        //
+        // `at` is the number the row carries; rows written before it existed have
+        // only their key, which was the timestamp.
+        function logAt(key, v) {
+            return Number(v.at) || Number(key) || 0;
+        }
+
+        function renderLog(snap) {
+            const el = document.getElementById('log-list');
+            if (!el) return;
+            const rows = [];
+            snap.forEach(child => {
+                const v = child.val() || {};
+                rows.push({ v, at: logAt(child.key, v) });
+            });
+            rows.sort((a, b) => b.at - a.at);
+            if (!rows.length) {
+                el.innerHTML = '<p style="opacity:0.5;">Nothing logged yet.</p>';
+                return;
+            }
+            let html = '';
+            for (const row of rows) {
+                const v = row.v;
+                const amount = v.amount != null ? v.amount : v.yieldAmount;
+                html += '<div class="log-row"><div>' +
+                            '<div class="log-what">' + escapeHTML(v.action || 'Logged') + ' &middot; ' +
+                                escapeHTML(v.item || '') +
+                                (amount != null ? ' &times; ' + escapeHTML(amount) : '') + '</div>' +
+                            '<div class="log-who">' + escapeHTML(v.staff || 'unknown') + '</div>' +
+                            (v.deductions ? '<div class="log-detail">used ' + escapeHTML(v.deductions) + '</div>' : '') +
+                        '</div>' +
+                        '<div class="log-when">' + escapeHTML(logWhen(row.at, v)) + '</div>' +
+                    '</div>';
+            }
+            el.innerHTML = html;
+        }
+
+        // `time` is whatever toLocaleString() produced on whichever device wrote it,
+        // so it is unsortable and reads differently per phone. The number is what
+        // gets used; the string is the fallback for a row that has neither.
+        function logWhen(at, v) {
+            if (!at) return v.time || '';
+            const mins = Math.round((Date.now() - at) / 60000);
+            if (mins < 2) return 'just now';
+            if (mins < 60) return mins + 'm ago';
+            const hrs = Math.round(mins / 60);
+            if (hrs < 24) return hrs + 'h ago';
+            return new Date(at).toLocaleDateString();
         }
 
         function renderUI() {
@@ -299,6 +374,13 @@
             
             const staffName = staffPins[pinHash];
             const timestamp = Date.now();
+            // A key of Date.now() alone is not unique. Two tablets confirming in the
+            // same millisecond write the same path and one log silently replaces the
+            // other, and a device with a skewed clock can land on a key that already
+            // exists. push() generates a key that cannot collide and still sorts
+            // chronologically. (pos.html appends randomness for the same reason; this
+            // was the one write that did not.)
+            const logKey = db.ref('inventory/logs').push().key;
             let updates = {};
 
             btn.innerText = "Processing...";
@@ -309,8 +391,9 @@
                 // each other, and each delta is replay-safe if it happens offline.
                 if (activeAction.type === 'receive') {
                     updates[`inventory/stock/${activeAction.itemName}`] = firebase.database.ServerValue.increment(qtyInput);
-                    updates[`inventory/logs/${timestamp}`] = {
-                        action: "Delivery Received", item: activeAction.itemName, amount: qtyInput, staff: staffName, time: new Date().toLocaleString()
+                    updates[`inventory/logs/${logKey}`] = {
+                        action: "Delivery Received", item: activeAction.itemName, amount: qtyInput, staff: staffName,
+                        at: timestamp, time: new Date().toLocaleString()
                     };
 
                 } else if (activeAction.type === 'prep') {
@@ -329,8 +412,9 @@
                         deductionLog.push(`${totalDeduction} of ${rawItem}`);
                     }
 
-                    updates[`inventory/logs/${timestamp}`] = {
-                        action: "Prepped Batch", item: activeAction.itemName, yieldAmount: qtyInput, staff: staffName, deductions: deductionLog.join(" | "), time: new Date().toLocaleString()
+                    updates[`inventory/logs/${logKey}`] = {
+                        action: "Prepped Batch", item: activeAction.itemName, yieldAmount: qtyInput, staff: staffName,
+                        deductions: deductionLog.join(" | "), at: timestamp, time: new Date().toLocaleString()
                     };
                 }
 
