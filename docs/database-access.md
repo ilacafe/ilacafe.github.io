@@ -244,6 +244,13 @@ the rules suite against the commit, deploys, then reads the live rules back from
 `/.settings/rules.json` and diffs them against the file. A run that reports
 success has checked that the rules being enforced are the rules in git.
 
+If any check after the deploy fails, the workflow **puts the old rules back** and
+re-probes them. The checks have to run after the deploy, since they are checking
+the deploy — so without a rollback a rules file that fails them simply stays in
+force while somebody reads a failed workflow. It takes a copy of the live rules
+before touching anything, and refuses to deploy at all if that copy cannot be
+taken: no backup, no change.
+
 It then asks the database the same question from outside, with no credentials at
 all — an unauthenticated GET against every path that should be public and every
 path that should not, which is the request an attacker would make. A condition can

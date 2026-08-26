@@ -6,7 +6,11 @@
 // security boundary in this project — so "it said OK" is not good enough.
 //
 // Usage:  FIREBASE_SERVICE_ACCOUNT='<the key JSON>' node tools/verify-rules.js
-// Exits 0 if they match, 1 with a diff if they do not.
+//         ... node tools/verify-rules.js --save <file>
+//
+// Exits 0 if they match, 1 with a diff if they do not. With --save it writes the
+// live rules to <file> and compares nothing — that copy is what the deploy rolls
+// back to if the checks after it fail, so a bad rules file cannot be left live.
 //
 // The token is minted here rather than with google-github-actions/auth, which
 // reaches for the IAM Service Account Credentials API to *impersonate* the
@@ -68,6 +72,15 @@ function parseRules(text) {
 }
 
 (async () => {
+  // Checked before the credential is touched, so a typo here says so rather than
+  // surfacing as an unrelated crypto error from signing.
+  const saveAt = process.argv.indexOf('--save');
+  const saveTo = saveAt === -1 ? null : process.argv[saveAt + 1];
+  if (saveAt !== -1 && !saveTo) {
+    console.error('--save needs a file to write to');
+    process.exit(1);
+  }
+
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) {
     console.error('FIREBASE_SERVICE_ACCOUNT is not set');
@@ -89,8 +102,31 @@ function parseRules(text) {
     console.error('could not read the live rules: ' + res.status + ' ' + res.statusText);
     process.exit(1);
   }
+  const liveText = await res.text();
 
-  const live = parseRules(await res.text());
+  // --save: keep what is live right now, so there is something to go back to.
+  if (saveTo) {
+    // Parse before writing. A truncated response or a proxy's error page, saved as
+    // "the rules to restore", turns the rollback into a second outage — so nothing
+    // is written unless it reads as a rules file, and the deploy that follows this
+    // step never runs without a backup because this exits non-zero.
+    let parsed = null;
+    try { parsed = parseRules(liveText); } catch (e) {
+      console.error('the live rules did not parse, so there is nothing safe to roll back to');
+      console.error('  ' + e.message);
+      console.error('  first 120 bytes: ' + JSON.stringify(liveText.slice(0, 120)));
+      process.exit(1);
+    }
+    if (!parsed || !parsed.rules) {
+      console.error('what came back has no "rules" key — not saving it as a rollback target');
+      process.exit(1);
+    }
+    fs.writeFileSync(saveTo, JSON.stringify(parsed, null, 2) + '\n');
+    console.log('kept the rules that are live now (' + liveText.length + ' bytes) in case this deploy has to be undone');
+    return;
+  }
+
+  const live = parseRules(liveText);
   const repo = parseRules(fs.readFileSync(RULES_FILE, 'utf8'));
 
   if (JSON.stringify(live) === JSON.stringify(repo)) {

@@ -179,6 +179,11 @@ Two things to know:
   deploys, then reads the live rules back and diffs them against the file — a run
   that says it worked has checked that it did.
 
+  If a check after the deploy fails, it restores the rules that were live before
+  and re-checks those — a bad rules file is never left in force while someone
+  reads a failed workflow. It refuses to deploy at all if it cannot take that
+  copy first.
+
   Deliberately not automatic: rules are the only real security boundary, and a bad
   commit deploying itself could lock the till out of the database or open it with
   nobody in the loop. Locally, `firebase deploy --only database` still works.
