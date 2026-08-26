@@ -426,9 +426,25 @@ function deriveWorkerPaths() {
     const after = src.slice(m.index, m.index + 260);
     touch(p, /method\s*:\s*'(PUT|PATCH|POST|DELETE)'/.test(after) ? 'write' : 'read');
   }
-  // monLoad only ever reads, and the root PATCH writes monitor/* in one call.
+  // monLoad only ever reads.
   for (const m of src.matchAll(/monLoad\([^,]+,\s*'([^']+)'\)/g)) touch(m[1], 'read');
-  touch('/monitor', 'write');
+
+  // The multi-path writes, which go out as one PATCH at the root and so carry their
+  // paths in the object keys rather than in the URL. This used to be a hardcoded
+  // `monitor` — true when the monitor was the only handler that wrote that way, and
+  // quietly wrong the moment a second one did. Both the cash-out and the stock log
+  // write like this now, and neither was visible.
+  // One pass: a literal followed by + has a dynamic tail and resolves as far as its
+  // head, exactly as the page-side deriver treats the same shape. Two passes over the
+  // same matches produced both `inventory/logs/` and `inventory/logs/$key`, and the
+  // first of those is not a path.
+  for (const m of src.matchAll(/updates\[\s*'([^']*)'\s*(\+)?/g)) {
+    const key = m[1];
+    const dyn = key.indexOf('${');
+    const head = dyn < 0 ? key : key.slice(0, dyn);
+    const open = m[2] || dyn >= 0;
+    touch('/' + head.replace(/\/+$/, '') + (open ? '/$key' : ''), 'write');
+  }
   return out;
 }
 

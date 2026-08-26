@@ -166,12 +166,6 @@
             return escapeHTML(String(str == null ? "" : str).replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
         }
 
-        const PIN_SALT = "ila-cafe-pin-v1::8D6E52";
-        async function hashPin(pin) {
-            const data = new TextEncoder().encode(PIN_SALT + String(pin).trim());
-            const buf = await crypto.subtle.digest('SHA-256', data);
-            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-        }
         function showLogin(msg) { document.getElementById('login-overlay').classList.remove('hidden'); if (msg) document.getElementById('login-error').innerText = msg; }
         function hideLogin() { document.getElementById('login-overlay').classList.add('hidden'); document.getElementById('login-error').innerText = ""; }
         window.signInInventory = function() {
@@ -191,8 +185,11 @@
         });
         function startInventory() {
             db.ref('inventory/stock').on('value', snap => { currentStock = snap.val() || {}; renderUI(); });
-            db.ref('inventory/recipes').on('value', snap => { recipeData = snap.val() || {}; });
-            db.ref('staff').on('value', snap => { staffPins = snap.val() || {}; });
+            // No recipes and no staff map any more. The Worker reads the recipe when it
+            // logs a batch — a client that computes its own deductions can under-report
+            // what one consumed — and it checks the PIN against staff itself. This tablet
+            // used to hold every PIN hash in the café, with the salt in its own source, to
+            // answer a question it was never the right place to answer.
             db.ref('inventory/config/items').on('value', snap => { dynamicInventoryMap = snap.val() || {}; renderUI(); });
             // Bounded: this node only grows, and the tab is for "what happened
             // recently", not for the whole history of the café.
@@ -200,8 +197,6 @@
         }
 
         let currentStock = {};
-        let recipeData = {};
-        let staffPins = {};
         let activeAction = { type: "", itemName: "" };
         let dynamicInventoryMap = {};
 
@@ -363,67 +358,53 @@
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
+        // Stock moves through the Worker, not from here.
+        //
+        // The PIN prompt in front of this was advice twice over. It ran in a browser the
+        // person filling it in controls, and the write did not need it at all: the rule on
+        // inventory was "has a staff role", so anyone signed in could adjust stock directly
+        // and leave no log line. Stock that moved with nothing explaining it is worse than
+        // a log line with the wrong name on it.
+        //
+        // inventory/stock and inventory/logs are now written by the robot alone. The Worker
+        // checks the PIN where a browser cannot skip it, reads the recipe itself rather than
+        // being told it — a client that computes its own deductions can under-report what a
+        // batch consumed — and writes the stock movement and its log line as one write.
+        const INV_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';
+        async function invLogToWorker(kind, item, qty, pin){
+            let token = null;
+            try { const u = auth.currentUser; token = u ? await u.getIdToken() : null; } catch(e){}
+            if (!token) return { ok:false, why:'You are signed out. Sign in and try again.' };
+            let res;
+            try {
+                res = await fetch(INV_WORKER_URL, {
+                    method:'POST', headers:{ 'Content-Type':'text/plain' },
+                    body: JSON.stringify({ action:'inventory-log', token: token, pin: pin,
+                                           kind: kind, item: item, qty: qty })
+                });
+            } catch(e){
+                return { ok:false, why:'Could not reach the stock service. Nothing was logged \u2014 check the connection and try again.' };
+            }
+            let body = null; try { body = await res.json(); } catch(e){}
+            if (res.ok && body && body.ok) return { ok:true, staff: body.staff };
+            if (res.status === 403 && body && body.error === 'invalid pin') return { ok:false, why:'Invalid PIN.' };
+            return { ok:false, why:'Could not log it: ' + ((body && body.error) || ('error ' + res.status)) + '\nNothing was changed.' };
+        }
+
         async function confirmAction() {
             const qtyInput = parseFloat(document.getElementById('modal-qty').value);
             const pinStr = document.getElementById('modal-pin').value.trim();
             const btn = document.getElementById('modal-confirm-btn');
 
             if (isNaN(qtyInput) || qtyInput <= 0) return alert("Please enter a valid amount.");
-            const pinHash = await hashPin(pinStr);
-            if (!staffPins[pinHash]) return alert("Invalid PIN.");
-            
-            const staffName = staffPins[pinHash];
-            const timestamp = Date.now();
-            // A key of Date.now() alone is not unique. Two tablets confirming in the
-            // same millisecond write the same path and one log silently replaces the
-            // other, and a device with a skewed clock can land on a key that already
-            // exists. push() generates a key that cannot collide and still sorts
-            // chronologically. (pos.html appends randomness for the same reason; this
-            // was the one write that did not.)
-            const logKey = db.ref('inventory/logs').push().key;
-            let updates = {};
 
             btn.innerText = "Processing...";
             btn.disabled = true;
-
             try {
-                // Atomic increments — no read first, so two logs at once can't clobber
-                // each other, and each delta is replay-safe if it happens offline.
-                if (activeAction.type === 'receive') {
-                    updates[`inventory/stock/${activeAction.itemName}`] = firebase.database.ServerValue.increment(qtyInput);
-                    updates[`inventory/logs/${logKey}`] = {
-                        action: "Delivery Received", item: activeAction.itemName, amount: qtyInput, staff: staffName,
-                        at: timestamp, time: new Date().toLocaleString()
-                    };
-
-                } else if (activeAction.type === 'prep') {
-                    const recipe = recipeData[activeAction.itemName];
-                    if (!recipe) {
-                        btn.innerText = "Confirm"; btn.disabled = false;
-                        return alert(`No Recipe found for ${activeAction.itemName}. Tell the Admin to set it up in the dashboard before logging prep.`);
-                    }
-
-                    updates[`inventory/stock/${activeAction.itemName}`] = firebase.database.ServerValue.increment(qtyInput);
-
-                    let deductionLog = [];
-                    for (let rawItem in recipe) {
-                        let totalDeduction = parseFloat(recipe[rawItem]) * qtyInput;
-                        updates[`inventory/stock/${rawItem}`] = firebase.database.ServerValue.increment(-totalDeduction);
-                        deductionLog.push(`${totalDeduction} of ${rawItem}`);
-                    }
-
-                    updates[`inventory/logs/${logKey}`] = {
-                        action: "Prepped Batch", item: activeAction.itemName, yieldAmount: qtyInput, staff: staffName,
-                        deductions: deductionLog.join(" | "), at: timestamp, time: new Date().toLocaleString()
-                    };
-                }
-
-                await db.ref().update(updates);
-
+                const r = await invLogToWorker(activeAction.type, activeAction.itemName, qtyInput, pinStr);
+                if (!r.ok) { alert(r.why); return; }
                 closeModal();
                 showToast(`Successfully logged ${qtyInput} ${activeAction.itemName}`);
-            } catch (error) {
-                alert("Database Error: " + error.message);
             } finally {
                 btn.innerText = "Confirm";
                 btn.disabled = false;

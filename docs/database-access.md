@@ -338,15 +338,46 @@ Everything else in the ledger is still the till's to write, on purpose: a sale h
 be recordable when the Worker is down, and putting a network hop in front of the
 counter would be a bad trade.
 
-### What is still only attribution
+**Stock moved the same way, and further.** `inventory.html` checked a PIN in the page
+and then wrote `inventory/stock` itself, so the prompt was advice twice over: it ran
+in a browser the person filling it in controls, *and* the write did not need it —
+`inventory` was writable by any staff role, so someone covering shrinkage could adjust
+stock directly and leave no log line at all. Stock that moved with nothing explaining
+it is worse than a log line with the wrong name on it.
 
-The PIN prompt in front of a **void** still runs in the page and still only stamps a
-name. So does `inventory.html`'s. Both are worth moving the same way; neither hands
-over cash.
+`inventory/stock` and `inventory/logs` are written by exactly one page, so unlike the
+till there is nothing that has to keep working when the Worker is unreachable — a
+delivery can be logged ten minutes later. That is what made it possible to say the
+robot is the only writer and mean it, which closes the direct-write hole as well as
+the PIN one. The Worker reads the *recipe* rather than being told it, too: a client
+that computes its own deductions can under-report what a batch consumed.
 
-And `staff` itself stays readable by every role, because both of those pages check
-PINs against it. Restricting the read was never the fix — it would remove the easiest
-attack, not the design — and the section above is the design being fixed instead.
+That tablet no longer holds the staff map or the salt at all. It used to download
+every PIN hash in the café to answer a question it was never the right place to
+answer.
+
+### The void, and why it is not the same
+
+The PIN in front of a **void** still runs in `pos.html`. I looked at moving it and
+decided against, which is a different answer from "not yet".
+
+A void's record already carries `deviceUid` — the signed-in account, which a borrowed
+PIN cannot forge — alongside the PIN's name, so its attribution is already real. And
+the thing worth protecting is not the void record: it is `pos/activeTables`, which the
+void mutates. Anyone who can open the till can edit a table directly and never write a
+void record at all. Moving the *record* into the Worker would not close that; closing
+it means putting the Worker in front of every order and every payment, which is a
+network hop in front of the counter and a second thing that has to be up for the café
+to sell anything.
+
+So the void stays where it is, and what makes it safe is that every one is pushed to
+the owner's phone as it happens.
+
+### What `staff` is still readable for
+
+`pos.html` is now the only page that reads it, for that void prompt. Restricting the
+read was never the fix — it would remove the easiest attack, not the design — and the
+sections above are the design being fixed instead.
 
 ## Deploying rules
 

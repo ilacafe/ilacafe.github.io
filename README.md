@@ -173,6 +173,12 @@ costs money:
   till's to write — a sale has to be recordable when the Worker is unreachable — and
   each of those now moves its line and its running total in one write, and says so on
   screen if that write is refused rather than swallowing it.
+- **stock on and off the shelf** — `inventory/stock` and `inventory/logs` are written
+  by the Worker and by nothing else, so a prep or a delivery cannot be recorded without
+  a PIN and cannot happen without a log line. The prompt used to be advice twice over:
+  it ran in a browser, and `inventory` was writable by any staff role, so the write did
+  not need it. The Worker reads the recipe rather than being told it, and the stock
+  tablet no longer downloads the staff PIN hashes at all.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with

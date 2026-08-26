@@ -19,6 +19,7 @@ It does four things:
 | **ETA recalibration** | cron `0 20 1 * *` | refits `eta/model` from 75 days of completions |
 | **Verification monitor** | cron `0 * * * *` | unverified-payment alerts, per-bank alarm, weekly digest |
 | **Cash out of the drawer** | `POST /` with `action: cashout` | verifies a staff token *and* a PIN, then writes the ledger entry itself |
+| **Stock on and off the shelf** | `POST /` with `action: inventory-log` | the same, for a prep or a delivery — and it reads the recipe rather than being told it |
 
 ## Deploying
 
@@ -137,6 +138,30 @@ was never paid — and it happens inside end-of-day, which has to be completable
 this Worker is unreachable. Blocking a cash-up on a network call would be a worse
 failure than the one being fixed.
 
+## Stock on and off the shelf
+
+Same argument as the cash-out, and the same fix — but this one closes the hole
+completely, where that one could not.
+
+```json
+{ "action": "inventory-log", "token": "<firebase idToken>", "pin": "4821",
+  "kind": "prep", "item": "Cold Brew Concentrate", "qty": 2 }
+```
+
+`kind` is `receive` or `prep`. A delivery adds to stock; a batch adds its yield and
+takes the recipe off the shelf. The **recipe is read here, not sent** — a client that
+computes its own deductions can under-report what a batch consumed. The stock movement
+and the log line explaining it go out as one write.
+
+Item names become database paths, so they are checked against Firebase's key rules
+before anything is built from them. A name carrying a slash would write somewhere else
+entirely.
+
+`inventory/stock` and `inventory/logs` are written by the robot and by nothing else.
+That is possible here and not at the till because exactly one page writes them, so
+nothing has to keep working when this Worker is unreachable — a delivery can be logged
+ten minutes later.
+
 ### Deploying this without breaking the expense button
 
 The pages, this Worker and the rules deploy separately, so they are briefly out of
@@ -145,13 +170,13 @@ at once. It **grants** the robot write on `pos/ledgerEntries` and `pos/cashDrawe
 (the robot has no `users` entry, so `pos`'s "has a staff role" does not cover it),
 and it **refuses** the three cash-out types from every browser.
 
-1. **This Worker**, first. The route is inert until something calls it.
+1. **This Worker**, first. Both routes are inert until something calls them.
 2. **The pages** (merge to `main`; GitHub Pages deploys them).
-3. **Reload the tills.** A tablet open all day is still running the old page;
-   `build-check.js` offers the banner. Do this before step 4.
+3. **Reload the tills, and the stock tablet.** A device open all day is still running
+   the old page; `build-check.js` offers the banner. Do this before step 4.
 4. **The rules** — Actions → *deploy database rules* → `DEPLOY`.
 
-Between 2 and 4 the expense, withdrawal and tip-payout buttons do not work: the page
+Between 2 and 4 the expense, withdrawal, tip-payout, prep and delivery buttons do not work: the page
 calls the Worker, and the Worker's write is refused because the grant it needs is in
 the rules that have not been deployed yet. **It fails loudly** — the till says it
 could not record the entry and nothing is written — so the window is an inconvenience

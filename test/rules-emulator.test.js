@@ -220,6 +220,7 @@ const SAMPLES = {
       'security':            ['admin'],
       'customers':           ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'inventory':           ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'inventory/recipes':   ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
       'reconciliation':      ['admin'],
       'monitor':             ['admin', 'robot'],
       'upiReview':           ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
@@ -313,6 +314,34 @@ const SAMPLES = {
     check('the till still records everything else in the ledger itself',
           blocked.length === 0, 'refused: ' + blocked.join(', '));
     note('a sale must be recordable when the Worker is unreachable');
+
+    // Stock on and off the shelf, for the same reason.
+    //
+    // The PIN in front of a prep or a delivery was advice twice over: the prompt ran
+    // in a browser, and inventory was writable by any staff role so the write did not
+    // need the prompt at all. Someone covering shrinkage could adjust stock directly
+    // and leave nothing explaining it. Unlike the till, these two nodes are written by
+    // exactly one page — nothing has to keep working when the Worker is unreachable,
+    // which is what makes the robot being the only writer possible at all.
+    const movedStock = [];
+    for (const who of ['cashier', 'admin', 'barista', 'anon']) {
+      if (await canWrite('inventory/stock/Coffee Beans', who, 5)) movedStock.push(who + ' moved stock');
+      if (await canWrite('inventory/logs/l-' + who, who, { action: 'Delivery Received', item: 'x', staff: 'Priya' })) {
+        movedStock.push(who + ' wrote a log line');
+      }
+    }
+    check('no browser can move stock or write its log', movedStock.length === 0, movedStock.join('; '));
+    check('the robot can, and reads the recipe it deducts by',
+          (await canWrite('inventory/stock/Coffee Beans', 'robot', 5)) &&
+          (await canWrite('inventory/logs/l-robot', 'robot', { action: 'Prepped Batch', item: 'x', staff: 'Priya' })) &&
+          (await canRead('inventory/recipes', 'robot')));
+    check('and the owner still keeps the recipes and the item list',
+          (await canWrite('inventory/recipes/Cold Brew', 'admin', { Beans: 0.2 })) &&
+          (await canWrite('inventory/config/items/Beans', 'admin', { unit: 'kg' })) &&
+          !(await canWrite('inventory/recipes/Cold Brew', 'cashier', { Beans: 0.2 })));
+    check('everyone who needs to see the shelf still can',
+          (await canRead('inventory/stock', 'cashier')) && (await canRead('inventory/logs', 'cashier')));
+    note('the tablet reads the stock and the log; it just cannot write either any more');
 
     // What admin.html and analytics.html show, and nobody else needs.
     const OWNERS_ALONE = ['pos/eodArchive', 'orders/history', 'security/voids', 'security/unpaid',

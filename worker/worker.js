@@ -1245,6 +1245,106 @@ async function handleCashout(data, claims){
   return { status: 200, body: { ok: true, key: key, by: name, type: type, amount: amount } };
 }
 
+// ============================================================================
+//  STOCK MOVING ON AND OFF THE SHELF
+// ============================================================================
+// Same argument as the cash-out above, and the same fix, but this one closes the
+// hole completely where that one could not.
+//
+// inventory.html checked a PIN in the page and then wrote inventory/stock itself.
+// The rule on inventory was "has a staff role", so the PIN was advice twice over:
+// the prompt ran in a browser the same person controls, AND the write did not need
+// the prompt at all. Someone covering shrinkage could adjust stock directly and
+// leave no log line, which is worse than a log line with the wrong name on it.
+//
+// inventory/stock and inventory/logs are written by exactly one page, so unlike the
+// till there is nothing that has to keep working when this Worker is unreachable —
+// a delivery can be logged ten minutes later. That is what makes it possible to say
+// the robot is the only writer, and mean it.
+//
+// The recipe is read here rather than sent. A client that computes its own
+// deductions can under-report what a batch consumed, which is the whole point of
+// having a recipe.
+const INV_KINDS = ['receive', 'prep'];
+
+// Item names become database paths. A name carrying a slash would write somewhere
+// else entirely; Firebase forbids the rest of these outright, and a client is not
+// the place to find that out.
+function invSafeKey(name){
+  const k = String(name == null ? '' : name).trim();
+  if (!k || k.length > 120) return null;
+  if (/[.$#\[\]\/]/.test(k)) return null;
+  for (let i = 0; i < k.length; i++) if (k.charCodeAt(i) < 32 || k.charCodeAt(i) === 127) return null;
+  return k;
+}
+
+async function handleInventoryLog(data, claims){
+  const kind = String((data && data.kind) || '');
+  if (INV_KINDS.indexOf(kind) < 0) return { status: 400, body: { error: 'unknown kind' } };
+
+  const item = invSafeKey(data && data.item);
+  if (!item) return { status: 400, body: { error: 'bad item name' } };
+
+  const qty = Number(data && data.qty);
+  if (!(qty > 0) || !isFinite(qty) || qty > 100000) {
+    return { status: 400, body: { error: 'quantity must be a positive number' } };
+  }
+
+  let token;
+  try { token = await getRobotToken(); } catch (e) { return { status: 502, body: { error: 'could not sign in' } }; }
+
+  const staff = await pinToName(data && data.pin, token);
+  if (!staff) return { status: 403, body: { error: 'invalid pin' } };
+
+  const now = Date.now();
+  const updates = {};
+  let entry;
+
+  if (kind === 'receive') {
+    updates['inventory/stock/' + item] = { '.sv': { increment: qty } };
+    entry = { action: 'Delivery Received', item: item, amount: qty, staff: staff };
+  } else {
+    let recipe = null;
+    try {
+      const res = await fetch(DB_URL + '/inventory/recipes/' + encodeURIComponent(item) + '.json?auth=' + token);
+      if (res.ok) recipe = await res.json();
+    } catch (e) { return { status: 502, body: { error: 'could not read the recipe' } }; }
+    if (!recipe || typeof recipe !== 'object' || !Object.keys(recipe).length) {
+      return { status: 400, body: { error: 'no recipe for ' + item } };
+    }
+    updates['inventory/stock/' + item] = { '.sv': { increment: qty } };
+    const used = [];
+    for (const raw in recipe) {
+      const rawKey = invSafeKey(raw);
+      const per = Number(recipe[raw]);
+      if (!rawKey || !isFinite(per) || per < 0) return { status: 400, body: { error: 'the recipe for ' + item + ' is not usable' } };
+      if (rawKey === item) return { status: 400, body: { error: 'the recipe for ' + item + ' consumes itself' } };
+      const off = per * qty;
+      updates['inventory/stock/' + rawKey] = { '.sv': { increment: -off } };
+      used.push(off + ' of ' + rawKey);
+    }
+    entry = { action: 'Prepped Batch', item: item, yieldAmount: qty, staff: staff,
+              deductions: used.join(' | ') };
+  }
+
+  entry.at = now;
+  entry.time = istClock(now);
+  entry.byUid = claims.sub;          // the account, which a borrowed PIN cannot forge
+  const key = 'inv-' + now + '-' + Math.random().toString(36).slice(2, 8);
+  updates['inventory/logs/' + key] = entry;
+
+  // The stock movement and the line explaining it go in one write. Stock that moved
+  // with no log is exactly the state this is here to make impossible.
+  try {
+    const res = await fetch(DB_URL + '/.json?auth=' + token, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates)
+    });
+    if (!res.ok) return { status: 502, body: { error: 'could not record it' } };
+  } catch (e) { return { status: 502, body: { error: 'could not record it' } }; }
+
+  return { status: 200, body: { ok: true, key: key, staff: staff, item: item, qty: qty, kind: kind } };
+}
+
 export default {
   async fetch(request, env){
     loadConfig(env);
@@ -1290,6 +1390,20 @@ export default {
       }
       if (!(await staffRoleOf(who.sub))) return json({ error:'forbidden' }, 403);
       const r = await handleCashout(data, who);
+      return json(r.body, r.status);
+    }
+
+    // Stock on and off the shelf. Same shape as the cash-out: a staff token says who
+    // is asking, the PIN says who is accountable, and the rules leave the robot as the
+    // only writer of inventory/stock and inventory/logs.
+    if (data && data.action === 'inventory-log') {
+      const who = await verifyIdToken(data.token);
+      if (!who) return json({ error:'unauthorized' }, 401);
+      if (who.firebase && who.firebase.sign_in_provider === 'anonymous') {
+        return json({ error:'forbidden' }, 403);
+      }
+      if (!(await staffRoleOf(who.sub))) return json({ error:'forbidden' }, 403);
+      const r = await handleInventoryLog(data, who);
       return json(r.body, r.status);
     }
 

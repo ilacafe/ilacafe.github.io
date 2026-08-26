@@ -20,7 +20,7 @@
 const crypto = require('crypto');
 const { readPage, extractFunction, buildModule, suite } = require('./helpers');
 
-const { check, note, done } = suite('Cash out of the drawer — the PIN as a gate');
+const { check, note, done } = suite('Cash and stock — the PIN as a gate');
 
 const src = readPage('worker/worker.js');
 
@@ -34,6 +34,7 @@ const SALT = /'([^']*)'/.exec(saltLine[0])[1];
 const hashOf = (pin) => crypto.createHash('sha256').update(SALT + pin).digest('hex');
 
 const STAFF = { [hashOf('4821')]: 'Priya', [hashOf('9090')]: 'Sam' };
+const RECIPES = { 'Cold Brew Concentrate': { 'Coffee Beans': 0.2, 'Water': 1.5 } };
 
 let calls, staffNode, patchOk;
 function makeApi() {
@@ -43,6 +44,10 @@ function makeApi() {
     if (String(url).includes('/staff.json')) {
       return { ok: staffNode !== null, json: async () => staffNode };
     }
+    if (String(url).includes('/inventory/recipes/')) {
+      const name = decodeURIComponent(String(url).split('/inventory/recipes/')[1].split('.json')[0]);
+      return { ok: true, json: async () => (RECIPES[name] || null) };
+    }
     return { ok: patchOk, json: async () => ({}) };
   };
   return buildModule([
@@ -50,12 +55,15 @@ function makeApi() {
     extractFunction(src, 'istClock'),
     extractFunction(src, 'pinToName'),
     extractFunction(src, 'handleCashout'),
+    /const INV_KINDS = \[[^\]]*\];/.exec(src)[0],
+    extractFunction(src, 'invSafeKey'),
+    extractFunction(src, 'handleInventoryLog'),
   ], {
     DB_URL: 'https://db.test', _enc: new TextEncoder(), crypto,
     fetch: fakeFetch,
     getRobotToken: async () => 'robot-token',
     Date, Math, JSON, String, Number, Object, Array, Uint8Array, isFinite, console,
-  }, ['handleCashout', 'istClock', 'pinToName', 'CASHOUT_TYPES']);
+  }, ['handleCashout', 'istClock', 'pinToName', 'CASHOUT_TYPES', 'handleInventoryLog', 'invSafeKey']);
 }
 
 const CLAIMS = { sub: 'cashierUid' };
@@ -165,6 +173,70 @@ const good = (over) => Object.assign({ type: 'expense', amount: 450, reason: 'mi
           api.istClock(Date.UTC(2026, 7, 26, 18, 30)));
   }
 
+  // =================================================== stock on and off the shelf
+  //
+  // The same fix, and this one closes the hole completely where the cash-out could
+  // not: inventory/stock and inventory/logs are written by exactly one page, so the
+  // robot can be made the only writer without anything needing to work offline.
+  {
+    staffNode = STAFF; patchOk = true;
+    const api = makeApi();
+    const inv = (over) => Object.assign(
+      { kind: 'receive', item: 'Coffee Beans', qty: 5, pin: '4821' }, over);
+    const lastPatch = () => JSON.parse(calls.filter(c => c.method === 'PATCH').pop().body);
+
+    let r = await api.handleInventoryLog(inv(), CLAIMS);
+    check('a delivery adds to stock and logs who received it',
+          r.status === 200 && r.body.ok === true, JSON.stringify(r.body));
+    let sent = lastPatch();
+    let logKey = Object.keys(sent).find(k => k.indexOf('inventory/logs/') === 0);
+    check('the stock movement and the line explaining it are one write',
+          JSON.stringify(sent['inventory/stock/Coffee Beans']) === JSON.stringify({ '.sv': { increment: 5 } }) &&
+          !!logKey, Object.keys(sent).join(', '));
+    note('stock that moved with nothing explaining it is the state this exists to prevent');
+    check('the log names the PIN holder and the account behind it',
+          sent[logKey].staff === 'Priya' && sent[logKey].byUid === 'cashierUid',
+          JSON.stringify({ staff: sent[logKey].staff, byUid: sent[logKey].byUid }));
+
+    r = await api.handleInventoryLog(inv({ kind: 'prep', item: 'Cold Brew Concentrate', qty: 2 }), CLAIMS);
+    check('a prepped batch yields stock and takes the recipe off the shelf',
+          r.status === 200, JSON.stringify(r.body));
+    sent = lastPatch();
+    check('by the recipe the Worker read, times the batch size',
+          JSON.stringify(sent['inventory/stock/Coffee Beans']) === JSON.stringify({ '.sv': { increment: -0.4 } }) &&
+          JSON.stringify(sent['inventory/stock/Water']) === JSON.stringify({ '.sv': { increment: -3 } }),
+          JSON.stringify(sent));
+    note('read here, never sent — a client that computes its own deductions can under-report');
+    logKey = Object.keys(sent).find(k => k.indexOf('inventory/logs/') === 0);
+    check('and the log says what came off the shelf',
+          /0\.4 of Coffee Beans/.test(sent[logKey].deductions), sent[logKey].deductions);
+
+    const refused = [];
+    const must = async (what, over, status) => {
+      const before = calls.filter(c => c.method === 'PATCH').length;
+      const res = await api.handleInventoryLog(inv(over), CLAIMS);
+      const wrote = calls.filter(c => c.method === 'PATCH').length > before;
+      if (res.status !== status || wrote) refused.push(what + ' → ' + res.status + (wrote ? ' AND WROTE' : ''));
+    };
+    await must('a wrong PIN', { pin: '0000' }, 403);
+    await must('a kind that is neither', { kind: 'shrinkage' }, 400);
+    await must('a negative quantity', { qty: -5 }, 400);
+    await must('a quantity that is not a number', { qty: 'some' }, 400);
+    await must('a prep with no recipe', { kind: 'prep', item: 'Coffee Beans' }, 400);
+    check('everything that should be refused is, and none of it moves stock',
+          refused.length === 0, refused.join('; '));
+
+    // An item name becomes a database path.
+    const escapes = ['../users/adminUid', 'a/b', 'x.y', 'x$y', 'x#y', 'x[y]', '', '   '];
+    const got = escapes.filter(n => api.invSafeKey(n) !== null);
+    check('an item name that would write somewhere else is refused', got.length === 0,
+          JSON.stringify(got));
+    const slash = await api.handleInventoryLog(inv({ item: 'x/../../users/adminUid' }), CLAIMS);
+    check('and the route refuses it rather than building the path',
+          slash.status === 400, JSON.stringify(slash.body));
+    note('Firebase forbids most of these outright; a client is not the place to find out');
+  }
+
   // ------------------------------------------- the till no longer writes these
   {
     const pos = readPage('pos.html');
@@ -178,6 +250,11 @@ const good = (over) => Object.assign({ type: 'expense', amount: 450, reason: 'mi
           !/staffPins\[await hashPin\(pinStr\)\]/.test(pos.slice(pos.indexOf('window.confirmTransaction'))) ||
           !/window\.confirmTransaction[\s\S]{0,600}staffPins/.test(pos));
     note('the void prompt still checks a PIN in the page — that one only stamps a name');
+
+    const invPage = readPage('inventory.html');
+    check('inventory.html no longer writes stock or its log either',
+          !/inventory\/stock\/|inventory\/logs\//.test(invPage));
+    check('and it asks the Worker instead', /invLogToWorker\(/.test(invPage));
   }
 
   done();

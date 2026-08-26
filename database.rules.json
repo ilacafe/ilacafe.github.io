@@ -297,7 +297,19 @@
     },
     "inventory": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      "stock": {
+        ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      },
+      "logs": {
+        ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      },
+      "config": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      },
+      "recipes": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
+      }
     },
     "security": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
