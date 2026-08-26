@@ -162,16 +162,31 @@ a role, against the `staff` map.
 
 These come from reading the code, and each one is a question the rules answer:
 
-**1. `orders/pendingWeb` is written by anonymous visitors.**
-That is how web orders arrive, and the ordering page uses `signInAnonymously()`,
-so "anonymous" means anyone at all. A rule here should at minimum constrain the
-shape of what can be pushed. Note that the POS no longer trusts the prices in
-these orders — it re-prices every line against the live menu on accept — but
-nothing stops a stranger filling the node with junk.
+**1 and 2 — the two nodes an anonymous visitor can write.** Answered, and checked
+on every pull request by `npm run test:rules`.
 
-**2. `orders/track/{trackId}` is read *and* written by anonymous visitors.**
-A trackId is the only thing protecting one customer's order from another's.
-Worth confirming a visitor cannot enumerate or overwrite someone else's.
+`orders/pendingWeb` is how web orders arrive and `orders/track` is how a customer
+watches one, and the ordering page signs everyone in with `signInAnonymously()`, so
+"anonymous" is anyone at all. `orders/track` is world-*readable* as well: for a
+while it accepted any JSON of any shape and served it straight back to the internet.
+
+Both now carry a shape. Every field is named and typed, strings are bounded, cart
+lines must be cart lines, and `createdAt` has to be the server's own clock so a
+record cannot be backdated. Anything not named is refused outright. Against the old
+rules, fourteen of the sixteen hostile writes the suite tries were accepted; none
+are now.
+
+The shape is checked **on creation**, which is where the whole exposure is: both
+nodes let a stranger create and never modify (`!data.exists() || <role>`). That
+also means no record already in the database has to satisfy a rule it was not
+written to satisfy — the tightening cannot strand what is already there.
+
+A visitor still cannot overwrite or delete somebody else's order, and cannot
+enumerate `orders/pendingWeb` at all. `orders/track` *is* enumerable — the parent
+`.read` has to be public because a customer scanning a table QR queries the node by
+`table` — which is why nothing identifying may be written into it. The ordering page
+and the POS both replace anything that is not a plain table label with the word
+"Order" before writing.
 
 **3. `staff` is readable by every signed-in role.**
 It maps `SHA-256(fixed salt + PIN) → name`, and the salt is a literal in the

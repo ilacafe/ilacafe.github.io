@@ -188,6 +188,12 @@ read sits on the exact nodes a customer needs and nowhere above them. `npm test`
 holds that list — `menu`, `settings`, `eta/model`, `eta/live`, `orders/track` —
 and fails on anything added to it or removed from it.
 
+The two nodes an anonymous visitor can *write* — `orders/pendingWeb` and
+`orders/track` — carry a shape: every field named and typed, strings bounded, cart
+lines that must be cart lines, and a `createdAt` that has to be the server's own
+clock. Checked on creation, which is the whole of what a stranger can do to either
+of them, so nothing already recorded has to satisfy a rule it predates.
+
 ## The Worker
 
 [`worker/`](worker/) holds the Cloudflare Worker that sends push notifications,

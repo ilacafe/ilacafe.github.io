@@ -101,13 +101,13 @@ const KEY_FOR = {
 const SAMPLES = {
   'orders/pendingWeb/$key': {
     orderType: 'Takeaway', tableOrAddress: 'Takeaway', notes: '', items: { Latte: { qty: 1, price: 250 } },
-    total: 250, paymentMethod: 'UPI', upiId: null, phone: '9990001111', gated: false,
-    trackId: 'tk1', createdAt: 1756200000000
+    total: 250, paymentMethod: 'UPI', phone: '9990001111', gated: false,
+    trackId: 'tk1', createdAt: { '.sv': 'timestamp' }
   },
   'payments/incoming/$key': { amount: 250, ref: '512345678901', at: 1756200000000, bank: 'yes', acct: '8020' },
   'orders/track/$key': {
     status: 'received', items: { Latte: { qty: 1, price: 250 } }, table: 'Table 4',
-    gated: false, createdAt: 1756200000000
+    gated: false, createdAt: { '.sv': 'timestamp' }
   },
 };
 
@@ -278,6 +278,85 @@ const SAMPLES = {
     check('a customer cannot alter an order already placed',
           !(await canWrite('orders/pendingWeb/someoneElse', 'anon', SAMPLES['orders/pendingWeb/$key'])));
     check('nor delete one', (await call('DELETE', 'orders/pendingWeb/someoneElse', 'anon')) !== 200);
+  }
+
+  // --------------------------------------- what a stranger may put in those nodes
+  //
+  // orders/track and orders/pendingWeb are the only two nodes an anonymous visitor
+  // can write, and the ordering page signs everyone in anonymously, so "anonymous"
+  // is anyone at all. orders/track is world-readable as well: for a while it took
+  // any JSON of any shape and served it back to the internet.
+  //
+  // Both let a stranger CREATE and never modify, so the shape is checked on
+  // creation. That is where the whole exposure is, and it means no record already
+  // in the database has to satisfy anything it was not written to satisfy.
+  {
+    const TRACK = () => JSON.parse(JSON.stringify(SAMPLES['orders/track/$key']));
+    const WEB = () => JSON.parse(JSON.stringify(SAMPLES['orders/pendingWeb/$key']));
+    let n = 0;
+    const asAnon = async (node, mutate) => {
+      const body = node === 'track' ? TRACK() : WEB();
+      mutate(body);
+      const path = (node === 'track' ? 'orders/track/t' : 'orders/pendingWeb/w') + (++n);
+      return canWrite(path, 'anon', body);
+    };
+
+    check('a customer can still place an order and track it',
+          (await asAnon('web', () => {})) && (await asAnon('track', () => {})));
+    note('everything below has to stay false without this ever becoming false');
+
+    const rejected = [];
+    const must = async (what, node, mutate) => {
+      if (await asAnon(node, mutate)) rejected.push(what);
+    };
+    await must('a field nobody wrote', 'track', (o) => { o.payload = 'x'; });
+    await must('a field nobody wrote, on an order', 'web', (o) => { o.payload = 'x'; });
+    await must('a field nobody wrote, nested in a cart line', 'track',
+               (o) => { o.items.Latte.payload = 'x'.repeat(4000); });
+    await must('a status longer than a status', 'track', (o) => { o.status = 'x'.repeat(500); });
+    await must('a table label longer than a table label', 'track', (o) => { o.table = 'x'.repeat(500); });
+    await must('an order note longer than a note', 'web', (o) => { o.notes = 'x'.repeat(5000); });
+    await must('an address longer than an address', 'web', (o) => { o.tableOrAddress = 'x'.repeat(5000); });
+    await must('a backdated order', 'track', (o) => { o.createdAt = 1; });
+    await must('an order dated next year', 'web', (o) => { o.createdAt = 2000000000000; });
+    await must('a cart line with no quantity', 'track', (o) => { delete o.items.Latte.qty; });
+    await must('a cart line priced as a string', 'web', (o) => { o.items.Latte.price = '250'; });
+    await must('a thousand of something', 'track', (o) => { o.items.Latte.qty = 1000; });
+    await must('a total that is not a number', 'web', (o) => { o.total = 'lots'; });
+    await must('an order with no items at all', 'web', (o) => { delete o.items; });
+    await must('a tracking record with no status', 'track', (o) => { delete o.status; });
+    await must('items that are not items', 'track', (o) => { o.items = 'a string'; });
+
+    check('and a stranger can write nothing else into either of them',
+          rejected.length === 0, 'accepted: ' + rejected.join('; '));
+    note('the node used to take any JSON of any shape, and serve it back world-readable');
+
+    // A POS-entered order creates its own tracking record, and it is a different
+    // shape from the customer's: no createdAt, and it carries the wait-time
+    // prediction the accuracy report later joins against.
+    check('the till can create a tracking record of its own shape',
+          await canWrite('orders/track/posmade', 'cashier', {
+            status: 'preparing', items: { Margherita: { qty: 1, price: 400, base: 'Margherita', mods: null } },
+            table: 'Table 6', stations: 2, stationsDone: 0,
+            acceptedAt: { '.sv': 'timestamp' },
+            predLow: 9, predHigh: 17, predPoint: 13, predOvenIdleMin: 4,
+            predLoadChef: 3, predLoadBarista: 1, predModelVersion: '2026-06'
+          }));
+
+    // The counter still has to be able to work on what it accepted.
+    await call('PUT', 'orders/track/staffside', OWNER, TRACK());
+    check('and the counter can still advance, price and finish an order',
+          (await canWrite('orders/track/staffside/status', 'cashier', 'preparing')) &&
+          (await canWrite('orders/track/staffside/stationsDone', 'chef', 1)) &&
+          (await canWrite('orders/track/staffside/paymentVerified', 'cashier', true)) &&
+          (await canWrite('orders/track/staffside/predPoint', 'cashier', 12.5)));
+    await call('PUT', 'orders/pendingWeb/staffside', OWNER, WEB());
+    check('and can send a pay link and book the payment against the order',
+          (await canWrite('orders/pendingWeb/staffside/payLinkSentAt', 'cashier', Date.now())) &&
+          (await canWrite('orders/pendingWeb/staffside/upiId', 'cashier', 'ila@okyesbank')) &&
+          (await canWrite('orders/pendingWeb/staffside/payment', 'cashier',
+                          { ref: '512345678901', amount: 250, at: Date.now(), payId: 'web_tk1', bankTag: 'yes 8020' })));
+    note('the shape is checked on creation, so nothing already recorded has to satisfy it');
   }
 
   // ------------------------------------------------------- the public surface
