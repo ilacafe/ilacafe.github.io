@@ -104,4 +104,39 @@ check('there is third-party code to check at all', tags.length > 0);
   note('nothing offline can tell a correct digest from a plausible one');
 }
 
+// ---------------------------------------------------------------- no shared secret in a page
+// The push relay used to be authorised by a secret that four pages carried, which
+// meant anyone who viewed source could send any notification to every admin device.
+// It is retired: the relay takes a Firebase ID token and the pages hold nothing.
+//
+// This is the check that keeps it that way. Reintroducing a constant like it is an
+// easy thing to do while adding a new alert, and impossible to notice by eye.
+{
+  // Matched on the shape of the VALUE, not the name. A name-based rule flags
+  // TABLE_CACHE_KEY = 'ila_cached_tables' and misses a secret assigned to something
+  // innocuous — the wrong way round on both counts.
+  const looksLikeCredential = (v) =>
+    (/^[0-9a-f]{24,}$/i.test(v)) ||                                  // hex, as the old push secret was
+    (v.length >= 20 && /^[A-Za-z0-9+/=_-]+$/.test(v) &&
+     /[a-z]/.test(v) && /[A-Z]/.test(v) && /[0-9]/.test(v));         // base64-ish, mixed case
+
+  const found = [];
+  for (const page of PAGES) {
+    for (const m of readPage(page).matchAll(/\b([A-Za-z_$][\w$]*)\s*=\s*['"]([^'"\s]{16,})['"]/g)) {
+      if (!looksLikeCredential(m[2])) continue;
+      // Public by design: they identify the project, they do not authorise anything.
+      if (/^AIza/.test(m[2])) continue;                              // Firebase web API key
+      if (/^B[A-Za-z0-9_-]{80,}$/.test(m[2])) continue;              // VAPID public key
+      if (/^sha(256|384|512)-/.test(m[2])) continue;                 // SRI digests
+      // An alphabet has every character exactly once; a random secret of this length
+      // drawn from 16 or 64 symbols always repeats. That separates Firebase's
+      // push-key charset from a credential without having to list either.
+      if (new Set(m[2]).size === m[2].length) continue;
+      found.push(page + ': ' + m[1]);
+    }
+  }
+  check('no page carries a secret that authorises anything', found.length === 0, found.join(', '));
+  note('a secret a browser must hold is a secret anyone can read');
+}
+
 done();
