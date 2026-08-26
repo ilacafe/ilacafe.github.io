@@ -623,20 +623,57 @@ function rcCheckGates(current, derived, counts){
 // does with a failed tick. Notifying is itself best-effort, because the usual cause
 // of a throw here is the robot token or the database being unreachable, which is
 // also what a notification needs.
+//
+// At most one push a day per job. The monitor cron runs hourly and sw.js sets
+// renotify on every tagged notification, so an unthrottled report would buzz the
+// owner's phone twenty-four times a day until someone fixed it — and the practical
+// response to that is turning notifications off, which also silences the payment
+// alerts this Worker exists to send. Every tick is still logged, and every tick
+// still updates ops/cronFailure, so the record is complete even when the phone is
+// quiet.
+const CRON_REPORT_GAP_MS = 20 * 3600 * 1000;
+
 async function reportIfItThrows(job, promise){
+  let result;
   try {
-    return await promise;
+    result = await promise;
   } catch(e){
     const detail = (e && (e.message || String(e))) || 'unknown error';
     console.log('cron ' + job + ' threw: ' + (e && e.stack ? e.stack : detail));
     try {
       const token = await getRobotToken();
-      await pushOwner(token, '\u274c Scheduled job failed: ' + job, detail, 'cron-' + job, '/admin.html');
+      const path = DB_URL + '/ops/cronFailure/' + encodeURIComponent(job) + '.json?auth=' + token;
+      const prevRes = await fetch(path);
+      const prev = prevRes.ok ? (await prevRes.json()) || {} : {};
+      const now = Date.now();
+      const due = !prev.lastNotifiedAt || (now - Number(prev.lastNotifiedAt)) > CRON_REPORT_GAP_MS;
+      await fetch(path, { method:'PUT', body: JSON.stringify({
+        lastAt: now,
+        lastError: String(detail).slice(0, 300),
+        lastNotifiedAt: due ? now : (prev.lastNotifiedAt || null),
+        failingSince: prev.failingSince || now,
+        consecutive: (Number(prev.consecutive) || 0) + 1
+      }) });
+      if (due){
+        await pushOwner(token, '\u274c Scheduled job failed: ' + job, detail, 'cron-' + job, '/admin.html');
+      } else {
+        console.log('cron ' + job + ': reported within the last 20h, not pushing again');
+      }
     } catch(inner){
       console.log('cron ' + job + ': could not report the failure either: ' + (inner && inner.message));
     }
     return { ran:false, threw:true, error:detail };
   }
+
+  // Finished. Clear the record, so failingSince and consecutive mean what they say
+  // and a job that recovered does not sit there looking broken — and so the next
+  // failure after a good run pushes immediately instead of waiting out the gap.
+  try {
+    const token = await getRobotToken();
+    await fetch(DB_URL + '/ops/cronFailure/' + encodeURIComponent(job) + '.json?auth=' + token,
+                { method:'DELETE' });
+  } catch(inner){ /* a clean run that could not clear its flag is not worth failing over */ }
+  return result;
 }
 
 // ---- main recalibration entry (dryRun => derive + gate, but DON'T write) ----

@@ -508,6 +508,34 @@ async function main() {
   check('a failed job is logged as well as pushed',
         /console\.log\(/.test(reporter),
         'a push needs a subscription; the log is the fallback when there is none');
+
+  // One of the two crons is hourly and sw.js sets renotify on every tagged
+  // notification. Reporting each failing tick would buzz the owner's phone
+  // twenty-four times a day, and the practical response to that is turning
+  // notifications off — which silences the payment alerts too.
+  check('a job that fails every hour does not push every hour',
+        /lastNotifiedAt/.test(reporter) && /CRON_REPORT_GAP_MS/.test(reporter),
+        'an hourly failure would notify 24 times a day until someone silenced the app');
+  const gap = /CRON_REPORT_GAP_MS\s*=\s*([^;]+);/.exec(src);
+  const gapMs = gap ? Function('return ' + gap[1])() : 0;
+  check('and the quiet gap is long enough to be one push a day',
+        gapMs >= 12 * 3600 * 1000 && gapMs <= 26 * 3600 * 1000,
+        gap ? gap[1].trim() + ' = ' + (gapMs / 3600000) + 'h' : 'no gap defined');
+  check('but every failing tick is still recorded, pushed or not',
+        /method:\s*'PUT'/.test(reporter) && /consecutive/.test(reporter),
+        'a quiet hour must still leave a trace, or the throttle becomes the silence');
+  check('and a job that recovers stops looking broken',
+        /method:\s*'DELETE'/.test(reporter),
+        'failingSince and consecutive would otherwise only ever grow');
+
+  // The record needs somewhere it is allowed to go, or every write above is
+  // rejected and the whole mechanism is a no-op that logs success.
+  const rules = JSON.parse(stripComments(fs.readFileSync(
+    path.join(ROOT, 'database.rules.json'), 'utf8'))).rules;
+  check('the robot is allowed to write where it records this',
+        !!(rules.ops && rules.ops.cronFailure && rules.ops.cronFailure['.write']),
+        'no rule means denied, and the failure record would silently never appear');
+
   note('the refit runs once a month — a tick that silently does nothing costs a month');
 }
 

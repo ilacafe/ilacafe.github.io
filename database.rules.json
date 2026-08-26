@@ -29,6 +29,12 @@
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       }
     },
+    "ops": {
+      "cronFailure": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      }
+    },
     "upiReview": {
       ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
