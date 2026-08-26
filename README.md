@@ -141,6 +141,13 @@ costs money:
   and still listed as owed, or a bill reading VOIDED with the till untouched and no
   button left to finish it. Each said "Nothing was changed — try again", and doing
   as it asked made the second copy.
+- **unpaid web orders** — a prepaid order that is not paid reaches someone. There
+  are two ways one sits unpaid — the pay link never went out, or it went out and
+  nothing came back — and the POS had an alert for each. Only the first fired: the
+  second waited on `orders/track/{id}/needsManualVerify`, which nothing in this repo
+  has ever written, while the first skipped every order whose link *had* gone out on
+  the grounds that the second covered it. A customer sent a link who never paid
+  produced no alert at all, for as long as the order existed.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with
