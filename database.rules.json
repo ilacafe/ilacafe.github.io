@@ -260,7 +260,11 @@
         ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'cashier')",
         ".indexOn": [
           "ts"
-        ]
+        ],
+        "$entry": {
+          ".validate": "!newData.child('type').exists() || auth.token.email === 'robot@cafeila.app' || (newData.child('type').val() !== 'expense' && newData.child('type').val() !== 'withdrawal' && newData.child('type').val() !== 'tip_payout')"
+        },
+        ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
       },
       "eodArchive": {
         ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
@@ -275,7 +279,8 @@
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "cashDrawer": {
-        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+        ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
       },
       "lastSplitHeads": {
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
@@ -299,7 +304,7 @@
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
     },
     "staff": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
     },
     "users": {

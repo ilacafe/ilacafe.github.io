@@ -206,7 +206,7 @@ const SAMPLES = {
     const READERS = ['nobody', 'anon', 'cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'];
     const EXPECTED_READERS = {
       '':                    [],                                    // the root, to anyone
-      'staff':               ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'staff':               ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
       'users':               ['admin'],
       'pos':                 [],
       'pos/activeTables':    ['cashier', 'barista', 'chef', 'inventory', 'admin'],
@@ -262,6 +262,58 @@ const SAMPLES = {
           await canWrite('pos/eodArchive/2026-08-26-1', 'cashier'));
     note('the till closes the day; reading the archive back is analytics, which is the owner’s');
 
+    // Cash leaving the drawer.
+    //
+    // Three ledger types hand real money to a real person, and each sat behind a PIN
+    // prompt in pos.html. The prompt was advice: pos is writable by any staff role, so
+    // the entry could be pushed with any name on it and no PIN at all. The check moved
+    // into the Worker, and this is the half that makes the move mean something — the
+    // till cannot write one from here whoever is holding it.
+    const CASHOUT = ['expense', 'withdrawal', 'tip_payout'];
+    const wroteCashout = [];
+    for (const type of CASHOUT) {
+      for (const who of ['cashier', 'admin', 'barista', 'anon']) {
+        const entry = { date: '03:04 pm', type: type, amount: 450, reason: 'milk (Priya)', ts: 1756200000000 };
+        if (await canWrite('pos/ledgerEntries/c-' + type + '-' + who, who, entry)) {
+          wroteCashout.push(who + ' wrote a ' + type);
+        }
+      }
+    }
+    check('no browser can record cash leaving the drawer, not even the owner’s',
+          wroteCashout.length === 0, wroteCashout.join('; '));
+    note('the PIN in front of it is a gate now rather than a prompt, because this is');
+    note('the half a browser cannot skip — the Worker is the only writer left');
+
+    check('but the robot can, which is the whole point',
+          await canWrite('pos/ledgerEntries/c-robot', 'robot',
+            { date: '03:04 pm', type: 'expense', amount: 450, reason: 'milk (Priya)',
+              ts: 1756200000000, by: 'Priya', byUid: 'cashierUid' }));
+    // It is the only writer of a cash-out, and that is all it may reach in here: the
+    // grant sits on the two children it needs, not on pos, which still says "has a
+    // staff role" — and the robot has none.
+    const robotReach = [];
+    for (const p of ['pos/bills/x1', 'pos/activeTables/x1', 'pos/eodArchive/x1',
+                     'pos/unverified/x1', 'pos/upiTotal', 'pos/tips/x1']) {
+      if (await canWrite(p, 'robot')) robotReach.push(p);
+    }
+    check('and the rest of the till is still closed to it',
+          robotReach.length === 0, robotReach.join(', '));
+
+    check('and it can read the staff map to resolve the PIN that authorised it',
+          await canRead('staff', 'robot'));
+
+    // Everything else in the ledger is still the till's to write. A sale has to be
+    // recordable when the Worker is unreachable, and routing every payment through it
+    // would put a network hop in front of the counter.
+    const blocked = [];
+    for (const type of ['cash_income', 'upi_income', 'unpaid_writeoff', 'refund_upi', 'void_cash']) {
+      const entry = { date: '03:04 pm', type: type, amount: 450, reason: 'Table 4', ts: 1756200000000 };
+      if (!(await canWrite('pos/ledgerEntries/k-' + type, 'cashier', entry))) blocked.push(type);
+    }
+    check('the till still records everything else in the ledger itself',
+          blocked.length === 0, 'refused: ' + blocked.join(', '));
+    note('a sale must be recordable when the Worker is unreachable');
+
     // What admin.html and analytics.html show, and nobody else needs.
     const OWNERS_ALONE = ['pos/eodArchive', 'orders/history', 'security/voids', 'security/unpaid',
                           'reconciliation', 'monitor', 'ops/cronFailure', 'ops/pushHealth',
@@ -305,7 +357,6 @@ const SAMPLES = {
       ['barista', 'staff/x1', 'a staff PIN, by the bar'],
       ['chef', 'menu/Coffee/Latte', 'the menu, by the kitchen'],
       ['robot', 'menu/Coffee/Latte', 'the menu, by the robot'],
-      ['robot', 'pos/ledgerEntries/x1', 'a ledger line, by the robot'],
     ];
     const wrote = [];
     for (const [who, path, what] of MUST_NOT_WRITE) {

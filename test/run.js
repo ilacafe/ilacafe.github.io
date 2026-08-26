@@ -20,6 +20,7 @@ const suites = [
   'kds-done.test.js',
   'rules.test.js',
   'worker.test.js',
+  'cashout.test.js',
   'analytics-range.test.js',
   'escaping.test.js',
   'third-party.test.js',

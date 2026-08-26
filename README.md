@@ -163,6 +163,16 @@ costs money:
   `admin.html` and `analytics.html` show and fails if any other role can reach it —
   those two pages check the role in a browser the holder controls, which is advice
   until the rules say the same thing.
+- **cash out of the drawer** — `expense`, `withdrawal` and `tip_payout` are written
+  by the Worker and by nothing else. Each sat behind a PIN prompt in the till, and
+  the prompt was advice: `pos` is writable by any staff role, so the entry could be
+  pushed with a colleague's name on it and no PIN at all. The Worker verifies a staff
+  token *and* the PIN, then writes the ledger line and the drawer decrement in one
+  atomic write; the rules refuse those three types from every browser, which is the
+  half that makes the prompt a gate. Everything else in the ledger is still the
+  till's to write — a sale has to be recordable when the Worker is unreachable — and
+  each of those now moves its line and its running total in one write, and says so on
+  screen if that write is refused rather than swallowing it.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with

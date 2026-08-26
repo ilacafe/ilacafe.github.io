@@ -327,7 +327,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.14"></script>
+    <script src="/build-check.js" data-build="2026-08-26.16"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -666,7 +666,7 @@
             <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
             <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason">
             <input type="password" id="transaction-pin" class="remark-input" placeholder="PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
-            <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
+            <div class="modal-buttons"><button id="transaction-confirm-btn" class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
             <button class="close-modal" onclick="closeTransactionModal()">✖ CANCEL</button>
         </div>
     </div>
@@ -3865,10 +3865,11 @@
             const parsedAmount = parseFloat(amount) || 0;
             const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
-            // Each entry is its own child — push() never touches siblings and merges cleanly
-            // after an offline spell. `meta` (UPI only) carries the stable payId, verification
-            // state ('verified' | 'unverified'), the matched credit ref, and the bank/acct the
-            // payment was routed to — so a late bank email can flip unverified→verified later.
+            // Each entry is its own child — its key never touches a sibling and merges
+            // cleanly after an offline spell. `meta` (UPI only) carries the stable payId,
+            // verification state ('verified' | 'unverified'), the matched credit ref, and
+            // the bank/acct the payment was routed to — so a late bank email can flip
+            // unverified→verified later.
             const entry = {
                 date: timeString, type: type, amount: parsedAmount, reason: reason,
                 ts: firebase.database.ServerValue.TIMESTAMP
@@ -3880,20 +3881,42 @@
                 if (meta.bankTag) entry.bankTag = meta.bankTag;         // VPA's admin bank tag, e.g. "yes 8020"
                 if (meta.tip) entry.tip = parseFloat(meta.tip) || 0;    // part of amount, not extra revenue
             }
-            db.ref('pos/ledgerEntries').push(entry);
 
-            // Running totals via atomic increment — concurrent sales can't lose each other,
-            // it shows instantly, and reconciles correctly after reconnect.
+            // The line and the total it moves go in ONE write. They used to be two, and
+            // either could be the one that failed: a sale on the ledger that the day's
+            // takings do not include, or takings with no line explaining them. Neither is
+            // reconcilable against the cash actually in the drawer.
+            //
+            // Running totals stay atomic increments — concurrent sales cannot lose each
+            // other, it shows instantly, and it reconciles correctly after a reconnect.
+            const key = db.ref('pos/ledgerEntries').push().key;
+            const updates = {};
+            updates['pos/ledgerEntries/' + key] = entry;
             if (type === 'cash_income') {
-                db.ref('pos/cashDrawer').set(firebase.database.ServerValue.increment(parsedAmount));
+                updates['pos/cashDrawer'] = firebase.database.ServerValue.increment(parsedAmount);
             } else if (type === 'upi_income') {
-                db.ref('pos/upiTotal').set(firebase.database.ServerValue.increment(parsedAmount));
+                updates['pos/upiTotal'] = firebase.database.ServerValue.increment(parsedAmount);
             } else if (type === 'unpaid_writeoff') {
                 // Nothing physically left the drawer — the money simply never arrived. Recording
                 // it as a cash outflow would make the till disagree with the cash in it.
             } else {
-                db.ref('pos/cashDrawer').set(firebase.database.ServerValue.increment(-parsedAmount));
+                updates['pos/cashDrawer'] = firebase.database.ServerValue.increment(-parsedAmount);
             }
+
+            // And it is no longer allowed to fail in silence. A push() with nothing on the
+            // end of it swallows a rejected write whole: the cashier taps Confirm, the modal
+            // closes, and the sale is simply not there. This is the one message that has to
+            // survive a busy counter, so it does not dismiss itself.
+            db.ref().update(updates).catch(function(e){
+                console.error('ledger write failed', e);
+                try {
+                    showToast('NOT RECORDED \u2014 \u20b9' + Math.round(Math.abs(parsedAmount)),
+                              (reason || type) + ' did not save. Check the connection and enter it again.');
+                } catch(_){
+                    alert('That entry did not save. Check the connection and enter it again.');
+                }
+            });
+            return key;
         }
 
         // ===== LEDGER VERIFICATION RECONCILER =====
@@ -4186,12 +4209,17 @@
             const each = Math.floor(due / heads);
             const pinStr = prompt('\u20b9' + Math.round(due) + ' \u00f7 ' + heads + ' = \u20b9' + each + ' each.\nThis takes \u20b9' + Math.round(due) + ' OUT of the cash drawer.\n\nStaff PIN to authorise:');
             if (!pinStr) return;
-            const staffName = window.staffPins[await hashPin(pinStr)];
-            if (!staffName) return alert('Invalid PIN.');
             const cash = parseFloat(window.cashDrawer) || 0;
             if (due > cash && !confirm('Only \u20b9' + Math.round(cash) + ' in the drawer. Pay out anyway?')) return;
-            // decrements the drawer via addLedgerEntry's outflow branch
-            addLedgerEntry('tip_payout', due, 'Tips \u00b7 ' + heads + ' \u00d7 \u20b9' + each + ' (' + staffName + ')');
+            // The Worker checks the PIN, writes the entry and decrements the drawer in one
+            // write. Only once that has landed is the pool marked paid out — the other way
+            // round leaves tips the staff are owed recorded as already handed over.
+            if (window._payingOutTips) return;
+            window._payingOutTips = true;
+            const paid = await posCashOut('tip_payout', due, 'Tips \u00b7 ' + heads + ' \u00d7 \u20b9' + each, pinStr);
+            window._payingOutTips = false;
+            if (!paid.ok) return alert(paid.why);
+            const staffName = paid.by;
             try {
                 db.ref('pos/tips/' + tipDayKey()).update({
                     paidOut: firebase.database.ServerValue.increment(due),
@@ -4209,12 +4237,18 @@
         window.confirmTransaction = async function() {
             const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
             if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
-            const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
-            
+            // The PIN is checked by the Worker now, which is the only place a check
+            // cannot be skipped. This page neither looks it up nor writes the entry —
+            // the rules refuse these three types from here.
             let currentCash = parseFloat(window.cashDrawer) || 0;
-            if (amount > currentCash && !confirm(`Only ₹${currentCash} in drawer. Continue?`)) return;
-            
-            addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (${staffName})`);
+            if (amount > currentCash && !confirm(`Only \u20b9${currentCash} in drawer. Continue?`)) return;
+
+            const btn = document.getElementById('transaction-confirm-btn');
+            if (btn && btn.disabled) return;
+            if (btn){ btn.disabled = true; btn.innerText = 'Recording\u2026'; }
+            const r = await posCashOut(window.currentTransactionType, amount, reasonStr, pinStr);
+            if (btn){ btn.disabled = false; btn.innerText = 'Confirm'; }
+            if (!r.ok) return alert(r.why);
             window.closeTransactionModal();
         };
 
@@ -4231,6 +4265,38 @@
             if (!token) return null;
             return JSON.stringify({ token: token, notification: notification });
         }
+        // Cash leaving the drawer goes through the Worker, not straight into the ledger.
+        //
+        // The PIN prompt in front of these three was advice: pos is writable by any
+        // staff role, so anyone who could open this page could push an entry with a
+        // colleague's name on it without knowing a PIN at all. The Worker holds the one
+        // credential no browser has, checks the PIN against staff itself, and writes the
+        // entry and the drawer movement as a single atomic write. The rules now refuse
+        // these three types from anybody else, so the prompt is a gate.
+        //
+        // It returns the reason it failed rather than a boolean, because "wrong PIN" and
+        // "the till cannot reach the Worker" need different things done about them.
+        async function posCashOut(type, amount, reason, pin){
+            if (!ALERT_WORKER_URL) return { ok:false, why:'The till is not configured to record this.' };
+            let token = null;
+            try { const u = firebase.auth().currentUser; token = u ? await u.getIdToken() : null; } catch(e){}
+            if (!token) return { ok:false, why:'You are signed out. Sign in and try again.' };
+            let res;
+            try {
+                res = await fetch(ALERT_WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({ action:'cashout', token: token, pin: pin,
+                                           type: type, amount: amount, reason: reason })
+                });
+            } catch(e){
+                return { ok:false, why:'Could not reach the till service. Nothing was recorded \u2014 check the connection and try again.' };
+            }
+            let body = null; try { body = await res.json(); } catch(e){}
+            if (res.ok && body && body.ok) return { ok:true, by: body.by };
+            if (res.status === 403 && body && body.error === 'invalid pin') return { ok:false, why:'Invalid PIN.' };
+            return { ok:false, why:'Could not record it: ' + ((body && body.error) || ('error ' + res.status)) + '\nNothing was changed.' };
+        }
+
         async function posSendPush(notification){
             if (!ALERT_WORKER_URL) return;
             try {

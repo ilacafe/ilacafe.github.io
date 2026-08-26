@@ -300,36 +300,53 @@ Two consequences worth keeping in mind when reading the rules:
   role. The parent `users` node stays admin-only, so that grants a lookup by uid,
   never a listing.
 
-## The staff PIN is attribution, not authorisation
+## The staff PIN, and what it now authorises
 
-`staff` maps `SHA-256(fixed salt + PIN) → name`, the salt is a literal in the
-page source, and every signed-in role can read the map. Any staff account can
-therefore recover every PIN in under a second, and PINs gate voids, expenses,
-withdrawals, tip payouts and end-of-day.
+`staff` maps `SHA-256(fixed salt + PIN) → name`, the salt is a literal in the page
+source, and every signed-in role can read the map. Any staff account can therefore
+recover every PIN in under a second.
 
-Restricting that read looks like the fix and mostly is not, because the PIN is
-not what authorises the action. `pos.html` pushes ledger entries straight from
-the browser:
+For a long time that barely mattered, because the PIN was not what authorised
+anything. `pos.html` pushed ledger entries straight from the browser:
 
 ```js
 db.ref('pos/ledgerEntries').push(entry);
 ```
 
-and `pos` is writable by anyone holding a staff role. So a staff member does not
-need anyone's PIN to record a withdrawal against a colleague's name — they can
-write the entry directly. The PIN prompt is a speed bump in the UI, and the name
-it stamps into `reason` is advisory.
+and `pos` is writable by anyone holding a staff role. So a staff member did not need
+anyone's PIN to record a withdrawal against a colleague's name — they could write the
+entry directly. The prompt was a speed bump in a UI the same person controlled.
 
-Making it real means moving those writes into the Worker: verify the staff token
-and the PIN there, write the entry from there, and stop clients writing those
-types at all. That is a change to the till's money path and has not been made.
+**For the three types that take cash out of the drawer, that is no longer true.**
+`expense`, `withdrawal` and `tip_payout` are written by the Cloudflare Worker and by
+nothing else. The till posts a Firebase ID token and the PIN; the Worker verifies
+both, resolves the name from `staff` itself, and writes the ledger line and the
+drawer decrement as one atomic update. The rules refuse those three types from every
+other identity, so the check cannot be skipped by opening devtools.
 
-What has been made is **visibility**. The hourly monitor reports cash leaving the
-drawer — `expense`, `withdrawal`, `tip_payout`, `unpaid_writeoff` — with the
-amount, the reason and the name it claims, so the owner sees it the same hour
-rather than at end-of-day, and the named person can say whether it was them.
-Routine spend under ₹500 is not reported, because a notification nobody reads is
-worse than none; a written-off bill is reported at any size.
+The entry now records two different things: `by`, which is what the PIN said, and
+`byUid`, which is the account that was actually signed in. A PIN can be borrowed; the
+token cannot.
+
+`unpaid_writeoff` is deliberately still client-written. It moves no cash — it records
+a bill that was never paid — and it happens inside end-of-day, which has to be
+completable when the Worker is unreachable. Blocking a cash-up on a network call
+would be a worse failure than the one being fixed. The hourly monitor reports it at
+any size, which is the visibility that covers it.
+
+Everything else in the ledger is still the till's to write, on purpose: a sale has to
+be recordable when the Worker is down, and putting a network hop in front of the
+counter would be a bad trade.
+
+### What is still only attribution
+
+The PIN prompt in front of a **void** still runs in the page and still only stamps a
+name. So does `inventory.html`'s. Both are worth moving the same way; neither hands
+over cash.
+
+And `staff` itself stays readable by every role, because both of those pages check
+PINs against it. Restricting the read was never the fix — it would remove the easiest
+attack, not the design — and the section above is the design being fixed instead.
 
 ## Deploying rules
 
