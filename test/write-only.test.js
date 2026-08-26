@@ -16,7 +16,7 @@
 // of it. Writing orders/active/chef/$id and reading orders/active/chef is one
 // feature, not an orphan.
 
-const { derivePaths, suite } = require('./helpers');
+const { derivePaths, unresolvedWrites, suite } = require('./helpers');
 
 const { check, note, done } = suite('Write-only paths — recorded and unreadable');
 
@@ -77,5 +77,39 @@ check('a $key segment matches a named one',
 check('but unrelated paths stay unrelated',
       !related('security/unpaid', 'security/voids') &&
       !related('pos/bills', 'orders/history'));
+
+// ---------------------------------------------------------------- the map can see the writes
+// A write the deriver cannot see is a path this file cannot judge, and — more to
+// the point — a rule nobody reviews, since the access map is what the rules are
+// checked against. Multi-path updates were entirely invisible to it: the path
+// lives in the object key, not in ref().
+{
+  const used2 = derivePaths();
+  const viaUpdate = [...used2.entries()]
+    .filter(([, v]) => v.writes.some(w => w.snippet === 'multi-path update'))
+    .map(([p]) => p).sort();
+
+  check('multi-path update writes are in the map',
+        viaUpdate.length >= 4,
+        'found: ' + (viaUpdate.join(', ') || 'none'));
+  viaUpdate.forEach(p => note('placed from an update key: ' + p));
+
+  // Keys are relative to whatever ref .update() was called on. Filing a write
+  // under the wrong path is worse than not seeing it, so the one case in the
+  // repo where the base is not the root is pinned by name.
+  check('and a key under a non-root ref is placed beneath it',
+        viaUpdate.includes('pos/unverified/$key'),
+        "db.ref('pos/unverified').update(carry) — carry's keys are children of it, not full paths");
+
+  // What is left cannot be placed from the source: the prefix is in a variable.
+  // Pinned so a new unplaceable write forces a decision rather than joining a
+  // list nobody looks at.
+  const unresolved = unresolvedWrites();
+  check('and what it still cannot place is the set we know about',
+        unresolved.length === 3 && unresolved.every(u => /^base \+/.test(u.expr)),
+        unresolved.map(u => u.file + ': ' + u.expr).join('; ') || 'none');
+  note('those three write state/ref/lateVerified under a ledger or unverified entry,');
+  note('and both parents are in the map above — the exact child is not');
+}
 
 done();
