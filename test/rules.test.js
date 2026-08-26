@@ -218,6 +218,43 @@ unruled.forEach(u => note('no rule governs: ' + u));
         missing.length === 0, missing.join(', ') + ' is no longer readable by a customer');
 }
 
+// ---------------------------------------------------------------- Firebase will accept it
+// This file parses as JSON long after Firebase has stopped accepting it. A rules
+// file using "//" keys as comments passed every check here and was refused at
+// deploy time with `33:13: Expected '}'` — because a path segment cannot contain
+// a slash, so "//" is not a comment, it is an illegal child name.
+//
+// The deploy refusing it is the right failure, but it happens at the moment you
+// are trying to ship, which is the worst time to discover it.
+{
+  // Everything Firebase allows as a key: the rule keywords, a $wildcard, or a
+  // child name. Child names may not contain . $ # [ ] / or control characters.
+  const KEYWORDS = new Set(['.read', '.write', '.validate', '.indexOn', '.priority']);
+  const ILLEGAL = /[.$#[\]/]/;
+
+  const bad = [];
+  (function walk(node, trail) {
+    if (!node || typeof node !== 'object') return;
+    for (const key of Object.keys(node)) {
+      const where = trail.concat(key).join(' > ');
+      if (KEYWORDS.has(key)) continue;
+      if (key.startsWith('$')) {
+        if (ILLEGAL.test(key.slice(1))) bad.push(where + '  (wildcard with an illegal character)');
+      } else if (key.startsWith('.')) {
+        bad.push(where + '  (unknown rule keyword)');
+      } else if (ILLEGAL.test(key)) {
+        bad.push(where + '  (a child name cannot contain . $ # [ ] or /)');
+      }
+      if (typeof node[key] === 'object') walk(node[key], trail.concat(key));
+    }
+  })(root, []);
+
+  check('every key is one Firebase will accept', bad.length === 0, bad.join('; '));
+  bad.forEach(b => note('rejected at deploy: ' + b));
+  note('JSON-valid is not the same as rules-valid, and the difference only shows');
+  note('up at deploy time — which is the worst moment to find out');
+}
+
 note('this checks shape and coverage only — whether a condition is CORRECT for a');
 note('given role needs the Firebase emulator against real auth tokens');
 
