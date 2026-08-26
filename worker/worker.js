@@ -647,15 +647,26 @@ async function reportIfItThrows(job, promise){
       const prev = prevRes.ok ? (await prevRes.json()) || {} : {};
       const now = Date.now();
       const due = !prev.lastNotifiedAt || (now - Number(prev.lastNotifiedAt)) > CRON_REPORT_GAP_MS;
-      await fetch(path, { method:'PUT', body: JSON.stringify({
+      const wrote = await fetch(path, { method:'PUT', body: JSON.stringify({
         lastAt: now,
         lastError: String(detail).slice(0, 300),
         lastNotifiedAt: due ? now : (prev.lastNotifiedAt || null),
         failingSince: prev.failingSince || now,
         consecutive: (Number(prev.consecutive) || 0) + 1
       }) });
-      if (due){
+
+      // The push is gated on the record having been written, not just on the gap.
+      // If this node cannot be written — the rules for it are not deployed yet, say,
+      // since the Worker ships on a push to main and the rules do not — then a
+      // failed read looks like "never notified" on every single tick, and the
+      // throttle would let every one of them through. An unrecordable notification
+      // is precisely the one that repeats forever, so it is not sent. The log line
+      // above still goes out on every tick.
+      if (due && wrote.ok){
         await pushOwner(token, '\u274c Scheduled job failed: ' + job, detail, 'cron-' + job, '/admin.html');
+      } else if (!wrote.ok){
+        console.log('cron ' + job + ': could not record the failure (' + wrote.status +
+                    '), so not pushing — an unthrottled report would repeat every tick');
       } else {
         console.log('cron ' + job + ': reported within the last 20h, not pushing again');
       }

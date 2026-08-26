@@ -528,6 +528,16 @@ async function main() {
         /method:\s*'DELETE'/.test(reporter),
         'failingSince and consecutive would otherwise only ever grow');
 
+  // The Worker ships on a push to main; the rules do not. Between those two
+  // moments this node is unwritable, every read looks like "never notified", and
+  // an ungated throttle would let every hourly tick through.
+  const pushGuard = /if\s*\(([^)]*)\)\s*\{\s*await pushOwner/.exec(reporter);
+  check('a failure it cannot record is not one it pushes',
+        !!pushGuard && /wrote\.ok/.test(pushGuard[1]) && /due/.test(pushGuard[1]),
+        pushGuard ? 'the push is guarded by: ' + pushGuard[1]
+                  : 'could not find the guard on the push at all');
+  note('an unrecordable notification is exactly the one that repeats every tick');
+
   // The record needs somewhere it is allowed to go, or every write above is
   // rejected and the whole mechanism is a no-op that logs success.
   const rules = JSON.parse(stripComments(fs.readFileSync(
