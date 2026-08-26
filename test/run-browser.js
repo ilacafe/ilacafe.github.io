@@ -10,6 +10,7 @@ const suites = [
   'qr-browser.test.js',
   'build-banner-browser.test.js',
   'inventory-browser.test.js',
+  'walkouts-browser.test.js',
 ];
 
 let failed = [];

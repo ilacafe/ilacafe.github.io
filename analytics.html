@@ -315,6 +315,28 @@
                 </table>
             </div>
         </div>
+
+        <!-- SECURITY / WALKOUTS
+             The till has recorded every unpaid bill written off at cash-up since
+             that prompt was added — the table, what was owed, the items on it, and
+             who authorised writing it off. The ledger shows the money; this is the
+             only place the rest of it was ever kept, and nothing read it. -->
+        <div class="card" style="border-color: rgba(244,67,54,0.35);">
+            <h2 style="color:#ffd2d2;">Security · Walkouts written off</h2>
+            <div id="unpaid-summary" style="font-size:0.9rem; margin-bottom:10px;"></div>
+            <div id="unpaid-bystaff" style="margin-bottom:14px;"></div>
+            <div class="controls">
+                <input type="text" id="unpaid-search" placeholder="Search staff, table, reason, item…" oninput="window.renderUnpaidLog()" style="flex:1; min-width:180px;">
+                <button class="lnk" onclick="window.exportUnpaid()">Export CSV</button>
+            </div>
+            <div id="unpaid-count" style="font-size:0.78rem; opacity:0.6; margin:6px 0;"></div>
+            <div class="scroll">
+                <table class="tbl">
+                    <thead><tr><th>Time</th><th>By</th><th>Table</th><th class="num">Unpaid</th><th>What was on it</th><th>Reason</th></tr></thead>
+                    <tbody id="unpaid-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
         </div><!-- /analytics-block -->
         <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-10 &middot; demand-merge h</div>
     </div>
@@ -360,6 +382,8 @@
         let historyQuery = null, historyFrom = null;
         let CATMAP = {};     // menu item name -> category
         let VOIDS = {};      // security/voids
+        let UNPAID = {};     // security/unpaid — bills written off unpaid at cash-up
+        let UNPAID_ROWS = [];
         let RANGE = null;    // {start, end, key, label}
         let charts = {};
         let LAST = null;     // last computed result (for sub-renderers)
@@ -376,6 +400,9 @@
             // Voids are rare — a few a week — so 2000 is years of them, and it stops
             // this being the next node that grows without limit.
             db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; render(); });
+            // Bounded like the voids beside it: append-only, and a café that ran for
+            // years would otherwise pull every walkout it ever had into a phone.
+            db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; render(); });
             db.ref('pos/eodArchive').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
             demandBoot();
         }
@@ -536,6 +563,7 @@
             LAST = { itemAgg, txns, totalRev: rev };
             renderTop(); renderTxns(); refreshDrillOptions();
             computeVoids(start, end, key);
+            computeUnpaid(start, end, key);
             renderEod();
         }
 
@@ -707,6 +735,86 @@
             const out = [['Time','By','Device','Table','Item','Value','Reason']];
             rows.forEach(r => out.push([r.time, r.by, r.device, r.table, r.item, Math.round(r.value), r.reason]));
             downloadCSV(out, 'ila-voids-' + stamp() + '.csv');
+        };
+
+        // ---------- security / walkouts written off ----------
+        // Same shape of question as the void log: who, when, how much, why. The
+        // difference is that a walkout takes the whole table, so the items are worth
+        // showing — that is the part the ledger line cannot tell you.
+        function computeUnpaid(start, end, key){
+            const rows = [];
+            for(const k in (UNPAID||{})){
+                const u = UNPAID[k] || {};
+                const dated = (typeof u.ts === 'number');
+                // Same rule as voids: undated rows only surface under All Time,
+                // rather than silently landing in whichever range is open.
+                if(key !== 'all'){ if(!dated) continue; if(u.ts < start || u.ts >= end) continue; }
+                rows.push({
+                    ts: dated ? u.ts : 0,
+                    time: dated ? new Date(u.ts).toLocaleString('en-GB') : '—',
+                    by: u.by || 'Unknown',
+                    table: (u.table != null) ? String(u.table) : '-',
+                    due: Number(u.due) || 0,
+                    total: Number(u.total) || 0,
+                    paid: Number(u.paid) || 0,
+                    items: unpaidItems(u.items),
+                    reason: u.reason || ''
+                });
+            }
+            rows.sort((a,b) => b.ts - a.ts);
+            UNPAID_ROWS = rows;
+
+            const totDue = rows.reduce((s,r) => s + r.due, 0);
+            document.getElementById('unpaid-summary').innerHTML = rows.length
+                ? `<strong>${rows.length}</strong> bill${rows.length===1?'':'s'} written off · <strong>${rupee(totDue)}</strong> unpaid${key==='all' ? ' (all time)' : ''}`
+                : 'No bills written off in this range.';
+
+            const byStaff = {};
+            rows.forEach(r => { if(!byStaff[r.by]) byStaff[r.by] = {count:0, val:0}; byStaff[r.by].count++; byStaff[r.by].val += r.due; });
+            const staff = Object.keys(byStaff).sort((a,b) => byStaff[b].val - byStaff[a].val);
+            document.getElementById('unpaid-bystaff').innerHTML = staff.length
+                ? '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.55; margin-bottom:6px;">Written off by</div>' +
+                  staff.map(st => `<div class="top-item-row"><span>${escapeHTML(st)}</span><span style="font-weight:bold;">${byStaff[st].count} · ${rupee(byStaff[st].val)}</span></div>`).join('')
+                : '';
+            renderUnpaidLog();
+        }
+
+        // items is { name: {qty, price} } as the till stores a table. Flatten it to
+        // something readable in a cell; a walkout with thirty lines is rare and
+        // truncating beats a row that fills the screen.
+        function unpaidItems(items){
+            if(!items || typeof items !== 'object') return '';
+            const parts = [];
+            for(const nm in items){
+                const q = Number(items[nm] && items[nm].qty) || 0;
+                parts.push((q > 1 ? q + '× ' : '') + nm);
+            }
+            if(!parts.length) return '';
+            return parts.length > 6 ? parts.slice(0,6).join(', ') + ' +' + (parts.length-6) + ' more' : parts.join(', ');
+        }
+
+        function unpaidFilter(){
+            const el = document.getElementById('unpaid-search');
+            const q = ((el && el.value) || '').toLowerCase().trim();
+            if(!q) return UNPAID_ROWS;
+            return UNPAID_ROWS.filter(r => (r.by + ' ' + r.table + ' ' + r.reason + ' ' + r.items).toLowerCase().includes(q));
+        }
+
+        window.renderUnpaidLog = function(){
+            const body = document.getElementById('unpaid-body'); const cnt = document.getElementById('unpaid-count');
+            if(!body) return;
+            const rows = unpaidFilter();
+            cnt.textContent = rows.length + (rows.length === UNPAID_ROWS.length ? '' : ' of ' + UNPAID_ROWS.length) + ' written off' + (rows.length > 500 ? ' (showing first 500)' : '');
+            if(!rows.length){ body.innerHTML = '<tr><td colspan="6" class="muted">Nothing written off.</td></tr>'; return; }
+            body.innerHTML = rows.slice(0,500).map(r => `<tr><td style="white-space:nowrap;">${escapeHTML(r.time)}</td><td>${escapeHTML(r.by)}</td><td>${escapeHTML(r.table)}</td><td class="num">${rupee(r.due)}${r.paid > 0 ? `<div style="opacity:0.45; font-size:0.7rem;">of ${rupee(r.total)}</div>` : ''}</td><td style="opacity:0.85;">${escapeHTML(r.items)}</td><td style="opacity:0.85;">${escapeHTML(r.reason)}</td></tr>`).join('');
+        };
+
+        window.exportUnpaid = function(){
+            const rows = unpaidFilter();
+            if(!rows.length){ alert('Nothing to export.'); return; }
+            const out = [['Time','By','Table','Unpaid','Bill total','Paid','Items','Reason']];
+            rows.forEach(r => out.push([r.time, r.by, r.table, Math.round(r.due), Math.round(r.total), Math.round(r.paid), r.items, r.reason]));
+            downloadCSV(out, 'ila-walkouts-' + stamp() + '.csv');
         };
 
         function renderEod(){

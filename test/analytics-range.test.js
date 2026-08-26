@@ -78,6 +78,15 @@ const ago = d => now - d * DAY;
   check('no page-level read pulls an append-only node whole',
         unbounded.length === 0, unbounded.join(', '));
   note('history is range-driven, completed is capped per station, voids are capped');
+
+  // Named rather than left to the sweep above, because both are security logs that
+  // only ever grow and both are read on a phone. The sweep would catch an unbounded
+  // read; this says out loud that these two are meant to be capped.
+  for (const node of ['security/voids', 'security/unpaid']) {
+    const read = new RegExp("db\\.ref\\('" + node + "'\\)((?:\\.\\w+\\([^)]*\\))*)").exec(idx);
+    check(node + ' is read with a cap', !!read && /limitToLast\(\d+\)/.test(read[1]),
+          read ? read[1] : 'not read at all');
+  }
 }
 
 // ---------------------------------------------------------------- the demand-map cap is justified
