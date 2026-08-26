@@ -6,7 +6,30 @@
     <meta name="theme-color" content="#8D6E52">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>ILA | Order</title>
+    <title>Café Ila — order ahead</title>
+    <meta name="description" content="Order ahead from Café Ila. Browse the menu, see how long the kitchen is running, and pay by UPI.">
+
+    <!-- A link to this page used to unfurl as a bare URL with no title, image or
+         description, because there was nothing here to unfurl. It is shared by
+         customers and printed on the table QR codes, so it is the first thing most
+         people see of the café. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Café Ila">
+    <meta property="og:title" content="Café Ila — order ahead">
+    <meta property="og:description" content="Browse the menu, see how long the kitchen is running, and pay by UPI.">
+    <meta property="og:url" content="https://ila.cafe/">
+    <meta property="og:image" content="https://ila.cafe/icon-customer.png">
+    <meta property="og:image:width" content="1024">
+    <meta property="og:image:height" content="1024">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Café Ila — order ahead">
+    <meta name="twitter:description" content="Browse the menu, see how long the kitchen is running, and pay by UPI.">
+    <meta name="twitter:image" content="https://ila.cafe/icon-customer.png">
+
+    <!-- Without this the page could not be installed: iOS honoured the apple-* tags
+         above, Android had nothing to go on and only ever offered a bookmark. -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="canonical" href="https://ila.cafe/">
     <link rel="apple-touch-icon" href="/icon-customer.png" />
     <link rel="icon" type="image/png" href="/icon-customer.png" />
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
@@ -141,7 +164,7 @@
             <div style="padding:16px 18px;">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
                     <span style="font-weight:700; text-transform:uppercase; letter-spacing:2px; font-size:0.85rem; color:#8D6E52;">Your Order</span>
-                    <span id="status-eta-chip" style="font-weight:700; font-size:0.9rem; color:#5a4a38; background:rgba(141,110,82,0.12); padding:4px 10px; border-radius:20px; display:none;"></span>
+                    <span id="status-eta-chip" aria-live="polite" style="font-weight:700; font-size:0.9rem; color:#5a4a38; background:rgba(141,110,82,0.12); padding:4px 10px; border-radius:20px; display:none;"></span>
                 </div>
                 <!-- progress steps -->
                 <div style="display:flex; align-items:center; gap:5px; margin-bottom:10px;">
@@ -157,7 +180,9 @@
             </div>
         </div>
 
-        <div id="usual-order-container" class="usual-box" onclick="window.loadUsualOrder()" style="display: none;">
+        <div id="usual-order-container" class="usual-box" onclick="window.loadUsualOrder()"
+             role="button" tabindex="0" aria-label="Reorder your usual" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
+             style="display: none;">
             <div style="font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Reorder Your Usual</div>
             <div id="usual-order-desc" style="font-size: 0.9rem; opacity: 0.7;"></div>
         </div>
@@ -176,7 +201,8 @@
         </div>
     </div>
 
-    <div id="cart-banner" onclick="window.openCheckoutModal()">
+    <div id="cart-banner" onclick="window.openCheckoutModal()"
+         role="button" tabindex="0" aria-label="Review your order and check out" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
         <div class="cart-info">
             <span class="cart-total" id="cart-total-text">₹0</span>
             <span class="cart-clear">View Order</span>
@@ -184,7 +210,7 @@
         <button class="checkout-btn">Checkout</button>
     </div>
 
-    <div id="remark-modal" class="modal-overlay">
+    <div id="remark-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Add a note to this item">
         <div class="modal-content">
             <h3 id="remark-item-title">Item</h3>
             <div style="text-align: left; width: 100%; margin: 15px 0;">
@@ -204,7 +230,7 @@
         </div>
     </div>
 
-    <div id="checkout-modal" class="modal-overlay">
+    <div id="checkout-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Review your order">
         <div class="modal-content">
             <h3>Cart</h3>
             <div id="review-cart-list" class="bill-receipt" style="max-height: 200px; overflow-y: auto;"></div>
@@ -213,7 +239,7 @@
             <div style="text-align: left; margin-top: 15px;">
                 <div style="margin-bottom: 15px;">
                     <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Special Requests</label>
-                    <textarea id="cart-notes" maxlength="200" class="remark-input" placeholder="e.g. Oat milk, extra napkins..." style="height: 50px; resize: none; margin-top: 5px;"></textarea>
+                    <textarea id="cart-notes" aria-label="Notes for the kitchen" maxlength="200" class="remark-input" placeholder="e.g. Oat milk, extra napkins..." style="height: 50px; resize: none; margin-top: 5px;"></textarea>
                 </div>
 
                 <div id="order-type-section">
@@ -232,7 +258,7 @@
                 
                 <div id="dynamic-fields" style="margin-top: 15px;">
                     <div id="field-delivery" style="display: none;">
-                        <textarea id="delivery-address" maxlength="300" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
+                        <textarea id="delivery-address" aria-label="Delivery address" maxlength="300" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
                     </div>
                     <div id="field-dinein" style="display: none;">
                         <div id="manual-table-selector">
@@ -243,7 +269,7 @@
                             </div>
                     </div>
                     <div id="field-takeaway" style="display: none; padding: 10px 0;">
-                        <div style="text-align:center; font-weight: bold; font-size: 1rem;" id="takeaway-eta-line">Ready in ~25–30 min</div>
+                        <div style="text-align:center; font-weight: bold; font-size: 1rem;" id="takeaway-eta-line" aria-live="polite">Ready in ~25–30 min</div>
                         <div style="text-align:center; font-size:0.8rem; opacity:0.65; margin-top:4px;">Estimated from your order and the current kitchen.</div>
                         <div style="margin-top:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
                             <input type="checkbox" id="takeaway-schedule-toggle" onchange="window.toggleSchedule()" style="width:auto;">
@@ -251,7 +277,7 @@
                         </div>
                         <div id="takeaway-schedule-row" style="display:none; text-align:center; margin-top:10px;">
                             <div style="font-size:0.85rem; margin-bottom:6px;">Pick up in <span id="sched-display" style="font-weight:bold;">45</span> min</div>
-                            <input type="range" id="takeaway-sched-time" min="30" max="120" step="5" value="45" oninput="document.getElementById('sched-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); height: 2px; outline: none; border-radius: 2px;">
+                            <input type="range" id="takeaway-sched-time" aria-label="Minutes from now to collect" min="30" max="120" step="5" value="45" oninput="document.getElementById('sched-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); height: 2px; outline: none; border-radius: 2px;">
                             <div style="font-size:0.75rem; opacity:0.6; margin-top:4px;">Can't be earlier than the kitchen estimate above.</div>
                         </div>
                     </div>
@@ -266,7 +292,7 @@
         </div>
     </div>
 
-    <div id="payment-modal" class="modal-overlay">
+    <div id="payment-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Payment">
         <div class="modal-content">
             <h3>Checkout</h3>
             <div style="border: 1px solid rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; margin-bottom: 18px;">
@@ -277,7 +303,7 @@
             <!-- STEP 1: phone number (required) -->
             <div id="pay-step-phone">
                 <label style="display:block; font-size:0.8rem; opacity:0.75; margin-bottom:6px;">Your mobile number</label>
-                <input type="tel" id="cust-phone" inputmode="numeric" maxlength="10" placeholder="10-digit number" style="width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.06); color:inherit; font-size:1rem; letter-spacing:1px;">
+                <input type="tel" id="cust-phone" aria-label="Your phone number" inputmode="numeric" maxlength="10" placeholder="10-digit number" style="width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.06); color:inherit; font-size:1rem; letter-spacing:1px;">
                 <div id="phone-error" style="font-size:0.75rem; color:#ff9e9e; margin-top:6px; display:none;">Please enter a valid 10-digit Indian mobile number.</div>
                 <div id="large-order-note" style="font-size:0.78rem; opacity:0.75; margin-top:10px; display:none; line-height:1.4;"></div>
                 <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
@@ -288,7 +314,7 @@
             <div id="pay-step-status" style="display:none; text-align:center; padding:10px 0;">
                 <div id="status-icon" style="font-size:2.5rem; margin-bottom:10px;">⏳</div>
                 <div id="status-title" style="font-size:1.1rem; font-weight:700; margin-bottom:8px;">Order placed</div>
-                <div id="status-detail" style="font-size:0.85rem; opacity:0.8; line-height:1.5;">Confirming your payment automatically…</div>
+                <div id="status-detail" aria-live="polite" style="font-size:0.85rem; opacity:0.8; line-height:1.5;">Confirming your payment automatically…</div>
             </div>
 
             <button class="close-modal" onclick="closeModal('payment-modal')">✖ CLOSE</button>
@@ -309,7 +335,7 @@
         const db = firebase.database();
         // Build stamp — rendered in the footer. If this doesn't change after a deploy, the
         // page being served is cached, not the one just pushed.
-        const ILA_BUILD = '2026-08-25.7';
+        const ILA_BUILD = '2026-08-25.9';
 
         // A TILL THAT STAYS OPEN NEVER GETS THE FIX
         //

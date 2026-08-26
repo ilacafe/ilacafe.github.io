@@ -1,0 +1,19 @@
+{
+  "name": "Café Ila",
+  "short_name": "ILA",
+  "description": "Order ahead from Café Ila — browse the menu, see how long the kitchen is running, and pay by UPI.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF9F6",
+  "theme_color": "#8D6E52",
+  "icons": [
+    {
+      "src": "/icon-customer.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
