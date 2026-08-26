@@ -1,1 +1,4 @@
 node_modules/
+# the emulator writes these next to firebase.json on every run of `npm run test:rules`
+*-debug.log
+.firebase/

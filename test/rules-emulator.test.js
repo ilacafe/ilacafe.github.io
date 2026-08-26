@@ -172,28 +172,32 @@ const SAMPLES = {
     // row fails here and asks for this table to be updated with the good news.
     const READERS = ['nobody', 'anon', 'cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'];
     const EXPECTED_READERS = {
-      '':                  [],                                    // the root, to anyone
-      'staff':             ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'users':             ['admin'],
-      'pos':               ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'pos/ledgerEntries': ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
-      'pos/eodArchive':    ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
-      'orders/history':    ['admin'],
-      'orders/pendingWeb': ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'payments':          ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'payments/incoming': ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'security':          ['admin'],
-      'customers':         ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'inventory':         ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'reconciliation':    ['admin'],
-      'monitor':           ['admin', 'robot'],
-      'upiReview':         ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
-      'upiRouting':        ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'pushSubscriptions': ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
-      'ops/cronFailure':   ['admin', 'robot'],
-      'ops/pushHealth':    ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
-      'eta/recalMeta':     ['admin', 'robot'],
-      'eta/modelPrevious': ['admin', 'robot'],
+      '':                    [],                                    // the root, to anyone
+      'staff':               ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'users':               ['admin'],
+      'pos':                 [],
+      'pos/activeTables':    ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'pos/ledgerEntries':   ['cashier', 'admin', 'robot'],
+      'pos/unverified':      ['cashier', 'admin'],
+      'pos/eodArchive':      ['admin', 'robot'],
+      'orders/history':      ['admin'],
+      'orders/pendingWeb':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'payments':            ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'payments/incoming':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'security':            ['admin'],
+      'customers':           ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'inventory':           ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'reconciliation':      ['admin'],
+      'monitor':             ['admin', 'robot'],
+      'upiReview':           ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
+      'upiRouting':          [],
+      'upiRouting/config':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'upiRouting/totals':   ['admin'],
+      'pushSubscriptions':   ['admin', 'robot'],
+      'ops/cronFailure':     ['admin', 'robot'],
+      'ops/pushHealth':      ['admin', 'robot'],
+      'eta/recalMeta':       ['admin', 'robot'],
+      'eta/modelPrevious':   ['admin', 'robot'],
     };
     const wrong = [];
     for (const [path, expected] of Object.entries(EXPECTED_READERS)) {
@@ -207,21 +211,45 @@ const SAMPLES = {
           wrong.length === 0, wrong.slice(0, 4).join(' | '));
     note('nothing here is world-readable, and nothing but the robot reaches in from outside a role');
 
-    // The two rows above that are wider than the café needs. Named, so they are a
-    // decision rather than an oversight — and so that closing one fails the table
-    // above and brings someone back here.
-    check('the bar and the kitchen can still read the till ledger',
-          (await canRead('pos/ledgerEntries', 'barista')) && (await canRead('pos/ledgerEntries', 'chef')));
-    note('pos grants .read to any role and rules cannot be revoked lower down, so the');
-    note('ledger, the bills and the drawer come with it. Closing it means splitting pos');
-    note('and gating the ledger on the role VALUE — which depends on what the café’s own');
-    note('accounts hold, since every page except admin lets any role in.');
+    // The till, and only the till and the owner.
+    //
+    // pos used to grant .read to any role, and a rule cannot be revoked lower down,
+    // so the ledger, the bills, the drawer and the cash-up archive all came with it —
+    // to the bar and the kitchen as much as to the counter. Each child is granted on
+    // its own now, and the ones carrying money are named by role.
+    check('the bar and the kitchen cannot read the till ledger',
+          !(await canRead('pos/ledgerEntries', 'barista')) && !(await canRead('pos/ledgerEntries', 'chef')));
+    check('but the counter still can, and so does the owner',
+          (await canRead('pos/ledgerEntries', 'cashier')) && (await canRead('pos/ledgerEntries', 'admin')));
+    note('the Worker reads it too — that is the hourly report of cash leaving the drawer');
+
+    check('a cashier cannot read the cash-up archive',
+          !(await canRead('pos/eodArchive', 'cashier')));
+    check('but can still write the day into it',
+          await canWrite('pos/eodArchive/2026-08-26-1', 'cashier'));
+    note('the till closes the day; reading the archive back is analytics, which is the owner’s');
+
+    // What admin.html and analytics.html show, and nobody else needs.
+    const OWNERS_ALONE = ['pos/eodArchive', 'orders/history', 'security/voids', 'security/unpaid',
+                          'reconciliation', 'monitor', 'ops/cronFailure', 'ops/pushHealth',
+                          'eta/recalMeta', 'eta/modelPrevious', 'pushSubscriptions',
+                          'upiRouting/totals', 'users'];
+    const reachable = [];
+    for (const p of OWNERS_ALONE) {
+      for (const who of ['cashier', 'barista', 'chef', 'inventory']) {
+        if (await canRead(p, who)) reachable.push(who + ' → ' + p);
+      }
+    }
+    check('nothing the owner’s two pages show is readable by anyone else',
+          reachable.length === 0, reachable.slice(0, 5).join('; '));
+    note('admin.html and analytics.html check the role themselves, in a browser the');
+    note('holder controls — so it is advice until the rules say the same thing');
 
     check('every role can still read the staff PIN hashes',
           (await canRead('staff', 'barista')) && (await canRead('staff', 'chef')));
     note('docs/database-access.md: the salt is a literal in the page, so any staff');
     note('account recovers every PIN in under a second. Restricting the read is not the');
-    note('fix — the PIN is checked in a browser — but it is the easiest attack.');
+    note('fix — the PIN is checked in a browser — and pos and inventory both need it.');
 
     const MUST_NOT_WRITE = [
       ['nobody', 'menu/Coffee/Latte', 'the menu, by a stranger'],

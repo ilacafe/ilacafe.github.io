@@ -157,7 +157,10 @@ costs money:
   map — every path an app uses must be permitted to the app that uses it, which is
   what makes tightening a rule safe: a locked-out till fails here rather than at the
   counter. The other half is written by hand, because a list derived from the rules
-  would agree with them by construction and check nothing.
+  would agree with them by construction and check nothing. It also walks everything
+  `admin.html` and `analytics.html` show and fails if any other role can reach it —
+  those two pages check the role in a browser the holder controls, which is advice
+  until the rules say the same thing.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with
@@ -184,7 +187,10 @@ verify.
 
 Rules cascade downwards and cannot be revoked lower down: a `.read` on a parent
 grants read to everything beneath it, whatever the children say. So the public
-read sits on the exact nodes a customer needs and nowhere above them. `npm test`
+read sits on the exact nodes a customer needs and nowhere above them. The same cascade
+is why `pos` no longer carries a blanket `.read`: it handed the ledger, the bills,
+the drawer and the cash-up archive to every signed-in role, including the bar and
+the kitchen, which read none of them. `npm test`
 holds that list — `menu`, `settings`, `eta/model`, `eta/live`, `orders/track` —
 and fails on anything added to it or removed from it.
 

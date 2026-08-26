@@ -122,23 +122,41 @@ The suite has two halves, and they answer opposite questions:
   *is* true rather than what ought to be, so closing one of the wide rows below
   fails the suite and brings someone back to update it with the good news.
 
-### Two rows that are wider than the café needs
+### The till, and only the till and the owner
 
-**The bar and the kitchen can read the till ledger.** `pos` grants `.read` to any
-role, and a rule cannot be revoked lower down, so `pos/ledgerEntries`, `pos/bills`
-and `pos/cashDrawer` all come with it. The access map says only the till and the
-owner read the ledger, so nothing needs this.
+`pos` used to grant `.read` to any signed-in role, and a rule cannot be revoked
+lower down, so the ledger, the bills, the drawer and the cash-up archive all came
+with it — to the bar and the kitchen as much as to the counter. The access map says
+neither reads any of it.
 
-Closing it means splitting `pos` — dropping the blanket `.read` and granting each
-child on its own — and then gating the ledger on the role *value* rather than on a
-role existing. That last part is the bit that needs a decision rather than a patch:
-every page except `admin.html` and `analytics.html` admits any role, so whether
-`admin | cashier` is the right gate depends on what the café's own accounts
-actually hold.
+Each child is granted on its own now, and the three that carry money are named by
+role rather than by a role merely existing:
 
-**Every role can read `staff`.** Covered below — the PIN is attribution, not
-authorisation, and restricting this read is the easiest attack removed rather than
-the design fixed.
+| node | who |
+|---|---|
+| `pos/ledgerEntries` | the counter, the owner, and the Worker's hourly report of cash leaving the drawer |
+| `pos/unverified` | the counter and the owner |
+| `pos/eodArchive` | the owner and the Worker — the till writes the day into it and never reads it back |
+| everything else under `pos` | any role |
+
+The same reasoning closed three more: `pushSubscriptions` and `ops/pushHealth` (who
+the café's alerts go to, and whether they are arriving) and `upiRouting/totals`
+(every account's month). The till still reads `upiRouting/totals/{YYYY-MM}`, because
+it needs the running total for the account it is about to charge — it just cannot
+list every month.
+
+**`admin.html` and `analytics.html` check the role themselves, in a browser the
+holder controls.** That is advice until the rules say the same thing, and now they
+do: `npm run test:rules` walks everything those two pages show and fails if any
+other role can reach it.
+
+### One row that is still wider than the café needs
+
+**Every role can read `staff`.** It maps `SHA-256(fixed salt + PIN) → name` and the
+salt is a literal in the page, so any staff account recovers every PIN in under a
+second. It stays open because `pos.html` and `inventory.html` both check PINs
+against it. Restricting the read is not the fix anyway — the check happens in a
+browser — and the section below says what the real one would be.
 
 ## The access map
 
