@@ -24,6 +24,44 @@ Each page is self-contained: its own HTML, CSS and JavaScript in one file, with
 Firebase loaded from a CDN. Sign-in is Firebase Auth; the role in
 `users/{uid}.role` decides which pages an account can use.
 
+## How it fits together
+
+Three moving parts, and the boundaries between them are where the surprises live.
+
+```
+  customer phone            staff tablets                 kitchen screens
+  index.html                pos.html / admin.html         chef.html / barista.html
+        |                          |                              |
+        +--------------+-----------+--------------+---------------+
+                       |                          |
+             Firebase Realtime Database    ila-push (Cloudflare Worker)
+             the only security boundary    the only code not in a browser
+                       |                          |
+                       +------------+-------------+
+                                    |
+                              robot@cafeila.app
+                        writes eta/model, payments/incoming
+```
+
+**Every page is a browser.** There is no server of ours between a till and the
+database. Every PIN prompt, role check and confirmation dialog is advice to a
+cooperating browser — anyone who opens devtools can skip all of it. The database
+rules are the only thing that actually stops a read or a write, which is why
+[`database.rules.json`](database.rules.json) matters more than any page does.
+
+**One component is not a browser.** The Cloudflare Worker in [`worker/`](worker/)
+holds the `robot@cafeila.app` credential and is the only thing that can refit the
+ETA model or record a bank credit. It is also the only place a secret can live.
+
+**Three things deploy separately**, and forgetting this is the most common way to
+be confused by this repo:
+
+| what | how | when |
+|---|---|---|
+| the pages | push to `main` | immediately, via GitHub Pages |
+| the database rules | `firebase deploy --only database` | never automatic |
+| the Worker | push to `main` touching `worker/` | via GitHub Actions |
+
 ## Running it
 
 Open the files. There is nothing to compile and no dev server needed — though a
