@@ -121,7 +121,10 @@ costs money:
   when the live model does not carry those curves. `etaInterp` reads a missing
   curve as zero, so the alarm would come in short and start calling on-time
   tickets late, silently.
-- **write-only paths** — every database path an app writes is read back somewhere.
+- **write-only paths** — across the pages and the Worker, every database path
+  something writes is read back somewhere, and every path something reads is
+  written by something. A screen that will always be empty is harder to spot than
+  a record nobody can see, because an empty list looks like a quiet day.
   Two features had been recording faithfully for as long as they existed and were
   readable from nowhere: the prep and delivery log, and the record of bills written
   off unpaid. The write worked in both; nobody had closed the loop.
