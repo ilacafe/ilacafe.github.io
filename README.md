@@ -156,7 +156,9 @@ costs money:
   the other two cannot, on every pull request. Half of it is derived from the access
   map — every path an app uses must be permitted to the app that uses it, which is
   what makes tightening a rule safe: a locked-out till fails here rather than at the
-  counter. The other half is written by hand, because a list derived from the rules
+  counter. The Worker gets the same treatment from `worker.js`, and needs it more:
+  its reads fail silently, so a rule that shuts the robot out stops the hourly report
+  and the monthly refit without breaking anything anyone can see. The other half is written by hand, because a list derived from the rules
   would agree with them by construction and check nothing. It also walks everything
   `admin.html` and `analytics.html` show and fails if any other role can reach it —
   those two pages check the role in a browser the holder controls, which is advice

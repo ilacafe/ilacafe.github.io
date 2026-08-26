@@ -116,6 +116,11 @@ The suite has two halves, and they answer opposite questions:
   derived from the access map so it cannot drift from the code. This is the half
   that makes tightening a rule safe — a change that locks the café out of its own
   till fails here rather than at the counter.
+- **The Worker's half of that**, derived from `worker.js` the same way. It matters
+  more here than anywhere, because the Worker's reads fail *silently*: `monLoad`
+  returns `null` on a denied response without saying why, so a rule that shuts the
+  robot out does not break anything visibly — the hourly report just stops finding
+  cash-outs, the monthly refit reads no completions, and nothing anywhere says so.
 - **Denials, and a table of who can read what.** Written by hand, for the reason
   [`tools/probe-rules.js`](../tools/probe-rules.js) gives: derived from the rules,
   it would agree with them by construction and check nothing. The table states what

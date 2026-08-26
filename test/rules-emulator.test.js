@@ -25,7 +25,7 @@
 //
 // Not part of `npm test` — it needs Java and the emulator. `npm run test:rules`.
 
-const { derivePaths, suite } = require('./helpers');
+const { derivePaths, deriveWorkerPaths, suite } = require('./helpers');
 
 const BASE = process.env.RULES_EMULATOR_URL || 'http://127.0.0.1:9010';
 const NS = process.env.RULES_EMULATOR_NS || 'demo-ila-default-rtdb';
@@ -157,6 +157,39 @@ const SAMPLES = {
           denied.length === 0, denied.slice(0, 6).join('; '));
     note(asked + ' role-and-path questions, derived from the access map');
     note('this is the half that makes tightening a rule safe — a locked-out till fails here');
+  }
+
+  // ---------------------------------------------------------- the Worker's half
+  //
+  // derivePaths only sees the pages, so the coverage above says nothing about the one
+  // component that is not a browser. That matters more here than anywhere: monLoad
+  // returns null on a denied read without saying why, so a rule that shuts the robot
+  // out does not fail — the hourly report simply stops finding anything, the monthly
+  // refit reads no completions, and nothing anywhere says so.
+  {
+    const worker = deriveWorkerPaths();
+    // The robot looks up the SENDER of a push by uid, so the key it reads is somebody
+    // else's; everything else takes a throwaway one.
+    const KEYS = { 'users/$key': 'cashierUid' };
+    const shut = [];
+    let asked = 0;
+    for (const [path, use] of worker) {
+      const concrete = path.replace(/\$key/g, KEYS[path] || 'probeKey');
+      if (use.read) {
+        asked++;
+        if (!(await canRead(concrete, 'robot'))) shut.push('robot cannot READ ' + path);
+      }
+      if (use.write) {
+        asked++;
+        const sample = SAMPLES[path];
+        const ok = sample ? await canWrite(concrete, 'robot', sample)
+                          : await canWrite(path.endsWith('$key') ? concrete : concrete + '/__wprobe', 'robot');
+        if (!ok) shut.push('robot cannot WRITE ' + path);
+      }
+    }
+    check('the Worker can still reach everything it touches', shut.length === 0,
+          shut.slice(0, 5).join('; '));
+    note(asked + ' questions, derived from worker.js — a denied read there is a silent one');
   }
 
   await seed();   // coverage wrote probes; start the denials from a known café

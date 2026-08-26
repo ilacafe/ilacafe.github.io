@@ -18,32 +18,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ROOT, derivePaths, unresolvedWrites, suite } = require('./helpers');
-
-// The Worker is not one of the apps, so derivePaths does not see it — and it is
-// the component most likely to have a write nobody reads, because none of it is
-// on a screen. eta/modelPrevious was found by hand for exactly that reason.
-function workerPaths() {
-  const src = fs.readFileSync(path.join(ROOT, 'worker', 'worker.js'), 'utf8');
-  const out = new Map();
-  const touch = (p, kind) => {
-    const key = p.replace(/^\//, '');
-    if (!key) return;                       // the root PATCH, handled below
-    const rec = out.get(key) || { read: false, write: false };
-    rec[kind] = true;
-    out.set(key, rec);
-  };
-  for (const m of src.matchAll(/DB_URL \+ '([^']+)'/g)) {
-    let p = m[1].replace(/\.json.*$/, '');
-    p = p.endsWith('/') && p !== '/' ? p + '$key' : p;
-    const after = src.slice(m.index, m.index + 260);
-    touch(p, /method\s*:\s*'(PUT|PATCH|POST|DELETE)'/.test(after) ? 'write' : 'read');
-  }
-  // monLoad only ever reads, and the root PATCH writes monitor/* in one call.
-  for (const m of src.matchAll(/monLoad\([^,]+,\s*'([^']+)'\)/g)) touch(m[1], 'read');
-  touch('/monitor', 'write');
-  return out;
-}
+const { ROOT, derivePaths, deriveWorkerPaths, unresolvedWrites, suite } = require('./helpers');
 
 const { check, note, done } = suite('Write-only paths — recorded and unreadable');
 
@@ -55,7 +30,7 @@ const DELIBERATELY_WRITE_ONLY = {
 };
 
 const used = derivePaths();
-const worker = workerPaths();
+const worker = deriveWorkerPaths();
 
 // One view of the whole system: the pages and the Worker together. A path the
 // Worker writes and a page reads is a working feature, and so is the reverse —

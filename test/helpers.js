@@ -403,6 +403,35 @@ function unresolvedWrites() {
   return out;
 }
 
+// Which paths the Worker touches, and how.
+//
+// It is not one of the apps, so derivePaths cannot see it — and it is the component
+// most likely to have a write nobody reads, because none of it is on a screen. It is
+// also the one whose reads fail SILENTLY: monLoad returns null on a denied response,
+// so a rule that shuts the robot out turns the hourly report into a quiet nothing.
+// Both suites that care read this from here rather than keeping a copy each.
+function deriveWorkerPaths() {
+  const src = fs.readFileSync(path.join(ROOT, 'worker', 'worker.js'), 'utf8');
+  const out = new Map();
+  const touch = (p, kind) => {
+    const key = p.replace(/^\//, '');
+    if (!key) return;                       // the root PATCH, handled below
+    const rec = out.get(key) || { read: false, write: false };
+    rec[kind] = true;
+    out.set(key, rec);
+  };
+  for (const m of src.matchAll(/DB_URL \+ '([^']+)'/g)) {
+    let p = m[1].replace(/\.json.*$/, '');
+    p = p.endsWith('/') && p !== '/' ? p + '$key' : p;
+    const after = src.slice(m.index, m.index + 260);
+    touch(p, /method\s*:\s*'(PUT|PATCH|POST|DELETE)'/.test(after) ? 'write' : 'read');
+  }
+  // monLoad only ever reads, and the root PATCH writes monitor/* in one call.
+  for (const m of src.matchAll(/monLoad\([^,]+,\s*'([^']+)'\)/g)) touch(m[1], 'read');
+  touch('/monitor', 'write');
+  return out;
+}
+
 function derivePaths() {
   const found = new Map();
   for (const [file, role] of Object.entries(APPS)) {
@@ -441,4 +470,4 @@ function derivePaths() {
   return found;
 }
 
-module.exports = { ROOT, readPage, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, stripComments, APPS, derivePaths, unresolvedWrites };
+module.exports = { ROOT, readPage, deriveWorkerPaths, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, stripComments, APPS, derivePaths, unresolvedWrites };
