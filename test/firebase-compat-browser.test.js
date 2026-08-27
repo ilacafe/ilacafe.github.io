@@ -193,6 +193,33 @@ async function exercise(base) {
     snap.forEach(function (ch) { got.push(ch.val().who); });
     r.query = got.join(',');
 
+    // --- orderByKey().startAt(): analytics reads a date range out of orders/history.
+    //
+    // The keys have to be the real shape here, and it is worth knowing why. Realtime
+    // Database sorts any key that parses as a 32-BIT integer numerically, ahead of
+    // every other key, and it parses the bound the same way. Written with small keys
+    // — '100-a', startAt('200') — the bound becomes the integer 200, every string key
+    // sorts after every integer, and the query returns the lot. It looks exactly like
+    // a filter that has stopped working.
+    //
+    // These keys are `${Date.now()}-${random}`, and Date.now() has been past 2^31 for
+    // decades, so the bound stays a string and the comparison is the lexicographic one
+    // the page is counting on. Anyone shortening those keys would find that out at the
+    // wrong moment; this is the check that would say so.
+    const T = 1756200000000;
+    await db.ref('t/hist').set({
+      [(T - 86400000) + '-old']: 1, [T + '-mid']: 2, [(T + 86400000) + '-new']: 3 });
+    const range = await db.ref('t/hist').orderByKey().startAt(String(T)).once('value');
+    const keys = [];
+    range.forEach(function (ch) { keys.push(ch.key.split('-')[1]); });
+    r.rangeQuery = keys.join(',');
+
+    // --- orderByChild().equalTo(): the table scan the customer page falls back to
+    const eq = await db.ref('t/orders').orderByChild('who').equalTo('b').once('value');
+    const who = [];
+    eq.forEach(function (ch) { who.push(ch.key); });
+    r.equalToQuery = who.join(',');
+
     // --- a live listener, and detaching it: every page opens these and pos.html
     //     detaches per-claim watches as bills close
     r.live = await new Promise(function (resolve) {
@@ -322,6 +349,13 @@ async function exercise(base) {
   check('push() hands back a key before the write lands', out.pushKeyIsLocal === true);
   check('orderByChild + limitToLast still order and limit',
         out.query === 'c,a', out.query);
+  check('orderByKey + startAt still returns a range and nothing before it',
+        out.rangeQuery === 'mid,new', out.rangeQuery);
+  note('the analytics date range reads orders/history this way, by key — and only');
+  note('works because a millisecond timestamp is too large to parse as an int32,');
+  note('which keeps both the keys and the bound on the string side of the ordering');
+  check('orderByChild + equalTo still matches exactly',
+        out.equalToQuery === 'b', out.equalToQuery);
   check('a value listener delivers changes, and off() stops it',
         out.live === 'one,two' && out.offStopsDelivery === true, String(out.live));
   check('remove() removes', out.removed === true);
