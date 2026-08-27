@@ -157,7 +157,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.3"></script>
+    <script src="/build-check.js" data-build="2026-08-27.4"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -1051,7 +1051,11 @@
             const pct = Math.round(100 * repeat.length / rows.length);
             k.innerHTML = '<div class="rec-kpi"><div class="lbl">Identified customers</div><div class="val">' + rows.length + '</div><div class="sub">with a phone number</div></div>'
                         + '<div class="rec-kpi ' + (pct >= 30 ? 'good' : '') + '"><div class="lbl">Ordered more than once</div><div class="val">' + pct + '%</div><div class="sub">' + repeat.length + ' of ' + rows.length + '</div></div>';
-            rows.sort((a,b) => b.n - a.n || b.lastAt - a.lastAt);
+            // Sort the array the ten are taken FROM. filter() returns a new array, so
+            // sorting rows left repeat in the order Firebase handed the node over — by
+            // phone number — and the panel showed ten arbitrary repeat customers while
+            // the most frequent ones were missing from it entirely.
+            repeat.sort((a,b) => b.n - a.n || b.lastAt - a.lastAt);
             const top = repeat.slice(0, 10);
             if (!top.length){ box.innerHTML = "<p style='opacity:0.6; font-size:0.9rem;'>No repeat orders yet.</p>"; return; }
             const fmt = ts => { try { return new Date(ts).toLocaleDateString('en-IN',{day:'numeric',month:'short'}); } catch(e){ return ''; } };
