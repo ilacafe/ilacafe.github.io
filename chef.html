@@ -17,6 +17,10 @@
             integrity="sha384-FlKYNHBedwGFdcKg5PNKA38dWBcbf9RzKO4qBmxO3DaDw5yuYP0DXikg/fgj4xID"
             crossorigin="anonymous"></script>
 
+    <!-- Keeps a signed-in device signed in, and stops the login form being
+         shown to somebody who is already signed in. See the top of the file. -->
+    <script src="/auth-gate.js"></script>
+
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; }
@@ -59,7 +63,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.4"></script>
+    <script src="/build-check.js" data-build="2026-08-27.5"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -112,8 +116,25 @@
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
             }[c]));
         }
-        function showLogin(msg) { document.getElementById('login-overlay').classList.remove('hidden'); if (msg) document.getElementById('login-error').innerText = msg; }
-        function hideLogin() { document.getElementById('login-overlay').classList.add('hidden'); document.getElementById('login-error').innerText = ""; }
+        // These delegate to auth-gate.js so that six pages cannot disagree about what a
+        // login screen is — but they must not DEPEND on it. A same-origin script can still
+        // fail to arrive on a cold cache, and a page whose whole inline script dies on the
+        // first line is a till that will not open. So the gate is an enhancement: present,
+        // it remembers the role and keeps the password field out of the way; absent, these
+        // do exactly what they always did.
+        const roleCache = window.ilaRole || { recall: () => null, remember: () => {}, forget: () => {} };
+        function showLogin(msg) {
+            if (window.ilaLoginBox) return window.ilaLoginBox.ready(msg);
+            document.getElementById('login-overlay').classList.remove('hidden');
+            if (msg) document.getElementById('login-error').innerText = msg;
+        }
+        function hideLogin() {
+            if (window.ilaLoginBox) return window.ilaLoginBox.hide();
+            document.getElementById('login-overlay').classList.add('hidden');
+            document.getElementById('login-error').innerText = "";
+        }
+        // Before auth has resolved nothing is known, so nothing is asked for.
+        if (window.ilaLoginBox) window.ilaLoginBox.checking();
         window.signInDisplay = function() {
             const email = document.getElementById('login-email').value.trim();
             const pw = document.getElementById('login-password').value;
@@ -255,13 +276,35 @@
         }, 1000);
 
         auth.onAuthStateChanged(async (user) => {
-            if (!user) { showLogin(); return; }
-            try {
-                const prof = (await db.ref('users/' + user.uid).once('value')).val();
-                if (!prof || !prof.role) { await auth.signOut(); showLogin("This account has no access."); return; }
+            if (!user) { roleCache.forget(); showLogin(); return; }
+
+            // What this device already knew about this uid. Enough to open on: the role
+            // only decides which screen gets drawn, and database.rules.json decides every
+            // read and write behind it. Waiting on the network to redraw the same screen
+            // is the whole of the delay staff were reading as "it signed me out again".
+            const known = roleCache.recall(user.uid);
+            const admit = (p) => {
                 hideLogin();
                 if (!displayStarted) { displayStarted = true; startDisplay(); }
-            } catch (e) { showLogin("Could not verify access. Check connection and retry."); }
+            };
+            if (known) admit(known);
+
+            try {
+                const prof = (await db.ref('users/' + user.uid).once('value')).val();
+                if (!prof || !prof.role) {
+                    roleCache.forget();
+                    await auth.signOut();
+                    showLogin("This account has no access.");
+                    return;
+                }
+                roleCache.remember(user.uid, prof);
+                admit(prof);
+            } catch (e) {
+                // A read that failed says nothing about the account, so it must not put
+                // anybody out. A device already open on a remembered role stays open; one
+                // with nothing remembered is the only one that has to wait for an answer.
+                if (!known) showLogin("Could not verify access. Check connection and retry.");
+            }
         });
 
         function startDisplay() {

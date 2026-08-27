@@ -149,7 +149,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.4"></script>
+    <script src="/build-check.js" data-build="2026-08-27.5"></script>
 </head>
 <body>
 
@@ -406,10 +406,20 @@
             // trouble with a fallback nobody can see failing.
             let etaLiveFresh = false;
             const ETA_LIVE_STALE_MS = 15*60000;   // no POS open for 15 min -> stop trusting it
+
+            // updatedAt is a SERVER timestamp and this comparison used the phone's own
+            // clock, so a handset running a quarter of an hour fast read every publish as
+            // stale and quoted a neutral wait for as long as it was wrong. .info is served
+            // by the connection itself — no rule governs it, and it needs no auth — so the
+            // offset costs nothing and removes the customer's clock from the question.
+            let serverSkew = 0;
+            try { db.ref('.info/serverTimeOffset').on('value', s => { serverSkew = Number(s.val()) || 0; }); } catch(e){}
+            const serverNow = () => Date.now() + serverSkew;
+
             try {
                 db.ref('eta/live').on('value', s=>{
                     const v = s.val();
-                    if (!v || !v.updatedAt || (Date.now() - v.updatedAt) > ETA_LIVE_STALE_MS) { etaLiveFresh = false; return; }
+                    if (!v || !v.updatedAt || (serverNow() - v.updatedAt) > ETA_LIVE_STALE_MS) { etaLiveFresh = false; return; }
                     etaLiveFresh = true;
                     loadChef = parseInt(v.activeChef) || 0;
                     loadBar  = parseInt(v.activeBarista) || 0;

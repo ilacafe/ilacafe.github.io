@@ -16,6 +16,7 @@ const suites = [
   'push-health-browser.test.js',
   'eod-browser.test.js',
   'web-verify-claims-browser.test.js',
+  'auth-gate-browser.test.js',
 ];
 
 let failed = [];
