@@ -61,36 +61,44 @@ const BOUNDED = {
   'pos/cashDrawer':         'a number',
   'pos/lastSplitHeads':     'a number',
   'pos/tips/lastHeads':     'a number',
+  'pos/unverified':         'payments still owed at closing. The Worker records each one ' +
+                            'into the archive for its day once a late credit matches, and ' +
+                            'clears the row on the run AFTER the archive shows it — so this ' +
+                            'is as long as the payments actually outstanding, not as long as ' +
+                            'the café has been open. See settleLateVerifications in worker.js.',
 };
 
 // These grow with the café's history and nothing removes from them. Each entry says
 // what is accepted and, more importantly, why it cannot just be pruned — every one
 // of them is the only copy of something.
 const GROWS = {
+  // These are all AUDIT records, and the café has said so: they are kept because
+  // somebody may need to answer a question about them later. Nothing here is pruned,
+  // and the reason is worth stating plainly rather than leaving as an omission —
+  // a few hundred kilobytes over several years is a much better trade than deleting
+  // the answer to a question nobody has asked yet.
+  //
+  // The cost is per page LOAD, not per bill: a value listener downloads its subtree
+  // once and takes deltas after. So this grows with the café's history rather than
+  // with its traffic, and slowly.
+
   'customers':
-    'one key per phone number, forever. The panel needs a count of ALL of them and ' +
-    'the share who came back, which a bounded query cannot answer — so bounding this ' +
-    'means keeping a counter or showing an approximate KPI. Read once per page load; ' +
-    'updates after that are deltas, so the cost is per open, not per bill.',
+    'one key per phone number. This is the repeat-customer record — the thing the ' +
+    'panel exists to show — so it is kept, and the panel needs a count of ALL of ' +
+    'them, which no bounded query answers. A busy decade is a few thousand keys.',
 
   'upiReview':
-    'one key per admin verify-or-ignore, forever. EOD folds each state into the ' +
-    'archived ledger and clears pos/ledgerEntries, but never clears this — the keys ' +
-    'orphan, by the till’s own admission. Pruning the orphans would be right except ' +
-    'for the window between the EOD archive being written and the reset landing: a ' +
-    'review written in it is in no archive, and deleting it loses an admin’s note.',
-
-  'pos/unverified':
-    'one key per payment still unverified at closing, forever. When a late credit ' +
-    'finally matches, the reconciler sets state=verified here rather than removing ' +
-    'the row — and it has to, because the archive was written BEFORE the payment was ' +
-    'parked, so this node is the only record that the money ever arrived. Nothing can ' +
-    'be pruned until a late verification has somewhere permanent to live.',
+    'one key per admin verify-or-ignore, with who decided and why. EOD folds each ' +
+    'state into the archived ledger, so the archive carries the decision — but the ' +
+    'note and the decider are worth keeping addressable, and a review written in ' +
+    'the window between the archive and the reset is in no archive at all. A ' +
+    'handful a day.',
 
   'upiRouting/totals':
-    'one key per month — twelve a year. Named rather than called bounded, because ' +
-    'nothing removes them; it is just slow enough never to matter.',
+    'one key per month. Twelve a year, and the per-account totals a tax question ' +
+    'would start from.',
 };
+
 
 // ---------------------------------------------------------------- the sweep
 const found = new Map();
@@ -134,9 +142,9 @@ note(found.size + ' nodes are read whole across the ' + PAGES.length + ' pages')
 {
   const thin = Object.entries(GROWS).filter(([, why]) => String(why).length < 80).map(([p]) => p);
   check('every growing node says what is being accepted', thin.length === 0, thin.join(', '));
-  note('the four that grow: ' + Object.keys(GROWS).join(', '));
-  note('none is a bug today. all three of the real ones hold the only copy of');
-  note('something, which is why none of them has been pruned on a guess');
+  note('kept on purpose: ' + Object.keys(GROWS).join(', '));
+  note('every one of them is an audit record. pos/unverified used to be here too,');
+  note('and left when the Worker started settling it into the archive for its day');
 }
 
 done();

@@ -318,7 +318,7 @@ const SAMPLES = {
       'pos':                 [],
       'pos/activeTables':    ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'pos/ledgerEntries':   ['cashier', 'admin', 'robot'],
-      'pos/unverified':      ['cashier', 'admin'],
+      'pos/unverified':      ['cashier', 'admin', 'robot'],   // the robot settles late credits into the archive
       'pos/eodArchive':      ['admin', 'robot'],
       'orders/history':      ['admin'],
       'orders/pendingWeb':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
@@ -402,6 +402,33 @@ const SAMPLES = {
           await canWrite('pos/eodArchive/2026-08-26-1', 'cashier'));
     note('the till closes the day; reading the archive back is analytics, which is the owner’s');
 
+    // The correction the Worker writes when a parked payment is finally paid.
+    //
+    // EOD archives the day and THEN parks the stragglers, so the archived ledger
+    // says unverified — true at closing, wrong forever after. The robot appends the
+    // late credit as a child of that day. What it must not be able to do is edit
+    // what was archived: the ledger line is the record of what was true when the
+    // till closed, and an audit that can be rewritten is not one.
+    const ARCH = 'pos/eodArchive/2026-08-27-1756200000000';
+    await call('PUT', ARCH, OWNER, { report: 'x', upi: 1000, cash: 500, ledger: { 0: { type: 'upi_income', payId: 'p1' } } });
+
+    check('the robot can read what was carried over', await canRead('pos/unverified', 'robot'));
+    check('and record that one of them was paid after the day closed',
+          await canWrite(ARCH + '/lateVerified/p1', 'robot',
+                         { ref: '512345678901', at: 1756290000000, amount: 450, bankTag: 'yes 8020' }));
+    check('and then drop the parked row',
+          (await call('DELETE', 'pos/unverified/p1', 'robot')) === 200);
+
+    check('but it cannot rewrite the ledger that was archived',
+          !(await canWrite(ARCH + '/ledger/0', 'robot', { type: 'upi_income', payId: 'p1' })));
+    check('nor the day around it',
+          !(await canWrite(ARCH + '/upi', 'robot', 999999)));
+    note('the correction sits beside what was archived, never on top of it');
+
+    check('and a correction of the wrong shape is refused',
+          !(await canWrite(ARCH + '/lateVerified/p2', 'robot', { note: 'paid, trust me' })));
+    check('the owner can still read the whole day', await canRead(ARCH, 'admin'));
+
     // Cash leaving the drawer.
     //
     // Three ledger types hand real money to a real person, and each sat behind a PIN
@@ -428,12 +455,16 @@ const SAMPLES = {
           await canWrite('pos/ledgerEntries/c-robot', 'robot',
             { date: '03:04 pm', type: 'expense', amount: 450, reason: 'milk (Priya)',
               ts: 1756200000000, by: 'Priya', byUid: 'cashierUid' }));
-    // It is the only writer of a cash-out, and that is all it may reach in here: the
-    // grant sits on the two children it needs, not on pos, which still says "has a
-    // staff role" — and the robot has none.
+    // Every grant the robot has under `pos` sits on the exact child it needs, never on
+    // pos itself — which still says "has a staff role", and the robot has none. Three
+    // children, three jobs: the cash-out it writes, the drawer that cash-out moves, and
+    // the parked payments it clears once the archive has recorded them.
+    //
+    // pos/eodArchive/x1 is in this list rather than exempted: the robot may append to
+    // ONE child of an archive, and must not be able to write an archive itself.
     const robotReach = [];
     for (const p of ['pos/bills/x1', 'pos/activeTables/x1', 'pos/eodArchive/x1',
-                     'pos/unverified/x1', 'pos/upiTotal', 'pos/tips/x1']) {
+                     'pos/upiTotal', 'pos/tips/x1']) {
       if (await canWrite(p, 'robot')) robotReach.push(p);
     }
     check('and the rest of the till is still closed to it',

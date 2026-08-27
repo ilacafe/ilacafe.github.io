@@ -1025,12 +1025,89 @@ function monEntryState(e, reviewMap){
   return 'unverified';
 }
 
+// ---------------------------------------------------------------------------
+// A payment that was still unverified at closing, and paid afterwards.
+//
+// EOD writes the archive FIRST and parks the stragglers second, so the archived
+// ledger records them as unverified — correctly, that is what was true when the
+// day closed. When a bank credit finally matches, the reconciler marks the parked
+// row verified. That row is then the ONLY record the money ever arrived: the
+// archive still says unverified, and nothing reconciles the two.
+//
+// So the correction is written where the day already lives, as a CHILD of the
+// archive rather than an edit to it. Nothing archived is ever rewritten — the
+// ledger line still says what was true at closing, and lateVerified says what
+// happened after. An audit reads both and gets the whole story in one place.
+//
+// Only then is the parked row dropped, and never in the same run that wrote it:
+// the next run re-reads the archive, and deletes the row only if that read comes
+// back with the correction in it. A write this hour and a delete next hour costs
+// nothing and means no row is ever removed on the strength of a write this code
+// merely believes succeeded.
+async function settleLateVerifications(token){
+  const carried = await monLoad(token, '/pos/unverified') || {};
+  const ids = Object.keys(carried).filter(function(id){
+    const r = carried[id];
+    return r && r.state === 'verified' && r.day && r.ref;
+  });
+  if (!ids.length) return { recorded: 0, cleared: 0 };
+
+  // Keys only. The archive holds every bill of every day the café has been open,
+  // and this runs hourly — reading it whole to find one key would grow into the
+  // most expensive thing the Worker does.
+  // monLoad appends `.json` to the path, so it cannot carry a query of its own —
+  // '/pos/eodArchive?shallow=true' would come out as '...?shallow=true.json?auth='.
+  let keys = [];
+  try {
+    const r = await fetch(DB_URL + '/pos/eodArchive.json?shallow=true&auth=' + token);
+    if (r.ok) keys = Object.keys((await r.json()) || {});
+  } catch (e) { return { recorded: 0, cleared: 0 }; }
+  if (!keys.length) return { recorded: 0, cleared: 0 };
+
+  let recorded = 0, cleared = 0;
+  for (const payId of ids){
+    const row = carried[payId];
+    // Archive keys are `${day}-${Date.now()}`. If a day was closed twice the later
+    // archive is the one that carries the payment, so take the highest key.
+    const forDay = keys.filter(function(k){ return k.indexOf(row.day + '-') === 0; }).sort();
+    const archiveKey = forDay[forDay.length - 1];
+    if (!archiveKey) continue;                      // no archive for that day: leave it alone
+
+    const at = '/pos/eodArchive/' + encodeURIComponent(archiveKey) + '/lateVerified/' + encodeURIComponent(payId);
+    const already = await monLoad(token, at);
+
+    if (already && already.ref){
+      // The archive demonstrably has it. Now, and only now, the parked row goes.
+      const del = await fetch(DB_URL + '/pos/unverified/' + encodeURIComponent(payId) + '.json?auth=' + token,
+                              { method: 'DELETE' });
+      if (del.ok) cleared++;
+      continue;
+    }
+
+    const put = await fetch(DB_URL + at + '.json?auth=' + token, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ref: String(row.ref),
+        at: Number(row.verifiedAt || row.ts || Date.now()),
+        amount: Number(row.amount) || 0,
+        bankTag: row.bankTag ? String(row.bankTag) : ''
+      })
+    });
+    if (put.ok) recorded++;
+  }
+  return { recorded: recorded, cleared: cleared };
+}
+
 async function runVerificationMonitor(nowMs, isWeekly){
   const token = await getRobotToken();
   // Housekeeping first, and on its own: the public table index is only useful for a
   // couple of hours, and one that accumulates hands out every trackId in the café
   // eventually. Its own try/catch, because nothing below should fail for it.
   try { await pruneTableIndex(token); } catch (e) { console.error('prune tableIndex', e); }
+  // Also housekeeping, also on its own: this one moves an audit record, so a failure
+  // here must never take the payment alerts below down with it.
+  try { await settleLateVerifications(token); } catch (e) { console.error('late verifications', e); }
   const ledgerObj = await monLoad(token, '/pos/ledgerEntries') || {};
   const reviewMap = await monLoad(token, '/upiReview') || {};
   const monState  = await monLoad(token, '/monitor') || {};

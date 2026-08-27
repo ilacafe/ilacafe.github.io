@@ -228,6 +228,15 @@
           "predLoadChef": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
           },
+          "quotedLow": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 240"
+          },
+          "quotedHigh": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 240"
+          },
+          "quotedLive": {
+            ".validate": "newData.isBoolean()"
+          },
           "predLoadBarista": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
           },
@@ -278,7 +287,20 @@
         ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
       },
       "eodArchive": {
-        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$archive": {
+          "lateVerified": {
+            ".write": "auth != null && auth.token.email === 'robot@cafeila.app'",
+            "$payId": {
+              ".validate": "newData.hasChildren(['ref','at'])",
+              "ref":     { ".validate": "newData.isString() && newData.val().length <= 60" },
+              "at":      { ".validate": "newData.isNumber()" },
+              "amount":  { ".validate": "newData.isNumber() && newData.val() >= 0" },
+              "bankTag": { ".validate": "newData.isString() && newData.val().length <= 40" },
+              "$other":  { ".validate": false }
+            }
+          }
+        }
       },
       "bills": {
         ".indexOn": [
@@ -303,7 +325,10 @@
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "unverified": {
-        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'cashier')"
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'cashier')",
+        "$payId": {
+          ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
+        }
       }
     },
     "inventory": {
