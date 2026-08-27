@@ -9,6 +9,31 @@
     <meta name="mobile-web-app-capable" content="yes">
     <title>ILA | Admin</title>
     <link rel="apple-touch-icon" href="/icon-admin.png" />
+    <!-- THE TWO HOSTS THE BROWSER FINDS OUT ABOUT LAST
+         A connection to a new host costs a DNS lookup, a TCP handshake and a TLS
+         handshake before a single byte of what was asked for comes back — on café
+         wifi, a good fraction of a second. The browser starts that work the moment
+         it SEES a host, and it cannot see either of these until late:
+
+           fonts.gstatic.com appears nowhere in this file. It is named inside the
+           Google Fonts stylesheet below, so the browser only learns it exists once
+           that stylesheet has been fetched and parsed, and only then starts a
+           connection for the font files themselves.
+
+           the database is worse. Its host is in firebaseConfig, at the foot of the
+           page, and nothing connects to it until the SDK below has downloaded,
+           parsed and run. That handshake happens after all of it, in series, while
+           the page sits there with nothing on it.
+
+         A preconnect names them here, at the top, so both handshakes happen early
+         and alongside everything else rather than after it. crossorigin is required
+         on the font one: fonts are fetched anonymously, and a preconnect whose mode
+         does not match the request is a connection the browser throws away.
+
+         Nothing else here needs one: every other host is named directly by a tag
+         below, which is already the earliest the browser could possibly know. -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     
     <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
@@ -161,7 +186,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.11"></script>
+    <script src="/build-check.js" data-build="2026-08-27.12"></script>
 </head>
 <body>
     <div id="login-overlay" class="hidden">
@@ -183,7 +208,7 @@
 
     <div class="container">
         <header>
-            <img src="logo.png" alt="ILA Logo" class="logo">
+            <img src="logo.png" alt="ILA Logo" class="logo" width="1200" height="427" decoding="async">
         </header>
 
 <div class="admin-card" style="text-align: center; padding: 20px;">
@@ -553,25 +578,27 @@
             db.ref('staff').on('value', (snapshot) => {
                 const staffData = snapshot.val() || {};
                 const container = document.getElementById('staff-list-container');
-                container.innerHTML = "";
+                let rows = "";
                 for (let key in staffData) {
                     const name = staffData[key];
-                    container.innerHTML += `<div class="list-item"><div><strong>${escapeHTML(name)}</strong> <span style="opacity: 0.5; margin-left: 10px; font-size: 0.85rem;">PIN set</span></div><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${key}', '${jsAttr(name)}')">✖</button></div>`;
+                    rows += `<div class="list-item"><div><strong>${escapeHTML(name)}</strong> <span style="opacity: 0.5; margin-left: 10px; font-size: 0.85rem;">PIN set</span></div><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${key}', '${jsAttr(name)}')">✖</button></div>`;
                 }
+                container.innerHTML = rows;
             });
 
             db.ref('users').on('value', snap => {
                 const users = snap.val() || {};
                 const container = document.getElementById('accounts-list-container');
-                container.innerHTML = "";
                 const ids = Object.keys(users);
                 if (ids.length === 0) { container.innerHTML = "<p style='opacity:0.5;'>No accounts yet.</p>"; return; }
+                let rows = "";
                 ids.forEach(uid => {
                     const u = users[uid];
                     const isSelf = window.currentAdmin && window.currentAdmin.uid === uid;
                     const safeName = jsAttr(u.name || u.email || 'user');
-                    container.innerHTML += `<div class="list-item"><div><strong>${escapeHTML(u.name || u.email || uid)}</strong> <span style="opacity:0.6; margin-left:8px; font-size:0.85rem;">${escapeHTML(u.email || "")}</span></div><div style="display:flex; align-items:center; gap:8px;"><select onchange="changeRole('${uid}', this.value)" ${isSelf ? 'disabled' : ''} style="padding:6px; border-radius:6px; background:rgba(255,255,255,0.95); color:#333; border:none;"><option value="cashier" ${u.role==='cashier'?'selected':''}>Cashier</option><option value="barista" ${u.role==='barista'?'selected':''}>Barista</option><option value="chef" ${u.role==='chef'?'selected':''}>Chef</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select>${isSelf ? '<span style="opacity:0.5; font-size:0.8rem;">you</span>' : `<button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeAccess('${uid}', '${safeName}')">✖</button>`}</div></div>`;
+                    rows += `<div class="list-item"><div><strong>${escapeHTML(u.name || u.email || uid)}</strong> <span style="opacity:0.6; margin-left:8px; font-size:0.85rem;">${escapeHTML(u.email || "")}</span></div><div style="display:flex; align-items:center; gap:8px;"><select onchange="changeRole('${uid}', this.value)" ${isSelf ? 'disabled' : ''} style="padding:6px; border-radius:6px; background:rgba(255,255,255,0.95); color:#333; border:none;"><option value="cashier" ${u.role==='cashier'?'selected':''}>Cashier</option><option value="barista" ${u.role==='barista'?'selected':''}>Barista</option><option value="chef" ${u.role==='chef'?'selected':''}>Chef</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select>${isSelf ? '<span style="opacity:0.5; font-size:0.8rem;">you</span>' : `<button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeAccess('${uid}', '${safeName}')">✖</button>`}</div></div>`;
                 });
+                container.innerHTML = rows;
             });
 
         db.ref('inventory/config/items').once('value', snap => {
@@ -1647,10 +1674,9 @@
 
             const targetSelect = document.getElementById('recipe-target');
             let currentVal = targetSelect.value;
-            targetSelect.innerHTML = "";
-            window.DYNAMIC_PREPPED_ITEMS.forEach(item => { 
-                targetSelect.innerHTML += `<option value="${item}" ${currentVal === item ? 'selected' : ''}>${escapeHTML(item)}</option>`; 
-            });
+            targetSelect.innerHTML = window.DYNAMIC_PREPPED_ITEMS
+                .map(item => `<option value="${item}" ${currentVal === item ? 'selected' : ''}>${escapeHTML(item)}</option>`)
+                .join('');
             
             // Re-render the ingredient rows to update their dropdown options
             loadExistingRecipe();

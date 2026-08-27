@@ -5,6 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>ILA | Barista Display</title>
     <link rel="apple-touch-icon" href="/icon-barista.png" />
+    <!-- THE TWO HOSTS THE BROWSER FINDS OUT ABOUT LAST
+         A connection to a new host costs a DNS lookup, a TCP handshake and a TLS
+         handshake before a single byte of what was asked for comes back — on café
+         wifi, a good fraction of a second. The browser starts that work the moment
+         it SEES a host, and it cannot see either of these until late:
+
+           fonts.gstatic.com appears nowhere in this file. It is named inside the
+           Google Fonts stylesheet below, so the browser only learns it exists once
+           that stylesheet has been fetched and parsed, and only then starts a
+           connection for the font files themselves.
+
+           the database is worse. Its host is in firebaseConfig, at the foot of the
+           page, and nothing connects to it until the SDK below has downloaded,
+           parsed and run. That handshake happens after all of it, in series, while
+           the page sits there with nothing on it.
+
+         A preconnect names them here, at the top, so both handshakes happen early
+         and alongside everything else rather than after it. crossorigin is required
+         on the font one: fonts are fetched anonymously, and a preconnect whose mode
+         does not match the request is a connection the browser throws away.
+
+         Nothing else here needs one: every other host is named directly by a tag
+         below, which is already the earliest the browser could possibly know. -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
 
     <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
@@ -63,7 +88,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.11"></script>
+    <script src="/build-check.js" data-build="2026-08-27.12"></script>
 </head>
 <body>
     <div id="login-overlay" class="hidden">
@@ -84,7 +109,7 @@
     </div>
 
     <header>
-        <img src="logo.png" alt="ILA Logo" class="logo">
+        <img src="logo.png" alt="ILA Logo" class="logo" width="1200" height="427" decoding="async">
         <h1 class="header-title">Barista Display</h1>
         <div class="clock" id="live-clock">00:00</div>
     </header>
@@ -206,13 +231,29 @@
         // silently vanish, the overdue threshold would come in short, and the board
         // would start flagging tickets early with nothing to say why. A kitchen that
         // learns to ignore the alarm is the real cost.
+        //
+        // Merged once per model, not once per call. This used to rebuild three objects
+        // every time it was asked, and it is asked from etaItemBase — so a board of ten
+        // tickets with four items each rebuilt them fifty-odd times, and kdsCheckOverdue
+        // does that EVERY SECOND for as long as the screen is open. The merge cost
+        // nothing on its own and a whole service of it is hours of pointless allocation
+        // on a tablet that is never reloaded.
+        //
+        // Keyed on the model OBJECT, not a flag: eta/model is replaced wholesale by the
+        // listener above, so a new object is a new model and anything else is the one
+        // already merged. Nothing mutates these in place, so there is no third case.
         function etaCfg(){
             const m = window.etaModel;
-            if (!m) return KDS_ETA_DEF;
-            return Object.assign({}, KDS_ETA_DEF, m, {
+            // The memo is kept ON this function, not in a variable beside it, because
+            // the suites extract this function by itself and evaluate it — a companion
+            // declaration would simply not exist there.
+            if (etaCfg.val && etaCfg.src === m) return etaCfg.val;
+            etaCfg.src = m;
+            etaCfg.val = !m ? KDS_ETA_DEF : Object.assign({}, KDS_ETA_DEF, m, {
                 fallback: Object.assign({}, KDS_ETA_DEF.fallback, m.fallback),
                 itemBase: Object.assign({}, KDS_ETA_DEF.itemBase, m.itemBase)
             });
+            return etaCfg.val;
         }
         function etaInterp(c,x){ if(!c||!c.length)return 0; if(x<=c[0][0])return c[0][1]; if(x>=c[c.length-1][0])return c[c.length-1][1]; for(let i=1;i<c.length;i++){ if(x<=c[i][0]){ const[a,b]=c[i-1],[d,e]=c[i]; return b+(e-b)*(x-a)/(d-a);} } return c[c.length-1][1]; }
         function etaItemBase(name){ const M=etaCfg(), n=(name||'').toLowerCase(); let best=null,bl=-1; for(const k in M.itemBase){ if(n.includes(k)&&k.length>bl){best=M.itemBase[k];bl=k.length;} } if(best!=null)return best; if(M.bakedKeys.some(k=>n.includes(k)))return M.fallback.baked; return M.fallback.drink; }
@@ -242,22 +283,42 @@
             return null;
         }
         function kdsBeep(){ try { const a = new (window.AudioContext || window.webkitAudioContext)(); const o = a.createOscillator(), g = a.createGain(); o.connect(g); g.connect(a.destination); o.type = 'square'; o.frequency.value = 880; g.gain.setValueAtTime(0.0001, a.currentTime); g.gain.exponentialRampToValueAtTime(0.35, a.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + 0.6); o.start(); o.stop(a.currentTime + 0.62); } catch (e) {} }
+        // Runs once a second, forever, on a screen nobody ever reloads — so what it does
+        // NOT do matters more than what it does.
+        //
+        // It used to look both elements up by id and write innerText on every pass. The
+        // text is a whole number of minutes: fifty-nine of those sixty writes set it to
+        // the string it already held, and each one is still a style and layout
+        // invalidation on that card. The lookups were two getElementById per ticket per
+        // second on top. Neither showed up as a stutter, and both were the tablet warm
+        // and flat by mid-afternoon.
+        //
+        // Now: the nodes are held on the ticket (the board rebuild that created them is
+        // what fills these in), and text and class are only written when the value
+        // actually changes. The alarm and the overdue arithmetic are untouched — a
+        // ticket still goes red and still beeps on the same second it always did.
         function kdsCheckOverdue(){
             const now = Date.now();
             for (const id in window.kdsTickets) {
                 const t = window.kdsTickets[id]; if (!t || !t.start) continue;
                 const age = now - t.start, over = age > kdsThresholdMs(t.qty, t.items), mins = Math.floor(age / 60000);
-                const card = document.getElementById('ticket-' + id), el = document.getElementById('elapsed-' + id);
-                if (el) {
+                if (t._el === undefined) t._el = document.getElementById('elapsed-' + id);
+                if (t._card === undefined) t._card = document.getElementById('ticket-' + id);
+                if (t._el) {
                     if (t._expM == null) { const e = kdsExpectedPrep(t.items); t._expM = (e!=null) ? Math.round(e) : null; }
-                    el.innerText = mins + 'm' + (t._expM!=null ? ' / ~' + t._expM + 'm' : '');
+                    const txt = mins + 'm' + (t._expM!=null ? ' / ~' + t._expM + 'm' : '');
+                    if (txt !== t._txt) { t._txt = txt; t._el.innerText = txt; }
                 }
-                if (card) { if (over) card.classList.add('overdue'); else card.classList.remove('overdue'); }
+                if (t._card && over !== t._over) { t._over = over; t._card.classList.toggle('overdue', over); }
                 if (over && !window.kdsAlarmed[id]) { window.kdsAlarmed[id] = true; kdsBeep(); kdsPushAlert(id, t); }
             }
         }
+        // Same again for the clock: it shows hours and minutes, so fifty-nine writes in
+        // sixty put back the string that was already there.
+        let _kdsClock = '';
         setInterval(() => {
-            document.getElementById('live-clock').innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            if (now !== _kdsClock) { _kdsClock = now; document.getElementById('live-clock').innerText = now; }
             kdsCheckOverdue();
         }, 1000);
 
@@ -293,17 +354,47 @@
             }
         });
 
+        // THE BOARD IS REDRAWN WHEN THE BOARD CHANGES, NOT WHEN THE NODE DOES
+        //
+        // Two things were wrong with rebuilding on every event, and the second is not a
+        // performance problem at all.
+        //
+        // `board.innerHTML += card` per ticket is quadratic: += reads the whole board
+        // back out as a string, appends, and reparses it, so ten tickets is ten parses
+        // of a growing board and every card built so far is thrown away and remade. The
+        // cards are accumulated into one string and assigned once instead.
+        //
+        // The one that could be seen: markOrderDone stamps doneAt on the ticket before
+        // it clears it, and doneAt fires this listener. Nothing renders doneAt, so the
+        // board that came back was identical — but rebuilding it replaced every node,
+        // including the card markOrderDone had just started fading out. The fade was
+        // wiped and the card snapped back to full opacity for the 200ms until the
+        // remove landed, which reads as the DONE tap not registering. That is also the
+        // moment somebody is most likely to tap again.
+        //
+        // So: build the markup, compare it with what is already on screen, and only
+        // touch the DOM when it differs. Ticket start times go into the comparison too
+        // because they are not in the markup — `time` is only accurate to the minute,
+        // and createdAt is what the overdue clock actually counts from. When the board
+        // is unchanged the existing kdsTickets are kept as they are, which is what
+        // keeps the cached nodes and the last-rendered text on them valid.
+        let _boardSig = null;
         function startDisplay() {
             db.ref('orders/active/barista').on('value', snap => {
                 const orders = snap.val();
                 const board = document.getElementById('ticket-board');
-                board.innerHTML = "";
-                window.kdsTickets = {};
                 if (!orders) {
-                    board.innerHTML = `<div class="empty-state"><h2>No Orders</h2><p>Waiting for tickets...</p></div>`;
+                    if (_boardSig !== '') {
+                        _boardSig = '';
+                        board.innerHTML = `<div class="empty-state"><h2>No Orders</h2><p>Waiting for tickets...</p></div>`;
+                    }
+                    window.kdsTickets = {};
                     window.kdsAlarmed = {};
                     return;
                 }
+                let html = "";
+                const tickets = {};
+                const starts = [];
                 for (let id in orders) {
                     const order = orders[id];
                     let itemsHTML = "";
@@ -313,9 +404,16 @@
                         }
                     }
                     let notesHTML = order.notes ? `<div class="ticket-notes">Notes: ${escapeHTML(order.notes)}</div>` : "";
-                    board.innerHTML += `<div class="ticket-card" id="ticket-${id}"><div class="ticket-header"><div class="ticket-dest">${escapeHTML(order.destination)}</div><div class="ticket-meta"><span class="ticket-time">${escapeHTML(order.time)}</span><span>${escapeHTML(order.source)} &middot; <span class="ticket-elapsed" id="elapsed-${id}"></span></span></div></div><div class="ticket-items">${itemsHTML}</div>${notesHTML}<button class="btn-done" onclick="markOrderDone('${id}')">DONE</button></div>`;
-                    window.kdsTickets[id] = { start: kdsTicketStart(order), qty: kdsQty(order), dest: order.destination || '', items: order.items || {}, summary: order.items ? Object.keys(order.items).map(function(k){ return order.items[k].qty + '\u00d7 ' + k; }).join(', ') : '' };
+                    html += `<div class="ticket-card" id="ticket-${id}"><div class="ticket-header"><div class="ticket-dest">${escapeHTML(order.destination)}</div><div class="ticket-meta"><span class="ticket-time">${escapeHTML(order.time)}</span><span>${escapeHTML(order.source)} &middot; <span class="ticket-elapsed" id="elapsed-${id}"></span></span></div></div><div class="ticket-items">${itemsHTML}</div>${notesHTML}<button class="btn-done" onclick="markOrderDone('${id}')">DONE</button></div>`;
+                    const start = kdsTicketStart(order);
+                    starts.push(id + ':' + start);
+                    tickets[id] = { start: start, qty: kdsQty(order), dest: order.destination || '', items: order.items || {}, summary: order.items ? Object.keys(order.items).map(function(k){ return order.items[k].qty + '\u00d7 ' + k; }).join(', ') : '' };
                 }
+                const sig = html + '\u0000' + starts.join('\u0000');
+                if (sig === _boardSig) return;                 // same board; leave the DOM alone
+                _boardSig = sig;
+                board.innerHTML = html;
+                window.kdsTickets = tickets;
                 for (const aid in window.kdsAlarmed) { if (!(aid in window.kdsTickets)) delete window.kdsAlarmed[aid]; }
                 kdsCheckOverdue();
             });

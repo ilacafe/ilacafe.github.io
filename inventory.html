@@ -5,6 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>ILA | Inventory</title>
     <link rel="apple-touch-icon" href="/icon.png" />
+    <!-- THE TWO HOSTS THE BROWSER FINDS OUT ABOUT LAST
+         A connection to a new host costs a DNS lookup, a TCP handshake and a TLS
+         handshake before a single byte of what was asked for comes back — on café
+         wifi, a good fraction of a second. The browser starts that work the moment
+         it SEES a host, and it cannot see either of these until late:
+
+           fonts.gstatic.com appears nowhere in this file. It is named inside the
+           Google Fonts stylesheet below, so the browser only learns it exists once
+           that stylesheet has been fetched and parsed, and only then starts a
+           connection for the font files themselves.
+
+           the database is worse. Its host is in firebaseConfig, at the foot of the
+           page, and nothing connects to it until the SDK below has downloaded,
+           parsed and run. That handshake happens after all of it, in series, while
+           the page sits there with nothing on it.
+
+         A preconnect names them here, at the top, so both handshakes happen early
+         and alongside everything else rather than after it. crossorigin is required
+         on the font one: fonts are fetched anonymously, and a preconnect whose mode
+         does not match the request is a connection the browser throws away.
+
+         Nothing else here needs one: every other host is named directly by a tag
+         below, which is already the earliest the browser could possibly know. -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     
     <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
@@ -334,7 +359,7 @@
             if(Object.keys(dynamicInventoryMap).length === 0) return;
             
             const container = document.getElementById('dynamic-tabs-container');
-            container.innerHTML = "";
+            let tabsHtml = "";
             let isFirst = true;
             
             // Define standard tab order for consistency
@@ -374,9 +399,10 @@
                 }
 
                 tabHtml += `</div>`;
-                container.innerHTML += tabHtml;
+                tabsHtml += tabHtml;
                 isFirst = false;
             });
+            container.innerHTML = tabsHtml;
             
             // Maintain active tab
             const activeBtn = document.querySelector('.tab-btn.active');

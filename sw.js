@@ -51,6 +51,29 @@ self.addEventListener('notificationclick', (event) => {
 // Exact-hostname allowlist. Everything else (RTDB, auth, ila-push worker) passes straight through.
 const CACHEABLE_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com'];
 
+// Of those, the ones whose URL can only ever answer with one file.
+//
+// A font file at fonts.gstatic.com is named after its own contents, and a Firebase
+// SDK under /firebasejs/12.17.1/ is pinned to a version the pages also carry an SRI
+// hash for — nothing at either URL can change without the URL changing too. Serving
+// them from the cache and ALSO fetching them to see whether they moved is six
+// requests per page open, every open, that can only ever return what is already
+// held. On a kitchen tablet on café wifi that is the slowest part of the open, and
+// it is spent confirming that immutable files are still immutable.
+//
+// So these are served from cache and left alone. Everything else keeps
+// stale-while-revalidate: our own HTML changes on every deploy, and the Google Fonts
+// stylesheet varies by browser and is rewritten by Google from time to time.
+//
+// If one of these ever does need re-fetching — a cache entry truncated by a disk
+// eviction — changing CACHE above re-fetches every one of them on the next open.
+// SRI covers the SDKs in the meantime: a short body is rejected by the browser
+// rather than run.
+function isImmutable(url) {
+  return url.hostname === 'fonts.gstatic.com' ||
+         (url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/') === 0);
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;                      // never touch writes
@@ -63,13 +86,14 @@ self.addEventListener('fetch', (event) => {
   // possibly fire. Always go to the network for it.
   if (sameOrigin && url.pathname === '/build.json') return;
   if (!sameOrigin && CACHEABLE_HOSTS.indexOf(url.hostname) === -1) return;  // Firebase etc: untouched
-  event.respondWith(swr(event, req, sameOrigin));
+  event.respondWith(swr(event, req, sameOrigin, isImmutable(url)));
 });
 
-async function swr(event, req, sameOrigin) {
+async function swr(event, req, sameOrigin, immutable) {
   try {
     const cache = await caches.open(CACHE);
     const cached = await cache.match(req);
+    if (cached && immutable) return cached;             // nothing at this URL can have changed
     // background revalidate; 'no-cache' on our own files so a deploy is picked up
     // immediately (bypasses GitHub Pages' 10-min HTTP cache) — served on next open.
     const network = (sameOrigin
