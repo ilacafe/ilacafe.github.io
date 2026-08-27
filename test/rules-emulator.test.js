@@ -575,5 +575,45 @@ const SAMPLES = {
     note('rules cascade: a .read on a parent grants everything beneath it');
   }
 
+  // ------------------------------------------ the requests the deploy probe makes
+  //
+  // The section above asks the right questions with paths written by hand here.
+  // tools/probe-rules.js asks them again after a deploy, against the live database
+  // — but with paths it derives from the rules file itself, and nothing anywhere
+  // ran those. So a rules change that was entirely correct could still hand the
+  // probe a request it could not make, and the first place that showed up was
+  // production: `orders/track/$trackId` went out verbatim, `$` is not a character
+  // Firebase accepts in a key, and the 400 rolled back a good deploy.
+  //
+  // These are the probe's exact requests, answered by a real database before one
+  // is deployed anywhere.
+  {
+    const probe = require('../tools/probe-rules.js');
+    const open = probe.publicPaths(probe.readRules());
+    const denied = probe.MUST_BE_DENIED.concat(
+      probe.ancestorsOf(open).filter(x => !probe.MUST_BE_DENIED.includes(x))
+    );
+
+    const wrong = [];
+    for (const p of open) {
+      const code = await call('GET', probe.toDbPath(p), 'nobody');
+      if (code !== 200) wrong.push(p + ' -> ' + probe.toDbPath(p) + ' answered ' + code);
+    }
+    check('every path the deploy probe calls public answers 200 to a stranger',
+          wrong.length === 0, wrong.join('; '));
+    note('a 400 here is not a denial — it is a question Firebase could not read,');
+    note('and the probe rightly refuses to score it either way');
+
+    const leaked = [], unclear = [];
+    for (const p of denied) {
+      const code = await call('GET', probe.toDbPath(p), 'nobody');
+      if (code === 200) leaked.push(p || '(root)');
+      else if (code !== 401 && code !== 403) unclear.push((p || '(root)') + ' answered ' + code);
+    }
+    check('and every path it calls private is refused', leaked.length === 0, leaked.join(', '));
+    check('with a status the probe reads as a refusal', unclear.length === 0, unclear.join('; '));
+    note('the probe accepts 401 and 403 and nothing else; anything else it reports');
+  }
+
   done();
 })();

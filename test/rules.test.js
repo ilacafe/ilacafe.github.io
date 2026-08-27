@@ -260,6 +260,53 @@ unruled.forEach(u => note('no rule governs: ' + u));
   note('up at deploy time — which is the worst moment to find out');
 }
 
+// ------------------------------------------------- what the deploy probe will ask
+// tools/probe-rules.js runs after a rules deploy and asks the live database, with
+// no credentials, what a stranger can read. Its public list is derived from this
+// same file — which means a change here changes the requests it makes, and nothing
+// exercised those requests until the deploy was already done.
+//
+// That is not hypothetical. Moving the customer's lookup onto a $wildcard gave the
+// probe `orders/track/$trackId` to ask for; `$` is not a character Firebase accepts
+// in a key, so it got 400 — neither allowed nor denied — and took a correct deploy
+// down with it. The rules were right. The question was malformed.
+{
+  const probe = require('../tools/probe-rules.js');
+  const open = probe.publicPaths(root);
+  const denied = probe.MUST_BE_DENIED.concat(
+    probe.ancestorsOf(open).filter(p => !probe.MUST_BE_DENIED.includes(p))
+  );
+
+  // A rule path is not a database path. Every segment the probe sends must be a key
+  // Firebase will accept, or the answer carries no information either way.
+  const ILLEGAL_KEY = /[.$#[\]]/;
+  const malformed = open.concat(denied)
+    .map(p => ({ rule: p, url: probe.toDbPath(p) }))
+    .filter(({ url }) => url !== '' &&
+            url.split('/').some(seg => seg === '' || ILLEGAL_KEY.test(seg)));
+
+  check('every path it would request is one Firebase can answer',
+        malformed.length === 0,
+        malformed.map(m => m.rule + ' -> ' + m.url).join(', '));
+  malformed.forEach(m => note(m.url + ' is not a legal path, so its status means nothing'));
+
+  // A path cannot be both. If it ever is, the probe fails after the deploy with a
+  // contradiction rather than a finding, and the rollback hides which half is wrong.
+  const both = open.filter(p => denied.includes(p));
+  check('nothing is on both its lists at once', both.length === 0, both.join(', '));
+
+  // The point of the derived half: a public read below the top of a node is only
+  // safe while the node above it stays shut. Public at the top hands out in one
+  // request what the wildcard hands out one key at a time.
+  const unguarded = open
+    .filter(p => p.includes('/'))
+    .map(p => p.slice(0, p.lastIndexOf('/')))
+    .filter(parent => !denied.includes(parent) && !open.includes(parent));
+  check('and the node above each public wildcard is checked too',
+        unguarded.length === 0, unguarded.join(', '));
+  note('a public read one level up is the same leak, served in a single request');
+}
+
 note('this checks shape and coverage only — whether a condition is CORRECT for a');
 note('given role needs the Firebase emulator against real auth tokens');
 
