@@ -325,7 +325,7 @@ const SAMPLES = {
       'payments':            ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'payments/incoming':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'security':            ['admin'],
-      'customers':           ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'customers':           ['admin'],                                    // the LIST; one customer is readable below
       'inventory':           ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'inventory/recipes':   ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
       'reconciliation':      ['admin'],
@@ -377,6 +377,24 @@ const SAMPLES = {
     check('but the counter still can, and so does the owner',
           (await canRead('pos/ledgerEntries', 'cashier')) && (await canRead('pos/ledgerEntries', 'admin')));
     note('the Worker reads it too — that is the hourly report of cash leaving the drawer');
+
+    // The customer list, and one customer.
+    //
+    // The till looks up customers/<phone> for a number the cashier has just typed in;
+    // admin.html reads the whole node for the repeat-customer panel. The read was
+    // granted at the parent for any staff role, and a read cascades — so every phone
+    // number, order count and last spend the café holds came back in one request to
+    // anybody on shift, on a node no staff page displays.
+    //
+    // Same shape as orders/track before #38: the parent read is the one that
+    // enumerates, and the child read is all the app ever needed.
+    check('a cashier cannot list every customer the café has',
+          !(await canRead('customers', 'cashier')) && !(await canRead('customers', 'barista')));
+    check('but can still look up the one whose number they were given',
+          await canRead('customers/9990001111', 'cashier'));
+    check('and the owner still has the list', await canRead('customers', 'admin'));
+    check('the till can still count a repeat visit',
+          await canWrite('customers/9990001111/orders', 'cashier', 3));
 
     check('a cashier cannot read the cash-up archive',
           !(await canRead('pos/eodArchive', 'cashier')));

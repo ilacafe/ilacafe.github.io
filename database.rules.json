@@ -259,8 +259,11 @@
       }
     },
     "customers": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      "$phone": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      }
     },
     "pos": {
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
