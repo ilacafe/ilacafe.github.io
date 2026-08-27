@@ -21,6 +21,9 @@
          shown to somebody who is already signed in. See the top of the file. -->
     <script src="/auth-gate.js"></script>
 
+    <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
+    <script src="/pin-mask.js"></script>
+
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
         #login-overlay { position: fixed; inset: 0; background: var(--brand-bg); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -72,13 +75,6 @@
 
         .remark-input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1.1rem; background-color: rgba(0,0,0,0.1); color: white; display: block; box-sizing: border-box; outline: none; text-align: center; font-weight: bold;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); font-weight: normal; }
-        /* A four-digit staff PIN is not a password, and type="password" was only ever
-           masking it. That is what put an iOS "sign in with your password" sheet over
-           a working till: Safari looks for a password field in the DOCUMENT, finds this
-           one from the moment the page loads, and offers to fill it — whether or not
-           anything is showing. Masking is a presentation job, so it is done here, and
-           the field goes back to being the numeric input it always was. */
-        .pin-input { -webkit-text-security: disc; text-security: disc; }
 
         .btn-group { display: flex; gap: 10px; margin-top: 10px; }
         .btn { flex: 1; padding: 15px; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; text-transform: uppercase; border: none; letter-spacing: 1px;}
@@ -144,7 +140,7 @@
             <div id="modal-subtitle" class="modal-subtitle">Details</div>
             
             <input type="number" id="modal-qty" class="remark-input" placeholder="Amount (Units / Kg / L)" step="any">
-            <input type="text" id="modal-pin" class="remark-input pin-input" placeholder="Staff PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4" autocomplete="off">
+            <input type="text" id="modal-pin" class="remark-input" placeholder="Staff PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4" autocomplete="off" data-pin>
             
             <div class="btn-group">
                 <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -395,7 +391,7 @@
         function openModal(type, itemName) {
             activeAction = { type, itemName };
             document.getElementById('modal-qty').value = "";
-            document.getElementById('modal-pin').value = "";
+            if (window.ilaPin) window.ilaPin.clear(document.getElementById('modal-pin')); else document.getElementById('modal-pin').value = "";
             
             if (type === 'prep') {
                 document.getElementById('modal-title').innerText = `Log Prep: ${itemName}`;
@@ -456,7 +452,9 @@
 
         async function confirmAction() {
             const qtyInput = parseFloat(document.getElementById('modal-qty').value);
-            const pinStr = document.getElementById('modal-pin').value.trim();
+            const _pinEl = document.getElementById('modal-pin');
+            // bullets on screen, digits in pin-mask.js; the element is the fallback
+            const pinStr = (window.ilaPin ? window.ilaPin.value(_pinEl) : (_pinEl.value || '')).trim();
             const btn = document.getElementById('modal-confirm-btn');
 
             if (isNaN(qtyInput) || qtyInput <= 0) return alert("Please enter a valid amount.");
