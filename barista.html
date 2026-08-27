@@ -189,7 +189,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.15"></script>
+    <script src="/build-check.js" data-build="2026-08-27.16"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -405,9 +405,23 @@
         }
         // Same again for the clock: it shows hours and minutes, so fifty-nine writes in
         // sixty put back the string that was already there.
+        // Built once. The clock reads it every second for as long as the screen is
+        // open, and toLocaleTimeString with an options object constructs a fresh
+        // Intl.DateTimeFormat on every call — 64µs measured, against 2µs for one
+        // that already exists. Skipping the WRITE when the minute has not changed
+        // was only half of it: the string still had to be produced to find that
+        // out, so a tablet was spending a few seconds of CPU a day formatting a
+        // clock nobody was watching change.
+        //
+        // markOrderDone stamps its ticket in this same format and deliberately does
+        // NOT use this constant. It is lifted out of the page and run on its own by
+        // kds-done.test.js, so anything declared beside it is not there — and a DONE
+        // tap happens a few times an hour, which is not a cost worth coupling a test
+        // to a constant for.
+        const KDS_CLOCK_FMT = new Intl.DateTimeFormat([], {hour: '2-digit', minute:'2-digit'});
         let _kdsClock = '';
         setInterval(() => {
-            const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const now = KDS_CLOCK_FMT.format(new Date());
             if (now !== _kdsClock) { _kdsClock = now; document.getElementById('live-clock').innerText = now; }
             kdsCheckOverdue();
         }, 1000);

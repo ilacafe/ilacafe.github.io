@@ -31,6 +31,7 @@ const suites = [
   'escaping.test.js',
   'third-party.test.js',
   'render-blocking.test.js',
+  'date-formatting.test.js',
   'table-cache.test.js',
   'inventory.test.js',
   'write-only.test.js',
