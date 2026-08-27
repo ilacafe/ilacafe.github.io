@@ -28,7 +28,6 @@ const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
 const TAG = /<script\b[^>]*?>/gs;
 const LINK = /<link\b[^>]*?>/gs;
 const attr = (name, tag) => (new RegExp(name + '="([^"]*)"', 's').exec(tag) || [])[1];
-const isOffOrigin = (src) => !!src && /^https?:\/\//.test(src);
 
 // Comments are stripped before anything is looked at, and this is not fussiness.
 // The note beside the stylesheet in each page explains itself by NAMING the tags
@@ -46,12 +45,17 @@ const markup = (page) => readPage(page).replace(/<!--[\s\S]*?-->/g, '');
     const head = src.slice(0, src.indexOf('</head>'));
     for (const tag of head.match(TAG) || []) {
       const url = attr('src', tag);
-      if (!isOffOrigin(url)) continue;                  // our own small files are fine
+      if (!url) continue;
       if (/\bdefer\b|\basync\b/.test(tag)) continue;    // does not block the parser
+      // Same-origin is checked too, and this is not pedantry. auth-gate, pin-mask
+      // and build-check are a few kilobytes each and sat here for exactly that
+      // reason — but the head is where the browser decides whether it may draw the
+      // page at all, and a synchronous script in it means the answer is no. Small
+      // is a reason it was easy to overlook, not a reason it was free.
       blocking.push(page + ' → ' + url);
     }
   }
-  check('no page has a render-blocking third-party script in its head',
+  check('no page has a render-blocking script in its head, ours included',
         blocking.length === 0, blocking.join(', '));
   note('a plain <script src> there is a blank screen for as long as the file takes');
 }
@@ -109,7 +113,7 @@ const markup = (page) => readPage(page).replace(/<!--[\s\S]*?-->/g, '');
 
     for (const tag of src.match(TAG) || []) {
       const url = attr('src', tag);
-      if (!isOffOrigin(url)) continue;
+      if (!url) continue;
       if (/\bdefer\b|\basync\b/.test(tag)) continue;     // discovered early already
       const pre = preloads.get(url);
       if (!pre) { unpreloaded.push(page + ' → ' + url); continue; }

@@ -218,10 +218,22 @@
         .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
     </style>
 
-    <!-- Watches for a newer deploy and offers a reload. This screen may be open
-         all day, and the service worker only applies a new build on the next
-         open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.14"></script>
+    <!-- Ours, named here and run at the foot alongside the SDK.
+         These are a few kilobytes each, which is not the point: the head is where
+         a browser decides whether it may draw the page yet, and a synchronous
+         script sitting in it means the answer is no, however small the file. They
+         are named up here so the fetch still starts at the same moment, then run
+         where they no longer hold anything up.
+
+         Deferring them instead would be simpler and does not work. The page's own
+         script calls into each of these on its first pass, and a deferred script
+         does not run until after the parser has finished — which is after that
+         call has already been made and already failed.
+
+         No crossorigin on these, unlike the SDK preloads above: they are
+         same-origin and fetched in that mode by default, so declaring it would
+         stop the preload matching the tag and fetch each file twice. -->
+    <link rel="preload" as="script" href="/build-check.js">
 </head>
 <body>
 
@@ -386,7 +398,6 @@
                 <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
             </div>
 
-
             <!-- STEP 3: order placed, live payment status -->
             <div id="pay-step-status" style="display:none; text-align:center; padding:10px 0;">
                 <div id="status-icon" style="font-size:2.5rem; margin-bottom:10px;">⏳</div>
@@ -397,6 +408,15 @@
             <button class="close-modal" onclick="closeModal('payment-modal')">✖ CLOSE</button>
         </div>
     </div>
+
+    <!-- Ours, in the order they ran in when they were in the head. Nothing here
+         needs the SDK and the SDK needs nothing here; what needs both is the
+         script at the end, which calls into whichever of these the page loads on
+         its first pass. That is what keeps all of it synchronous and above it. -->
+    <!-- Watches for a newer deploy and offers a reload. This screen may be open
+         all day, and the service worker only applies a new build on the next
+         open. Keep data-build in step with build.json — npm test checks it. -->
+    <script src="/build-check.js" data-build="2026-08-27.15"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -434,7 +454,6 @@
         // ILA_BUILD (rendered in the footer, so a cached page is obvious rather than
         // guessed), the build.json poll and the update banner now live in
         // /build-check.js, loaded from the <head> with this page's build on it.
-
 
         // Register the shared service worker (push + instant-open caching).
         // A cache-first service worker serves the PREVIOUS build until it decides to update,
@@ -1250,7 +1269,6 @@
             }
             window.sendCustomerOrder();
         };
-
 
         window.sendCustomerOrder = function() {
             const info = window.currentOrderInfo; 

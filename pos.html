@@ -95,12 +95,24 @@
           href="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"
           integrity="sha384-FlKYNHBedwGFdcKg5PNKA38dWBcbf9RzKO4qBmxO3DaDw5yuYP0DXikg/fgj4xID">
 
-    <!-- Keeps a signed-in device signed in, and stops the login form being
-         shown to somebody who is already signed in. See the top of the file. -->
-    <script src="/auth-gate.js"></script>
+    <!-- Ours, named here and run at the foot alongside the SDK.
+         These are a few kilobytes each, which is not the point: the head is where
+         a browser decides whether it may draw the page yet, and a synchronous
+         script sitting in it means the answer is no, however small the file. They
+         are named up here so the fetch still starts at the same moment, then run
+         where they no longer hold anything up.
 
-    <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
-    <script src="/pin-mask.js"></script>
+         Deferring them instead would be simpler and does not work. The page's own
+         script calls into each of these on its first pass, and a deferred script
+         does not run until after the parser has finished — which is after that
+         call has already been made and already failed.
+
+         No crossorigin on these, unlike the SDK preloads above: they are
+         same-origin and fetched in that mode by default, so declaring it would
+         stop the preload matching the tag and fetch each file twice. -->
+    <link rel="preload" as="script" href="/auth-gate.js">
+    <link rel="preload" as="script" href="/pin-mask.js">
+    <link rel="preload" as="script" href="/build-check.js">
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
@@ -180,7 +192,6 @@
             animation: crispBorderPulse 1.5s infinite ease-in-out;
             border-radius: 6px;
         }
-
 
         h2 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 20px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 10px; }
         
@@ -403,10 +414,6 @@
         .ledger-meta { font-size: 0.75rem; opacity: 0.68; display: block; margin-top: 2px;}
     </style>
 
-    <!-- Watches for a newer deploy and offers a reload. This screen may be open
-         all day, and the service worker only applies a new build on the next
-         open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.14"></script>
 </head>
 <body>
     <div id="login-overlay" class="hidden">
@@ -756,6 +763,20 @@
             <button class="close-modal" onclick="closeTransactionModal()">✖ CANCEL</button>
         </div>
     </div>
+
+    <!-- Ours, in the order they ran in when they were in the head. Nothing here
+         needs the SDK and the SDK needs nothing here; what needs both is the
+         script at the end, which calls into whichever of these the page loads on
+         its first pass. That is what keeps all of it synchronous and above it. -->
+    <!-- Keeps a signed-in device signed in, and stops the login form being
+         shown to somebody who is already signed in. See the top of the file. -->
+    <script src="/auth-gate.js"></script>
+    <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
+    <script src="/pin-mask.js"></script>
+    <!-- Watches for a newer deploy and offers a reload. This screen may be open
+         all day, and the service worker only applies a new build on the next
+         open. Keep data-build in step with build.json — npm test checks it. -->
+    <script src="/build-check.js" data-build="2026-08-27.15"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -1143,7 +1164,6 @@
         })();
         /* =================== END ILA ETA ENGINE =================== */
 
-
         const auth = firebase.auth();
         // Device clocks drift. This is the server's clock minus this device's, in ms.
         // We add it whenever we need "true" now() — notably the UPI match window.
@@ -1344,7 +1364,6 @@
         // exactly when someone looks.
         try { const _b = document.getElementById('build-stamp');
               if (_b) _b.textContent = 'build ' + (window.ILA_BUILD || '?'); } catch(e){}
-
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
         const CAFE_UPI_ID = "sraveen.chirania-1@okaxis"; 
@@ -2397,7 +2416,6 @@
                 if(cachedMenu) { buildMenuMaps(cachedMenu); renderPOSMenu(cachedMenu, cachedOrder || []); }
             }
         });
-
 
         // menu, categoryOrder and itemOrder all arrive at login and each used to trigger a full
         // menu rebuild. Coalesce into one render on the next frame; the latest arguments win, so

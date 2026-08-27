@@ -89,9 +89,22 @@
           href="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"
           integrity="sha384-FlKYNHBedwGFdcKg5PNKA38dWBcbf9RzKO4qBmxO3DaDw5yuYP0DXikg/fgj4xID">
 
-    <!-- Keeps a signed-in device signed in, and stops the login form being
-         shown to somebody who is already signed in. See the top of the file. -->
-    <script src="/auth-gate.js"></script>
+    <!-- Ours, named here and run at the foot alongside the SDK.
+         These are a few kilobytes each, which is not the point: the head is where
+         a browser decides whether it may draw the page yet, and a synchronous
+         script sitting in it means the answer is no, however small the file. They
+         are named up here so the fetch still starts at the same moment, then run
+         where they no longer hold anything up.
+
+         Deferring them instead would be simpler and does not work. The page's own
+         script calls into each of these on its first pass, and a deferred script
+         does not run until after the parser has finished — which is after that
+         call has already been made and already failed.
+
+         No crossorigin on these, unlike the SDK preloads above: they are
+         same-origin and fetched in that mode by default, so declaring it would
+         stop the preload matching the tag and fetch each file twice. -->
+    <link rel="preload" as="script" href="/auth-gate.js">
     <!-- deferred, unlike the three above, because nothing here needs it until the
          data arrives. Chart is only ever touched inside drawChart and drawToday, and
          the only way into either is through onAuthStateChanged — a sign-in, a database
@@ -162,7 +175,6 @@
         .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
         .muted { opacity: 0.55; text-align: center; padding: 20px 0; font-size: 0.85rem; }
         .pull-right { margin-left: auto; }
-
 
         /* ---------- demand map ---------- */
         .view-switch { display: flex; gap: 8px; justify-content: center; margin: 0 0 18px 0; flex-wrap: wrap; }
@@ -448,6 +460,14 @@
         </div><!-- /analytics-block -->
         <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-10 &middot; demand-merge h</div>
     </div>
+
+    <!-- Ours, in the order they ran in when they were in the head. Nothing here
+         needs the SDK and the SDK needs nothing here; what needs both is the
+         script at the end, which calls into whichever of these the page loads on
+         its first pass. That is what keeps all of it synchronous and above it. -->
+    <!-- Keeps a signed-in device signed in, and stops the login form being
+         shown to somebody who is already signed in. See the top of the file. -->
+    <script src="/auth-gate.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -1479,7 +1499,6 @@ if (typeof module !== "undefined") module.exports = {
   plannerPrep, plannerRoastCadence, anomalyNow, PY_DAYS
 };
 
-
         /* ============================================================
            CONFIG
            ============================================================ */
@@ -1498,7 +1517,6 @@ if (typeof module !== "undefined") module.exports = {
             roast: { espShare: 0.75, doseG: 18, weightLossPct: 15, restDays: 6,
                      batchGreenKg: 0.7 }   // one MACDUKE working charge
         };
-        
 
         /* Fitted seed (offline fit, data Feb 24 → Jun 20 2026). Fallback + verification target. */
         const SEED = {"chef":{"grand":34.85,"dow":{"0":34.85,"1":34.31,"2":30.82,"3":32.42,"4":36.22,"5":39.04,"6":36.2},"hourShape":{"0":0.37,"6":0.08,"7":0.18,"8":0.36,"9":2.24,"10":15.1,"11":25.16,"12":58.89,"13":85.47,"14":104.8,"15":81.16,"16":91.76,"17":88.55,"18":139.99,"19":242.59,"20":174.99,"21":22.29,"22":0.54,"23":0.34},"mapePct":47},"barista":{"grand":61.31,"dow":{"0":61.31,"1":57.77,"2":54.12,"3":54.96,"4":65.28,"5":68.68,"6":66.93},"hourShape":{"0":0.23,"6":0.08,"7":2.61,"8":34.46,"9":69.74,"10":90.96,"11":103.43,"12":136.09,"13":161.34,"14":183.06,"15":159.5,"16":194.92,"17":193.86,"18":229.29,"19":245.98,"20":160.19,"21":34.36,"22":0.91,"23":0.08},"mapePct":76},"meta":{"fitEnd":"2026-06-06","halfLifeDays":28.0,"shrinkK":6,"records":6236}};
@@ -1521,7 +1539,6 @@ if (typeof module !== "undefined") module.exports = {
             n.style.display = "block";
             n.innerHTML = items.map(i => i.txt).join("<br>");
         }
-        
 
         /* ---------- record extraction (replicates the offline fit exactly) ---------- */
         function qtyOf(order){
