@@ -30,6 +30,7 @@ const suites = [
   'late-verification.test.js',
   'escaping.test.js',
   'third-party.test.js',
+  'render-blocking.test.js',
   'table-cache.test.js',
   'inventory.test.js',
   'write-only.test.js',
