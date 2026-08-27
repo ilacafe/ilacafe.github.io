@@ -425,6 +425,20 @@ reading a rule is not the same skill as predicting its effect. The deny list in
 the rules on purpose — derived from them, it would agree with them by construction
 and check nothing.
 
+Two details of how it asks, both learned the hard way. A public read declared on a
+`$wildcard` has no path of its own to request, so the probe substitutes a key that
+cannot exist: a miss answers 200 and settles the permission exactly as well as a
+hit, without pulling a real customer's order out of the live database to prove a
+rule permits it. Asking for the rule path verbatim is not an option — `$` is not a
+character Firebase accepts in a key, and the 400 that comes back is neither allowed
+nor denied. That went out once and rolled back a correct deploy; `npm test` now
+checks every path the probe would request is one Firebase can answer, and the
+emulator suite makes those exact requests before anything is deployed.
+
+The other: every node *above* a public one is added to the deny list automatically.
+A read granted one level up is the same leak served in a single request, and that
+has to hold for a public path added later, not just the ones there today.
+
 Locally, if you have the credentials:
 
 ```sh
