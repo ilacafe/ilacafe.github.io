@@ -35,6 +35,14 @@ const { check, note, done } = suite('Kitchen board — redrawn when the board ch
 // undefined however convincing the replacement was — the stub has to arrive first
 // and simply be there when the page looks.
 //
+// Arriving first is not enough on its own: firebase-app-compat.js assigns
+// window.firebase when it runs, so if it loads at all it overwrites the stub and
+// the page goes to the real SDK, finds no session, and shows the login screen
+// instead of the board. Every off-origin request is aborted below for that reason.
+// Leaving it out passed on a machine whose sandbox happened to block gstatic and
+// failed on CI, where the CDN is reachable — the suite has to be the thing that
+// stops it, not the network it runs on.
+//
 // Every ref() is a chaining no-op except the two the page actually needs an answer
 // from: orders/active/<station>, which hands its value callback to window.__feed so
 // a test can push snapshots through it, and users/<uid>, which must resolve to a
@@ -71,6 +79,7 @@ const FIREBASE_STUB = `
     goOnline: noop, goOffline: noop,
   };
   window.firebase = {
+    __stub: true,
     initializeApp: noop,
     apps: [{}],
     database: Object.assign(() => db, { ServerValue: { TIMESTAMP: 0 } }),
@@ -125,7 +134,22 @@ const ticket = (dest, items, extra) => Object.assign({
     const tab = await ctx.newPage();
     tab.on('pageerror', e => threw.push(page + ': ' + e.message));
 
+    // Same-origin only. This is what keeps the real Firebase SDK off the page, and
+    // what makes the run independent of whether the machine can reach a CDN.
+    await tab.route('**/*', route =>
+      route.request().url().startsWith(base) ? route.continue() : route.abort());
+
     await tab.goto(base + '/' + page, { waitUntil: 'load' });
+
+    // Checked before anything else, because when it is false everything after it
+    // fails as an unexplained timeout waiting for a board that was never going to
+    // be drawn. False means the real firebase-app-compat.js loaded and replaced
+    // the stub, so the page went to the real SDK, found no session and put up the
+    // login screen. It has broken this suite twice; it says so now.
+    const stubbed = await tab.evaluate(() => !!(window.firebase && window.firebase.__stub));
+    check(page + ' is talking to the stubbed SDK, not the real one', stubbed,
+          'the CDN script loaded and overwrote the stub — the off-origin abort is not holding');
+
     await tab.waitForFunction(() => !!window.__feed, null, { timeout: 5000 });
 
     // Feed one order in, then the same order again with doneAt stamped on it.
