@@ -24,6 +24,7 @@ const suites = [
   'table-index-prune.test.js',
   'analytics-range.test.js',
   'repeat-customers.test.js',
+  'unbounded-reads.test.js',
   'escaping.test.js',
   'third-party.test.js',
   'table-cache.test.js',
