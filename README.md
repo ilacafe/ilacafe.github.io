@@ -179,6 +179,10 @@ costs money:
   it ran in a browser, and `inventory` was writable by any staff role, so the write did
   not need it. The Worker reads the recipe rather than being told it, and the stock
   tablet no longer downloads the staff PIN hashes at all.
+- **one order, not the whole history** — a customer can read their own order by its
+  id and find it from the table they are sitting at, and cannot list every order the
+  café has taken. Nor take every trackId at once from the index that replaced the
+  query, which would be the same leak one level up.
 - **cash-up** — the day's archive lands before the till is cleared, and the till is
   cleared before the report is handed off to WhatsApp. That hand-off is a real
   navigation, and it takes the socket — and any un-acked write still on it — with
@@ -209,8 +213,15 @@ read sits on the exact nodes a customer needs and nowhere above them. The same c
 is why `pos` no longer carries a blanket `.read`: it handed the ledger, the bills,
 the drawer and the cash-up archive to every signed-in role, including the bar and
 the kitchen, which read none of them. `npm test`
-holds that list — `menu`, `settings`, `eta/model`, `eta/live`, `orders/track` —
-and fails on anything added to it or removed from it.
+holds that list — `menu`, `settings`, `eta/model`, `eta/live`, a single
+`orders/track/{trackId}`, and one table's `orders/tableIndex` — and fails on anything
+added to it or removed from it.
+
+`orders/track` was on that list as a whole node until recently, because a customer
+scanning a table QR queried it by `table` and a query needs read on what it queries.
+One unauthenticated request returned every order the café had ever taken. The lookup
+moved to `orders/tableIndex`, which holds trackIds and timestamps and nothing else,
+is readable one table at a time, and is pruned to six hours by the Worker.
 
 The two nodes an anonymous visitor can *write* — `orders/pendingWeb` and
 `orders/track` — carry a shape: every field named and typed, strings bounded, cart

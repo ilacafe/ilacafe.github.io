@@ -352,7 +352,7 @@ async function main() {
   rules.pushSubscriptions['.read'] = JSON.parse(saved);
 
   // the grants must not have opened anything to the world
-  const PUBLIC_OK = ['menu', 'settings', 'eta', 'orders/track'];
+  const PUBLIC_OK = ['menu', 'settings', 'eta', 'orders/track/', 'orders/tableIndex/'];
   const leaked = [];
   (function walk(n, p) {
     if (!n || typeof n !== 'object') return;

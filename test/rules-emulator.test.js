@@ -105,6 +105,12 @@ const SAMPLES = {
     trackId: 'tk1', createdAt: { '.sv': 'timestamp' }
   },
   'payments/incoming/$key': { amount: 250, ref: '512345678901', at: 1756200000000, bank: 'yes', acct: '8020' },
+  'orders/tableIndex/$key/$key': 1756200000000,
+  // Fields inside a record that carries a .validate. A throwaway child would be
+  // refused for being the wrong shape, which says nothing about who may write it.
+  'orders/track/$key/paymentVerified': true,
+  'orders/pendingWeb/$key/payment': { ref: '512345678901', amount: 250, at: 1756200000000,
+                                      payId: 'web_tk1', bankTag: 'yes 8020' },
   'orders/track/$key': {
     status: 'received', items: { Latte: { qty: 1, price: 250 } }, table: 'Table 4',
     gated: false, createdAt: { '.sv': 'timestamp' }
@@ -123,6 +129,13 @@ const SAMPLES = {
   }
 
   await seed();
+
+  // Some derived paths are children of a record that carries a .validate — writing
+  // orders/track/probeKey/paymentVerified means creating probeKey, and the creation
+  // shape rightly refuses a lone flag. The parents are seeded so the probe asks the
+  // question it means to: may this role write THIS FIELD of an order that exists.
+  await call('PUT', 'orders/track/probeKey', OWNER, SAMPLES['orders/track/$key']);
+  await call('PUT', 'orders/pendingWeb/probeKey', OWNER, SAMPLES['orders/pendingWeb/$key']);
 
   // ---------------------------------------------------------------- coverage
   {
@@ -500,19 +513,62 @@ const SAMPLES = {
     note('the shape is checked on creation, so nothing already recorded has to satisfy it');
   }
 
+  // ------------------------------------------- one order, not the whole history
+  //
+  // orders/track was world-readable as a NODE, because a customer scanning a table QR
+  // queried it by `table` and a query needs read on what it queries. That handed
+  // anyone the café's entire order history in one request — items, table and time,
+  // going back as far as the café does, on a node nothing prunes.
+  //
+  // The lookup moved to orders/tableIndex: trackIds and timestamps, readable one
+  // table at a time. A stranger can still ask what is on table four and read those
+  // orders — which is what someone standing in the café can see — and the Worker
+  // prunes the index hourly so that is all they can ask for. What they cannot do any
+  // more is take the lot.
+  {
+    await call('PUT', 'orders/track/pub1', OWNER, SAMPLES['orders/track/$key']);
+    await call('PUT', 'orders/tableIndex/Table 4/pub1', OWNER, 1756200000000);
+
+    check('a customer can read their own order by its id',
+          await canRead('orders/track/pub1', 'nobody'));
+    check('and find it from the table they are sitting at',
+          await canRead('orders/tableIndex/Table 4', 'nobody'));
+    check('but cannot list every order the café has taken',
+          !(await canRead('orders/track', 'nobody')) && !(await canRead('orders/track', 'anon')),
+          'the node itself is no longer readable');
+    note('that read was one request for every order ever, on a node nothing prunes');
+    check('nor take every trackId at once from the index',
+          !(await canRead('orders/tableIndex', 'nobody')) && !(await canRead('orders/tableIndex', 'anon')),
+          'a trackId is what reads the record behind it');
+    note('public at the top would be the same leak rebuilt one level up');
+
+    check('the owner can still read the node whole for the accuracy report',
+          await canRead('orders/track', 'admin'));
+    check('and the Worker can read the index whole to prune it, and delete from it',
+          (await canRead('orders/tableIndex', 'robot')) &&
+          (await call('DELETE', 'orders/tableIndex/Table 4/pub1', 'robot')) === 200);
+    check('a customer can add their own order to the index but not touch another',
+          (await canWrite('orders/tableIndex/Table 4/mine', 'anon', 1756200000000)) &&
+          !(await canWrite('orders/tableIndex/Table 4/mine', 'anon', 1756200000001)));
+    check('and cannot put anything but a timestamp in it',
+          !(await canWrite('orders/tableIndex/Table 4/junk', 'anon', { items: 'lots' })));
+  }
+
   // ------------------------------------------------------- the public surface
   //
   // README names this list and the offline suite holds it. Here it is the database
   // answering, which is a different question from what the file says.
   {
-    const PUBLIC = ['menu', 'settings', 'eta/model', 'eta/live', 'orders/track'];
+    const PUBLIC = ['menu', 'settings', 'eta/model', 'eta/live',
+                    'orders/track/someoneElse', 'orders/tableIndex/Table 4'];
     const shut = [];
     for (const p of PUBLIC) if (!(await canRead(p, 'nobody'))) shut.push(p);
     check('exactly the documented public surface is readable by a stranger',
           shut.length === 0, 'closed: ' + shut.join(', '));
 
     // and nothing above or beside it
-    const NOT_PUBLIC = ['eta', 'orders', 'eta/recalMeta', 'eta/modelPrevious', 'ops', 'payments'];
+    const NOT_PUBLIC = ['eta', 'orders', 'eta/recalMeta', 'eta/modelPrevious', 'ops', 'payments',
+                        'orders/track', 'orders/tableIndex'];
     const open = [];
     for (const p of NOT_PUBLIC) if (await canRead(p, 'nobody')) open.push(p);
     check('and nothing above or beside it is', open.length === 0, 'open: ' + open.join(', '));

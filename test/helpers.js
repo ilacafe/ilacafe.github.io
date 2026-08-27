@@ -268,6 +268,46 @@ function oneLiteral(e) {
   return end === e.length ? e.slice(1, -1) : null;
 }
 
+// What follows a db.ref('literal' … in the source, as path segments: `$key` for each
+// variable, and the text of each literal that comes after one. Stops at the closing
+// paren, or at anything it cannot read — a map that guesses is worse than one that
+// stops.
+function trailingSegments(after) {
+  let out = '', i = 0, depth = 0;
+  for (;;) {
+    const plus = /^\s*\+/.exec(after.slice(i));
+    if (!plus) return out;
+    i += plus[0].length;
+
+    const lit = /^\s*(['"`])([^'"`]*)\1/.exec(after.slice(i));
+    if (lit) {
+      i += lit[0].length;
+      // Only a literal that STARTS with a slash begins a new segment. Without that,
+      // `'orders/history/' + Date.now() + '-' + Math.random()` — one key built out of
+      // three pieces — read as a path with a segment called '-' in the middle of it.
+      if (lit[2][0] !== '/') return out;              // it continues the current key
+      const text = lit[2].replace(/^\/+|\/+$/g, '');
+      if (text.includes('${')) return out;            // unresolvable; stop rather than guess
+      if (text) out += '/' + text;                    // a bare '/' is a separator, not a segment
+      continue;
+    }
+
+    // A variable: one segment, then step over the expression to the next + or the
+    // end of the call. Doing this with a regex was the bug — it looked for the next
+    // literal without first skipping the variable, so every path stopped one level in.
+    out += '/$key';
+    for (;;) {
+      if (i >= after.length) return out;
+      const c = after[i];
+      if (c === '(' || c === '[') { depth++; i++; continue; }
+      if (c === ')' || c === ']') { if (depth === 0) return out; depth--; i++; continue; }
+      if (depth === 0 && (c === ',' || c === ';' || c === '\n')) return out;
+      if (depth === 0 && c === '+') break;
+      i++;
+    }
+  }
+}
+
 function joinPath(base, rest) {
   const r = String(rest).replace(/^\/+|\/+$/g, '');
   if (!base) return r;
@@ -438,12 +478,13 @@ function deriveWorkerPaths() {
   // head, exactly as the page-side deriver treats the same shape. Two passes over the
   // same matches produced both `inventory/logs/` and `inventory/logs/$key`, and the
   // first of those is not a path.
-  for (const m of src.matchAll(/updates\[\s*'([^']*)'\s*(\+)?/g)) {
+  for (const m of src.matchAll(/updates\[\s*'([^']*)'/g)) {
     const key = m[1];
     const dyn = key.indexOf('${');
-    const head = dyn < 0 ? key : key.slice(0, dyn);
-    const open = m[2] || dyn >= 0;
-    touch('/' + head.replace(/\/+$/, '') + (open ? '/$key' : ''), 'write');
+    if (dyn >= 0) { touch('/' + key.slice(0, dyn).replace(/\/+$/, '') + '/$key', 'write'); continue; }
+    // Same resolver the page scan uses, so `updates['orders/tableIndex/' + label +
+    // '/' + id]` lands two levels down rather than one — which is where its rule is.
+    touch('/' + key.replace(/\/+$/, '') + trailingSegments(src.slice(m.index + m[0].length)), 'write');
   }
   return out;
 }
@@ -464,7 +505,16 @@ function derivePaths() {
     while ((m = re.exec(src))) {
       let p = m[2].replace(/\/$/, '');
       const after = src.slice(m.index + m[0].length, m.index + m[0].length + 400);
-      if (/^\s*\+/.test(after)) p += '/$key';        // a dynamic child appended to the literal
+      // A ref is often built from alternating literals and variables:
+      //
+      //     db.ref('orders/tableIndex/' + label + '/' + trackId)
+      //     db.ref('orders/history/' + key + '/voided')
+      //
+      // Stopping at the first variable called both of those one level deep, and the
+      // first is two — so the rules check asked whether a write to the TABLE was
+      // permitted when what the app writes is a child of it, and reported a rule as
+      // missing that was sitting one level down. Keep consuming the pairs.
+      p += trailingSegments(after);
       if (p.startsWith('.info') || !p) continue;      // .info is always readable
       if (p.includes('${')) continue;                 // template segment; its literal sibling covers it
       let kind = null, best = Infinity, op = null;

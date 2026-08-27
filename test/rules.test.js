@@ -197,7 +197,12 @@ unruled.forEach(u => note('no rule governs: ' + u));
     'settings',      // opening hours, whether ordering is on
     'eta/model',     // the wait-time model
     'eta/live',      // current load, for the wait estimate
-    'orders/track',  // a customer following their own order
+    // A customer following their own order, by its id. The NODE is not public any
+    // more: a query needs read on what it queries, and that read handed anyone the
+    // café's whole order history in one request. The lookup moved to a per-table
+    // index carrying trackIds and timestamps and nothing else.
+    'orders/track/$trackId',
+    'orders/tableIndex/$tableLabel',
   ];
 
   const publicReads = findOpenNodes(root, [], [])
