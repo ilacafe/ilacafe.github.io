@@ -60,6 +60,18 @@ ROLES.forEach(r => { WHO[r] = token({ sub: r + 'Uid', user_id: r + 'Uid', email:
 
 const OWNER = 'owner';   // the emulator's bypass credential, for seeding only
 
+// The access map names roles the way the pages talk about them; WHO above names the
+// identities this suite can sign as. They are not the same strings, and the coverage
+// loop below used to key straight into WHO and `continue` on a miss — so
+// `customer (anonymous)` matched nothing and every path the ordering page uses was
+// skipped in silence. Eighteen questions, all of them about the one caller with no
+// credentials at all, none of them asked.
+//
+// Hence a map, and hence unmapped being a failure rather than a skip. A check that
+// quietly asks less than it claims is worse than one that is not there.
+const AS = { 'customer (anonymous)': 'anon' };
+const identityFor = (role) => AS[role] || role;
+
 async function call(method, path, who, body) {
   let url = BASE + '/' + String(path).replace(/^\/+/, '') + '.json?ns=' + NS;
   const headers = {};
@@ -144,16 +156,36 @@ const SAMPLES = {
     let asked = 0;
     let probe = 0;
 
+    const unplaceable = new Set();
+
     for (const [path, use] of used) {
       if (path.includes('${')) continue;                 // a template segment; its literal sibling covers it
-      const at = (role, op) => path.replace(/\$key/g, KEY_FOR[path] ? KEY_FOR[path](role, op) : 'probeKey');
-      for (const role of use.read) {
-        if (!WHO[role]) continue;
+      // Two probes want opposite things from the same key. A child-field probe
+      // (orders/track/$key/paymentVerified) needs the record above it to EXIST, which
+      // is why the seed writes probeKey. A creation probe (orders/track/$key) needs it
+      // NOT to — `!data.exists()` is the whole of what lets a customer place an order.
+      // Sharing one key made the second question unanswerable: the seed had already
+      // created the record, so the rule fell through to the role check and reported
+      // that a customer cannot place an order, which is the opposite of the truth.
+      //
+      // So a write that creates a record gets a key of its own, per role. Reads keep
+      // the seeded one, where there is something to read.
+      const at = (role, op) => {
+        if (KEY_FOR[path]) return path.replace(/\$key/g, KEY_FOR[path](role, op));
+        if (op === 'write' && path.endsWith('$key')) {
+          return path.slice(0, -'$key'.length).replace(/\$key/g, 'probeKey') + 'probeKey-' + role;
+        }
+        return path.replace(/\$key/g, 'probeKey');
+      };
+      for (const named of use.read) {
+        const role = identityFor(named);
+        if (!(role in WHO)) { unplaceable.add(named); continue; }
         asked++;
-        if (!(await canRead(at(role, 'read'), role))) denied.push(role + ' cannot READ ' + path);
+        if (!(await canRead(at(role, 'read'), role))) denied.push(named + ' cannot READ ' + path);
       }
-      for (const role of use.write) {
-        if (!WHO[role]) continue;
+      for (const named of use.write) {
+        const role = identityFor(named);
+        if (!(role in WHO)) { unplaceable.add(named); continue; }
         asked++;
         const sample = SAMPLES[path];
         // A path with a .validate is written with a real payload; anything else gets a
@@ -162,12 +194,17 @@ const SAMPLES = {
           ? await canWrite(at(role, 'write'), role, sample)
           : await canWrite(path.endsWith('$key') ? at(role, 'write')
                                                  : at(role, 'write') + '/__probe' + (++probe), role);
-        if (!ok) denied.push(role + ' cannot WRITE ' + path);
+        if (!ok) denied.push(named + ' cannot WRITE ' + path);
       }
     }
 
+    check('every role the access map names is one this suite can sign in as',
+          unplaceable.size === 0, [...unplaceable].join(', ') + ' — add it to AS');
+    note('an unmapped role used to be skipped, which made the coverage below a smaller');
+    note('claim than it read as, and said nothing about it');
+
     check('every path an app uses is permitted to the app that uses it',
-          denied.length === 0, denied.slice(0, 6).join('; '));
+          denied.length === 0, denied.join('\n        '));
     note(asked + ' role-and-path questions, derived from the access map');
     note('this is the half that makes tightening a rule safe — a locked-out till fails here');
   }

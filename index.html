@@ -149,7 +149,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.2"></script>
+    <script src="/build-check.js" data-build="2026-08-27.3"></script>
 </head>
 <body>
 
@@ -400,9 +400,10 @@
             // the order nodes themselves no longer have to be readable from here — they
             // carry every order's items, notes and delivery address and are never pruned.
             //
-            // The direct reads are kept as a fallback for the window where eta/live has
-            // not been written yet, and they are harmless once the rules close those nodes:
-            // the reads simply fail and these values stay at their neutral defaults.
+            // That window has closed: the rules now require a staff role on those nodes,
+            // so the direct reads that used to stand in for eta/live are gone. They had
+            // stopped returning anything long before they were deleted — which is the
+            // trouble with a fallback nobody can see failing.
             let etaLiveFresh = false;
             const ETA_LIVE_STALE_MS = 15*60000;   // no POS open for 15 min -> stop trusting it
             try {
@@ -420,11 +421,6 @@
                     else recomputeTempoFromPace(v.pace || []);
                 });
             } catch(e){}
-            try {
-                db.ref('orders/active/chef').on('value', s=>{ if(!etaLiveFresh) loadChef=s.numChildren(); });
-                db.ref('orders/active/barista').on('value', s=>{ if(!etaLiveFresh) loadBar=s.numChildren(); });
-                db.ref('orders/ready').limitToLast(40).on('value', s=>{ if(etaLiveFresh) return; let last=0; s.forEach(c=>{const v=c.val()||{}; if(v.items&&v.timestamp&&v.timestamp>last&&isPizza(v.items))last=v.timestamp;}); if(last)lastPizzaOut=last; });
-            } catch(e){}
 
             // ===== LIVE KITCHEN TEMPO (conservative, smoothed, NON-jumpy) =====
             // Measures whether the kitchen is currently completing orders faster/slower than the
@@ -439,28 +435,9 @@
             const TEMPO_MIN_SAMPLES = 6;            // fewer than this -> no adjustment (stay 1.0)
             const TEMPO_CLAMP_LO = 0.85, TEMPO_CLAMP_HI = 1.25;
             const TEMPO_SMOOTH = 0.25;              // low = very smooth (new reading only 25% weight)
-            // rough per-order expected time (base + oven + load) for the ratio — mirrors the model
-            function tempoExpected(items, doneAt){
-                const st={chef:{base:0,pizza:false},bar:{base:0}};
-                for(const nm in (items||{})){ const b=itemBase(nm); if(isPizza(nm)){ if(b>st.chef.base)st.chef.base=b; st.chef.pizza=true; } else if(b>st.bar.base) st.bar.base=b; }
-                let t = Math.max(st.chef.base, st.bar.base);
-                if(t<=0) return null;
-                return t; // conservative: compare actual to the pure base pace (load/oven are what we're detecting)
-            }
-            function recomputeTempo(snap){
-                const now = Date.now();
-                const ratios=[];
-                snap.forEach(ch=>{
-                    const o=ch.val()||{};
-                    if(!o.completedAt || !o.createdAt) return;
-                    if(now - o.completedAt > TEMPO_WINDOW_MS) return;   // only recent
-                    const dur=(o.completedAt-o.createdAt)/60000;
-                    if(dur<1 || dur>60) return;                        // sanity
-                    const exp=tempoExpected(o.items, o.completedAt);
-                    if(exp && exp>0) ratios.push(dur/exp);
-                });
-                applyTempo(ratios);
-            }
+            // Deriving a ratio per completed order lived here. It needed the completion
+            // records themselves, which a customer cannot read, so what remains is the
+            // ratios the POS publishes on eta/live and the guards they go through.
             // The five anti-jump guards live here, so both sources of ratios get them.
             function applyTempo(ratios){
                 let target;
@@ -487,11 +464,9 @@
                 });
                 applyTempo(ratios);
             }
-            try {
-                // watch recent completions from BOTH stations for the tempo signal
-                db.ref('orders/completed/chef').limitToLast(30).on('value', recomputeTempo);
-                db.ref('orders/completed/barista').limitToLast(30).on('value', recomputeTempo);
-            } catch(e){}
+            // The tempo signal comes from eta/live too: the POS publishes `tempo`, and
+            // `pace` behind it for a POS running an older build. Watching the completion
+            // nodes from here needed a staff role, which a customer has never had.
             window.custKitchenTempo = function(){ return kitchenTempo; };
 
             function interp(c,x){ if(!c||!c.length)return 0; if(x<=c[0][0])return c[0][1]; if(x>=c[c.length-1][0])return c[c.length-1][1]; for(let i=1;i<c.length;i++){if(x<=c[i][0]){const[a,b]=c[i-1],[d,e]=c[i];return b+(e-b)*(x-a)/(d-a);}} return c[c.length-1][1]; }
@@ -675,7 +650,7 @@
                 const tableLabel='Table '+tbl;
                 db.ref('orders/tableIndex/'+tableLabel).limitToLast(5).once('value', s=>{
                     const ids=Object.keys(s.val()||{});
-                    if(!ids.length){ window.tryTableScanLegacy(tableLabel); return; }
+                    if(!ids.length) return;      // nothing indexed for this table in the last six hours
                     // trackIds sort chronologically, so these are the five most recent.
                     Promise.all(ids.map(id=>db.ref('orders/track/'+id).once('value')
                                              .then(sn=>[id,sn.val()]).catch(()=>[id,null])))
@@ -684,17 +659,6 @@
                             if(Object.keys(recs).length) pickAndBind(recs);
                         });
                 });
-            };
-            // The way it worked before the index existed. Kept for the window between this
-            // page shipping and the rules closing the read it needs — orders placed before
-            // the index existed are not in it. Once those rules are deployed this fails,
-            // which is harmless: by then every order in the last two hours is indexed.
-            window.tryTableScanLegacy=function(tableLabel){
-                try {
-                    db.ref('orders/track').orderByChild('table').equalTo(tableLabel).limitToLast(5).once('value', s=>{
-                        const recs=s.val(); if(recs) pickAndBind(recs);
-                    });
-                } catch(e){}
             };
         })();
         /* ===== END ILA ETA + ORDER STATUS ===== */
