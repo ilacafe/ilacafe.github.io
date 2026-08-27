@@ -12,7 +12,7 @@ const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
                'chef.html', 'barista.html', 'inventory.html'];
 
 // A URL is pinned when it names a version that a CDN cannot reinterpret.
-//   .../firebasejs/8.10.1/...        pinned
+//   .../firebasejs/12.17.1/...       pinned
 //   .../npm/chart.js@4.5.1           pinned
 //   .../npm/chart.js                 NOT pinned — resolves to whatever is newest
 const PINNED = [

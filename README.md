@@ -81,6 +81,7 @@ npm install
 npm test              # syntax, settlement, pricing, QR, rules, Worker
 npm run test:browser  # loads the real pages in Chromium (needs a browser download)
 npm run test:rules    # runs database.rules.json in the Firebase emulator (needs Java)
+npm run test:compat   # the real Firebase SDK, in a browser, against the emulator
 npm run access-map    # prints every database path each app reads and writes
 npm run bump          # moves every page and build.json to a new build
 ```
@@ -163,6 +164,15 @@ costs money:
   `admin.html` and `analytics.html` show and fails if any other role can reach it —
   those two pages check the role in a browser the holder controls, which is advice
   until the rules say the same thing.
+- **the SDK the till runs on** — every other browser suite stubs `window.firebase`,
+  because what those suites ask about is the page's own code. That left the Firebase
+  SDK itself with no coverage, on pages pinned to a 2021 release that had to move
+  eventually. `npm run test:compat` reads the version and the integrity hashes out of
+  the pages, fetches those exact bundles, refuses to run unless their bytes hash to
+  what the pages committed — and then drives a real browser through the operations
+  the money paths are built from: `ServerValue.increment`, a multi-path update at the
+  root, a transaction that aborts, a listener that is detached. Moving the SDK is the
+  moment you find out whether any of those changed.
 - **cash out of the drawer** — `expense`, `withdrawal` and `tip_payout` are written
   by the Worker and by nothing else. Each sat behind a PIN prompt in the till, and
   the prompt was advice: `pos` is writable by any staff role, so the entry could be

@@ -7,6 +7,17 @@
 // answers is whether that changed the answer: for the same kitchen, the estimate
 // must come out the same as it did reading the orders directly. If it doesn't,
 // customers get told a different wait than before and the refactor is not neutral.
+//
+// One side of that comparison no longer ships. The rules require a staff role on
+// those nodes, so the customer page's own ratio derivation could not run and has
+// been deleted; keeping it in the page to feed a test would mean shipping code to
+// every customer that nothing can ever call.
+//
+// It is frozen below instead, copied verbatim at the commit that removed it. Nothing
+// is lost by the copy: this suite's other extractFunction() calls exist so a test
+// cannot drift from shipping code, and there is no shipping code left here to drift
+// from. What the equivalence still buys is a fixed point — the wait a customer was
+// quoted before eta/live existed — that recomputeTempoFromPace has to keep matching.
 
 const { readPage, extractFunction, buildModule, suite } = require('./helpers');
 
@@ -27,10 +38,33 @@ const customer = buildModule([
   extractFunction(idx, 'isPizza'),
   extractFunction(idx, 'isBaked'),
   extractFunction(idx, 'itemBase'),
-  extractFunction(idx, 'tempoExpected'),
   extractFunction(idx, 'applyTempo'),
-  extractFunction(idx, 'recomputeTempo'),
   extractFunction(idx, 'recomputeTempoFromPace'),
+  // ---- frozen: index.html as it read before eta/live, verbatim ----------------
+  // Deliberately not extractFunction'd — the page no longer contains these, and it
+  // should not. They are the reference the equivalence above is measured against.
+  `function tempoExpected(items, doneAt){
+       const st={chef:{base:0,pizza:false},bar:{base:0}};
+       for(const nm in (items||{})){ const b=itemBase(nm); if(isPizza(nm)){ if(b>st.chef.base)st.chef.base=b; st.chef.pizza=true; } else if(b>st.bar.base) st.bar.base=b; }
+       let t = Math.max(st.chef.base, st.bar.base);
+       if(t<=0) return null;
+       return t;
+   }`,
+  `function recomputeTempo(snap){
+       const now = Date.now();
+       const ratios=[];
+       snap.forEach(ch=>{
+           const o=ch.val()||{};
+           if(!o.completedAt || !o.createdAt) return;
+           if(now - o.completedAt > TEMPO_WINDOW_MS) return;
+           const dur=(o.completedAt-o.createdAt)/60000;
+           if(dur<1 || dur>60) return;
+           const exp=tempoExpected(o.items, o.completedAt);
+           if(exp && exp>0) ratios.push(dur/exp);
+       });
+       applyTempo(ratios);
+   }`,
+  // ----------------------------------------------------------------------------
   'function resetTempo(){ kitchenTempo = 1.0; }',
   'function readTempo(){ return kitchenTempo; }',
 ], { MODEL, Math, Date, Object },
@@ -81,6 +115,8 @@ const { check, note, done } = suite('ETA summary — eta/live replaces reading t
   check('the published summary yields the same kitchen tempo as reading the orders',
         Math.abs(viaOrders - viaSummary) < 1e-9,
         'orders=' + viaOrders + '  summary=' + viaSummary);
+  note('one side is the page as it shipped before eta/live, frozen at the top of this');
+  note('file; the other is the page as it ships now, extracted from it');
   note('tempo ' + viaOrders.toFixed(4) + ' either way');
   check('and it is a real adjustment, not both defaulting to neutral',
         Math.abs(viaOrders - 1.0) > 1e-9, 'both were exactly 1.0, so this proves nothing');

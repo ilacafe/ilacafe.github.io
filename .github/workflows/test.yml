@@ -65,6 +65,33 @@ jobs:
       - run: npm ci
       - run: npm run test:rules
 
+  # The one suite that runs somebody else's code rather than ours. Every other
+  # browser suite stubs window.firebase, because what they are asking about is the
+  # page's own logic — which leaves the SDK the till depends on with no coverage at
+  # all, and the pages have to move off a pinned version eventually.
+  #
+  # It reads the version and the integrity hashes out of the pages, fetches those
+  # exact bundles, refuses to run if their bytes do not hash to what the pages
+  # committed, and then drives a real browser through the operations the money paths
+  # are built from: increments, multi-path updates, transactions, live listeners.
+  #
+  # Needs all three: node, a JVM for the emulator, and a Chromium.
+  compat:
+    name: the SDK itself
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:compat
+
   browser:
     name: on a real page
     runs-on: ubuntu-latest
