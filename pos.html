@@ -27,6 +27,9 @@
          shown to somebody who is already signed in. See the top of the file. -->
     <script src="/auth-gate.js"></script>
 
+    <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
+    <script src="/pin-mask.js"></script>
+
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
         #login-overlay { position: fixed; inset: 0; background: var(--brand-bg); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -203,13 +206,6 @@
                 
         .remark-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); }
-        /* A four-digit staff PIN is not a password, and type="password" was only ever
-           masking it. That is what put an iOS "sign in with your password" sheet over
-           a working till: Safari looks for a password field in the DOCUMENT, finds this
-           one from the moment the page loads, and offers to fill it — whether or not
-           anything is showing. Masking is a presentation job, so it is done here, and
-           the field goes back to being the numeric input it always was. */
-        .pin-input { -webkit-text-security: disc; text-security: disc; }
         
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1 1 0; min-width: 0;}
@@ -338,7 +334,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.9"></script>
+    <script src="/build-check.js" data-build="2026-08-27.10"></script>
 </head>
 <body>
     <div id="login-overlay" class="hidden">
@@ -683,7 +679,7 @@
             <h3 id="transaction-title">Transaction</h3>
             <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
             <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason">
-            <input type="text" id="transaction-pin" class="remark-input pin-input" placeholder="PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4" autocomplete="off">
+            <input type="text" id="transaction-pin" class="remark-input" placeholder="PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4" autocomplete="off" data-pin>
             <div class="modal-buttons"><button id="transaction-confirm-btn" class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
             <button class="close-modal" onclick="closeTransactionModal()">✖ CANCEL</button>
         </div>
@@ -4335,11 +4331,15 @@
         // .active FIRST: renderLedger() now no-ops while the Ledger is closed, so rendering
         // before showing would have left it empty until the next data change.
         window.openCashManagement = function() { document.getElementById('cash-modal').classList.add('active'); renderLedger(); renderTipPool(); };
-        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
+        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; if (window.ilaPin) window.ilaPin.clear(document.getElementById('transaction-pin')); else document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
         window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
 
         window.confirmTransaction = async function() {
-            const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
+            const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const _pinEl = document.getElementById('transaction-pin');
+            // The box shows bullets; the digits live in pin-mask.js. Falling back to the
+            // element covers the case where that script never arrived — the field is a
+            // plain text input, so its own value is still exactly what was typed.
+            const pinStr = (window.ilaPin ? window.ilaPin.value(_pinEl) : (_pinEl.value || '')).trim();
             if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
             // The PIN is checked by the Worker now, which is the only place a check
             // cannot be skipped. This page neither looks it up nor writes the entry —
