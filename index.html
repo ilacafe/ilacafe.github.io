@@ -159,6 +159,25 @@
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: calc(12px + env(safe-area-inset-top)) 0 calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        /* CLOSED MODALS ARE NOT LAID OUT
+           These overlays are hidden with opacity rather than display, so that they
+           can fade. The cost of that is that every one of them is still a rendered
+           box with a rendered subtree: on the till, fourteen closed modals were
+           being laid out on the first paint and again on every reflow after it.
+           Measured at 4x CPU throttle, pos.html spent 136ms in layout against
+           32ms for a kitchen screen — the till's slow open was never its 250KB of
+           script (143ms, less than the kitchen screen's) but its markup.
+
+           content-visibility:hidden skips layout and paint for the CONTENTS while
+           leaving the overlay's own box alone, so the opacity transition still
+           runs exactly as before and nothing moves. The subtree is laid out when
+           the modal is opened, which is the moment somebody is waiting for it
+           rather than the moment they are waiting for the till.
+
+           A browser too old to know the property ignores it and lays everything
+           out as it did — slower, never wrong. */
+        .modal-overlay { content-visibility: hidden; }
+        .modal-overlay.active { content-visibility: visible; }
         .modal-overlay { cursor: pointer; }
         .modal-content { cursor: auto; }
                 /* ============================================================
@@ -416,7 +435,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.16"></script>
+    <script src="/build-check.js" data-build="2026-08-27.17"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the

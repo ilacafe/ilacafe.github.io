@@ -20,6 +20,7 @@ const suites = [
   'pin-mask-browser.test.js',
   'kds-board-browser.test.js',
   'boot-order-browser.test.js',
+  'modal-layout-browser.test.js',
 ];
 
 let failed = [];
