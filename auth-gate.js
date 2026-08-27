@@ -20,11 +20,12 @@
 //   goes straight in — then re-reads the role in the background and corrects
 //   itself if it has changed;
 //
-//   the login box is not shown until something actually knows a sign-in is needed.
-//   The whole box, not the fields inside it — hiding the inputs and leaving the box
-//   up was the first attempt, and it was worse: a password field that appears in the
-//   DOM is what makes a phone offer to fill it and open the keyboard, which it then
-//   did on devices that were already signed in.
+//   the login box does not EXIST until something actually knows a sign-in is needed.
+//   Not hidden — absent. Two attempts got this wrong: hiding the inputs and leaving
+//   the box up, then hiding the whole box. Neither worked, because iOS looks for a
+//   password field in the document rather than for one on screen, and offered to
+//   fill it over a working till either way. The form sits in a <template> now, which
+//   is a detached fragment, and is cloned in only when a sign-in is really needed.
 //
 // THE REMEMBERED ROLE IS A CACHE FOR THE UI, AND ONLY THAT
 //
@@ -80,9 +81,26 @@
   function overlay() { return document.getElementById('login-overlay'); }
   function errorLine() { return document.getElementById('login-error'); }
 
+  // The form lives in a <template> until somebody actually needs to sign in.
+  //
+  // Hiding it was not enough, and this is the part I had wrong twice. iOS looks for a
+  // password field in the DOCUMENT, not for one on screen: with the box display:none
+  // it still decided the page was a sign-in page and threw up "Sign in to ila.cafe
+  // with your password for …" over a working till, mid-service. A field inside a
+  // <template> is in a detached fragment and is not in the document at all, so there
+  // is nothing to find until this runs.
+  function materialise() {
+    if (document.getElementById('login-box')) return true;     // already here
+    var tpl = document.getElementById('login-box-template');
+    var host = overlay();
+    if (!tpl || !host || !tpl.content) return false;
+    host.appendChild(tpl.content.cloneNode(true));
+    return true;
+  }
+
   window.ilaLoginBox = {
-    // Called the moment the page script runs. The markup already carries `hidden`
-    // so there is no flash of a login box to hide — this only arms the safety net.
+    // Called the moment the page script runs. Nothing is materialised and nothing is
+    // shown — this only arms the safety net.
     checking: function () {
       clearTimeout(timer);
       // If auth never resolves at all — the SDK did not arrive — a device that shows
@@ -91,6 +109,7 @@
     },
     ready: function (msg) {
       clearTimeout(timer);
+      materialise();
       var o = overlay(); if (o) o.classList.remove('hidden');
       var e = errorLine(); if (e) e.innerText = msg || '';
     },
