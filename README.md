@@ -179,6 +179,11 @@ costs money:
   it ran in a browser, and `inventory` was writable by any staff role, so the write did
   not need it. The Worker reads the recipe rather than being told it, and the stock
   tablet no longer downloads the staff PIN hashes at all.
+- **the table index prune** — the one job here that deletes. It takes entries older
+  than its window and nothing else: an entry a minute inside it is one a customer may
+  still be using, an entry whose timestamp it cannot read is left alone rather than
+  guessed at, and a read it could not make deletes nothing — a denied read must not
+  look like an empty index.
 - **one order, not the whole history** — a customer can read their own order by its
   id and find it from the table they are sitting at, and cannot list every order the
   café has taken. Nor take every trackId at once from the index that replaced the

@@ -21,6 +21,7 @@ const suites = [
   'rules.test.js',
   'worker.test.js',
   'cashout.test.js',
+  'table-index-prune.test.js',
   'analytics-range.test.js',
   'escaping.test.js',
   'third-party.test.js',
