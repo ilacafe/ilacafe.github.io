@@ -35,20 +35,36 @@ const { check, note, done } = suite('Kitchen board — redrawn when the board ch
 // undefined however convincing the replacement was — the stub has to arrive first
 // and simply be there when the page looks.
 //
-// Every ref() is a chaining no-op except the one the board watches: that one hands
-// its callback to window.__feed so a test can push a snapshot through it.
+// Every ref() is a chaining no-op except the two the page actually needs an answer
+// from: orders/active/<station>, which hands its value callback to window.__feed so
+// a test can push snapshots through it, and users/<uid>, which must resolve to a
+// real role.
+//
+// users/<uid> has to be a genuine promise, and getting that wrong is what this
+// comment is for. A chaining Proxy answers `then` with another callable Proxy, so
+// `await` treats it as a thenable, calls it with (resolve, reject), and it does
+// nothing with either — the await never settles and the page never gets past the
+// role read. That left the seeded localStorage role as the only way in, which is a
+// second mechanism to depend on for a suite that is testing neither. It passed on
+// one machine and timed out on CI. Both reads answer properly now.
 const FIREBASE_STUB = `
 (() => {
   const noop = () => {};
   const chain = () => new Proxy(function(){}, { get: () => chain(), apply: () => chain() });
+  const snap = (v) => ({ val: () => v, exists: () => v != null, forEach: () => {},
+                         numChildren: () => (v ? Object.keys(v).length : 0) });
   window.__feed = null;
   const db = {
     ref: (p) => {
-      if (/^orders\\/active\\/(chef|barista)$/.test(p || '')) {
+      const path = String(p == null ? '' : p);
+      if (path === 'orders/active/chef' || path === 'orders/active/barista') {
         return {
           on: (evt, cb) => { if (evt === 'value') window.__feed = cb; return cb; },
-          off: noop, once: () => Promise.resolve({ val: () => null, exists: () => false }),
+          off: noop, once: () => Promise.resolve(snap(null)),
         };
+      }
+      if (path.indexOf('users/') === 0) {
+        return { once: () => Promise.resolve(snap({ role: 'chef', name: 'Test' })), on: noop, off: noop };
       }
       return chain();
     },
@@ -59,10 +75,9 @@ const FIREBASE_STUB = `
     apps: [{}],
     database: Object.assign(() => db, { ServerValue: { TIMESTAMP: 0 } }),
     auth: () => ({
-      // A signed-in chef, so startDisplay actually runs. The page re-reads the role
-      // from the database and that read is a chaining no-op here, which is the
-      // "could not verify" path — it leaves an already-admitted screen open, which
-      // is the state under test.
+      // A signed-in member of staff, so the page admits and startDisplay runs.
+      // Which role does not matter: these pages check that there IS one, and
+      // database.rules.json is what governs every read behind the screen.
       onAuthStateChanged: (cb) => { setTimeout(() => { try { cb({ uid: 'u1' }); } catch (e) {} }, 0); },
       signInWithEmailAndPassword: () => Promise.resolve({}),
       signOut: () => Promise.resolve(),
@@ -70,7 +85,6 @@ const FIREBASE_STUB = `
     }),
     messaging: () => ({ getToken: () => Promise.resolve(null), onMessage: noop }),
   };
-  try { localStorage.setItem('ila.role.v1', JSON.stringify({ uid: 'u1', role: 'chef', name: 'Test' })); } catch (e) {}
 })();
 `;
 
@@ -102,7 +116,11 @@ const ticket = (dest, items, extra) => Object.assign({
 
   for (const [page, station] of [['chef.html', 'chef'], ['barista.html', 'barista']]) {
     const item = station === 'chef' ? 'Margherita' : 'Latte';
-    const ctx = await browser.newContext();
+    // serviceWorkers: 'block' for the reason build-banner-browser.test.js gives —
+    // the worker's own script request does not go through page.route, so a route
+    // rule does not stop it, and a page that reloads itself when the worker claims
+    // it takes the board's DOM with it mid-assertion.
+    const ctx = await browser.newContext({ serviceWorkers: 'block' });
     await ctx.addInitScript(FIREBASE_STUB);
     const tab = await ctx.newPage();
     tab.on('pageerror', e => threw.push(page + ': ' + e.message));
