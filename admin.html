@@ -161,7 +161,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.10"></script>
+    <script src="/build-check.js" data-build="2026-08-27.11"></script>
 </head>
 <body>
     <div id="login-overlay" class="hidden">
@@ -1048,7 +1048,9 @@
                 if (!d.completedAt || !d.createdAt) continue;
                 const actual = (d.completedAt - d.createdAt) / 60000;
                 if (actual < 0.5 || actual > 120) continue;              // clock skew / stale tickets
-                rows.push({ actual: actual, low: t.predLow, high: t.predHigh, pizza: etaHasPizza(t.items), items: t.items, at: d.completedAt });
+                rows.push({ actual: actual, low: t.predLow, high: t.predHigh, pizza: etaHasPizza(t.items), items: t.items, at: d.completedAt,
+                            // what the CUSTOMER was shown, and whether the kitchen was live for it
+                            qLow: t.quotedLow, qHigh: t.quotedHigh, qLive: t.quotedLive });
             }
             renderETAAccuracy(rows);
         }
@@ -1079,6 +1081,28 @@
             h += '<div class="rec-kpi"><div class="lbl">Median actual vs quoted</div><div class="val">' + medActual.toFixed(0) + ' / ' + medQuote.toFixed(0) + ' min</div><div class="sub">' + (medActual > medQuote ? 'slower than quoted' : 'faster than quoted') + '</div></div>';
             h += '<div class="rec-kpi"><div class="lbl">When late, by</div><div class="val">' + (late.length ? '+' + avgOver.toFixed(1) + ' min' : '\u2014') + '</div><div class="sub">' + late.length + ' late \u00b7 ' + early + ' early</div></div>';
             h += '<div class="rec-kpi"><div class="lbl">Pizza vs rest</div><div class="val">' + (pzP == null ? '\u2014' : pzP + '%') + ' / ' + (drP == null ? '\u2014' : drP + '%') + '</div><div class="sub">' + pz.length + ' with pizza \u00b7 ' + dr.length + ' without</div></div>';
+            // The customer's own quote, which is a different number from the counter's and
+            // the only one they ever see. It is also the one that can be made blind: the
+            // counter publishes eta/live, so its quote is never stale, while a phone whose
+            // signal has aged out quotes a neutral kitchen and cannot tell you it did.
+            //
+            // Reported separately rather than averaged in, because averaging is exactly
+            // what hides it: a good on-time figure made of half-live quotes is not a good
+            // wait estimate, it is a coincidence.
+            const cq = rows.filter(r => r.qLow != null && r.qHigh != null);
+            if (cq.length){
+                const live = cq.filter(r => r.qLive), blind = cq.filter(r => !r.qLive);
+                const hit = a => a.length ? Math.round(100 * a.filter(r => r.actual <= r.qHigh).length / a.length) : null;
+                const liveP = hit(live), blindP = hit(blind);
+                const shareLive = Math.round(100 * live.length / cq.length);
+                const shareCls = shareLive >= 90 ? 'good' : (shareLive >= 70 ? 'warn' : 'bad');
+                h += '<div class="rec-kpi ' + shareCls + '"><div class="lbl">Customer quotes on a live kitchen</div><div class="val">'
+                   + shareLive + '%</div><div class="sub">' + live.length + ' of ' + cq.length + ' \u00b7 the rest quoted blind</div></div>';
+                h += '<div class="rec-kpi"><div class="lbl">On time, live vs blind</div><div class="val">'
+                   + (liveP == null ? '\u2014' : liveP + '%') + ' / ' + (blindP == null ? '\u2014' : blindP + '%')
+                   + '</div><div class="sub">the customer\u2019s own quote, not the counter\u2019s</div></div>';
+            }
+
             k.innerHTML = h;
             const worst = late.slice().sort((a,b) => (b.actual - b.high) - (a.actual - a.high)).slice(0, 6);
             if (!worst.length){ box.innerHTML = "<p style='opacity:0.6; font-size:0.9rem;'>Nothing ran past its quote.</p>"; return; }

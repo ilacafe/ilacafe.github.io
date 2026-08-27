@@ -149,7 +149,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.10"></script>
+    <script src="/build-check.js" data-build="2026-08-27.11"></script>
 </head>
 <body>
 
@@ -405,7 +405,27 @@
             // stopped returning anything long before they were deleted — which is the
             // trouble with a fallback nobody can see failing.
             let etaLiveFresh = false;
-            const ETA_LIVE_STALE_MS = 15*60000;   // no POS open for 15 min -> stop trusting it
+
+            // How long to keep trusting eta/live once it stops changing.
+            //
+            // This was fifteen minutes because fifteen minutes sounded about right, which
+            // is no way to decide the moment a wait estimate stops being a measurement and
+            // becomes a guess. The till says how often it promises to touch updatedAt, so
+            // the answer comes from there: three missed heartbeats. Change the heartbeat on
+            // the POS and this follows it.
+            //
+            // The old number stays as the fallback for a till on an older build, which is
+            // the only case where nothing is published to derive from.
+            const ETA_LIVE_STALE_FALLBACK_MS = 15*60000;
+            const ETA_BEATS_BEFORE_STALE = 3;
+            let etaStaleMs = ETA_LIVE_STALE_FALLBACK_MS;
+            function etaStaleWindow(beatMs){
+                const beat = Number(beatMs) || 0;
+                if (!beat) return ETA_LIVE_STALE_FALLBACK_MS;
+                // Bounded either way: a till that published a silly heartbeat must not be
+                // able to make this page trust an hour-old kitchen, or distrust a live one.
+                return Math.max(5*60000, Math.min(30*60000, beat * ETA_BEATS_BEFORE_STALE));
+            }
 
             // updatedAt is a SERVER timestamp and this comparison used the phone's own
             // clock, so a handset running a quarter of an hour fast read every publish as
@@ -419,8 +439,10 @@
             try {
                 db.ref('eta/live').on('value', s=>{
                     const v = s.val();
-                    if (!v || !v.updatedAt || (serverNow() - v.updatedAt) > ETA_LIVE_STALE_MS) { etaLiveFresh = false; return; }
+                    etaStaleMs = etaStaleWindow(v && v.heartbeatMs);
+                    if (!v || !v.updatedAt || (serverNow() - v.updatedAt) > etaStaleMs) { etaLiveFresh = false; window.etaLiveFresh = false; return; }
                     etaLiveFresh = true;
+                    window.etaLiveFresh = true;      // read when an order records its quote
                     loadChef = parseInt(v.activeChef) || 0;
                     loadBar  = parseInt(v.activeBarista) || 0;
                     if (v.lastPizzaOut) lastPizzaOut = v.lastPizzaOut;
@@ -1122,7 +1144,31 @@
                 const publicTrackLabel = d => /^Table \d+$/.test(String(d == null ? '' : d).trim())
                     ? String(d).trim() : 'Order';
                 const _label = publicTrackLabel(info.details);
-                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: _label, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                // The wait the CUSTOMER was shown, and whether the kitchen was live when
+                // it was worked out.
+                //
+                // The counter's quote has been recorded on this node all along, and the
+                // accuracy report has been measuring that one — but the counter is the
+                // thing publishing eta/live, so its numbers are never stale. The estimate
+                // nobody was checking is this one: the number on the customer's phone,
+                // which is the only one they ever see and the only one that decides
+                // whether any of this is worth having.
+                //
+                // quotedLive is the half that matters. A quote made on a stale signal is a
+                // model-only guess, and averaging it in with the rest hides exactly the
+                // thing worth knowing.
+                // custEstimateETA is the same call that renders the number on screen, so
+                // what is recorded is what the customer was actually told — not a second
+                // estimate worked out at write time that could differ from it.
+                const _q = (function(){
+                    try {
+                        const e = (typeof window.custEstimateETA === 'function')
+                                    ? window.custEstimateETA(orderItemsSnapshot) : null;
+                        if (!e || e.low == null || e.high == null) return {};
+                        return { quotedLow: e.low, quotedHigh: e.high, quotedLive: !!window.etaLiveFresh };
+                    } catch (err) { return {}; }
+                })();
+                db.ref('orders/track/' + trackId).set(Object.assign({ status: 'received', items: orderItemsSnapshot, table: _label, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP }, _q));
                 // A table's orders, as trackIds and nothing else — see tryTableScan below.
                 if (_label !== 'Order') db.ref('orders/tableIndex/' + _label + '/' + trackId).set(firebase.database.ServerValue.TIMESTAMP);
                 if (window.watchOrderStatus) window.watchOrderStatus();

@@ -334,7 +334,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.10"></script>
+    <script src="/build-check.js" data-build="2026-08-27.11"></script>
 </head>
 <body>
     <div id="login-overlay" class="hidden">
@@ -909,6 +909,7 @@
             });
             return out;
           }
+          const ETA_HEARTBEAT_MS = 5*60000;
           let etaPubTimer = null, etaPubLast = '';
           function publishEtaLive(){
             if (etaPubTimer) return;                            // coalesce a burst of listener fires
@@ -925,7 +926,12 @@
                   // rather than deriving its own and drifting. `pace` stays as the fallback
                   // for a build that predates this.
                   tempo: window.etaTempo,
-                  pace: pace
+                  pace: pace,
+                  // How often this till promises to touch updatedAt. The ordering page
+                  // decides from THIS how long to keep trusting the numbers, instead of
+                  // carrying its own guess at how often a POS publishes — the two cannot
+                  // drift apart, and changing the heartbeat here changes it there.
+                  heartbeatMs: ETA_HEARTBEAT_MS
                 };
                 const sig = JSON.stringify(payload);
                 if (sig === etaPubLast) return;                 // nothing actually moved
@@ -948,7 +954,6 @@
           // A heartbeat, well inside that window. It writes the timestamp and nothing else,
           // so a steady kitchen costs one small write every few minutes rather than
           // republishing numbers that have not moved.
-          const ETA_HEARTBEAT_MS = 5*60000;
           let etaHeartbeat = null;
           function startEtaHeartbeat(){
             if (etaHeartbeat) return;

@@ -17,7 +17,7 @@
 //   2. the page compared a SERVER timestamp against the phone's own clock. A handset
 //      a quarter of an hour fast read every publish as stale, permanently.
 
-const { readPage, suite } = require('./helpers');
+const { readPage, extractFunction, buildModule, suite } = require('./helpers');
 
 const { check, note, done } = suite('The live ETA — why it stopped moving');
 
@@ -25,17 +25,45 @@ const pos = readPage('pos.html');
 const idx = readPage('index.html');
 
 // ------------------------------------------------------------------- the window
-const stale = /const ETA_LIVE_STALE_MS = (\d+)\*(\d+)/.exec(idx);
-const beat  = /const ETA_HEARTBEAT_MS = (\d+)\*(\d+)/.exec(pos);
-check('the ordering page still has a staleness window', !!stale, String(stale));
-check('and the POS has a heartbeat to stay inside it', !!beat, String(beat));
+//
+// It used to be fifteen minutes because fifteen minutes sounded about right, which
+// is no way to decide when a wait estimate stops being a measurement. The till
+// publishes how often it promises to touch updatedAt, and the page derives the
+// window from that — so the two cannot drift, and changing the heartbeat on the POS
+// changes the page with it.
+const beat = /const ETA_HEARTBEAT_MS = (\d+)\*(\d+)/.exec(pos);
+check('the POS has a heartbeat', !!beat, String(beat));
+check('and publishes how often it beats', /heartbeatMs: ETA_HEARTBEAT_MS/.test(pos),
+      'without this the page has nothing to derive from and falls back to a guess');
 
-if (stale && beat) {
-  const STALE = Number(stale[1]) * Number(stale[2]);
-  const BEAT  = Number(beat[1]) * Number(beat[2]);
-  check('the heartbeat is comfortably faster than the window',
-        BEAT * 2 <= STALE, (BEAT/60000) + ' min beat against a ' + (STALE/60000) + ' min window');
-  note('one missed beat must not be enough to make a live POS look shut');
+check('the page derives its window from that rather than carrying a number',
+      /etaStaleWindow\(v && v\.heartbeatMs\)/.test(idx));
+check('and judges the signal against the derived window',
+      /\(serverNow\(\) - v\.updatedAt\) > etaStaleMs/.test(idx));
+
+{
+  const api = buildModule([
+    'const ETA_LIVE_STALE_FALLBACK_MS = 15*60000;',
+    'const ETA_BEATS_BEFORE_STALE = 3;',
+    extractFunction(idx, 'etaStaleWindow'),
+  ], { Number, Math }, ['etaStaleWindow']);
+
+  const BEAT = beat ? Number(beat[1]) * Number(beat[2]) : 0;
+  check('three missed beats, so one late heartbeat is not a shut café',
+        api.etaStaleWindow(BEAT) === BEAT * 3, String(api.etaStaleWindow(BEAT)));
+  note('the till beats every ' + (BEAT/60000) + ' min, so the page trusts it for ' +
+       (api.etaStaleWindow(BEAT)/60000) + ' min');
+
+  check('a till on an older build, publishing nothing, falls back rather than trusting forever',
+        api.etaStaleWindow(undefined) === 15*60000 && api.etaStaleWindow(0) === 15*60000,
+        String(api.etaStaleWindow(undefined)));
+
+  // A published number is a number this page did not choose, so it is bounded.
+  check('an absurdly long heartbeat cannot make the page trust a dead kitchen',
+        api.etaStaleWindow(60*60000) === 30*60000, String(api.etaStaleWindow(60*60000)));
+  check('nor an absurdly short one make it distrust a live one',
+        api.etaStaleWindow(1000) === 5*60000, String(api.etaStaleWindow(1000)));
+  note('eta/live is written by any staff role, so what it says is bounded on read');
 }
 
 // --------------------------------------------------- it refreshes only the stamp
@@ -64,7 +92,7 @@ if (stale && beat) {
   check('the page asks the connection what time the server thinks it is',
         /\.info\/serverTimeOffset/.test(idx));
   check('and judges freshness on that, not on the handset',
-        /\(serverNow\(\) - v\.updatedAt\) > ETA_LIVE_STALE_MS/.test(idx),
+        /\(serverNow\(\) - v\.updatedAt\) > etaStaleMs/.test(idx),
         'Date.now() here means a phone with a wrong clock never sees a live kitchen');
   check('.info needs no rule and no sign-in, so this cannot fail closed',
         !/auth/.test((/\.info\/serverTimeOffset[^\n]*/.exec(idx) || [''])[0]));
