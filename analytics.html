@@ -5,6 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ILA | Analytics</title>
     <link rel="apple-touch-icon" href="/icon-analytics.png" />
+    <!-- THE TWO HOSTS THE BROWSER FINDS OUT ABOUT LAST
+         A connection to a new host costs a DNS lookup, a TCP handshake and a TLS
+         handshake before a single byte of what was asked for comes back — on café
+         wifi, a good fraction of a second. The browser starts that work the moment
+         it SEES a host, and it cannot see either of these until late:
+
+           fonts.gstatic.com appears nowhere in this file. It is named inside the
+           Google Fonts stylesheet below, so the browser only learns it exists once
+           that stylesheet has been fetched and parsed, and only then starts a
+           connection for the font files themselves.
+
+           the database is worse. Its host is in firebaseConfig, at the foot of the
+           page, and nothing connects to it until the SDK below has downloaded,
+           parsed and run. That handshake happens after all of it, in series, while
+           the page sits there with nothing on it.
+
+         A preconnect names them here, at the top, so both handshakes happen early
+         and alongside everything else rather than after it. crossorigin is required
+         on the font one: fonts are fetched anonymously, and a preconnect whose mode
+         does not match the request is a connection the browser throws away.
+
+         Nothing else here needs one: every other host is named directly by a tag
+         below, which is already the earliest the browser could possibly know. -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
 
     <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
@@ -20,7 +45,15 @@
     <!-- Keeps a signed-in device signed in, and stops the login form being
          shown to somebody who is already signed in. See the top of the file. -->
     <script src="/auth-gate.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"
+    <!-- deferred, unlike the three above, because nothing here needs it until the
+         data arrives. Chart is only ever touched inside drawChart and drawToday, and
+         the only way into either is through onAuthStateChanged — a sign-in, a database
+         read and a render after that, all of them long past DOMContentLoaded, which is
+         itself after every deferred script has run. Loading it in the blocking path
+         meant the owner stared at a blank brown page for the download and parse of a
+         charting library before a single word of the page was drawn. It downloads
+         alongside everything else now and runs before it can possibly be wanted. -->
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"
             integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
             crossorigin="anonymous"></script>
 
@@ -137,7 +170,7 @@
              in the moment a sign-in is actually needed, and not before. -->
         <template id="login-box-template">
             <div id="login-box">
-                <img src="logo.png" alt="ILA" style="max-width: 180px; margin: 0 auto 22px auto; display:block;">
+                <img src="logo.png" alt="ILA" width="1200" height="427" decoding="async" style="max-width: 180px; height: auto; margin: 0 auto 22px auto; display:block;">
                 <input type="email" id="login-email" placeholder="Email" autocomplete="username">
                 <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
                 <button onclick="window.signIn()">Sign In</button>
@@ -148,7 +181,7 @@
 
     <div class="container">
         <header>
-            <img src="logo.png" alt="ILA Logo" class="logo">
+            <img src="logo.png" alt="ILA Logo" class="logo" width="1200" height="427" decoding="async">
         </header>
 
         <div class="view-switch">

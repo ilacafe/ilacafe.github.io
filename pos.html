@@ -11,6 +11,31 @@
     <meta name="apple-mobile-web-app-title" content="ILA POS">
     <title>ILA | POS</title>
     <link rel="apple-touch-icon" href="/icon.png" />
+    <!-- THE TWO HOSTS THE BROWSER FINDS OUT ABOUT LAST
+         A connection to a new host costs a DNS lookup, a TCP handshake and a TLS
+         handshake before a single byte of what was asked for comes back — on café
+         wifi, a good fraction of a second. The browser starts that work the moment
+         it SEES a host, and it cannot see either of these until late:
+
+           fonts.gstatic.com appears nowhere in this file. It is named inside the
+           Google Fonts stylesheet below, so the browser only learns it exists once
+           that stylesheet has been fetched and parsed, and only then starts a
+           connection for the font files themselves.
+
+           the database is worse. Its host is in firebaseConfig, at the foot of the
+           page, and nothing connects to it until the SDK below has downloaded,
+           parsed and run. That handshake happens after all of it, in series, while
+           the page sits there with nothing on it.
+
+         A preconnect names them here, at the top, so both handshakes happen early
+         and alongside everything else rather than after it. crossorigin is required
+         on the font one: fonts are fetched anonymously, and a preconnect whose mode
+         does not match the request is a connection the browser throws away.
+
+         Nothing else here needs one: every other host is named directly by a tag
+         below, which is already the earliest the browser could possibly know. -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     
     <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
@@ -334,7 +359,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.11"></script>
+    <script src="/build-check.js" data-build="2026-08-27.12"></script>
 </head>
 <body>
     <div id="login-overlay" class="hidden">
@@ -356,7 +381,7 @@
 
     <div class="container">
         <header>
-            <img src="logo.png" alt="ILA Logo" class="logo">
+            <img src="logo.png" alt="ILA Logo" class="logo" width="1200" height="427" decoding="async">
             <div id="offline-indicator" style="display:none; background:transparent; border: 1px solid rgba(255,255,255,0.5); color:white; opacity: 0.8; padding:5px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
         </header>
 
@@ -1731,10 +1756,14 @@
         }
 
         window.openWebOrders = function() {
-            const list = document.getElementById('web-orders-list'); 
-            list.innerHTML = "";
+            const list = document.getElementById('web-orders-list');
+            // One write at the end, not one per card. Each `innerHTML +=` reads the
+            // whole list back out as a string and reparses it, so a busy lunchtime
+            // queue costs a reparse per order — and every card already built is
+            // discarded and remade each time round.
+            let cards = "";
             if (Object.keys(window.pendingWebOrders).length === 0) {
-                list.innerHTML = "<p style='opacity:0.5;'>No pending web orders.</p>";
+                cards = "<p style='opacity:0.5;'>No pending web orders.</p>";
             } else {
                 // #1 auto-expire (flag-and-sink): an unpaid order older than 20 min is likely
                 // abandoned. We DON'T delete it (a late bank credit could still verify it) — we mark
@@ -1774,7 +1803,7 @@
                         ? `<div style="font-size:0.78rem; color:#ffd08a; margin-top:6px; overflow-wrap:anywhere;">\u26a0\ufe0f Ordered at \u20b9${rp.sentTotal}, menu price \u20b9${rp.total}${rp.unknown.length ? ' \u00b7 ' + rp.unknown.length + ' item(s) not on the menu' : ''}</div>`
                         : '';
 
-                    list.innerHTML += `<div style="border:1px solid rgba(255,255,255,${stale?'0.12':'0.2'}); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left; ${stale?'opacity:0.6;':''}">
+                    cards += `<div style="border:1px solid rgba(255,255,255,${stale?'0.12':'0.2'}); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left; ${stale?'opacity:0.6;':''}">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                             <strong style="font-size:1.1rem; text-transform:uppercase; min-width:0; overflow-wrap:anywhere;">${escapeHTML(o.tableOrAddress)}</strong>
                             <span id="wv-${id}"></span>
@@ -1792,6 +1821,7 @@
                     </div>`;
                 }
             }
+            list.innerHTML = cards;
             ensureWebVerifyFeeds();
             renderWebVerifyBadges();
             renderCustomerBadges();
@@ -2367,7 +2397,10 @@
         function renderPOSMenu(menuData, categoryOrder) {
             const container = document.getElementById('live-menu-container');
             if (!menuData) return;
-            container.innerHTML = "";
+            // Accumulated and written once: `container.innerHTML += catHTML` per section
+            // serialises and reparses the whole menu for every category, and remakes
+            // every row built so far each time.
+            let menuHTML = "";
 
             let activeCats = Object.keys(menuData);
             let sortedCats = categoryOrder.filter(cat => activeCats.includes(cat));
@@ -2417,8 +2450,9 @@
                     });
                 }
                 catHTML += `</section>`;
-                container.innerHTML += catHTML;
+                menuHTML += catHTML;
             });
+            container.innerHTML = menuHTML;
             const strip = document.getElementById('cat-strip');
             if (strip) strip.innerHTML = catOrder.length > 1
                 ? catOrder.map(c => `<button class="cat-chip" data-cat="${c.id}" onclick="window.jumpToCategory('${c.id}')">${escapeHTML(c.name)}</button>`).join('')
@@ -2619,8 +2653,9 @@
         window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveLocalCart(); closeModal('review-cart-modal'); };
 
         window.openReviewCartModal = function() {
-            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
-            if (window.totalItems === 0) { list.innerHTML = "<p style='text-align:center; opacity:0.5;'>Empty</p>"; } 
+            const list = document.getElementById('review-cart-list');
+            let rows = "";
+            if (window.totalItems === 0) { rows = "<p style='text-align:center; opacity:0.5;'>Empty</p>"; } 
             else {
                 for (let item in window.cart) {
                     const safeItemName = jsAttr(item);
@@ -2628,9 +2663,10 @@
                     const nameCell = hasAddons
                         ? `<button class="cart-name" onclick="window.openAddons('${safeItemName}')">${escapeHTML(item)}<span class="opt-mark">+</span></button>`
                         : `<span style="flex:1;">${escapeHTML(item)}</span>`;
-                    list.innerHTML += `<div class="bill-receipt-row">${nameCell}<span style="display:flex; align-items:center; flex-shrink:0;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                    rows += `<div class="bill-receipt-row">${nameCell}<span style="display:flex; align-items:center; flex-shrink:0;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center; color:#ffffff; font-weight:bold; font-size:1.1rem;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
                 }
             }
+            list.innerHTML = rows;
             document.getElementById('review-cart-modal').classList.add('active');
         };
 
@@ -2844,8 +2880,9 @@
         }
 
         window.openActiveBills = function() {
-            const list = document.getElementById('active-bills-list'); list.innerHTML = "";
-            if (Object.keys(window.activeTables).length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No active tables.</p>"; } 
+            const list = document.getElementById('active-bills-list');
+            let rows = "";
+            if (Object.keys(window.activeTables).length === 0) { rows = "<p style='opacity:0.5;'>No active tables.</p>"; } 
             else {
                 for (let table in window.activeTables) {
                     const t = window.activeTables[table];
@@ -2858,9 +2895,10 @@
                     } else if ((parseFloat(t.paid) || 0) > 0 && due > 0){
                         sub = `<span class="ledger-meta">\u20b9${Math.round(due)} still due</span>`;
                     }
-                    list.innerHTML += `<div class="active-bill-item" onclick="window.openCheckout('${jsAttr(table)}')"><div><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span>${sub}</div><span>₹${t.total}</span></div>`;
+                    rows += `<div class="active-bill-item" onclick="window.openCheckout('${jsAttr(table)}')"><div><span style="font-weight: 700;">${table === 'Takeaway' ? 'Takeaway' : 'Table ' + table}</span>${sub}</div><span>₹${t.total}</span></div>`;
                 }
             }
+            list.innerHTML = rows;
             document.getElementById('active-bills-modal').classList.add('active');
         };
 
@@ -4175,7 +4213,10 @@
             // What is skipped is only the rendering, when nobody is looking at it.
             const modal = document.getElementById('cash-modal');
             if (modal && !modal.classList.contains('active')) return;
-            const list = document.getElementById('ledger-list'); list.innerHTML = "";
+            const list = document.getElementById('ledger-list');
+            // The cash-up is the longest list the till builds — every cash and UPI line
+            // of the day, and it is opened at the busiest possible moment. Written once.
+            let rows = "";
             if (window.ledgerDenied) {
                 list.innerHTML = "<p style='opacity:0.7;'>The cash-up is only shown to the counter and the owner."
                                + "<br>Ask for cashier access if you need it.</p>";
@@ -4209,14 +4250,17 @@
                         tick = '<span title="Awaiting verification" style="color:#ffd54f; margin-left:6px;">⏳</span>';
                     }
                 }
-                list.innerHTML += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${escapeHTML(entry.reason)}</span>${tick}<span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
+                rows += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${escapeHTML(entry.reason)}</span>${tick}<span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
             });
+            list.innerHTML = rows;
         }
 
         window.openPastBills = function() {
-            const list = document.getElementById('past-bills-list'); list.innerHTML = "";
-            if (window.pastBills.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; } 
-            else { window.pastBills.forEach(bill => { list.innerHTML += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${escapeHTML(bill.table)}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
+            const list = document.getElementById('past-bills-list');
+            let rows = "";
+            if (window.pastBills.length === 0) { rows = "<p style='opacity:0.5;'>No logs.</p>"; } 
+            else { window.pastBills.forEach(bill => { rows += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${escapeHTML(bill.table)}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
+            list.innerHTML = rows;
             document.getElementById('past-bills-modal').classList.add('active');
         };
 

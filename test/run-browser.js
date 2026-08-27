@@ -18,6 +18,7 @@ const suites = [
   'web-verify-claims-browser.test.js',
   'auth-gate-browser.test.js',
   'pin-mask-browser.test.js',
+  'kds-board-browser.test.js',
 ];
 
 let failed = [];

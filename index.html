@@ -32,6 +32,31 @@
     <link rel="canonical" href="https://ila.cafe/">
     <link rel="apple-touch-icon" href="/icon-customer.png" />
     <link rel="icon" type="image/png" href="/icon-customer.png" />
+    <!-- THE TWO HOSTS THE BROWSER FINDS OUT ABOUT LAST
+         A connection to a new host costs a DNS lookup, a TCP handshake and a TLS
+         handshake before a single byte of what was asked for comes back — on café
+         wifi, a good fraction of a second. The browser starts that work the moment
+         it SEES a host, and it cannot see either of these until late:
+
+           fonts.gstatic.com appears nowhere in this file. It is named inside the
+           Google Fonts stylesheet below, so the browser only learns it exists once
+           that stylesheet has been fetched and parsed, and only then starts a
+           connection for the font files themselves.
+
+           the database is worse. Its host is in firebaseConfig, at the foot of the
+           page, and nothing connects to it until the SDK below has downloaded,
+           parsed and run. That handshake happens after all of it, in series, while
+           the page sits there with nothing on it.
+
+         A preconnect names them here, at the top, so both handshakes happen early
+         and alongside everything else rather than after it. crossorigin is required
+         on the font one: fonts are fetched anonymously, and a preconnect whose mode
+         does not match the request is a connection the browser throws away.
+
+         Nothing else here needs one: every other host is named directly by a tag
+         below, which is already the earliest the browser could possibly know. -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     
     <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
@@ -149,19 +174,19 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.11"></script>
+    <script src="/build-check.js" data-build="2026-08-27.12"></script>
 </head>
 <body>
 
     <div id="closed-screen">
-        <img src="logo.png" alt="ILA Logo" style="max-width: 200px; margin-bottom: 20px;">
+        <img src="logo.png" alt="ILA Logo" width="1200" height="427" decoding="async" style="max-width: 200px; height: auto; margin-bottom: 20px;">
         <h1 style="text-transform: uppercase; font-size: 1.5rem; letter-spacing: 2px;">Closed</h1>
         <p style="opacity: 0.7; font-size: 1rem;">We are currently not accepting orders.</p>
     </div>
 
     <div class="container">
         <header>
-            <img src="logo.png" alt="ILA Logo" class="logo" onclick="this.style.transform = `rotate(${this.rotation = (this.rotation || 0) + 360}deg)`">
+            <img src="logo.png" alt="ILA Logo" class="logo" width="1200" height="427" decoding="async" onclick="this.style.transform = `rotate(${this.rotation = (this.rotation || 0) + 360}deg)`">
             <div id="table-badge"></div>
         </header>
 
@@ -745,7 +770,11 @@
         if (window.lastAddress) document.getElementById('delivery-address').value = window.lastAddress;
 
         const tableGrid = document.getElementById('customer-table-grid');
-        for(let i=1; i<=10; i++) { tableGrid.innerHTML += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
+        {
+            let grid = "";
+            for(let i=1; i<=10; i++) { grid += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
+            tableGrid.innerHTML = grid;
+        }
 
         if (window.lastOrder && Object.keys(window.lastOrder).length > 0) {
             document.getElementById('usual-order-container').style.display = 'block';
@@ -765,8 +794,26 @@
             if (isOpen === false) { lockScreen.style.display = "flex"; document.body.style.overflow = "hidden"; } 
             else { lockScreen.style.display = "none"; document.body.style.overflow = "auto"; }
         });
-        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderCustomerMenu(); });
-        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; renderCustomerMenu(); });
+        // THREE LISTENERS, ONE MENU
+        //
+        // The menu is drawn from three nodes — the items, the order of the categories
+        // and the order of the items within them — and each arrives as its own event.
+        // On a cold open all three land within a few hundred milliseconds of each other
+        // and each one used to redraw the whole menu on the spot: three full rebuilds
+        // where the first two were never on screen long enough to be seen, on the phone
+        // of somebody standing at the counter deciding what to order.
+        //
+        // Coalesced onto a frame instead. Whatever has arrived by the time the browser
+        // is ready to paint is what gets drawn, once. pos.html has done this since the
+        // till had the same problem; this is the same helper.
+        let _menuRenderQueued = false;
+        function scheduleCustomerMenu(){
+            if (_menuRenderQueued) return;
+            _menuRenderQueued = true;
+            requestAnimationFrame(() => { _menuRenderQueued = false; renderCustomerMenu(); });
+        }
+        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; scheduleCustomerMenu(); });
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; scheduleCustomerMenu(); });
         // Which station makes an item is configured per item in admin. The POS reads that
         // map; this page used to guess from the name alone, so anything routed to the chef
         // that is not recognised as a pizza (garlic bread, hot food) landed on the barista
@@ -800,7 +847,7 @@
             }
             return null;
         }
-        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; buildCustRouting(); renderCustomerMenu(); });
+        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; buildCustRouting(); scheduleCustomerMenu(); });
 
         function updateCheckoutOptions() {
             const btnDel = document.getElementById('type-delivery'); const btnTak = document.getElementById('type-takeaway'); const btnDin = document.getElementById('type-dinein'); const scanMsg = document.getElementById('scan-instruction'); const payBtn = document.getElementById('btn-pay');
@@ -854,10 +901,26 @@
             return qty;
         };
 
+        // Every tap on a + or a - lands here, and this walks EVERY row on the menu.
+        // Rewriting a row's innerHTML destroys its buttons and builds new ones, so one
+        // tap used to remake the controls on all sixty-odd rows to change the number on
+        // one of them. On a mid-range phone that is the pause between the tap and the
+        // count moving — and it lands on the tap that is repeated fastest, somebody
+        // adding four of something.
+        //
+        // A row is only rewritten when what it would say has changed. The signature is
+        // the whole of what is rendered, so it cannot go stale: a price edit arriving
+        // from the menu listener changes it too. pos.html has had this since the till
+        // had the same lag; this is the same guard.
         window.renderInlineControls = function() {
             const containers = document.querySelectorAll('.swap-container');
             containers.forEach(container => {
                 let safeName = container.getAttribute('data-item'); let price = container.getAttribute('data-price'); let reqSweet = container.getAttribute('data-sweet') === 'true'; let qty = window.getCartQty(safeName);
+
+                const sig = qty + '|' + price + '|' + reqSweet;
+                if (container.dataset.sig === sig) return;   // nothing about this row changed
+                container.dataset.sig = sig;
+
                 if (qty > 0) { container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`; } 
                 else { container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`; }
             });
@@ -876,7 +939,11 @@
         function renderCustomerMenu() {
             const container = document.getElementById('live-menu-container');
             if (Object.keys(currentMenuData).length === 0) { container.innerHTML = "<p style='text-align: center; opacity:0.5;'>Menu updating...</p>"; return; }
-            container.innerHTML = ""; window.flatMenu = {};
+            // Accumulated, then written once. `container.innerHTML += catHTML` per
+            // category serialises the whole menu back out to a string and reparses it
+            // for every section — quadratic in the number of categories, and it throws
+            // away and remakes every row built so far each time round.
+            let menuHTML = ""; window.flatMenu = {};
 
             let activeCats = Object.keys(currentMenuData); let sortedCats = currentCategoryOrder.filter(cat => activeCats.includes(cat));
             activeCats.forEach(cat => { if(!sortedCats.includes(cat)) sortedCats.push(cat); });
@@ -913,8 +980,9 @@
                         catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
                     });
                 }
-                catHTML += `</section>`; container.innerHTML += catHTML;
+                catHTML += `</section>`; menuHTML += catHTML;
             });
+            container.innerHTML = menuHTML;
             window.renderInlineControls();
         }
 
@@ -972,11 +1040,13 @@
                 window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count; saveCart(); 
                 if(result.removed.length > 0) { alert("Cart updated: Some items are no longer available and were removed."); if(window.totalItems === 0) return; }
             }
-            const list = document.getElementById('review-cart-list'); list.innerHTML = "";
+            const list = document.getElementById('review-cart-list');
+            let rows = "";
             for (let item in window.cart) {
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                list.innerHTML += `<div class="bill-receipt-row"><span style="flex:1;">${escapeHTML(item)}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                rows += `<div class="bill-receipt-row"><span style="flex:1;">${escapeHTML(item)}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
+            list.innerHTML = rows;
             document.getElementById('cart-notes').value = ""; document.getElementById('modal-checkout-total').innerText = window.totalAmount;
             document.getElementById('checkout-modal').classList.add('active'); updateCheckoutOptions();
             // Always recompute the takeaway ETA on open with the CURRENT cart — updateCheckoutOptions
