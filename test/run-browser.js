@@ -19,6 +19,7 @@ const suites = [
   'auth-gate-browser.test.js',
   'pin-mask-browser.test.js',
   'kds-board-browser.test.js',
+  'boot-order-browser.test.js',
 ];
 
 let failed = [];

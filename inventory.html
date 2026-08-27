@@ -32,15 +32,42 @@
     <link rel="preconnect" href="https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
     
-    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
-            integrity="sha384-rGbwvB6k85I5jkhcy5vYOSdABhBKcD9CHXb0RJIIuxMYVZatT6uul1faR/C5QI1U"
-            crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-database-compat.js"
-            integrity="sha384-DVRvWnCIBtUIWOm6GpD+wukXwI8nijglXsBFYMlBIOgL5qBHlB8sa1CUlOftmd0R"
-            crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"
-            integrity="sha384-FlKYNHBedwGFdcKg5PNKA38dWBcbf9RzKO4qBmxO3DaDw5yuYP0DXikg/fgj4xID"
-            crossorigin="anonymous"></script>
+    <!-- PRELOADED HERE, RUN AT THE FOOT OF THE PAGE
+         These three bundles are the better part of 400KB of JavaScript to compile,
+         and they used to sit right here as ordinary script tags. A script tag in
+         the head stops the parser dead: nothing below it is looked at, let alone
+         painted, until the file has both arrived AND been compiled. So on a cold
+         open the till, the kitchen screen and the customer's phone each showed a
+         blank page for the whole of that — with the markup for the page they were
+         waiting on sitting ready, unparsed, a few lines further down.
+
+         The tags now sit at the foot of the body, directly above this page's own
+         script, which is the last thing in the document. Same three files, same
+         order, still ordinary synchronous tags — so `firebase` is defined before a
+         line of page code runs, exactly as it was. What changed is only that the
+         browser is allowed to parse and paint the page first.
+
+         The preloads are the other half of it, and leaving them out would make
+         this SLOWER rather than faster: a tag at the foot of the body is not
+         DISCOVERED until the parser gets there, so the download would start late
+         and the page would become usable later than it does today. rel=preload
+         names the files up here, where the tags used to be, so the fetch begins at
+         the same moment it always did, running alongside the parse rather than
+         in place of it.
+
+         crossorigin and integrity are repeated from the tags deliberately. A
+         preload is only reused for a later request when the mode and the integrity
+         metadata match it; if they do not, the browser fetches the same file
+         twice, which is worse than never having preloaded it. -->
+    <link rel="preload" as="script" crossorigin="anonymous"
+          href="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
+          integrity="sha384-rGbwvB6k85I5jkhcy5vYOSdABhBKcD9CHXb0RJIIuxMYVZatT6uul1faR/C5QI1U">
+    <link rel="preload" as="script" crossorigin="anonymous"
+          href="https://www.gstatic.com/firebasejs/12.17.1/firebase-database-compat.js"
+          integrity="sha384-DVRvWnCIBtUIWOm6GpD+wukXwI8nijglXsBFYMlBIOgL5qBHlB8sa1CUlOftmd0R">
+    <link rel="preload" as="script" crossorigin="anonymous"
+          href="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"
+          integrity="sha384-FlKYNHBedwGFdcKg5PNKA38dWBcbf9RzKO4qBmxO3DaDw5yuYP0DXikg/fgj4xID">
 
     <!-- Keeps a signed-in device signed in, and stops the login form being
          shown to somebody who is already signed in. See the top of the file. -->
@@ -175,6 +202,27 @@
     </div>
 
     <div id="toast">Log Saved!</div>
+
+    <!-- The SDK. It lives here rather than in the head so that everything above it
+         can be parsed and painted first; the preload tags up there start the
+         download at the same moment the old head tags did. See the note beside
+         them.
+
+         Two things about this block must not change. It has to stay ABOVE the
+         script below — that script calls firebase.initializeApp on its first
+         working line — and these have to stay plain synchronous tags. Adding defer
+         to them would be the one change that looks harmless and is not: deferred
+         scripts run after the parser finishes, which is AFTER the inline script
+         below has already run and already thrown on an undefined `firebase`. -->
+    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
+            integrity="sha384-rGbwvB6k85I5jkhcy5vYOSdABhBKcD9CHXb0RJIIuxMYVZatT6uul1faR/C5QI1U"
+            crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-database-compat.js"
+            integrity="sha384-DVRvWnCIBtUIWOm6GpD+wukXwI8nijglXsBFYMlBIOgL5qBHlB8sa1CUlOftmd0R"
+            crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"
+            integrity="sha384-FlKYNHBedwGFdcKg5PNKA38dWBcbf9RzKO4qBmxO3DaDw5yuYP0DXikg/fgj4xID"
+            crossorigin="anonymous"></script>
 
     <script>
         const firebaseConfig = {
