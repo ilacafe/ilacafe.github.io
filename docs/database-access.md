@@ -205,9 +205,32 @@ also means no record already in the database has to satisfy a rule it was not
 written to satisfy — the tightening cannot strand what is already there.
 
 A visitor still cannot overwrite or delete somebody else's order, and cannot
-enumerate `orders/pendingWeb` at all. `orders/track` *is* enumerable — the parent
-`.read` has to be public because a customer scanning a table QR queries the node by
-`table` — which is why nothing identifying may be written into it. The ordering page
+enumerate `orders/pendingWeb` at all.
+
+`orders/track` **used to be enumerable**, and that was the largest hole in the
+project. The parent `.read` had to be public because a customer scanning a table QR
+queried the node by `table`, and a query needs read on the node it queries. So one
+unauthenticated request returned every order the café had ever taken — items, table
+and time, on a node nothing prunes.
+
+The lookup lives in `orders/tableIndex` now: trackIds and timestamps, and nothing
+else. A record is then read by its id, and an id is the only thing standing between
+one customer's order and another's — which is what it was always for. `orders/track`
+itself is readable by the owner only, for the ETA accuracy report.
+
+**Be precise about what this buys.** A stranger can still ask what is on table four —
+the index is readable one table at a time, and table labels are guessable — and read
+those orders. That is what anyone standing in the café can see. Two things make it
+bounded rather than open:
+
+- the index is public *per table*, never at the top. Public at the top would hand out
+  every trackId in one request, which is the same leak rebuilt one level up.
+- the Worker prunes entries older than six hours on its hourly run. An index that
+  accumulates eventually hands out every id anyway, one table at a time. Nothing
+  stored there is anything but derived, so losing an old entry costs a lookup nobody
+  makes.
+
+Nothing identifying may be written into a track record either way: the ordering page
 and the POS both replace anything that is not a plain table label with the word
 "Order" before writing.
 

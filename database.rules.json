@@ -157,10 +157,7 @@
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "track": {
-        ".read": true,
-        ".indexOn": [
-          "table"
-        ],
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
         "$trackId": {
           ".write": "auth != null && (!data.exists() || root.child('users').child(auth.uid).child('role').exists())",
           ".validate": "data.exists() || (newData.hasChildren(['status','items','table']) && (!newData.child('createdAt').exists() || newData.child('createdAt').val() === now))",
@@ -239,7 +236,8 @@
           },
           "$other": {
             ".validate": false
-          }
+          },
+          ".read": true
         }
       },
       "history": {
@@ -248,6 +246,16 @@
         ".indexOn": [
           "ts"
         ]
+      },
+      "tableIndex": {
+        "$tableLabel": {
+          ".read": true,
+          "$trackId": {
+            ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || !data.exists() || root.child('users').child(auth.uid).child('role').exists())",
+            ".validate": "newData.isNumber()"
+          }
+        },
+        ".read": "auth != null && auth.token.email === 'robot@cafeila.app'"
       }
     },
     "customers": {

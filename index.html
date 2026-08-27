@@ -149,7 +149,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.17"></script>
+    <script src="/build-check.js" data-build="2026-08-27.1"></script>
 </head>
 <body>
 
@@ -645,27 +645,56 @@
                 window.tryTableScan();
             };
             // table-scan: find the most recent active (preparing) order for the scanned table
+            // Scanning a table QR finds that table's current order without the customer
+            // having ordered from this phone. It used to do that with a query ACROSS
+            // orders/track — and a query needs read on the node it queries, so the whole
+            // node had to be world-readable. Anyone could download every order the café
+            // had ever taken: what was ordered, when, at which table, going back forever.
+            //
+            // orders/tableIndex holds the same lookup and nothing else: a table label, the
+            // trackIds seen at it, and a timestamp. The record itself is then read by id,
+            // and an id is the only thing standing between one customer's order and
+            // another's — which is what it was always meant to be.
+            function pickAndBind(recs){
+                let pick=null, pickKey=null, pickTime=0;
+                Object.keys(recs).forEach(k=>{
+                    const r=recs[k]; if(!r) return; const tm=r.acceptedAt||r.createdAt||0;
+                    // prefer active orders; skip ones already dismissed/ready long ago
+                    if(r.status!=='ready' && tm>pickTime){ pick=r; pickKey=k; pickTime=tm; }
+                });
+                // if all are ready, optionally show the latest ready (so they see "ready")
+                if(!pick){ Object.keys(recs).forEach(k=>{ const r=recs[k]; if(!r) return; const tm=r.readyAt||r.acceptedAt||0; if(tm>pickTime){pick=r;pickKey=k;pickTime=tm;} }); }
+                // only show if reasonably recent (within 2h)
+                if(pick && pickKey && pickTime && Date.now()-pickTime < 2*3600*1000){ bindStatus(pickKey, pick.items||{}); }
+                return !!pick;
+            }
             window.tryTableScan=function(){
                 const params=new URLSearchParams(location.search);
                 const tbl=params.get('table');
                 if(!tbl) return;
                 const tableLabel='Table '+tbl;
-                db.ref('orders/track').orderByChild('table').equalTo(tableLabel).limitToLast(5).once('value', s=>{
-                    const recs=s.val(); if(!recs) return;
-                    // pick the most recent non-ready (or most recent overall) record
-                    let pick=null, pickKey=null, pickTime=0;
-                    Object.keys(recs).forEach(k=>{
-                        const r=recs[k]; const tm=r.acceptedAt||r.createdAt||0;
-                        // prefer active orders; skip ones already dismissed/ready long ago
-                        if(r.status!=='ready' && tm>pickTime){ pick=r; pickKey=k; pickTime=tm; }
-                    });
-                    // if all are ready, optionally show the latest ready (so they see "ready")
-                    if(!pick){ Object.keys(recs).forEach(k=>{ const r=recs[k]; const tm=r.readyAt||r.acceptedAt||0; if(tm>pickTime){pick=r;pickKey=k;pickTime=tm;} }); }
-                    if(pick && pickKey){
-                        // only show if reasonably recent (within 2h)
-                        if(pickTime && Date.now()-pickTime < 2*3600*1000){ bindStatus(pickKey, pick.items||{}); }
-                    }
+                db.ref('orders/tableIndex/'+tableLabel).limitToLast(5).once('value', s=>{
+                    const ids=Object.keys(s.val()||{});
+                    if(!ids.length){ window.tryTableScanLegacy(tableLabel); return; }
+                    // trackIds sort chronologically, so these are the five most recent.
+                    Promise.all(ids.map(id=>db.ref('orders/track/'+id).once('value')
+                                             .then(sn=>[id,sn.val()]).catch(()=>[id,null])))
+                        .then(pairs=>{
+                            const recs={}; pairs.forEach(([id,v])=>{ if(v) recs[id]=v; });
+                            if(Object.keys(recs).length) pickAndBind(recs);
+                        });
                 });
+            };
+            // The way it worked before the index existed. Kept for the window between this
+            // page shipping and the rules closing the read it needs — orders placed before
+            // the index existed are not in it. Once those rules are deployed this fails,
+            // which is harmless: by then every order in the last two hours is indexed.
+            window.tryTableScanLegacy=function(tableLabel){
+                try {
+                    db.ref('orders/track').orderByChild('table').equalTo(tableLabel).limitToLast(5).once('value', s=>{
+                        const recs=s.val(); if(recs) pickAndBind(recs);
+                    });
+                } catch(e){}
             };
         })();
         /* ===== END ILA ETA + ORDER STATUS ===== */
@@ -1118,7 +1147,10 @@
                 // order in orders/pendingWeb, which is staff-only.
                 const publicTrackLabel = d => /^Table \d+$/.test(String(d == null ? '' : d).trim())
                     ? String(d).trim() : 'Order';
-                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: publicTrackLabel(info.details), gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                const _label = publicTrackLabel(info.details);
+                db.ref('orders/track/' + trackId).set({ status: 'received', items: orderItemsSnapshot, table: _label, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                // A table's orders, as trackIds and nothing else — see tryTableScan below.
+                if (_label !== 'Order') db.ref('orders/tableIndex/' + _label + '/' + trackId).set(firebase.database.ServerValue.TIMESTAMP);
                 if (window.watchOrderStatus) window.watchOrderStatus();
                 window.watchPaymentStatus(trackId, info);
             }).catch(() => alert("Couldn't place the order — check your connection and try again."));

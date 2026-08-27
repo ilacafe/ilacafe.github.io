@@ -18,6 +18,7 @@ It does four things:
 | **Payment ingest** | `POST /ingest`, and Email Routing | parses a bank credit alert → `payments/incoming/{utr}` |
 | **ETA recalibration** | cron `0 20 1 * *` | refits `eta/model` from 75 days of completions |
 | **Verification monitor** | cron `0 * * * *` | unverified-payment alerts, per-bank alarm, weekly digest |
+| **Table index prune** | on the same hourly tick | drops `orders/tableIndex` entries older than six hours |
 | **Cash out of the drawer** | `POST /` with `action: cashout` | verifies a staff token *and* a PIN, then writes the ledger entry itself |
 | **Stock on and off the shelf** | `POST /` with `action: inventory-log` | the same, for a prep or a delivery — and it reads the recipe rather than being told it |
 

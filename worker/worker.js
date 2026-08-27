@@ -1027,6 +1027,10 @@ function monEntryState(e, reviewMap){
 
 async function runVerificationMonitor(nowMs, isWeekly){
   const token = await getRobotToken();
+  // Housekeeping first, and on its own: the public table index is only useful for a
+  // couple of hours, and one that accumulates hands out every trackId in the café
+  // eventually. Its own try/catch, because nothing below should fail for it.
+  try { await pruneTableIndex(token); } catch (e) { console.error('prune tableIndex', e); }
   const ledgerObj = await monLoad(token, '/pos/ledgerEntries') || {};
   const reviewMap = await monLoad(token, '/upiReview') || {};
   const monState  = await monLoad(token, '/monitor') || {};
@@ -1343,6 +1347,55 @@ async function handleInventoryLog(data, claims){
   } catch (e) { return { status: 502, body: { error: 'could not record it' } }; }
 
   return { status: 200, body: { ok: true, key: key, staff: staff, item: item, qty: qty, kind: kind } };
+}
+
+// ============================================================================
+//  THE TABLE INDEX, KEPT SHORT
+// ============================================================================
+// orders/tableIndex is the public lookup a table QR uses: the trackIds seen at a
+// table, and when. It exists so that orders/track itself need not be enumerable —
+// a query needs read on the node it queries, and that read used to hand anyone the
+// café's entire order history in one request.
+//
+// It only moves the problem unless it is kept short. A trackId is what reads the
+// record behind it, so an index that accumulates is an index that eventually hands
+// out every id anyway, one table at a time. The customer page discards anything
+// older than two hours; six is generous and still bounded.
+//
+// Safe to prune because nothing is stored here that is not derived: losing an old
+// entry costs a lookup nobody makes. The records themselves are untouched.
+const TABLE_INDEX_KEEP_MS = 6 * 60 * 60000;
+
+async function pruneTableIndex(token){
+  let all;
+  try {
+    const res = await fetch(DB_URL + '/orders/tableIndex.json?auth=' + token);
+    if (!res.ok) return { pruned: 0 };
+    all = await res.json();
+  } catch (e) { return { pruned: 0 }; }
+  if (!all || typeof all !== 'object') return { pruned: 0 };
+
+  const cutoff = Date.now() - TABLE_INDEX_KEEP_MS;
+  const updates = {};
+  let pruned = 0;
+  for (const label in all) {
+    const ids = all[label];
+    if (!ids || typeof ids !== 'object') continue;
+    for (const id in ids) {
+      const at = Number(ids[id]);
+      // A missing or unreadable timestamp is left alone rather than guessed at.
+      if (!isFinite(at) || at <= 0 || at >= cutoff) continue;
+      updates['orders/tableIndex/' + label + '/' + id] = null;
+      pruned++;
+    }
+  }
+  if (!pruned) return { pruned: 0 };
+  try {
+    await fetch(DB_URL + '/.json?auth=' + token, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates)
+    });
+  } catch (e) { return { pruned: 0 }; }
+  return { pruned: pruned };
 }
 
 export default {
