@@ -211,27 +211,34 @@ const SAMPLES = {
 
   // ------------------------------------------- and to whoever actually opened it
   //
-  // The coverage above asks whether the role the access map ASSIGNS to a page can
-  // use it: pos.html is mapped to cashier, so it asks about a cashier. Nobody told
-  // the café that. Any member of staff can open the till, and a barista who does
-  // gets a page that loads, works, and shows an empty cash-up — because a denied
-  // read in Realtime Database is an empty snapshot, not an error.
+  // The coverage above asks whether the role the access map ASSIGNS to a page can use
+  // it: pos.html is mapped to cashier, so it asks about a cashier. Nobody told the
+  // café that. Any member of staff can open the till, and a barista who does gets a
+  // page that loads, works, and shows an empty cash-up — because a denied read in
+  // Realtime Database is an empty snapshot, not an error.
   //
-  // That is not hypothetical either. Splitting the blanket `pos` read into per-child
-  // grants left pos/ledgerEntries and pos/unverified as admin-or-cashier, and the
-  // ledger went blank on a staff phone while the owner's iPad was fine. Every check
-  // in this file passed the whole time, because every check asked about a cashier.
+  // That is how pos/ledgerEntries went unnoticed: every check in this file passed,
+  // because every check asked about a cashier.
   //
-  // So: the pages any member of staff opens must work for any member of staff. The
-  // owner's two are deliberately not on that list — admin.html and analytics.html
-  // are the pages a cashier must NOT get into, and the denials below say so.
+  // The rule is not that everything must be open to everybody. The café wants the
+  // cash-up held to the counter and the owner, and NARROWED is listed below with what
+  // the page does about it — because a restriction nobody can see is the part that
+  // actually hurt. Anything narrowed that is not on this list fails, so the next one
+  // is a decision rather than a discovery.
   {
     const SHARED = ['pos.html', 'chef.html', 'barista.html', 'inventory.html'];
-
-    // The roles the access map assigns to the pages anyone on shift opens.
     const sharedRoles = new Set(SHARED.map(f => APPS[f]).filter(Boolean));
 
-    const shut = [];
+    const NARROWED = {
+      'pos/ledgerEntries':
+        'the cash-up: the counter and the owner. pos.html catches the denial and says ' +
+        'so rather than drawing "No logs."',
+      'pos/unverified':
+        'last night\'s carried-over payments, same gate as the ledger. Nothing renders ' +
+        'them directly; the reconciler treats a denial as nothing to carry.',
+    };
+
+    const surprises = [], stale = new Set(Object.keys(NARROWED));
     for (const [path, use] of derivePaths()) {
       if (path.includes('${')) continue;
       // A shared page reads it: that is the whole test. It does not matter that an
@@ -240,16 +247,23 @@ const SAMPLES = {
       // exists for. It passed against the broken rules until that line came out.
       if (![...use.read].some(r => sharedRoles.has(r))) continue;
 
+      const shut = [];
       for (const role of ROLES) {
         const at = path.replace(/\$key/g, KEY_FOR[path] ? KEY_FOR[path](role, 'read') : 'probeKey');
-        if (!(await canRead(at, role))) shut.push(role + ' cannot read ' + path);
+        if (!(await canRead(at, role))) shut.push(role);
       }
+      if (!shut.length) { stale.delete(path); continue; }
+      stale.delete(path);
+      if (!(path in NARROWED)) surprises.push(path + ' is shut to ' + shut.join(', '));
     }
 
-    check('every staff role can read everything the shared pages read',
-          shut.length === 0, shut.join('; '));
+    check('anything a shared page reads that not all staff can is written down here',
+          surprises.length === 0, surprises.join('; '));
     note('a denied read is an empty snapshot, not an error — the till does not complain,');
     note('it just shows nothing, and only the person holding it ever finds out');
+
+    check('and nothing is listed that every staff role can now read',
+          stale.size === 0, [...stale].join(', ') + ' — drop it from NARROWED');
   }
 
   // ---------------------------------------------------------- the Worker's half
@@ -303,8 +317,8 @@ const SAMPLES = {
       'users':               ['admin'],
       'pos':                 [],
       'pos/activeTables':    ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'pos/ledgerEntries':   ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
-      'pos/unverified':      ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'pos/ledgerEntries':   ['cashier', 'admin', 'robot'],
+      'pos/unverified':      ['cashier', 'admin'],
       'pos/eodArchive':      ['admin', 'robot'],
       'orders/history':      ['admin'],
       'orders/pendingWeb':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
@@ -344,25 +358,25 @@ const SAMPLES = {
     // so the ledger, the bills, the drawer and the cash-up archive all came with it —
     // to the bar and the kitchen as much as to the counter. Each child is granted on
     // its own now, and the ones carrying money are named by role.
-    // This used to say the bar and the kitchen could not read the till ledger, and
-    // the rules used to enforce it. It cost a café a working till: a member of staff
-    // opened the POS on their phone, the page loaded, and the cash-up was blank. A
-    // denied read is an empty snapshot, not an error, so nothing said why.
+    // Three tiers, deliberately: the owner, the counter, and everyone else on shift.
     //
-    // The restriction was the anomaly, not the symptom. Every other rule in the file
-    // asks one of two questions — is this the owner, or is this staff at all — and so
-    // does every page: 28 rules name 'admin' and not one names 'cashier'. Splitting
-    // the blanket `pos` read into per-child grants was right, and pos/eodArchive
-    // being the owner's is a real distinction. Naming the counter specifically, in
-    // two places and nowhere else, invented a third tier the system does not have and
-    // the rota does not either — whoever is on shift works the till.
-    check('anyone working the till can read the till ledger',
-          (await canRead('pos/ledgerEntries', 'cashier')) && (await canRead('pos/ledgerEntries', 'barista')) &&
-          (await canRead('pos/ledgerEntries', 'chef')) && (await canRead('pos/ledgerEntries', 'admin')));
-    check('and the cash-up they are standing in front of',
-          (await canRead('pos/unverified', 'barista')) && (await canRead('pos/unverified', 'chef')));
-    note('the Worker reads the ledger too — that is the hourly report of cash leaving the drawer');
-    note('what stops a barista MOVING money is the write rules below, which are unchanged');
+    // This is the one place in the rules where 'cashier' means anything — every other
+    // condition asks only whether you are the owner — and it stays because the café
+    // wants it. Somebody who needs the cash-up is given cashier access; not everybody
+    // needs it.
+    //
+    // What it cost the first time was not the rule but the silence: a barista opened
+    // the POS, the page worked, and the cash-up drew "No logs." A refused read in
+    // Realtime Database arrives as nothing at all rather than as an error, so it looks
+    // exactly like a quiet morning. The till says which it is now — see ledgerDenied
+    // in pos.html, and the check for it in test/ledger-denied.test.js.
+    check('the bar and the kitchen cannot read the till ledger',
+          !(await canRead('pos/ledgerEntries', 'barista')) && !(await canRead('pos/ledgerEntries', 'chef')));
+    check('nor the payments carried over from last night',
+          !(await canRead('pos/unverified', 'barista')) && !(await canRead('pos/unverified', 'chef')));
+    check('but the counter still can, and so does the owner',
+          (await canRead('pos/ledgerEntries', 'cashier')) && (await canRead('pos/ledgerEntries', 'admin')));
+    note('the Worker reads it too — that is the hourly report of cash leaving the drawer');
 
     check('a cashier cannot read the cash-up archive',
           !(await canRead('pos/eodArchive', 'cashier')));

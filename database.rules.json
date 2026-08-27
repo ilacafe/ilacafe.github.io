@@ -265,7 +265,7 @@
     "pos": {
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
       "ledgerEntries": {
-        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'cashier')",
         ".indexOn": [
           "ts"
         ],
@@ -300,7 +300,7 @@
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "unverified": {
-        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'cashier')"
       }
     },
     "inventory": {
