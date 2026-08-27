@@ -30,7 +30,27 @@
          below, which is already the earliest the browser could possibly know. -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app">
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- LOADED WITHOUT BLOCKING THE FIRST PAINT
+         With the SDK moved out of the head, this one-kilobyte stylesheet was the
+         only thing left up here that could stop the page being drawn — and it
+         stopped it for a whole round trip to another origin. Measured on a cold
+         open with the font server answering in 800ms, first paint was ~890ms: the
+         page was ready and waiting on this the entire time.
+
+         media="print" means it does not apply to the screen, so the browser will
+         not hold the paint for it; the onload swaps it to all as soon as it lands.
+         Nothing is lost by that, because the URL already asks for display=swap —
+         text was ALWAYS going to be drawn in the fallback face first and re-drawn
+         in Quicksand when the font arrived. This only stops the rest of the page
+         waiting for that to be arranged.
+
+         The <noscript> copy keeps the ordinary behaviour where onload can never
+         fire. These pages need JavaScript for anything at all, so it changes
+         nothing in practice, but a stylesheet that silently depends on script is
+         not a thing to leave unsaid. -->
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap"
+          rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet"></noscript>
 
     <!-- PRELOADED HERE, RUN AT THE FOOT OF THE PAGE
          These three bundles are the better part of 400KB of JavaScript to compile,

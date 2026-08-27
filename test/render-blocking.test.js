@@ -30,11 +30,19 @@ const LINK = /<link\b[^>]*?>/gs;
 const attr = (name, tag) => (new RegExp(name + '="([^"]*)"', 's').exec(tag) || [])[1];
 const isOffOrigin = (src) => !!src && /^https?:\/\//.test(src);
 
+// Comments are stripped before anything is looked at, and this is not fussiness.
+// The note beside the stylesheet in each page explains itself by NAMING the tags
+// involved, so the source text of a comment contains things that read exactly like
+// markup. Scanning it raw, the strip below ran from the word in that prose to the
+// real closing tag and quietly took the stylesheet with it — leaving this suite
+// reporting that no page blocks on a stylesheet, on a page that did.
+const markup = (page) => readPage(page).replace(/<!--[\s\S]*?-->/g, '');
+
 // ---------------------------------------------------------------- the head
 {
   const blocking = [];
   for (const page of PAGES) {
-    const src = readPage(page);
+    const src = markup(page);
     const head = src.slice(0, src.indexOf('</head>'));
     for (const tag of head.match(TAG) || []) {
       const url = attr('src', tag);
@@ -48,11 +56,49 @@ const isOffOrigin = (src) => !!src && /^https?:\/\//.test(src);
   note('a plain <script src> there is a blank screen for as long as the file takes');
 }
 
+// -------------------------------------------------------------- the stylesheet
+// A stylesheet in the head blocks the paint exactly the way a script does, and
+// once the SDK moved out this one-kilobyte file from another origin was the only
+// thing still doing it. Measured with the font server answering in 800ms, first
+// paint was ~890ms on the ordering page and ~900ms on the till; with it made
+// non-blocking, ~196ms and ~132ms. The page was ready the whole time.
+//
+// media="print" is what makes it non-blocking — it does not apply to the screen,
+// so nothing waits for it — and the onload swaps it to all when it lands. That
+// costs nothing to look at, because the URL already asks for display=swap: the
+// text was always going to be painted in the fallback face and re-painted in
+// Quicksand afterwards.
+{
+  const blocking = [], noFallback = [];
+  for (const page of PAGES) {
+    const src = markup(page);
+    // <noscript> holds a deliberately ordinary copy for the case where onload can
+    // never fire. It is inert with script on, so it must not be read as a blocker.
+    const head = src.slice(0, src.indexOf('</head>')).replace(/<noscript>[\s\S]*?<\/noscript>/g, '');
+
+    let sawFont = false;
+    for (const tag of head.match(LINK) || []) {
+      if (!/rel="stylesheet"/.test(tag)) continue;
+      sawFont = true;
+      // Anything that applies to the screen on arrival is holding the first paint.
+      if (!/media="print"/.test(tag)) blocking.push(page + ' → ' + attr('href', tag));
+      if (!/onload=/.test(tag)) blocking.push(page + ' → ' + attr('href', tag) + ' never becomes active');
+    }
+    if (sawFont && !/<noscript>[\s\S]*?rel="stylesheet"[\s\S]*?<\/noscript>/.test(src)) {
+      noFallback.push(page);
+    }
+  }
+  check('no page holds its first paint for a stylesheet',
+        blocking.length === 0, blocking.join(', '));
+  check('and each one still applies itself once it arrives, with a no-script copy',
+        noFallback.length === 0, noFallback.join(', '));
+}
+
 // ------------------------------------------------- everything it does load, early
 {
   const unpreloaded = [], mismatched = [];
   for (const page of PAGES) {
-    const src = readPage(page);
+    const src = markup(page);
     const head = src.slice(0, src.indexOf('</head>'));
 
     const preloads = new Map();                          // href -> tag
@@ -94,7 +140,7 @@ const isOffOrigin = (src) => !!src && /^https?:\/\//.test(src);
 {
   const wrongOrder = [], deferred = [], notLast = [];
   for (const page of PAGES) {
-    const src = readPage(page);
+    const src = markup(page);
     const app = src.search(/\n\s*<script>\s*\n/);        // the page's own inline code
 
     let last = -1;
