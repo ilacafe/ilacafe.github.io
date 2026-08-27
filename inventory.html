@@ -89,12 +89,23 @@
           href="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"
           integrity="sha384-FlKYNHBedwGFdcKg5PNKA38dWBcbf9RzKO4qBmxO3DaDw5yuYP0DXikg/fgj4xID">
 
-    <!-- Keeps a signed-in device signed in, and stops the login form being
-         shown to somebody who is already signed in. See the top of the file. -->
-    <script src="/auth-gate.js"></script>
+    <!-- Ours, named here and run at the foot alongside the SDK.
+         These are a few kilobytes each, which is not the point: the head is where
+         a browser decides whether it may draw the page yet, and a synchronous
+         script sitting in it means the answer is no, however small the file. They
+         are named up here so the fetch still starts at the same moment, then run
+         where they no longer hold anything up.
 
-    <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
-    <script src="/pin-mask.js"></script>
+         Deferring them instead would be simpler and does not work. The page's own
+         script calls into each of these on its first pass, and a deferred script
+         does not run until after the parser has finished — which is after that
+         call has already been made and already failed.
+
+         No crossorigin on these, unlike the SDK preloads above: they are
+         same-origin and fetched in that mode by default, so declaring it would
+         stop the preload matching the tag and fetch each file twice. -->
+    <link rel="preload" as="script" href="/auth-gate.js">
+    <link rel="preload" as="script" href="/pin-mask.js">
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
@@ -222,6 +233,16 @@
     </div>
 
     <div id="toast">Log Saved!</div>
+
+    <!-- Ours, in the order they ran in when they were in the head. Nothing here
+         needs the SDK and the SDK needs nothing here; what needs both is the
+         script at the end, which calls into whichever of these the page loads on
+         its first pass. That is what keeps all of it synchronous and above it. -->
+    <!-- Keeps a signed-in device signed in, and stops the login form being
+         shown to somebody who is already signed in. See the top of the file. -->
+    <script src="/auth-gate.js"></script>
+    <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
+    <script src="/pin-mask.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -355,10 +376,8 @@
         // Real-time Listeners
 
 
-
         
         // Listen to the new dynamic config set by Admin
-
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
