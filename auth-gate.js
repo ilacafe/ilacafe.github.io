@@ -20,9 +20,11 @@
 //   goes straight in — then re-reads the role in the background and corrects
 //   itself if it has changed;
 //
-//   the form is not shown until something actually knows a sign-in is needed. A
-//   box that says nothing is better than a box that asks for a password it does
-//   not need.
+//   the login box is not shown until something actually knows a sign-in is needed.
+//   The whole box, not the fields inside it — hiding the inputs and leaving the box
+//   up was the first attempt, and it was worse: a password field that appears in the
+//   DOM is what makes a phone offer to fill it and open the keyboard, which it then
+//   did on devices that were already signed in.
 //
 // THE REMEMBERED ROLE IS A CACHE FOR THE UI, AND ONLY THAT
 //
@@ -63,40 +65,39 @@
 
   // ---------------------------------------------------------------- the box
   // No CSS anywhere: these pages each carry their own <style>, and six copies of a
-  // rule is six chances to get one of them wrong. The ids are the same on all of
-  // them, and the sign-in button is the only <button> inside the box.
-  function parts() {
-    var box = document.getElementById('login-box');
-    if (!box) return null;
-    return {
-      overlay: document.getElementById('login-overlay'),
-      box: box,
-      fields: [document.getElementById('login-email'),
-               document.getElementById('login-password'),
-               box.querySelector('button')].filter(Boolean),
-      error: document.getElementById('login-error')
-    };
-  }
+  // rule is six chances to get one of them wrong. They already share the one class
+  // that matters — #login-overlay.hidden { display: none } — so this only ever
+  // toggles that.
+  //
+  // What it must NOT do is touch the fields inside. The first version hid the email
+  // and password inputs and put "Checking sign-in…" in their place, which is worse
+  // than what it replaced: a password field appearing in the DOM is what makes a
+  // phone offer to fill it and throw up the keyboard, and it did that on devices
+  // that were already signed in. The overlay is hidden or it is not.
+  var FALLBACK_MS = 10000;
+  var timer = null;
+
+  function overlay() { return document.getElementById('login-overlay'); }
+  function errorLine() { return document.getElementById('login-error'); }
 
   window.ilaLoginBox = {
-    // Called the moment the page script runs, before auth has resolved. Nothing is
-    // known yet, so nothing is asked for.
+    // Called the moment the page script runs. The markup already carries `hidden`
+    // so there is no flash of a login box to hide — this only arms the safety net.
     checking: function () {
-      var p = parts(); if (!p) return;
-      p.fields.forEach(function (el) { el.style.display = 'none'; });
-      if (p.error) p.error.innerText = 'Checking sign-in…';
+      clearTimeout(timer);
+      // If auth never resolves at all — the SDK did not arrive — a device that shows
+      // nothing and explains nothing is worse than one showing the form it used to.
+      timer = setTimeout(function () { window.ilaLoginBox.ready(''); }, FALLBACK_MS);
     },
-    // A sign-in really is needed: show the form, and say why if there is a reason.
     ready: function (msg) {
-      var p = parts(); if (!p) return;
-      if (p.overlay) p.overlay.classList.remove('hidden');
-      p.fields.forEach(function (el) { el.style.display = ''; });
-      if (p.error) p.error.innerText = msg || '';
+      clearTimeout(timer);
+      var o = overlay(); if (o) o.classList.remove('hidden');
+      var e = errorLine(); if (e) e.innerText = msg || '';
     },
     hide: function () {
-      var p = parts(); if (!p) return;
-      if (p.overlay) p.overlay.classList.add('hidden');
-      if (p.error) p.error.innerText = '';
+      clearTimeout(timer);
+      var o = overlay(); if (o) o.classList.add('hidden');
+      var e = errorLine(); if (e) e.innerText = '';
     }
   };
 })();

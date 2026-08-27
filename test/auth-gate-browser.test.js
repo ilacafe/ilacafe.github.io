@@ -135,7 +135,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const em = document.getElementById('login-email');
     return {
       overlayHidden: !!ov && ov.classList.contains('hidden'),
-      fieldsVisible: !!em && em.style.display !== 'none',
+      // Asking for a password means the BOX is up. The inputs must never be
+      // display-toggled at all: doing that is what made a phone offer to fill the
+      // field and open the keyboard on a device that was already signed in.
+      fieldsVisible: !!ov && !ov.classList.contains('hidden'),
+      fieldsTouched: !!em && em.style.display !== '',
       error: (document.getElementById('login-error') || {}).innerText || '',
       signOuts: window.__signOuts,
       profileReads: window.__profileReads,
@@ -156,6 +160,19 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           bad.length === 0, bad.join(', '));
     note('this is the whole complaint: the form was in the markup with nothing hiding it,');
     note('so every open began by asking for a password the device did not need');
+
+    // The first fix hid the inputs and left the box up saying "Checking sign-in…".
+    // That was worse. A password field appearing in the DOM is what makes a phone
+    // offer to fill it and raise the keyboard, and it did that on tills that were
+    // already signed in. The box is hidden or it is not; the fields are never moved.
+    const meddled = [];
+    for (const page of PAGES) {
+      const { ctx, pg } = await open(page);
+      if ((await state(pg)).fieldsTouched) meddled.push(page);
+      await ctx.close();
+    }
+    check('and none of them reaches into the fields to do it', meddled.length === 0, meddled.join(', '));
+    note('hiding a password input and showing it again is a keyboard on somebody’s phone');
   }
 
   // ------------------------------------------------------------- no session at all
@@ -230,12 +247,16 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   }
 
   // -------------------------------------------------- the read merely failed
+  //
+  // Only the shared pages admit on a remembered role, so only they have a session to
+  // preserve. The owner's two never admitted anybody, so there is nothing to keep
+  // open and staying silent would leave them looking at an empty shell — they are
+  // told instead, and that is checked separately below.
   {
     const stillOpen = [], wronglyOut = [];
-    for (const page of PAGES) {
-      const role = OWNER.includes(page) ? 'admin' : 'cashier';
+    for (const page of STAFF) {
       const { ctx, pg } = await open(page, {
-        remembered: { uid: 'u1', role: role, name: 'Priya' }, mode: 'reject'
+        remembered: { uid: 'u1', role: 'cashier', name: 'Priya' }, mode: 'reject'
       });
       await pg.evaluate(() => { window.__authCb({ uid: 'u1', email: 'p@ila.test' }); });
       await sleep(150);
@@ -244,28 +265,69 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       if (s.signOuts !== 0) wronglyOut.push(page);
       await ctx.close();
     }
-    check('a failed read does not put a remembered device out', stillOpen.length === 0, stillOpen.join(', '));
+    check('a failed read does not put a remembered till out', stillOpen.length === 0, stillOpen.join(', '));
     check('and does not sign anybody out', wronglyOut.length === 0, wronglyOut.join(', '));
     note('a read that failed says nothing about an account — the rules still govern');
     note('every read behind the screen, so staying open costs nothing');
+
+    const silent = [];
+    for (const page of OWNER) {
+      const { ctx, pg } = await open(page, {
+        remembered: { uid: 'u1', role: 'admin', name: 'Priya' }, mode: 'reject'
+      });
+      await pg.evaluate(() => { window.__authCb({ uid: 'u1', email: 'p@ila.test' }); });
+      await sleep(150);
+      const st = await state(pg);
+      if (st.overlayHidden || st.signOuts !== 0) silent.push(page + ' ' + JSON.stringify(st));
+      await ctx.close();
+    }
+    check('but on the owner’s pages it says so rather than showing an empty shell',
+          silent.length === 0, silent.join('; '));
   }
 
   // ------------------------------------------------ a cashier is not an owner
+  //
+  // The owner's two pages take no remembered role at all: nothing is drawn until the
+  // database has answered. So the thing to check is what happens when it does.
   {
-    const leaked = [];
+    const leaked = [], quiet = [];
     for (const page of OWNER) {
+      // the database says cashier, whatever this device remembered
       const { ctx, pg } = await open(page, {
-        remembered: { uid: 'u1', role: 'cashier', name: 'Priya' }, mode: 'hang'
+        remembered: { uid: 'u1', role: 'admin', name: 'Priya' },
+        profile: { name: 'Priya', role: 'cashier' }
       });
       await pg.evaluate(() => { window.__authCb({ uid: 'u1', email: 'p@ila.test' }); });
-      await sleep(120);
-      const s = await state(pg);
-      if (s.overlayHidden) leaked.push(page);
+      await sleep(150);
+      const s1 = await state(pg);
+      if (s1.overlayHidden || s1.signOuts !== 1) leaked.push(page + ' ' + JSON.stringify(s1));
       await ctx.close();
+
+      // and while it has not answered yet, the owner's screen is not drawn either
+      const b = await open(page, { remembered: { uid: 'u1', role: 'admin', name: 'Priya' }, mode: 'hang' });
+      await b.pg.evaluate(() => { window.__authCb({ uid: 'u1', email: 'p@ila.test' }); });
+      await sleep(120);
+      // admin.html seeds window.currentAdmin = { uid: null } at load, so the object
+      // existing proves nothing — the uid landing on it is what admit() does.
+      const drawn = await b.pg.evaluate(
+        () => !!(window.currentAdmin && window.currentAdmin.uid));
+      if (drawn) quiet.push(page);
+      await b.ctx.close();
     }
-    check('a remembered cashier does not walk into admin or analytics',
-          leaked.length === 0, leaked.join(', '));
-    note('the rules deny the data either way; this is about not drawing the screen');
+    check('a remembered admin role does not open admin or analytics on its own',
+          leaked.length === 0, leaked.join('; '));
+    note('the database is asked every time on these two, and it is the answer that counts');
+    check('and nothing of the owner’s is drawn while it is still being asked',
+          quiet.length === 0, quiet.join(', '));
+  }
+
+  // Hidden in the markup, not hidden by a script that runs after first paint —
+  // otherwise the box is on screen for a frame and the phone has already seen it.
+  {
+    const shown = PAGES.filter(p =>
+      !/<div id="login-overlay" class="hidden">/.test(fs.readFileSync(path.join(ROOT, p), 'utf8')));
+    check('the login box ships hidden rather than being hidden afterwards',
+          shown.length === 0, shown.join(', '));
   }
 
   check('no page threw while any of that ran', errors.length === 0, errors.slice(0, 4).join('; '));

@@ -25,7 +25,7 @@
 //
 // Not part of `npm test` — it needs Java and the emulator. `npm run test:rules`.
 
-const { derivePaths, deriveWorkerPaths, suite } = require('./helpers');
+const { derivePaths, deriveWorkerPaths, APPS, suite } = require('./helpers');
 
 const BASE = process.env.RULES_EMULATOR_URL || 'http://127.0.0.1:9010';
 const NS = process.env.RULES_EMULATOR_NS || 'demo-ila-default-rtdb';
@@ -209,6 +209,49 @@ const SAMPLES = {
     note('this is the half that makes tightening a rule safe — a locked-out till fails here');
   }
 
+  // ------------------------------------------- and to whoever actually opened it
+  //
+  // The coverage above asks whether the role the access map ASSIGNS to a page can
+  // use it: pos.html is mapped to cashier, so it asks about a cashier. Nobody told
+  // the café that. Any member of staff can open the till, and a barista who does
+  // gets a page that loads, works, and shows an empty cash-up — because a denied
+  // read in Realtime Database is an empty snapshot, not an error.
+  //
+  // That is not hypothetical either. Splitting the blanket `pos` read into per-child
+  // grants left pos/ledgerEntries and pos/unverified as admin-or-cashier, and the
+  // ledger went blank on a staff phone while the owner's iPad was fine. Every check
+  // in this file passed the whole time, because every check asked about a cashier.
+  //
+  // So: the pages any member of staff opens must work for any member of staff. The
+  // owner's two are deliberately not on that list — admin.html and analytics.html
+  // are the pages a cashier must NOT get into, and the denials below say so.
+  {
+    const SHARED = ['pos.html', 'chef.html', 'barista.html', 'inventory.html'];
+
+    // The roles the access map assigns to the pages anyone on shift opens.
+    const sharedRoles = new Set(SHARED.map(f => APPS[f]).filter(Boolean));
+
+    const shut = [];
+    for (const [path, use] of derivePaths()) {
+      if (path.includes('${')) continue;
+      // A shared page reads it: that is the whole test. It does not matter that an
+      // owner page reads it too — pos/ledgerEntries is read by admin.html as well, and
+      // excluding anything the owner also looks at skipped exactly the path this check
+      // exists for. It passed against the broken rules until that line came out.
+      if (![...use.read].some(r => sharedRoles.has(r))) continue;
+
+      for (const role of ROLES) {
+        const at = path.replace(/\$key/g, KEY_FOR[path] ? KEY_FOR[path](role, 'read') : 'probeKey');
+        if (!(await canRead(at, role))) shut.push(role + ' cannot read ' + path);
+      }
+    }
+
+    check('every staff role can read everything the shared pages read',
+          shut.length === 0, shut.join('; '));
+    note('a denied read is an empty snapshot, not an error — the till does not complain,');
+    note('it just shows nothing, and only the person holding it ever finds out');
+  }
+
   // ---------------------------------------------------------- the Worker's half
   //
   // derivePaths only sees the pages, so the coverage above says nothing about the one
@@ -260,8 +303,8 @@ const SAMPLES = {
       'users':               ['admin'],
       'pos':                 [],
       'pos/activeTables':    ['cashier', 'barista', 'chef', 'inventory', 'admin'],
-      'pos/ledgerEntries':   ['cashier', 'admin', 'robot'],
-      'pos/unverified':      ['cashier', 'admin'],
+      'pos/ledgerEntries':   ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
+      'pos/unverified':      ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'pos/eodArchive':      ['admin', 'robot'],
       'orders/history':      ['admin'],
       'orders/pendingWeb':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
@@ -301,11 +344,25 @@ const SAMPLES = {
     // so the ledger, the bills, the drawer and the cash-up archive all came with it —
     // to the bar and the kitchen as much as to the counter. Each child is granted on
     // its own now, and the ones carrying money are named by role.
-    check('the bar and the kitchen cannot read the till ledger',
-          !(await canRead('pos/ledgerEntries', 'barista')) && !(await canRead('pos/ledgerEntries', 'chef')));
-    check('but the counter still can, and so does the owner',
-          (await canRead('pos/ledgerEntries', 'cashier')) && (await canRead('pos/ledgerEntries', 'admin')));
-    note('the Worker reads it too — that is the hourly report of cash leaving the drawer');
+    // This used to say the bar and the kitchen could not read the till ledger, and
+    // the rules used to enforce it. It cost a café a working till: a member of staff
+    // opened the POS on their phone, the page loaded, and the cash-up was blank. A
+    // denied read is an empty snapshot, not an error, so nothing said why.
+    //
+    // The restriction was the anomaly, not the symptom. Every other rule in the file
+    // asks one of two questions — is this the owner, or is this staff at all — and so
+    // does every page: 28 rules name 'admin' and not one names 'cashier'. Splitting
+    // the blanket `pos` read into per-child grants was right, and pos/eodArchive
+    // being the owner's is a real distinction. Naming the counter specifically, in
+    // two places and nowhere else, invented a third tier the system does not have and
+    // the rota does not either — whoever is on shift works the till.
+    check('anyone working the till can read the till ledger',
+          (await canRead('pos/ledgerEntries', 'cashier')) && (await canRead('pos/ledgerEntries', 'barista')) &&
+          (await canRead('pos/ledgerEntries', 'chef')) && (await canRead('pos/ledgerEntries', 'admin')));
+    check('and the cash-up they are standing in front of',
+          (await canRead('pos/unverified', 'barista')) && (await canRead('pos/unverified', 'chef')));
+    note('the Worker reads the ledger too — that is the hourly report of cash leaving the drawer');
+    note('what stops a barista MOVING money is the write rules below, which are unchanged');
 
     check('a cashier cannot read the cash-up archive',
           !(await canRead('pos/eodArchive', 'cashier')));
