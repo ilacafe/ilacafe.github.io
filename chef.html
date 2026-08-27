@@ -63,17 +63,24 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.8"></script>
+    <script src="/build-check.js" data-build="2026-08-27.9"></script>
 </head>
 <body>
     <div id="login-overlay" class="hidden">
-        <div id="login-box">
-            <h2>Kitchen Display</h2>
-            <input type="email" id="login-email" placeholder="Email" autocomplete="username">
-            <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
-            <button onclick="window.signInDisplay()">Sign In</button>
-            <div id="login-error"></div>
-        </div>
+        <!-- In a <template> on purpose: its contents are a detached fragment, so the
+             password field is NOT in the document. iOS offers to fill a password field
+             it finds in the DOM whether or not anything is showing it, and it did —
+             on a till that was already signed in, mid-service. auth-gate.js clones this
+             in the moment a sign-in is actually needed, and not before. -->
+        <template id="login-box-template">
+            <div id="login-box">
+                <h2>Kitchen Display</h2>
+                <input type="email" id="login-email" placeholder="Email" autocomplete="username">
+                <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                <button onclick="window.signInDisplay()">Sign In</button>
+                <div id="login-error"></div>
+            </div>
+        </template>
     </div>
 
     <header>
@@ -125,13 +132,19 @@
         const roleCache = window.ilaRole || { recall: () => null, remember: () => {}, forget: () => {} };
         function showLogin(msg) {
             if (window.ilaLoginBox) return window.ilaLoginBox.ready(msg);
-            document.getElementById('login-overlay').classList.remove('hidden');
-            if (msg) document.getElementById('login-error').innerText = msg;
+            // Gate missing: clone the form in ourselves rather than reveal an empty box.
+            const tpl = document.getElementById('login-box-template');
+            const host = document.getElementById('login-overlay');
+            if (tpl && host && !document.getElementById('login-box')) host.appendChild(tpl.content.cloneNode(true));
+            host.classList.remove('hidden');
+            const err = document.getElementById('login-error');
+            if (err && msg) err.innerText = msg;
         }
         function hideLogin() {
             if (window.ilaLoginBox) return window.ilaLoginBox.hide();
             document.getElementById('login-overlay').classList.add('hidden');
-            document.getElementById('login-error').innerText = "";
+            const err = document.getElementById('login-error');   // absent until the form is cloned in
+            if (err) err.innerText = "";
         }
         // Before auth has resolved nothing is known, so nothing is asked for.
         if (window.ilaLoginBox) window.ilaLoginBox.checking();

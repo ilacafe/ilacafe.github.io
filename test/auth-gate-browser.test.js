@@ -139,7 +139,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       // display-toggled at all: doing that is what made a phone offer to fill the
       // field and open the keyboard on a device that was already signed in.
       fieldsVisible: !!ov && !ov.classList.contains('hidden'),
-      fieldsTouched: !!em && em.style.display !== '',
+      // What iOS actually looks at: password fields in the DOCUMENT. It offers to
+      // fill one it finds whether or not anything is showing it — hidden was not
+      // enough, twice. Report which, because which one it is decides what to do:
+      // a login field belongs in the template, a staff PIN was never a password.
+      passwordIds: [...document.querySelectorAll('input[type="password"]')]
+                     .map(el => el.id || '(no id)'),
       error: (document.getElementById('login-error') || {}).innerText || '',
       signOuts: window.__signOuts,
       profileReads: window.__profileReads,
@@ -165,14 +170,26 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     // That was worse. A password field appearing in the DOM is what makes a phone
     // offer to fill it and raise the keyboard, and it did that on tills that were
     // already signed in. The box is hidden or it is not; the fields are never moved.
-    const meddled = [];
+    // Hiding the inputs was the first attempt and hiding the box was the second, and
+    // iOS defeated both: it looks for a password field in the document, not for one
+    // on screen, and put "Sign in to ila.cafe with your password for …" over a
+    // working till in the middle of service. The field has to be ABSENT.
+    // admin.html's account-creation field is a password genuinely being SET — it
+    // carries autocomplete="new-password", so nothing offers an existing one, and it
+    // is on the owner's page rather than the till.
+    const EXPECTED = { 'admin.html': ['acct-password'] };
+    const present = [];
     for (const page of PAGES) {
       const { ctx, pg } = await open(page);
-      if ((await state(pg)).fieldsTouched) meddled.push(page);
+      const found = (await state(pg)).passwordIds
+                      .filter(id => !(EXPECTED[page] || []).includes(id));
+      if (found.length) present.push(page + ': ' + found.join(', '));
       await ctx.close();
     }
-    check('and none of them reaches into the fields to do it', meddled.length === 0, meddled.join(', '));
-    note('hiding a password input and showing it again is a keyboard on somebody’s phone');
+    check('and no unexpected password field exists in the document at all',
+          present.length === 0, present.join('; '));
+    note('it lives in a <template> until a sign-in is really needed — a detached');
+    note('fragment, which is not the document, so there is nothing to offer to fill');
   }
 
   // ------------------------------------------------------------- no session at all
@@ -187,6 +204,18 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       await ctx.close();
     }
     check('a device with no session is asked to sign in', bad.length === 0, bad.join('; '));
+
+    const missing = [];
+    for (const page of PAGES) {
+      const { ctx, pg } = await open(page);
+      await pg.evaluate(() => { window.__authCb(null); });
+      await sleep(60);
+      const st = await state(pg);
+      if (!st.passwordIds.includes('login-password')) missing.push(page);
+      await ctx.close();
+    }
+    check('and given a real password field to do it with', missing.length === 0, missing.join(', '));
+    note('absent until needed is only right if it arrives when it is');
   }
 
   // -------------------------------------- a session, and a role remembered here
@@ -321,13 +350,33 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           quiet.length === 0, quiet.join(', '));
   }
 
-  // Hidden in the markup, not hidden by a script that runs after first paint —
-  // otherwise the box is on screen for a frame and the phone has already seen it.
+  // The markup itself, because a script that runs after first paint is already too
+  // late: the document has existed, with a password field in it, for a frame.
   {
-    const shown = PAGES.filter(p =>
-      !/<div id="login-overlay" class="hidden">/.test(fs.readFileSync(path.join(ROOT, p), 'utf8')));
-    check('the login box ships hidden rather than being hidden afterwards',
-          shown.length === 0, shown.join(', '));
+    const bad = [];
+    for (const p of PAGES) {
+      const html = fs.readFileSync(path.join(ROOT, p), 'utf8');
+      if (!/<div id="login-overlay" class="hidden">/.test(html)) bad.push(p + ' (overlay not hidden in markup)');
+      if (!/<template id="login-box-template">/.test(html)) bad.push(p + ' (login box not in a template)');
+      // A password input anywhere else in the document is the same problem: iOS finds
+      // it and offers to fill it over whatever is on screen. The staff PIN prompts used
+      // to be two of these — they are numeric PINs, masked in CSS now, not passwords.
+      //
+      // One is allowed, and named rather than pattern-matched away: admin.html's
+      // account-creation field really is a password being set, it carries
+      // autocomplete="new-password" so nothing offers to fill it with an existing one,
+      // and it is on the owner's page rather than the till.
+      const ALLOWED = { 'admin.html': ['acct-password'] };
+      const tpl = /<template id="login-box-template">([\s\S]*?)<\/template>/.exec(html);
+      const loose = html.replace(tpl ? tpl[0] : '', '');
+      for (const m of loose.matchAll(/<input[^>]*type="password"[^>]*>/g)) {
+        const id = (/id="([^"]+)"/.exec(m[0]) || [])[1] || '(no id)';
+        if ((ALLOWED[p] || []).includes(id)) continue;
+        bad.push(p + ' (loose password input #' + id + ')');
+      }
+    }
+    check('every page ships its login box in a template, hidden, with no loose password field',
+          bad.length === 0, bad.join('; '));
   }
 
   check('no page threw while any of that ran', errors.length === 0, errors.slice(0, 4).join('; '));
