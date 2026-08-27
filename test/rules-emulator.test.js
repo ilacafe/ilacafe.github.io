@@ -25,7 +25,7 @@
 //
 // Not part of `npm test` — it needs Java and the emulator. `npm run test:rules`.
 
-const { derivePaths, deriveWorkerPaths, suite } = require('./helpers');
+const { derivePaths, deriveWorkerPaths, APPS, suite } = require('./helpers');
 
 const BASE = process.env.RULES_EMULATOR_URL || 'http://127.0.0.1:9010';
 const NS = process.env.RULES_EMULATOR_NS || 'demo-ila-default-rtdb';
@@ -209,6 +209,63 @@ const SAMPLES = {
     note('this is the half that makes tightening a rule safe — a locked-out till fails here');
   }
 
+  // ------------------------------------------- and to whoever actually opened it
+  //
+  // The coverage above asks whether the role the access map ASSIGNS to a page can use
+  // it: pos.html is mapped to cashier, so it asks about a cashier. Nobody told the
+  // café that. Any member of staff can open the till, and a barista who does gets a
+  // page that loads, works, and shows an empty cash-up — because a denied read in
+  // Realtime Database is an empty snapshot, not an error.
+  //
+  // That is how pos/ledgerEntries went unnoticed: every check in this file passed,
+  // because every check asked about a cashier.
+  //
+  // The rule is not that everything must be open to everybody. The café wants the
+  // cash-up held to the counter and the owner, and NARROWED is listed below with what
+  // the page does about it — because a restriction nobody can see is the part that
+  // actually hurt. Anything narrowed that is not on this list fails, so the next one
+  // is a decision rather than a discovery.
+  {
+    const SHARED = ['pos.html', 'chef.html', 'barista.html', 'inventory.html'];
+    const sharedRoles = new Set(SHARED.map(f => APPS[f]).filter(Boolean));
+
+    const NARROWED = {
+      'pos/ledgerEntries':
+        'the cash-up: the counter and the owner. pos.html catches the denial and says ' +
+        'so rather than drawing "No logs."',
+      'pos/unverified':
+        'last night\'s carried-over payments, same gate as the ledger. Nothing renders ' +
+        'them directly; the reconciler treats a denial as nothing to carry.',
+    };
+
+    const surprises = [], stale = new Set(Object.keys(NARROWED));
+    for (const [path, use] of derivePaths()) {
+      if (path.includes('${')) continue;
+      // A shared page reads it: that is the whole test. It does not matter that an
+      // owner page reads it too — pos/ledgerEntries is read by admin.html as well, and
+      // excluding anything the owner also looks at skipped exactly the path this check
+      // exists for. It passed against the broken rules until that line came out.
+      if (![...use.read].some(r => sharedRoles.has(r))) continue;
+
+      const shut = [];
+      for (const role of ROLES) {
+        const at = path.replace(/\$key/g, KEY_FOR[path] ? KEY_FOR[path](role, 'read') : 'probeKey');
+        if (!(await canRead(at, role))) shut.push(role);
+      }
+      if (!shut.length) { stale.delete(path); continue; }
+      stale.delete(path);
+      if (!(path in NARROWED)) surprises.push(path + ' is shut to ' + shut.join(', '));
+    }
+
+    check('anything a shared page reads that not all staff can is written down here',
+          surprises.length === 0, surprises.join('; '));
+    note('a denied read is an empty snapshot, not an error — the till does not complain,');
+    note('it just shows nothing, and only the person holding it ever finds out');
+
+    check('and nothing is listed that every staff role can now read',
+          stale.size === 0, [...stale].join(', ') + ' — drop it from NARROWED');
+  }
+
   // ---------------------------------------------------------- the Worker's half
   //
   // derivePaths only sees the pages, so the coverage above says nothing about the one
@@ -268,7 +325,7 @@ const SAMPLES = {
       'payments':            ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'payments/incoming':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'security':            ['admin'],
-      'customers':           ['cashier', 'barista', 'chef', 'inventory', 'admin'],
+      'customers':           ['admin'],                                    // the LIST; one customer is readable below
       'inventory':           ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'inventory/recipes':   ['cashier', 'barista', 'chef', 'inventory', 'admin', 'robot'],
       'reconciliation':      ['admin'],
@@ -301,11 +358,43 @@ const SAMPLES = {
     // so the ledger, the bills, the drawer and the cash-up archive all came with it —
     // to the bar and the kitchen as much as to the counter. Each child is granted on
     // its own now, and the ones carrying money are named by role.
+    // Three tiers, deliberately: the owner, the counter, and everyone else on shift.
+    //
+    // This is the one place in the rules where 'cashier' means anything — every other
+    // condition asks only whether you are the owner — and it stays because the café
+    // wants it. Somebody who needs the cash-up is given cashier access; not everybody
+    // needs it.
+    //
+    // What it cost the first time was not the rule but the silence: a barista opened
+    // the POS, the page worked, and the cash-up drew "No logs." A refused read in
+    // Realtime Database arrives as nothing at all rather than as an error, so it looks
+    // exactly like a quiet morning. The till says which it is now — see ledgerDenied
+    // in pos.html, and the check for it in test/ledger-denied.test.js.
     check('the bar and the kitchen cannot read the till ledger',
           !(await canRead('pos/ledgerEntries', 'barista')) && !(await canRead('pos/ledgerEntries', 'chef')));
+    check('nor the payments carried over from last night',
+          !(await canRead('pos/unverified', 'barista')) && !(await canRead('pos/unverified', 'chef')));
     check('but the counter still can, and so does the owner',
           (await canRead('pos/ledgerEntries', 'cashier')) && (await canRead('pos/ledgerEntries', 'admin')));
     note('the Worker reads it too — that is the hourly report of cash leaving the drawer');
+
+    // The customer list, and one customer.
+    //
+    // The till looks up customers/<phone> for a number the cashier has just typed in;
+    // admin.html reads the whole node for the repeat-customer panel. The read was
+    // granted at the parent for any staff role, and a read cascades — so every phone
+    // number, order count and last spend the café holds came back in one request to
+    // anybody on shift, on a node no staff page displays.
+    //
+    // Same shape as orders/track before #38: the parent read is the one that
+    // enumerates, and the child read is all the app ever needed.
+    check('a cashier cannot list every customer the café has',
+          !(await canRead('customers', 'cashier')) && !(await canRead('customers', 'barista')));
+    check('but can still look up the one whose number they were given',
+          await canRead('customers/9990001111', 'cashier'));
+    check('and the owner still has the list', await canRead('customers', 'admin'));
+    check('the till can still count a repeat visit',
+          await canWrite('customers/9990001111/orders', 'cashier', 3));
 
     check('a cashier cannot read the cash-up archive',
           !(await canRead('pos/eodArchive', 'cashier')));

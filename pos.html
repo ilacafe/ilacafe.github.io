@@ -331,10 +331,10 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.5"></script>
+    <script src="/build-check.js" data-build="2026-08-27.8"></script>
 </head>
 <body>
-    <div id="login-overlay">
+    <div id="login-overlay" class="hidden">
         <div id="login-box">
             <h2>ILA Staff</h2>
             <input type="email" id="login-email" placeholder="Email" autocomplete="username">
@@ -1128,11 +1128,21 @@
             startTipFeed();
             startVerificationReconciler();
             db.ref('pos/ledgerEntries').on('value', snap => {
+                window.ledgerDenied = false;
                 const data = snap.val() || {};
                 window.salesLedgerMap = data;   // keep keyed form for reconciliation
                 window.salesLedger = Object.values(data).sort((a, b) => (b.ts || 0) - (a.ts || 0));
                 renderLedger();
                 try { reconcileLedgerVerification(); } catch(e){}
+            }, () => {
+                // The cash-up is the counter's and the owner's. Everyone else can work
+                // the till and this read is refused — and a refused read in Realtime
+                // Database arrives as nothing at all, not as an error, so the page used
+                // to draw "No logs." A member of staff cannot tell that from a quiet
+                // morning, and nobody told the café either: it took a phone at the
+                // counter showing an empty day to find out.
+                window.ledgerDenied = true;
+                renderLedger();
             });
             db.ref('pos/bills').on('value', snap => {
                 const data = snap.val() || {};
@@ -4030,7 +4040,7 @@
                 db.ref('pos/unverified').on('value', s => {
                     window._carryUnverified = s.val() || {};
                     try { reconcileLedgerVerification(); } catch(e){}
-                });
+                }, () => { window._carryUnverified = {}; });   // same gate as the ledger; nothing to carry
             } catch(e){}
         }
         function reconcileLedgerVerification(){
@@ -4145,6 +4155,11 @@
             const modal = document.getElementById('cash-modal');
             if (modal && !modal.classList.contains('active')) return;
             const list = document.getElementById('ledger-list'); list.innerHTML = "";
+            if (window.ledgerDenied) {
+                list.innerHTML = "<p style='opacity:0.7;'>The cash-up is only shown to the counter and the owner."
+                               + "<br>Ask for cashier access if you need it.</p>";
+                return;
+            }
             if (window.salesLedger.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; return; }
             window.salesLedger.forEach(entry => {
                 let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';

@@ -26,6 +26,7 @@ const suites = [
   'repeat-customers.test.js',
   'unbounded-reads.test.js',
   'eta-freshness.test.js',
+  'ledger-denied.test.js',
   'escaping.test.js',
   'third-party.test.js',
   'table-cache.test.js',

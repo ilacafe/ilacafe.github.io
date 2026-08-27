@@ -161,10 +161,10 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.5"></script>
+    <script src="/build-check.js" data-build="2026-08-27.8"></script>
 </head>
 <body>
-    <div id="login-overlay">
+    <div id="login-overlay" class="hidden">
         <div id="login-box">
             <h2>ILA Admin</h2>
             <input type="email" id="login-email" placeholder="Email" autocomplete="username">
@@ -509,13 +509,16 @@
             // only decides which screen gets drawn, and database.rules.json decides every
             // read and write behind it. Waiting on the network to redraw the same screen
             // is the whole of the delay staff were reading as "it signed me out again".
-            const known = roleCache.recall(user.uid);
             const admit = (p) => {
                 window.currentAdmin = { uid: user.uid, name: p.name || user.email };
                 hideLogin();
                 if (!adminDataLoaded) { adminDataLoaded = true; loadAdminData(); }
             };
-            if (known && known.role === 'admin') admit(known);
+            // No remembered-role fast path here, deliberately. What this whole change
+            // fixes is a till asking for a password at the start of every shift; admin
+            // and analytics get opened occasionally, so there is nothing to save that is
+            // worth spending a server-confirmed gate on. The role is read below and
+            // nothing is drawn until it answers.
 
             try {
                 const prof = (await db.ref('users/' + user.uid).once('value')).val();
@@ -528,10 +531,9 @@
                 roleCache.remember(user.uid, prof);
                 admit(prof);
             } catch (e) {
-                // A read that failed says nothing about the account, so it must not put
-                // anybody out. A device already open on a remembered role stays open; one
-                // with nothing remembered is the only one that has to wait for an answer.
-                if (!known) showLogin("Could not verify access. Check connection and retry.");
+                // Nothing was admitted above on this page, so there is no open session to
+                // preserve — say so rather than leaving the owner looking at an empty shell.
+                showLogin("Could not verify access. Check connection and retry.");
             }
         });
         function loadAdminData() {
