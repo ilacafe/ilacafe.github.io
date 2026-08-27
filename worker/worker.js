@@ -1143,6 +1143,208 @@ async function runWeeklyDigest(token, nowMs){
 }
 // ===== END VERIFICATION MONITORING =====
 
+// ============================================================================
+//  CASH LEAVING THE DRAWER
+// ============================================================================
+// The one place a staff PIN authorises something instead of describing it.
+//
+// pos.html used to push these entries straight from the browser. The rule on pos
+// is "has a staff role", so anyone who could open the till could record a
+// withdrawal against a colleague's name without knowing a PIN at all — and the
+// PIN prompt in front of it was a speed bump on a screen the same person
+// controls. docs/database-access.md has said so for as long as it has existed.
+//
+// So the check moves here, where a browser cannot skip it. The caller sends a
+// Firebase ID token and the PIN; this verifies both, resolves the name from
+// staff itself, and writes the entry as the robot. The matching rule refuses
+// these three types from anybody else, which is what turns the prompt into a gate.
+//
+// Three types, not four. expense, withdrawal and tip_payout each take cash out of
+// the drawer on demand. unpaid_writeoff does not move cash — it records a bill
+// that was never paid — and it happens inside end-of-day, which has to be
+// completable when this Worker is not reachable. Blocking a cash-up on a network
+// call would be a worse failure than the one being fixed.
+const CASHOUT_TYPES = ['expense', 'withdrawal', 'tip_payout'];
+
+// Public by construction: a literal in pos.html, admin.html and inventory.html,
+// all served from ila.cafe. Hiding it was never the point — a PIN checked in a
+// browser is skippable whatever it is hashed with. What this buys is that the
+// entry cannot be written without passing through here.
+const PIN_SALT = 'ila-cafe-pin-v1::8D6E52';
+
+async function pinToName(pin, token){
+  const raw = String(pin == null ? '' : pin).trim();
+  if (!raw) return null;
+  let map;
+  try {
+    const res = await fetch(DB_URL + '/staff.json?auth=' + token);
+    if (!res.ok) return null;
+    map = await res.json();
+  } catch (e) { return null; }
+  if (!map || typeof map !== 'object') return null;
+  const buf = await crypto.subtle.digest('SHA-256', _enc.encode(PIN_SALT + raw));
+  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const name = map[hash];
+  return (typeof name === 'string' && name.trim()) ? name : null;
+}
+
+// The ledger's `date` is a display string the till shows as-is, and the café is in
+// India. A Worker runs in UTC, so writing its own local time would put every entry
+// five and a half hours out on the one screen anybody reads it on.
+function istClock(ms){
+  const d = new Date(ms + 5.5 * 3600000);
+  const h = d.getUTCHours(), m = d.getUTCMinutes();
+  const ampm = h >= 12 ? 'pm' : 'am';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return String(h12).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+}
+
+async function handleCashout(data, claims){
+  const type = String((data && data.type) || '');
+  if (CASHOUT_TYPES.indexOf(type) < 0) return { status: 400, body: { error: 'unknown cash-out type' } };
+
+  const amount = Number(data && data.amount);
+  if (!(amount > 0) || !isFinite(amount) || amount > 1000000) {
+    return { status: 400, body: { error: 'amount must be a positive number' } };
+  }
+  // Free text, and it ends up in a push notification and on the ledger screen.
+  const reason = String((data && data.reason) || '')
+    .replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 200);
+  if (!reason) return { status: 400, body: { error: 'a reason is required' } };
+
+  let token;
+  try { token = await getRobotToken(); } catch (e) { return { status: 502, body: { error: 'could not sign in' } }; }
+
+  const name = await pinToName(data && data.pin, token);
+  if (!name) return { status: 403, body: { error: 'invalid pin' } };
+
+  // One write, not two. The ledger line and the drawer move together or not at
+  // all — a line with no drawer movement, or the reverse, is a till that cannot be
+  // reconciled against the cash actually in it.
+  const now = Date.now();
+  const key = 'co-' + now + '-' + Math.random().toString(36).slice(2, 8);
+  const updates = {};
+  updates['pos/ledgerEntries/' + key] = {
+    date: istClock(now),
+    type: type,
+    amount: amount,
+    reason: reason + ' (' + name + ')',
+    ts: { '.sv': 'timestamp' },
+    by: name,                 // what the PIN said
+    byUid: claims.sub         // and who was actually signed in, which a PIN cannot forge
+  };
+  updates['pos/cashDrawer'] = { '.sv': { increment: -amount } };
+
+  try {
+    const res = await fetch(DB_URL + '/.json?auth=' + token, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates)
+    });
+    if (!res.ok) return { status: 502, body: { error: 'could not record the entry' } };
+  } catch (e) { return { status: 502, body: { error: 'could not record the entry' } }; }
+
+  return { status: 200, body: { ok: true, key: key, by: name, type: type, amount: amount } };
+}
+
+// ============================================================================
+//  STOCK MOVING ON AND OFF THE SHELF
+// ============================================================================
+// Same argument as the cash-out above, and the same fix, but this one closes the
+// hole completely where that one could not.
+//
+// inventory.html checked a PIN in the page and then wrote inventory/stock itself.
+// The rule on inventory was "has a staff role", so the PIN was advice twice over:
+// the prompt ran in a browser the same person controls, AND the write did not need
+// the prompt at all. Someone covering shrinkage could adjust stock directly and
+// leave no log line, which is worse than a log line with the wrong name on it.
+//
+// inventory/stock and inventory/logs are written by exactly one page, so unlike the
+// till there is nothing that has to keep working when this Worker is unreachable —
+// a delivery can be logged ten minutes later. That is what makes it possible to say
+// the robot is the only writer, and mean it.
+//
+// The recipe is read here rather than sent. A client that computes its own
+// deductions can under-report what a batch consumed, which is the whole point of
+// having a recipe.
+const INV_KINDS = ['receive', 'prep'];
+
+// Item names become database paths. A name carrying a slash would write somewhere
+// else entirely; Firebase forbids the rest of these outright, and a client is not
+// the place to find that out.
+function invSafeKey(name){
+  const k = String(name == null ? '' : name).trim();
+  if (!k || k.length > 120) return null;
+  if (/[.$#\[\]\/]/.test(k)) return null;
+  for (let i = 0; i < k.length; i++) if (k.charCodeAt(i) < 32 || k.charCodeAt(i) === 127) return null;
+  return k;
+}
+
+async function handleInventoryLog(data, claims){
+  const kind = String((data && data.kind) || '');
+  if (INV_KINDS.indexOf(kind) < 0) return { status: 400, body: { error: 'unknown kind' } };
+
+  const item = invSafeKey(data && data.item);
+  if (!item) return { status: 400, body: { error: 'bad item name' } };
+
+  const qty = Number(data && data.qty);
+  if (!(qty > 0) || !isFinite(qty) || qty > 100000) {
+    return { status: 400, body: { error: 'quantity must be a positive number' } };
+  }
+
+  let token;
+  try { token = await getRobotToken(); } catch (e) { return { status: 502, body: { error: 'could not sign in' } }; }
+
+  const staff = await pinToName(data && data.pin, token);
+  if (!staff) return { status: 403, body: { error: 'invalid pin' } };
+
+  const now = Date.now();
+  const updates = {};
+  let entry;
+
+  if (kind === 'receive') {
+    updates['inventory/stock/' + item] = { '.sv': { increment: qty } };
+    entry = { action: 'Delivery Received', item: item, amount: qty, staff: staff };
+  } else {
+    let recipe = null;
+    try {
+      const res = await fetch(DB_URL + '/inventory/recipes/' + encodeURIComponent(item) + '.json?auth=' + token);
+      if (res.ok) recipe = await res.json();
+    } catch (e) { return { status: 502, body: { error: 'could not read the recipe' } }; }
+    if (!recipe || typeof recipe !== 'object' || !Object.keys(recipe).length) {
+      return { status: 400, body: { error: 'no recipe for ' + item } };
+    }
+    updates['inventory/stock/' + item] = { '.sv': { increment: qty } };
+    const used = [];
+    for (const raw in recipe) {
+      const rawKey = invSafeKey(raw);
+      const per = Number(recipe[raw]);
+      if (!rawKey || !isFinite(per) || per < 0) return { status: 400, body: { error: 'the recipe for ' + item + ' is not usable' } };
+      if (rawKey === item) return { status: 400, body: { error: 'the recipe for ' + item + ' consumes itself' } };
+      const off = per * qty;
+      updates['inventory/stock/' + rawKey] = { '.sv': { increment: -off } };
+      used.push(off + ' of ' + rawKey);
+    }
+    entry = { action: 'Prepped Batch', item: item, yieldAmount: qty, staff: staff,
+              deductions: used.join(' | ') };
+  }
+
+  entry.at = now;
+  entry.time = istClock(now);
+  entry.byUid = claims.sub;          // the account, which a borrowed PIN cannot forge
+  const key = 'inv-' + now + '-' + Math.random().toString(36).slice(2, 8);
+  updates['inventory/logs/' + key] = entry;
+
+  // The stock movement and the line explaining it go in one write. Stock that moved
+  // with no log is exactly the state this is here to make impossible.
+  try {
+    const res = await fetch(DB_URL + '/.json?auth=' + token, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates)
+    });
+    if (!res.ok) return { status: 502, body: { error: 'could not record it' } };
+  } catch (e) { return { status: 502, body: { error: 'could not record it' } }; }
+
+  return { status: 200, body: { ok: true, key: key, staff: staff, item: item, qty: qty, kind: kind } };
+}
+
 export default {
   async fetch(request, env){
     loadConfig(env);
@@ -1176,6 +1378,33 @@ export default {
     // relay and returning a confusing 'unauthorized' from a different route.
     if (data && (data.action === 'recalibrate-dryrun' || data.action === 'recalibrate-now')) {
       return json({ error:'unauthorized' }, 401);
+    }
+
+    // Cash out of the drawer. A staff token says who is asking, the PIN says who is
+    // accountable, and the rules say nobody else may write these at all.
+    if (data && data.action === 'cashout') {
+      const who = await verifyIdToken(data.token);
+      if (!who) return json({ error:'unauthorized' }, 401);
+      if (who.firebase && who.firebase.sign_in_provider === 'anonymous') {
+        return json({ error:'forbidden' }, 403);
+      }
+      if (!(await staffRoleOf(who.sub))) return json({ error:'forbidden' }, 403);
+      const r = await handleCashout(data, who);
+      return json(r.body, r.status);
+    }
+
+    // Stock on and off the shelf. Same shape as the cash-out: a staff token says who
+    // is asking, the PIN says who is accountable, and the rules leave the robot as the
+    // only writer of inventory/stock and inventory/logs.
+    if (data && data.action === 'inventory-log') {
+      const who = await verifyIdToken(data.token);
+      if (!who) return json({ error:'unauthorized' }, 401);
+      if (who.firebase && who.firebase.sign_in_provider === 'anonymous') {
+        return json({ error:'forbidden' }, 403);
+      }
+      if (!(await staffRoleOf(who.sub))) return json({ error:'forbidden' }, 403);
+      const r = await handleInventoryLog(data, who);
+      return json(r.body, r.status);
     }
 
     // Payment ingest route — separate secret, separate handler.

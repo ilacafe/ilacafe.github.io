@@ -157,7 +157,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.9"></script>
+    <script src="/build-check.js" data-build="2026-08-26.17"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -1112,25 +1112,50 @@
             }
             box.innerHTML = html;
         }
+        // A refund is money that has already left the bank; recording it twice is a real
+        // number wrong in both the ledger and the day's UPI total. The button lives on a row
+        // that only disappears when the write lands, so it stays tappable for a round trip
+        // after the confirm — long enough to press twice.
+        window._refunding = {};
         window.refundDone = async function(rid){
             const r = refundsCache[rid]; if (!r) return;
+            if (r.status === 'refunded'){ alert('That refund is already recorded.'); return; }
+            if (window._refunding[rid]) return;
             const amt = parseFloat(r.amount) || 0;
             const where = r.tableOrAddress || 'Web order';
             if (!confirm('Confirm you have ALREADY sent \u20b9' + Math.round(amt) + ' back to the customer' + (r.phone ? ' (' + r.phone + ')' : '') + '.\n\nThis writes the refund to the ledger and reverses it from the UPI total. It does not move any money by itself.')) return;
             const by = (window.currentAdmin && window.currentAdmin.name) || 'admin';
             const now = Date.now();
+            window._refunding[rid] = true;   // this device, until the row goes away
             try {
-                await db.ref('pos/ledgerEntries').push({
+                // ONE write, not three. The ledger line, the reversal off the UPI total and the
+                // flag that says this refund is done used to be three awaits in a row, and any
+                // one of them could be the last to land. Stopping after the first leaves a refund
+                // in the ledger that the UPI total does not know about; stopping after the second
+                // leaves the money reversed and the refund still listed as owed, so it gets paid
+                // and recorded a second time. And the message below said "Nothing was changed"
+                // in either case, which was not true.
+                //
+                // A multi-path update is atomic: all three or none of them, and the message is
+                // now the truth. It also means the "refunded" flag lands in the same write as the
+                // money, so the row leaves the list the moment the money moves.
+                const ledgerKey = db.ref('pos/ledgerEntries').push().key;
+                const updates = {};
+                updates['pos/ledgerEntries/' + ledgerKey] = {
                     date: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                     type: 'refund_upi',
                     amount: -Math.abs(amt),
                     reason: 'REFUND: ' + where + (r.phone ? ' \u00b7 ' + r.phone : '') + ' (' + by + ')',
                     ts: firebase.database.ServerValue.TIMESTAMP,
                     refundOf: r.payId || null
-                });
-                await db.ref('pos/upiTotal').set(firebase.database.ServerValue.increment(-Math.abs(amt)));
-                await db.ref('orders/refundsDue/' + rid).update({ status: 'refunded', refundedBy: by, refundedAt: now });
+                };
+                updates['pos/upiTotal'] = firebase.database.ServerValue.increment(-Math.abs(amt));
+                updates['orders/refundsDue/' + rid + '/status'] = 'refunded';
+                updates['orders/refundsDue/' + rid + '/refundedBy'] = by;
+                updates['orders/refundsDue/' + rid + '/refundedAt'] = now;
+                await db.ref().update(updates);
             } catch(e){
+                delete window._refunding[rid];   // nothing was written, so let them try again
                 alert('Could not record the refund: ' + (e && e.message ? e.message : e) + '\nNothing was changed \u2014 try again.');
             }
         };
@@ -1181,9 +1206,15 @@
                 status.innerText='';
             }).catch(e => { status.innerText = 'Could not load bills: ' + (e && e.message ? e.message : e); });
         };
+        // Same shape as a refund, and the same two ways it could go wrong. The extra hazard
+        // here is that voidBillsCache is a one-shot read: it says what was true when the list
+        // was last loaded, so "already voided" can be hours stale and a bill voided elsewhere
+        // still shows a live Void button. The flag is re-read against the database below.
+        window._voiding = {};
         window.voidBill = async function(key){
             const rec = voidBillsCache[key]; if (!rec) return;
             if (rec.voided){ alert('This bill is already voided.'); return; }
+            if (window._voiding[key]) return;
             const total = (rec.payment && rec.payment.total != null) ? parseFloat(rec.payment.total) : 0;
             const method = (rec.payment && rec.payment.method) || '';
             const where = rec.tableOrAddress || rec.orderType || 'bill';
@@ -1198,21 +1229,47 @@
 
             const by = (window.currentAdmin && window.currentAdmin.name) || 'admin';
             const now = Date.now();
+            window._voiding[key] = true;
             try {
-                // 1. flag the archived order (kept, not deleted)
-                await db.ref('orders/history/' + key).update({ voided: true, voidReason: reason.trim(), voidBy: by, voidAt: now, paymentVerifiedAtVoid: wasVerified });
-                // 2. reverse the till
-                if (isUpi) await db.ref('pos/upiTotal').set(firebase.database.ServerValue.increment(-total));
-                else await db.ref('pos/cashDrawer').set(firebase.database.ServerValue.increment(-total));
-                // 3. visible compensating ledger line
-                await db.ref('pos/ledgerEntries').push({
+                // The list this button came from may be hours old. Ask the database, not the
+                // cache, whether this bill has already been reversed — otherwise a bill voided
+                // on another device gets reversed a second time and the till is out by its value.
+                const already = await db.ref('orders/history/' + key + '/voided').once('value');
+                if (already.val()){
+                    delete window._voiding[key];
+                    alert('This bill has already been voided somewhere else.');
+                    loadVoidBills();
+                    return;
+                }
+                // ONE write, not three. Flagging the order, reversing the till and writing the
+                // compensating ledger line were three awaits in a row, and any one of them could
+                // be the last to land. Stopping after the first marks the bill VOIDED with the
+                // till never reversed — and the button is gone, so nobody can finish it. Stopping
+                // after the second reverses the money and leaves the bill looking unvoided, so it
+                // gets reversed again. The message below claimed nothing had changed either way.
+                //
+                // A multi-path update is atomic: all three or none, and the message is the truth.
+                const ledgerKey = db.ref('pos/ledgerEntries').push().key;
+                const updates = {};
+                updates['orders/history/' + key + '/voided'] = true;
+                updates['orders/history/' + key + '/voidReason'] = reason.trim();
+                updates['orders/history/' + key + '/voidBy'] = by;
+                updates['orders/history/' + key + '/voidAt'] = now;
+                updates['orders/history/' + key + '/paymentVerifiedAtVoid'] = wasVerified;
+                // Written as two literals rather than one ternary key so the access map can see
+                // which node this reverses. It is derived from the source, and a write it cannot
+                // place is a write the database rules never get reviewed against.
+                if (isUpi) updates['pos/upiTotal'] = firebase.database.ServerValue.increment(-total);
+                else updates['pos/cashDrawer'] = firebase.database.ServerValue.increment(-total);
+                updates['pos/ledgerEntries/' + ledgerKey] = {
                     date: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                     type: isUpi ? 'void_upi' : 'void_cash',
                     amount: -Math.abs(total),
                     reason: 'VOID: ' + where + ' — ' + reason.trim() + ' (' + by + ')',
                     ts: firebase.database.ServerValue.TIMESTAMP,
                     voidOf: key
-                });
+                };
+                await db.ref().update(updates);
                 // 4. notify (same push path as item-voids)
                 try {
                     const pushBody = await ilaPushBody({ title: '🚫 Bill voided', body: where + ' · ₹' + Math.round(total) + ' · by ' + by + ' — ' + reason.trim(), tag: 'billvoid-' + now, url: '/admin.html' });
@@ -1221,6 +1278,7 @@
                 if (voidBillsCache[key]) { voidBillsCache[key].voided = true; voidBillsCache[key].voidReason = reason.trim(); voidBillsCache[key].voidBy = by; }
                 loadVoidBills();
             } catch(e){
+                delete window._voiding[key];   // nothing was written, so let them try again
                 alert('Void failed: ' + (e && e.message ? e.message : e) + '\nNothing was changed — try again.');
             }
         };

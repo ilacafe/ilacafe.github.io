@@ -18,32 +18,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ROOT, derivePaths, unresolvedWrites, suite } = require('./helpers');
-
-// The Worker is not one of the apps, so derivePaths does not see it — and it is
-// the component most likely to have a write nobody reads, because none of it is
-// on a screen. eta/modelPrevious was found by hand for exactly that reason.
-function workerPaths() {
-  const src = fs.readFileSync(path.join(ROOT, 'worker', 'worker.js'), 'utf8');
-  const out = new Map();
-  const touch = (p, kind) => {
-    const key = p.replace(/^\//, '');
-    if (!key) return;                       // the root PATCH, handled below
-    const rec = out.get(key) || { read: false, write: false };
-    rec[kind] = true;
-    out.set(key, rec);
-  };
-  for (const m of src.matchAll(/DB_URL \+ '([^']+)'/g)) {
-    let p = m[1].replace(/\.json.*$/, '');
-    p = p.endsWith('/') && p !== '/' ? p + '$key' : p;
-    const after = src.slice(m.index, m.index + 260);
-    touch(p, /method\s*:\s*'(PUT|PATCH|POST|DELETE)'/.test(after) ? 'write' : 'read');
-  }
-  // monLoad only ever reads, and the root PATCH writes monitor/* in one call.
-  for (const m of src.matchAll(/monLoad\([^,]+,\s*'([^']+)'\)/g)) touch(m[1], 'read');
-  touch('/monitor', 'write');
-  return out;
-}
+const { ROOT, derivePaths, deriveWorkerPaths, unresolvedWrites, suite } = require('./helpers');
 
 const { check, note, done } = suite('Write-only paths — recorded and unreadable');
 
@@ -55,7 +30,7 @@ const DELIBERATELY_WRITE_ONLY = {
 };
 
 const used = derivePaths();
-const worker = workerPaths();
+const worker = deriveWorkerPaths();
 
 // One view of the whole system: the pages and the Worker together. A path the
 // Worker writes and a page reads is a working feature, and so is the reverse —
@@ -81,6 +56,22 @@ function related(a, b) {
     if (x[i] !== y[i]) return false;
   }
   return true;   // one is the other, or an ancestor of it
+}
+
+// Before asking anything of the map, check the map is a map.
+//
+// A derived path is a database path: segments of ordinary key characters, with $key
+// standing for one the deriver could not resolve. When the parser mistook
+// `'orders/history/' + key + '/voided'` for a single literal, it produced rows named
+// after their own source text — and every question below was still answerable about
+// them, so nothing failed. A path that is not a path is worse than a missing one: it
+// reports a rule as present at somewhere that does not exist.
+{
+  const wellFormed = /^[A-Za-z0-9_$.-]+(\/[A-Za-z0-9_$.-]+)*$/;
+  const malformed = paths.filter(p => !wellFormed.test(p));
+  check('every path the map derived is a path',
+        malformed.length === 0,
+        malformed.slice(0, 3).map(p => JSON.stringify(p)).join(', '));
 }
 
 const readable = paths.filter(p => all.get(p).read);

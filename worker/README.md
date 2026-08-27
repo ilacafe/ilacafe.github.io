@@ -18,6 +18,8 @@ It does four things:
 | **Payment ingest** | `POST /ingest`, and Email Routing | parses a bank credit alert → `payments/incoming/{utr}` |
 | **ETA recalibration** | cron `0 20 1 * *` | refits `eta/model` from 75 days of completions |
 | **Verification monitor** | cron `0 * * * *` | unverified-payment alerts, per-bank alarm, weekly digest |
+| **Cash out of the drawer** | `POST /` with `action: cashout` | verifies a staff token *and* a PIN, then writes the ledger entry itself |
+| **Stock on and off the shelf** | `POST /` with `action: inventory-log` | the same, for a prep or a delivery — and it reads the recipe rather than being told it |
 
 ## Deploying
 
@@ -105,6 +107,88 @@ shipped and the tablets have reloaded, delete the binding:
 `VAPID_PUBLIC`, `FIREBASE_API_KEY`, `FIREBASE_PROJECT` and `DB_URL` are in
 `wrangler.toml` instead — all four already appear in the site's own source, so
 committing them leaks nothing new.
+
+## Cash out of the drawer
+
+`expense`, `withdrawal` and `tip_payout` each hand real money to a real person, and
+each sat behind a staff PIN prompt in `pos.html`. That prompt was advice.
+`database.rules.json` grants write on `pos` to any staff role, so anyone who could
+open the till could push an entry with a colleague's name on it without knowing any
+PIN — and the prompt itself runs in a browser the same person controls.
+
+The check lives here now, where a browser cannot skip it:
+
+```json
+{ "action": "cashout", "token": "<firebase idToken>", "pin": "4821",
+  "type": "expense", "amount": 450, "reason": "milk" }
+```
+
+It verifies the token, refuses an anonymous sign-in, requires `users/{uid}.role`,
+then resolves the PIN against `staff` with the robot credential and writes the
+ledger line and the drawer decrement as **one** atomic update. The entry carries
+both `by` (what the PIN said) and `byUid` (the account that was actually signed in,
+which a PIN cannot forge).
+
+The rules refuse those three types from anybody but the robot. That is the half
+that turns the prompt into a gate — without it this is just a longer way to write
+the same entry.
+
+**Three types, not four.** `unpaid_writeoff` moves no cash — it records a bill that
+was never paid — and it happens inside end-of-day, which has to be completable when
+this Worker is unreachable. Blocking a cash-up on a network call would be a worse
+failure than the one being fixed.
+
+## Stock on and off the shelf
+
+Same argument as the cash-out, and the same fix — but this one closes the hole
+completely, where that one could not.
+
+```json
+{ "action": "inventory-log", "token": "<firebase idToken>", "pin": "4821",
+  "kind": "prep", "item": "Cold Brew Concentrate", "qty": 2 }
+```
+
+`kind` is `receive` or `prep`. A delivery adds to stock; a batch adds its yield and
+takes the recipe off the shelf. The **recipe is read here, not sent** — a client that
+computes its own deductions can under-report what a batch consumed. The stock movement
+and the log line explaining it go out as one write.
+
+Item names become database paths, so they are checked against Firebase's key rules
+before anything is built from them. A name carrying a slash would write somewhere else
+entirely.
+
+`inventory/stock` and `inventory/logs` are written by the robot and by nothing else.
+That is possible here and not at the till because exactly one page writes them, so
+nothing has to keep working when this Worker is unreachable — a delivery can be logged
+ten minutes later.
+
+### Deploying this without breaking the expense button
+
+The pages, this Worker and the rules deploy separately, so they are briefly out of
+step — and here the order is load-bearing, because the rules change does two things
+at once. It **grants** the robot write on `pos/ledgerEntries` and `pos/cashDrawer`
+(the robot has no `users` entry, so `pos`'s "has a staff role" does not cover it),
+and it **refuses** the three cash-out types from every browser.
+
+1. **This Worker**, first. Both routes are inert until something calls them.
+2. **The pages** (merge to `main`; GitHub Pages deploys them).
+3. **Reload the tills, and the stock tablet.** A device open all day is still running
+   the old page; `build-check.js` offers the banner. Do this before step 4.
+4. **The rules** — Actions → *deploy database rules* → `DEPLOY`.
+
+Between 2 and 4 the expense, withdrawal, tip-payout, prep and delivery buttons do not work: the page
+calls the Worker, and the Worker's write is refused because the grant it needs is in
+the rules that have not been deployed yet. **It fails loudly** — the till says it
+could not record the entry and nothing is written — so the window is an inconvenience
+rather than a hazard. Keep it to minutes by doing 4 straight after 3.
+
+Do it the other way round — rules before pages — and the old page's direct write is
+refused instead. That used to fail *silently*: `push()` with nothing on the end of it
+swallows a rejected write, so the cashier taps Confirm, the modal closes, and the
+entry is simply not there. `addLedgerEntry` now reports a failed write on screen, so
+that order is survivable too. It is still the wrong one: the message it produces
+tells a cashier something is broken, where the recommended order tells them the
+button is not available yet.
 
 ## Who may send a push
 

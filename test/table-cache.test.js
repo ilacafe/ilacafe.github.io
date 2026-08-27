@@ -83,8 +83,11 @@ const FLOOR = {
         /localStorage\.setItem\(TABLE_CACHE_KEY, packTables\(window\.activeTables/.test(pos));
   check('and clears the from-cache flag, so the screen stops saying stale',
         /window\.tablesFromCacheAt = 0;\s*\n\s*try \{ localStorage\.setItem\(TABLE_CACHE_KEY/.test(pos));
+  // The open tables are cleared as part of one atomic multi-path reset now rather
+  // than by a remove() of their own, so this follows the reset object. What it is
+  // checking is unchanged: the cache goes when the tables do.
   check('end of day removes the cache along with the tables',
-        /activeTables'\)\.remove\(\);[\s\S]{0,220}removeItem\(TABLE_CACHE_KEY\)/.test(pos),
+        /activeTables: null[\s\S]{0,900}removeItem\(TABLE_CACHE_KEY\)/.test(pos),
         'otherwise tomorrow morning restores tonight’s closed tables');
   check('the offline banner reports the age of what it is showing',
         /tables as of/.test(pos), 'a stale floor shown as live is worse than no floor');

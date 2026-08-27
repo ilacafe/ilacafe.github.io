@@ -35,7 +35,7 @@
         ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
       },
       "pushHealth": {
-        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
       }
     },
@@ -44,12 +44,16 @@
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
     },
     "upiRouting": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
       "config": {
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
       },
       "totals": {
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        "$month": {
+          ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+        }
       }
     },
     "orders": {
@@ -57,7 +61,83 @@
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
         "$orderId": {
           ".write": "auth != null && (!data.exists() || root.child('users').child(auth.uid).child('role').exists())",
-          ".validate": "newData.hasChildren(['items','total','orderType']) && newData.child('total').isNumber()"
+          ".validate": "newData.hasChildren(['items','total','orderType']) && newData.child('total').isNumber() && (data.exists() || (!newData.child('createdAt').exists() || newData.child('createdAt').val() === now))",
+          "items": {
+            ".validate": "newData.hasChildren()",
+            "$item": {
+              ".validate": "newData.hasChildren(['qty','price'])",
+              "qty": {
+                ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 99"
+              },
+              "price": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+              },
+              "base": {
+                ".validate": "newData.isString() && newData.val().length <= 80"
+              },
+              "mods": {},
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "orderType": {
+            ".validate": "newData.isString() && newData.val().length <= 20"
+          },
+          "tableOrAddress": {
+            ".validate": "newData.isString() && newData.val().length <= 200"
+          },
+          "notes": {
+            ".validate": "newData.isString() && newData.val().length <= 500"
+          },
+          "paymentMethod": {
+            ".validate": "newData.isString() && newData.val().length <= 20"
+          },
+          "upiId": {
+            ".validate": "newData.isString() && newData.val().length <= 100"
+          },
+          "phone": {
+            ".validate": "newData.isString() && newData.val().length <= 20"
+          },
+          "trackId": {
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "total": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+          },
+          "gated": {
+            ".validate": "newData.isBoolean()"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+          },
+          "payLinkSentAt": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+          },
+          "payment": {
+            ".validate": "newData.hasChildren(['ref','amount'])",
+            "ref": {
+              ".validate": "newData.isString() && newData.val().length <= 60"
+            },
+            "amount": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+            },
+            "at": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+            },
+            "payId": {
+              ".validate": "newData.isString() && newData.val().length <= 60"
+            },
+            "bankTag": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
         }
       },
       "refundsDue": {
@@ -82,7 +162,84 @@
           "table"
         ],
         "$trackId": {
-          ".write": "auth != null && (!data.exists() || root.child('users').child(auth.uid).child('role').exists())"
+          ".write": "auth != null && (!data.exists() || root.child('users').child(auth.uid).child('role').exists())",
+          ".validate": "data.exists() || (newData.hasChildren(['status','items','table']) && (!newData.child('createdAt').exists() || newData.child('createdAt').val() === now))",
+          "status": {
+            ".validate": "newData.isString() && newData.val().length <= 20"
+          },
+          "table": {
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "items": {
+            ".validate": "newData.hasChildren()",
+            "$item": {
+              ".validate": "newData.hasChildren(['qty','price'])",
+              "qty": {
+                ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 99"
+              },
+              "price": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+              },
+              "base": {
+                ".validate": "newData.isString() && newData.val().length <= 80"
+              },
+              "mods": {},
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "gated": {
+            ".validate": "newData.isBoolean()"
+          },
+          "paymentVerified": {
+            ".validate": "newData.isBoolean()"
+          },
+          "refundDue": {
+            ".validate": "newData.isBoolean()"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+          },
+          "acceptedAt": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+          },
+          "readyAt": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+          },
+          "rejectedAt": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+          },
+          "stations": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10"
+          },
+          "stationsDone": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10"
+          },
+          "predLow": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+          },
+          "predHigh": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+          },
+          "predPoint": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+          },
+          "predOvenIdleMin": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+          },
+          "predLoadChef": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+          },
+          "predLoadBarista": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+          },
+          "predModelVersion": {
+            ".validate": "newData.isNumber() || (newData.isString() && newData.val().length <= 40)"
+          },
+          "$other": {
+            ".validate": false
+          }
         }
       },
       "history": {
@@ -98,33 +255,68 @@
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
     },
     "pos": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
       "ledgerEntries": {
-        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'cashier')",
         ".indexOn": [
           "ts"
-        ]
+        ],
+        "$entry": {
+          ".validate": "!newData.child('type').exists() || auth.token.email === 'robot@cafeila.app' || (newData.child('type').val() !== 'expense' && newData.child('type').val() !== 'withdrawal' && newData.child('type').val() !== 'tip_payout')"
+        },
+        ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
       },
       "eodArchive": {
-        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
       },
       "bills": {
         ".indexOn": [
           "id"
-        ]
+        ],
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "activeTables": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "cashDrawer": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+        ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
+      },
+      "lastSplitHeads": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "tips": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "upiTotal": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      },
+      "unverified": {
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'cashier')"
       }
     },
     "inventory": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
+      "stock": {
+        ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      },
+      "logs": {
+        ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      },
+      "config": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      },
+      "recipes": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
+      }
     },
     "security": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()"
     },
     "staff": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
+      ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
     },
     "users": {
@@ -143,8 +335,8 @@
       ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
     },
     "pushSubscriptions": {
-      ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
-      ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
+      ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+      ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
     },
     "payments": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",

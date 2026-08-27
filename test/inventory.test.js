@@ -3,9 +3,12 @@
 // who prepped what, who received which delivery, how much came off the shelf — and
 // none of that was reachable from any page in the repo.
 //
-// It is also the one write in the codebase that keyed a record on a bare
-// Date.now(). pos.html appends randomness to its archive keys for exactly this
-// reason; this one did not.
+// The write itself has since moved into the Worker, because the PIN in front of it
+// was advice twice over: the prompt ran in a browser the person filling it in
+// controls, AND inventory was writable by any staff role, so the write did not need
+// the prompt at all. The page reads the log; the robot is the only thing that writes
+// it. The properties below did not go away with the move, so they are asked of
+// whichever component is answerable for each of them now.
 
 const fs = require('fs');
 const path = require('path');
@@ -17,22 +20,41 @@ const src = readPage('inventory.html');
 
 // ---------------------------------------------------------------- the key cannot collide
 {
-  check('a log entry is keyed by push(), not by the clock',
-        /const logKey = db\.ref\('inventory\/logs'\)\.push\(\)\.key/.test(src),
-        'two tablets confirming in the same millisecond wrote the same path, ' +
-        'and one entry silently replaced the other');
+  const worker = fs.readFileSync(path.join(ROOT, 'worker', 'worker.js'), 'utf8');
+  const block = worker.slice(worker.indexOf('async function handleInventoryLog'));
 
-  check('and nothing still writes a bare timestamp key',
-        !/inventory\/logs\/\$\{timestamp\}/.test(src),
-        'a device with a skewed clock can land on a key that already exists');
+  // This was the one write in the codebase keyed on a bare Date.now(): two tablets
+  // confirming in the same millisecond wrote the same path and one entry silently
+  // replaced the other. It kept randomness on the way through the Worker.
+  const key = /const key = 'inv-' \+ now \+ '-' \+ Math\.random\(\)/.test(block);
+  check('a log entry key still carries more than the clock', key,
+        'a millisecond is not unique across two tablets, or across a skewed one');
 
-  // The key is no longer the time, so the time has to be in the record.
-  const writes = (src.match(/updates\[`inventory\/logs\/\$\{logKey\}`\]/g) || []).length;
-  const stamped = (src.match(/at: timestamp/g) || []).length;
-  check('every log write carries a numeric timestamp of its own',
-        writes > 0 && writes === stamped,
-        writes + ' writes, ' + stamped + ' with `at`');
-  note('toLocaleString() is unsortable and reads differently on every device');
+  check('the key sorts by time as well', /'inv-' \+ now/.test(block),
+        'the fixed-width millisecond has to come first or the node stops being browsable');
+
+  check('and the record carries a numeric timestamp of its own',
+        /entry\.at = now;/.test(block),
+        'toLocaleString() is unsortable and reads differently on every device');
+
+  check('the page does not write the log at all any more',
+        !/db\.ref\(\)\.update|inventory\/logs\/|inventory\/stock\//.test(src),
+        'the rules refuse it from there; a write left here would just fail');
+  note('the page asks the Worker, which is the only thing the rules let write these');
+}
+
+// ------------------------------------------------- and the tablet holds no secrets
+{
+  // A consequence worth checking, not just a tidy-up. This tablet used to download
+  // every staff PIN hash in the café and carry the salt in its own source, to answer
+  // a question it was never the right place to answer.
+  check('the stock tablet no longer holds the staff PIN hashes',
+        !/db\.ref\('staff'\)/.test(src), 'it downloaded every one of them');
+  check('nor the salt they are hashed with', !/PIN_SALT/.test(src));
+  check('nor the recipes it used to compute deductions from',
+        !/db\.ref\('inventory\/recipes'\)/.test(src),
+        'a client that computes its own deductions can under-report what a batch used');
+  note('the Worker reads the recipe when it logs the batch');
 }
 
 // ---------------------------------------------------------------- the read is bounded

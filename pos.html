@@ -327,7 +327,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-26.9"></script>
+    <script src="/build-check.js" data-build="2026-08-26.17"></script>
 </head>
 <body>
     <div id="login-overlay">
@@ -666,7 +666,7 @@
             <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
             <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason">
             <input type="password" id="transaction-pin" class="remark-input" placeholder="PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4">
-            <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
+            <div class="modal-buttons"><button id="transaction-confirm-btn" class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
             <button class="close-modal" onclick="closeTransactionModal()">✖ CANCEL</button>
         </div>
     </div>
@@ -1093,56 +1093,56 @@
                 if(document.getElementById('web-orders-modal').classList.contains('active')) { window.openWebOrders(); }
                 // matching runs from login, not from the modal — see sweepWebPayments()
                 try { ensureWebVerifyFeeds(); sweepWebPayments(); } catch(e){}
-                try { watchManualVerifyFlags(); } catch(e){}
             });
-
-            // #5: when a customer's payment hasn't auto-confirmed in 120s, their app sets
-            // needsManualVerify on the track record. Watch for it and push staff ONCE per order to
-            // go verify manually. When they verify (paymentVerified set), the customer app reflects it.
-            // The push carries the customer's number for takeaway/delivery, so whoever sees the
-            // alert can chase it from the lock screen without digging the order out first.
-            window._mvAlerted = {};
-            function watchManualVerifyFlags(){
-                for (const id in (window.pendingWebOrders || {})){
-                    const o = window.pendingWebOrders[id]; if (!o || !o.trackId) continue;
-                    const tid = o.trackId;
-                    if (window._mvAlerted[tid]) continue;
-                    db.ref('orders/track/' + tid + '/needsManualVerify').once('value', s => {
-                        if (s.val() === true && !window._mvAlerted[tid]){
-                            // only alert if still unverified
-                            const matched = !!(window._wvMatch && window._wvMatch[id]);
-                            if (matched) return;
-                            window._mvAlerted[tid] = true;
-                            const ph = o.phone ? ' \u00b7 \ud83d\udcde ' + o.phone : '';
-                            posSendPush({ title: '⚠️ Web order still unpaid', body: (o.tableOrAddress||'Web order') + ' · ₹' + o.total + ph + ' — no payment matched yet. Send or resend the pay link, or check the bank.', tag: 'manualverify-' + tid, url: '/admin.html' });
-                        }
-                    });
-                }
-            }
 
             db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
 
-            // ===== FORGOTTEN PAY LINK =====
-            // Takeaway/delivery is prepaid, and the link only goes out when someone taps it.
-            // A busy counter forgets. The customer's browser can't detect this (it doesn't know
-            // whether staff sent anything) — the POS can, because sendPayLink stamps the order.
-            // Alerts once per order, and only when no link was ever sent.
-            window._plAlerted = {};
+            // ===== A PREPAID WEB ORDER THAT IS NOT PAID =====
+            // Takeaway and delivery are prepaid, and there are two ways one sits unpaid. Both
+            // end with staff needing to do something, so both are alerted from here.
+            //
+            // The link never went out. It only goes when someone taps it, and a busy counter
+            // forgets. The customer's browser cannot detect this — it does not know whether
+            // staff sent anything — but the POS can, because sendPayLink stamps the order.
+            //
+            // The link went out and nothing came back. This half used to live elsewhere and
+            // never fired at all: the POS watched orders/track/{id}/needsManualVerify, and
+            // NOTHING in this repo ever wrote that flag. It was meant to be set by the
+            // customer's app at 120s, and that app deliberately does not — it cannot know
+            // whether the link has even been sent, so it must not assert that a payment is
+            // late. The POS does know. Meanwhile the branch above skipped every order whose
+            // link HAD gone out, on the grounds that other alerts covered it. Nothing did. A
+            // customer who was sent a link and never paid produced no alert of any kind.
+            //
+            // Ten minutes from the link, not from the order: the clock that matters starts
+            // when the customer was actually asked for money.
+            window._plAlerted = {}; window._mvAlerted = {};
             setInterval(function(){
                 const now = Date.now();
                 for (const id in (window.pendingWebOrders || {})){
                     const o = window.pendingWebOrders[id]; if (!o) continue;
                     if (o.orderType === 'Dine-in') continue;          // settles at the table
-                    if (o.payment && o.payment.ref) continue;        // already paid
-                    if (o.payLinkSentAt) continue;                   // link went out; other alerts cover it
-                    if (!o.createdAt || now - o.createdAt < 5*60000) continue;
-                    if (window._plAlerted[id]) continue;
-                    window._plAlerted[id] = true;
-                    posSendPush({
-                        title: '\ud83d\udce4 Pay link never sent',
-                        body: (o.tableOrAddress || 'Web order') + ' \u00b7 \u20b9' + o.total + (o.phone ? ' \u00b7 ' + o.phone : '') + ' \u2014 waiting ' + Math.round((now - o.createdAt)/60000) + ' min with no payment link sent.',
-                        tag: 'paylink-' + id, url: '/pos.html'
-                    });
+                    if (o.payment && o.payment.ref) continue;        // already booked
+                    if (window._wvMatch && window._wvMatch[id]) continue;   // matched; booking in flight
+                    if (!o.payLinkSentAt){
+                        if (!o.createdAt || now - o.createdAt < 5*60000) continue;
+                        if (window._plAlerted[id]) continue;
+                        window._plAlerted[id] = true;
+                        posSendPush({
+                            title: '📤 Pay link never sent',
+                            body: (o.tableOrAddress || 'Web order') + ' · ₹' + o.total + (o.phone ? ' · ' + o.phone : '') + ' — waiting ' + Math.round((now - o.createdAt)/60000) + ' min with no payment link sent.',
+                            tag: 'paylink-' + id, url: '/pos.html'
+                        });
+                    } else {
+                        if (now - o.payLinkSentAt < 10*60000) continue;
+                        if (window._mvAlerted[id]) continue;
+                        window._mvAlerted[id] = true;
+                        posSendPush({
+                            title: '⚠️ Web order still unpaid',
+                            body: (o.tableOrAddress || 'Web order') + ' · ₹' + o.total + (o.phone ? ' · 📞 ' + o.phone : '') + ' — pay link sent ' + Math.round((now - o.payLinkSentAt)/60000) + ' min ago and no payment has matched. Chase it, resend the link, or check the bank.',
+                            tag: 'manualverify-' + id, url: '/pos.html'
+                        });
+                    }
                 }
             }, 60000);
         }
@@ -1267,8 +1267,46 @@
         function ensureWebVerifyFeeds(){
             if (window._wvFeeds) return; window._wvFeeds = true;
             try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
-            // credits come from the single shared feed in startVerificationReconciler
-            try { db.ref('payments/claims').limitToLast(150).on('value', s => { window._wvClaims = s.val() || {}; sweepWebPayments(); }); } catch(e){}
+            // credits come from the single shared feed in startVerificationReconciler, and the
+            // claim on each of them from watchClaimsFor() below
+        }
+
+        // Which credits are already spoken for.
+        //
+        // This used to be one read of payments/claims with limitToLast(150). That node is keyed
+        // by the bank's own reference, and a bank reference is not a clock: with no orderBy the
+        // limit sorts by KEY, so once more than 150 credits have ever been claimed the visible
+        // set is a fixed lexicographic slice that mostly does not contain today's. A claim
+        // missing from the slice reads as UNCLAIMED — and wvFindMatch would then offer a credit
+        // that a table at the counter has already taken, showing a pending web order "✓ paid"
+        // against money that is not its own. Staff hand food over on that badge.
+        //
+        // The claims that matter are only ever the ones on the credits in view, and those are
+        // known: one leaf watch per credit in _wvCredits, dropped as a credit falls out of the
+        // window. Fewer bytes than the old read, and always the right ones.
+        window._wvClaimWatch = {};
+        function watchClaimsFor(credits){
+            const want = credits || {};
+            for (const ref in window._wvClaimWatch){
+                if (want[ref]) continue;
+                const w = window._wvClaimWatch[ref];
+                try { w.ref.off('value', w.handler); } catch(e){}
+                delete window._wvClaimWatch[ref];
+                delete window._wvClaims[ref];
+            }
+            for (const ref in want){
+                if (window._wvClaimWatch[ref]) continue;
+                try {
+                    const r = db.ref('payments/claims/' + ref);
+                    const handler = s => {
+                        const v = s.val();
+                        if (v == null) delete window._wvClaims[ref]; else window._wvClaims[ref] = v;
+                        try { sweepWebPayments(); } catch(e){}
+                    };
+                    r.on('value', handler);
+                    window._wvClaimWatch[ref] = { ref: r, handler: handler };
+                } catch(e){}
+            }
         }
 
         // ===== HEADLESS PAYMENT SWEEP =====
@@ -3827,10 +3865,11 @@
             const parsedAmount = parseFloat(amount) || 0;
             const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
-            // Each entry is its own child — push() never touches siblings and merges cleanly
-            // after an offline spell. `meta` (UPI only) carries the stable payId, verification
-            // state ('verified' | 'unverified'), the matched credit ref, and the bank/acct the
-            // payment was routed to — so a late bank email can flip unverified→verified later.
+            // Each entry is its own child — its key never touches a sibling and merges
+            // cleanly after an offline spell. `meta` (UPI only) carries the stable payId,
+            // verification state ('verified' | 'unverified'), the matched credit ref, and
+            // the bank/acct the payment was routed to — so a late bank email can flip
+            // unverified→verified later.
             const entry = {
                 date: timeString, type: type, amount: parsedAmount, reason: reason,
                 ts: firebase.database.ServerValue.TIMESTAMP
@@ -3842,20 +3881,42 @@
                 if (meta.bankTag) entry.bankTag = meta.bankTag;         // VPA's admin bank tag, e.g. "yes 8020"
                 if (meta.tip) entry.tip = parseFloat(meta.tip) || 0;    // part of amount, not extra revenue
             }
-            db.ref('pos/ledgerEntries').push(entry);
 
-            // Running totals via atomic increment — concurrent sales can't lose each other,
-            // it shows instantly, and reconciles correctly after reconnect.
+            // The line and the total it moves go in ONE write. They used to be two, and
+            // either could be the one that failed: a sale on the ledger that the day's
+            // takings do not include, or takings with no line explaining them. Neither is
+            // reconcilable against the cash actually in the drawer.
+            //
+            // Running totals stay atomic increments — concurrent sales cannot lose each
+            // other, it shows instantly, and it reconciles correctly after a reconnect.
+            const key = db.ref('pos/ledgerEntries').push().key;
+            const updates = {};
+            updates['pos/ledgerEntries/' + key] = entry;
             if (type === 'cash_income') {
-                db.ref('pos/cashDrawer').set(firebase.database.ServerValue.increment(parsedAmount));
+                updates['pos/cashDrawer'] = firebase.database.ServerValue.increment(parsedAmount);
             } else if (type === 'upi_income') {
-                db.ref('pos/upiTotal').set(firebase.database.ServerValue.increment(parsedAmount));
+                updates['pos/upiTotal'] = firebase.database.ServerValue.increment(parsedAmount);
             } else if (type === 'unpaid_writeoff') {
                 // Nothing physically left the drawer — the money simply never arrived. Recording
                 // it as a cash outflow would make the till disagree with the cash in it.
             } else {
-                db.ref('pos/cashDrawer').set(firebase.database.ServerValue.increment(-parsedAmount));
+                updates['pos/cashDrawer'] = firebase.database.ServerValue.increment(-parsedAmount);
             }
+
+            // And it is no longer allowed to fail in silence. A push() with nothing on the
+            // end of it swallows a rejected write whole: the cashier taps Confirm, the modal
+            // closes, and the sale is simply not there. This is the one message that has to
+            // survive a busy counter, so it does not dismiss itself.
+            db.ref().update(updates).catch(function(e){
+                console.error('ledger write failed', e);
+                try {
+                    showToast('NOT RECORDED \u2014 \u20b9' + Math.round(Math.abs(parsedAmount)),
+                              (reason || type) + ' did not save. Check the connection and enter it again.');
+                } catch(_){
+                    alert('That entry did not save. Check the connection and enter it again.');
+                }
+            });
+            return key;
         }
 
         // ===== LEDGER VERIFICATION RECONCILER =====
@@ -3889,6 +3950,9 @@
                     const newest = {};
                     keys.forEach(k => { newest[k] = all[k]; });
                     window._wvCredits = newest;
+                    // before the sweep: a credit whose claim is not known yet is a credit the
+                    // sweep would read as free
+                    try { watchClaimsFor(newest); } catch(e){}
                     try { sweepWebPayments(); } catch(e){}
                     try { reconcileLedgerVerification(); } catch(e){}
                 });
@@ -4145,12 +4209,17 @@
             const each = Math.floor(due / heads);
             const pinStr = prompt('\u20b9' + Math.round(due) + ' \u00f7 ' + heads + ' = \u20b9' + each + ' each.\nThis takes \u20b9' + Math.round(due) + ' OUT of the cash drawer.\n\nStaff PIN to authorise:');
             if (!pinStr) return;
-            const staffName = window.staffPins[await hashPin(pinStr)];
-            if (!staffName) return alert('Invalid PIN.');
             const cash = parseFloat(window.cashDrawer) || 0;
             if (due > cash && !confirm('Only \u20b9' + Math.round(cash) + ' in the drawer. Pay out anyway?')) return;
-            // decrements the drawer via addLedgerEntry's outflow branch
-            addLedgerEntry('tip_payout', due, 'Tips \u00b7 ' + heads + ' \u00d7 \u20b9' + each + ' (' + staffName + ')');
+            // The Worker checks the PIN, writes the entry and decrements the drawer in one
+            // write. Only once that has landed is the pool marked paid out — the other way
+            // round leaves tips the staff are owed recorded as already handed over.
+            if (window._payingOutTips) return;
+            window._payingOutTips = true;
+            const paid = await posCashOut('tip_payout', due, 'Tips \u00b7 ' + heads + ' \u00d7 \u20b9' + each, pinStr);
+            window._payingOutTips = false;
+            if (!paid.ok) return alert(paid.why);
+            const staffName = paid.by;
             try {
                 db.ref('pos/tips/' + tipDayKey()).update({
                     paidOut: firebase.database.ServerValue.increment(due),
@@ -4168,12 +4237,18 @@
         window.confirmTransaction = async function() {
             const amount = parseFloat(document.getElementById('transaction-amount').value); const reasonStr = document.getElementById('transaction-reason').value.trim(); const pinStr = document.getElementById('transaction-pin').value.trim();
             if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
-            const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
-            
+            // The PIN is checked by the Worker now, which is the only place a check
+            // cannot be skipped. This page neither looks it up nor writes the entry —
+            // the rules refuse these three types from here.
             let currentCash = parseFloat(window.cashDrawer) || 0;
-            if (amount > currentCash && !confirm(`Only ₹${currentCash} in drawer. Continue?`)) return;
-            
-            addLedgerEntry(window.currentTransactionType, amount, `${reasonStr} (${staffName})`);
+            if (amount > currentCash && !confirm(`Only \u20b9${currentCash} in drawer. Continue?`)) return;
+
+            const btn = document.getElementById('transaction-confirm-btn');
+            if (btn && btn.disabled) return;
+            if (btn){ btn.disabled = true; btn.innerText = 'Recording\u2026'; }
+            const r = await posCashOut(window.currentTransactionType, amount, reasonStr, pinStr);
+            if (btn){ btn.disabled = false; btn.innerText = 'Confirm'; }
+            if (!r.ok) return alert(r.why);
             window.closeTransactionModal();
         };
 
@@ -4190,6 +4265,38 @@
             if (!token) return null;
             return JSON.stringify({ token: token, notification: notification });
         }
+        // Cash leaving the drawer goes through the Worker, not straight into the ledger.
+        //
+        // The PIN prompt in front of these three was advice: pos is writable by any
+        // staff role, so anyone who could open this page could push an entry with a
+        // colleague's name on it without knowing a PIN at all. The Worker holds the one
+        // credential no browser has, checks the PIN against staff itself, and writes the
+        // entry and the drawer movement as a single atomic write. The rules now refuse
+        // these three types from anybody else, so the prompt is a gate.
+        //
+        // It returns the reason it failed rather than a boolean, because "wrong PIN" and
+        // "the till cannot reach the Worker" need different things done about them.
+        async function posCashOut(type, amount, reason, pin){
+            if (!ALERT_WORKER_URL) return { ok:false, why:'The till is not configured to record this.' };
+            let token = null;
+            try { const u = firebase.auth().currentUser; token = u ? await u.getIdToken() : null; } catch(e){}
+            if (!token) return { ok:false, why:'You are signed out. Sign in and try again.' };
+            let res;
+            try {
+                res = await fetch(ALERT_WORKER_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({ action:'cashout', token: token, pin: pin,
+                                           type: type, amount: amount, reason: reason })
+                });
+            } catch(e){
+                return { ok:false, why:'Could not reach the till service. Nothing was recorded \u2014 check the connection and try again.' };
+            }
+            let body = null; try { body = await res.json(); } catch(e){}
+            if (res.ok && body && body.ok) return { ok:true, by: body.by };
+            if (res.status === 403 && body && body.error === 'invalid pin') return { ok:false, why:'Invalid PIN.' };
+            return { ok:false, why:'Could not record it: ' + ((body && body.error) || ('error ' + res.status)) + '\nNothing was changed.' };
+        }
+
         async function posSendPush(notification){
             if (!ALERT_WORKER_URL) return;
             try {
@@ -4198,6 +4305,23 @@
                 await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: body });
             } catch (e) { console.error('push failed', e); }
         }
+        // A Realtime Database write that cannot reach the server neither resolves nor
+        // rejects: the SDK queues it and waits, for as long as it takes. Awaiting one
+        // on a dropped connection would leave the cash-up sitting on a dead screen with
+        // nothing to read, so every step of it is bounded here instead.
+        //
+        // 'timeout' is not 'failed'. A write that has not been confirmed in twenty
+        // seconds may still land a minute later, and the messages below say that
+        // rather than claiming a failure nobody can verify.
+        const EOD_STEP_MS = 20000;
+        function eodStep(promise, ms) {
+            let timer = null;
+            return Promise.race([
+                Promise.resolve(promise).then(() => 'ok', e => { console.error('EOD step failed', e); return 'failed'; }),
+                new Promise(r => { timer = setTimeout(() => r('timeout'), ms || EOD_STEP_MS); })
+            ]).then(v => { if (timer) clearTimeout(timer); return v; });
+        }
+
         window.promptEOD = async function() {
             const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
             const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
@@ -4277,45 +4401,70 @@
                     if (rv && rv.by) out.verifyBy = rv.by;
                     return out;
                 });
-                db.ref('pos/eodArchive/' + todayKey + '-' + Date.now()).set({
+                // Counted before the reset, not after it. pos/bills and pos/ledgerEntries have
+                // live listeners behind them, so the moment the reset lands both of these arrays
+                // are emptied — and the notification the owner gets would read 0 bills, no expenses.
+                var _eodBills = Array.isArray(window.pastBills) ? window.pastBills.length : 0;
+                var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income' && !REVERSALS[e.type]) _eodExp += Math.abs(parseFloat(e.amount) || 0); });
+
+                // Archive, carry-forward and reset all used to be fire-and-forget: the reset
+                // ran inside a .then() while the code below carried straight on to the WhatsApp
+                // hand-off, and `location.href` tears down the socket those un-acked writes are
+                // still sitting on. On a bad connection that loses the archive, or the reset, or
+                // both — and nothing said so, because the report went out either way and the day
+                // looked closed. Each step is waited for now, and the first one that does not
+                // land stops the cash-up and says which.
+                const archived = await eodStep(db.ref('pos/eodArchive/' + todayKey + '-' + Date.now()).set({
                     report: report, upi: safeUPI, cash: safeCash,
                     bills: window.pastBills, ledger: enrichedLedger,
                     closedBy: staffName, closedAt: firebase.database.ServerValue.TIMESTAMP
-                }).then(() => {
-                    // Park anything still unverified BEFORE wiping. This is the only reason the
-                    // last bills of the night can ever auto-verify: their ledger rows are about
-                    // to be deleted, and the bank email may not have arrived yet. Money is not
-                    // moved or recounted here — the day's totals are already archived. This is
-                    // purely so a late credit can still find the payment it belongs to.
-                    try {
-                        const carry = {};
-                        const rvMap = window.upiReviewMap || {};
-                        (window.salesLedger || []).forEach(function(e){
-                            if (!e || e.type !== 'upi_income' || !e.payId) return;
-                            if (e.state === 'verified') return;
-                            const rv = rvMap[e.payId];
-                            if (rv && (rv.state === 'verified' || rv.state === 'ignored')) return;
-                            carry[e.payId] = {
-                                amount: parseFloat(e.amount) || 0, reason: e.reason || '',
-                                ts: e.ts || 0, bankTag: e.bankTag || null,
-                                day: todayKey, state: 'unverified'
-                            };
-                        });
-                        if (Object.keys(carry).length) db.ref('pos/unverified').update(carry);
-                    } catch(e){ console.error('EOD carry-forward', e); }
+                }));
+                if (archived !== 'ok') {
+                    alert("Today's sales could not be saved" + (archived === 'timeout' ? ' — the till did not hear back from the database.' : '.')
+                        + "\n\nThe day is still open and nothing has been cleared. Check the connection and close the day again.");
+                    return;
+                }
 
-                    db.ref('pos/ledgerEntries').remove();
-                    db.ref('pos/bills').remove();
-                    // cashDrawer is NOT reset — physical cash carries forward to the next day.
-                    db.ref('pos/upiTotal').set(0);
-                    db.ref('pos/activeTables').remove();
-                    // Or a till reopened offline tomorrow morning restores today's
-                    // closed tables and shows them as open.
-                    try { localStorage.removeItem(TABLE_CACHE_KEY); } catch(e){}
-                    window.tablesFromCacheAt = 0;
-                });
-                var _eodBills = Array.isArray(window.pastBills) ? window.pastBills.length : 0;
-                var _eodExp = 0; (window.salesLedger || []).forEach(function(e){ if (e.type !== 'cash_income' && e.type !== 'upi_income' && !REVERSALS[e.type]) _eodExp += Math.abs(parseFloat(e.amount) || 0); });
+                // Park anything still unverified BEFORE wiping. This is the only reason the
+                // last bills of the night can ever auto-verify: their ledger rows are about
+                // to be deleted, and the bank email may not have arrived yet. Money is not
+                // moved or recounted here — the day's totals are already archived. This is
+                // purely so a late credit can still find the payment it belongs to.
+                try {
+                    const carry = {};
+                    const rvMap = window.upiReviewMap || {};
+                    (window.salesLedger || []).forEach(function(e){
+                        if (!e || e.type !== 'upi_income' || !e.payId) return;
+                        if (e.state === 'verified') return;
+                        const rv = rvMap[e.payId];
+                        if (rv && (rv.state === 'verified' || rv.state === 'ignored')) return;
+                        carry[e.payId] = {
+                            amount: parseFloat(e.amount) || 0, reason: e.reason || '',
+                            ts: e.ts || 0, bankTag: e.bankTag || null,
+                            day: todayKey, state: 'unverified'
+                        };
+                    });
+                    if (Object.keys(carry).length) await eodStep(db.ref('pos/unverified').update(carry));
+                } catch(e){ console.error('EOD carry-forward', e); }
+
+                // One multi-path update rather than four separate writes, because an update is
+                // atomic and four writes are not. Half a reset is the worst outcome available
+                // here: yesterday's UPI total left standing while its ledger is gone is a number
+                // nothing on the till can explain, and it goes straight into tomorrow's takings.
+                // cashDrawer is NOT reset — physical cash carries forward to the next day.
+                const reset = await eodStep(db.ref('pos').update({
+                    ledgerEntries: null, bills: null, upiTotal: 0, activeTables: null
+                }));
+                if (reset !== 'ok') {
+                    alert("Today's sales are archived, but the till did not confirm it reset"
+                        + (reset === 'timeout' ? ' — the till did not hear back from the database.' : '.')
+                        + "\n\nReload the POS before starting tomorrow. If today's ledger is still on screen, close the day again.");
+                    return;
+                }
+                // Or a till reopened offline tomorrow morning restores today's
+                // closed tables and shows them as open.
+                try { localStorage.removeItem(TABLE_CACHE_KEY); } catch(e){}
+                window.tablesFromCacheAt = 0;
                 // IMPORTANT: await the push so it actually completes before we navigate to WhatsApp.
                 // (Previously this was fire-and-forget and the wa.me redirect 300ms later aborted the
                 //  in-flight Firebase read + Worker POST, so the EOD notification usually never sent.)

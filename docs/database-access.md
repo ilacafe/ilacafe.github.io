@@ -49,6 +49,17 @@ updates[`inventory/stock/${item}`] = increment(n);
 db.ref().update(updates);
 ```
 
+An update can also be handed its object inline, which is the natural shape when
+the keys are fixed — the end-of-day reset clears four nodes that way:
+
+```js
+db.ref('pos').update({ ledgerEntries: null, bills: null, upiTotal: 0 });
+```
+
+Read as a `db.ref()` alone that is a write to `pos`, which is true and useless:
+what the rules get reviewed against is which children it clears. Both forms are
+parsed for their keys.
+
 Those keys are relative to whatever ref `.update()` was called on, which is not
 always the root, so the base is read from the call site. What the map still cannot
 place — a key whose prefix is in a variable — it prints at the bottom rather than
@@ -82,7 +93,75 @@ that and does nothing else. Once the file exists it checks:
 What it **cannot** check is whether a condition is *correct* for a given role.
 `".read": "auth != null"` and `".read": "root.child('users').child(auth.uid).child('role').val() === 'admin'"`
 both pass every check above, and only one of them is right for `pos/ledgerEntries`.
-Verifying that needs the Firebase emulator running against real auth tokens.
+
+## Running the rules in the emulator
+
+That gap is what `npm run test:rules` closes. It loads `database.rules.json` into a
+real Realtime Database — the Firebase emulator, so it needs Java — and asks what
+each role may actually read and write. It runs on every pull request.
+
+```sh
+npm run test:rules
+```
+
+Identities are unsigned JWTs passed as `?auth=`. **It has to be `?auth=`.** The
+emulator treats *any* bearer token in an `Authorization` header as the owner
+credential, which bypasses rules altogether: written that way every denial passes
+without testing anything, and a database that is wide open reports as one that is
+locked down. `Bearer owner` is used to seed, and for nothing else.
+
+The suite has two halves, and they answer opposite questions:
+
+- **Coverage.** Every path an app uses is permitted to the app that uses it,
+  derived from the access map so it cannot drift from the code. This is the half
+  that makes tightening a rule safe — a change that locks the café out of its own
+  till fails here rather than at the counter.
+- **The Worker's half of that**, derived from `worker.js` the same way. It matters
+  more here than anywhere, because the Worker's reads fail *silently*: `monLoad`
+  returns `null` on a denied response without saying why, so a rule that shuts the
+  robot out does not break anything visibly — the hourly report just stops finding
+  cash-outs, the monthly refit reads no completions, and nothing anywhere says so.
+- **Denials, and a table of who can read what.** Written by hand, for the reason
+  [`tools/probe-rules.js`](../tools/probe-rules.js) gives: derived from the rules,
+  it would agree with them by construction and check nothing. The table states what
+  *is* true rather than what ought to be, so closing one of the wide rows below
+  fails the suite and brings someone back to update it with the good news.
+
+### The till, and only the till and the owner
+
+`pos` used to grant `.read` to any signed-in role, and a rule cannot be revoked
+lower down, so the ledger, the bills, the drawer and the cash-up archive all came
+with it — to the bar and the kitchen as much as to the counter. The access map says
+neither reads any of it.
+
+Each child is granted on its own now, and the three that carry money are named by
+role rather than by a role merely existing:
+
+| node | who |
+|---|---|
+| `pos/ledgerEntries` | the counter, the owner, and the Worker's hourly report of cash leaving the drawer |
+| `pos/unverified` | the counter and the owner |
+| `pos/eodArchive` | the owner and the Worker — the till writes the day into it and never reads it back |
+| everything else under `pos` | any role |
+
+The same reasoning closed three more: `pushSubscriptions` and `ops/pushHealth` (who
+the café's alerts go to, and whether they are arriving) and `upiRouting/totals`
+(every account's month). The till still reads `upiRouting/totals/{YYYY-MM}`, because
+it needs the running total for the account it is about to charge — it just cannot
+list every month.
+
+**`admin.html` and `analytics.html` check the role themselves, in a browser the
+holder controls.** That is advice until the rules say the same thing, and now they
+do: `npm run test:rules` walks everything those two pages show and fails if any
+other role can reach it.
+
+### One row that is still wider than the café needs
+
+**Every role can read `staff`.** It maps `SHA-256(fixed salt + PIN) → name` and the
+salt is a literal in the page, so any staff account recovers every PIN in under a
+second. It stays open because `pos.html` and `inventory.html` both check PINs
+against it. Restricting the read is not the fix anyway — the check happens in a
+browser — and the section below says what the real one would be.
 
 ## The access map
 
@@ -106,16 +185,31 @@ a role, against the `staff` map.
 
 These come from reading the code, and each one is a question the rules answer:
 
-**1. `orders/pendingWeb` is written by anonymous visitors.**
-That is how web orders arrive, and the ordering page uses `signInAnonymously()`,
-so "anonymous" means anyone at all. A rule here should at minimum constrain the
-shape of what can be pushed. Note that the POS no longer trusts the prices in
-these orders — it re-prices every line against the live menu on accept — but
-nothing stops a stranger filling the node with junk.
+**1 and 2 — the two nodes an anonymous visitor can write.** Answered, and checked
+on every pull request by `npm run test:rules`.
 
-**2. `orders/track/{trackId}` is read *and* written by anonymous visitors.**
-A trackId is the only thing protecting one customer's order from another's.
-Worth confirming a visitor cannot enumerate or overwrite someone else's.
+`orders/pendingWeb` is how web orders arrive and `orders/track` is how a customer
+watches one, and the ordering page signs everyone in with `signInAnonymously()`, so
+"anonymous" is anyone at all. `orders/track` is world-*readable* as well: for a
+while it accepted any JSON of any shape and served it straight back to the internet.
+
+Both now carry a shape. Every field is named and typed, strings are bounded, cart
+lines must be cart lines, and `createdAt` has to be the server's own clock so a
+record cannot be backdated. Anything not named is refused outright. Against the old
+rules, fourteen of the sixteen hostile writes the suite tries were accepted; none
+are now.
+
+The shape is checked **on creation**, which is where the whole exposure is: both
+nodes let a stranger create and never modify (`!data.exists() || <role>`). That
+also means no record already in the database has to satisfy a rule it was not
+written to satisfy — the tightening cannot strand what is already there.
+
+A visitor still cannot overwrite or delete somebody else's order, and cannot
+enumerate `orders/pendingWeb` at all. `orders/track` *is* enumerable — the parent
+`.read` has to be public because a customer scanning a table QR queries the node by
+`table` — which is why nothing identifying may be written into it. The ordering page
+and the POS both replace anything that is not a plain table label with the word
+"Order" before writing.
 
 **3. `staff` is readable by every signed-in role.**
 It maps `SHA-256(fixed salt + PIN) → name`, and the salt is a literal in the
@@ -206,36 +300,84 @@ Two consequences worth keeping in mind when reading the rules:
   role. The parent `users` node stays admin-only, so that grants a lookup by uid,
   never a listing.
 
-## The staff PIN is attribution, not authorisation
+## The staff PIN, and what it now authorises
 
-`staff` maps `SHA-256(fixed salt + PIN) → name`, the salt is a literal in the
-page source, and every signed-in role can read the map. Any staff account can
-therefore recover every PIN in under a second, and PINs gate voids, expenses,
-withdrawals, tip payouts and end-of-day.
+`staff` maps `SHA-256(fixed salt + PIN) → name`, the salt is a literal in the page
+source, and every signed-in role can read the map. Any staff account can therefore
+recover every PIN in under a second.
 
-Restricting that read looks like the fix and mostly is not, because the PIN is
-not what authorises the action. `pos.html` pushes ledger entries straight from
-the browser:
+For a long time that barely mattered, because the PIN was not what authorised
+anything. `pos.html` pushed ledger entries straight from the browser:
 
 ```js
 db.ref('pos/ledgerEntries').push(entry);
 ```
 
-and `pos` is writable by anyone holding a staff role. So a staff member does not
-need anyone's PIN to record a withdrawal against a colleague's name — they can
-write the entry directly. The PIN prompt is a speed bump in the UI, and the name
-it stamps into `reason` is advisory.
+and `pos` is writable by anyone holding a staff role. So a staff member did not need
+anyone's PIN to record a withdrawal against a colleague's name — they could write the
+entry directly. The prompt was a speed bump in a UI the same person controlled.
 
-Making it real means moving those writes into the Worker: verify the staff token
-and the PIN there, write the entry from there, and stop clients writing those
-types at all. That is a change to the till's money path and has not been made.
+**For the three types that take cash out of the drawer, that is no longer true.**
+`expense`, `withdrawal` and `tip_payout` are written by the Cloudflare Worker and by
+nothing else. The till posts a Firebase ID token and the PIN; the Worker verifies
+both, resolves the name from `staff` itself, and writes the ledger line and the
+drawer decrement as one atomic update. The rules refuse those three types from every
+other identity, so the check cannot be skipped by opening devtools.
 
-What has been made is **visibility**. The hourly monitor reports cash leaving the
-drawer — `expense`, `withdrawal`, `tip_payout`, `unpaid_writeoff` — with the
-amount, the reason and the name it claims, so the owner sees it the same hour
-rather than at end-of-day, and the named person can say whether it was them.
-Routine spend under ₹500 is not reported, because a notification nobody reads is
-worse than none; a written-off bill is reported at any size.
+The entry now records two different things: `by`, which is what the PIN said, and
+`byUid`, which is the account that was actually signed in. A PIN can be borrowed; the
+token cannot.
+
+`unpaid_writeoff` is deliberately still client-written. It moves no cash — it records
+a bill that was never paid — and it happens inside end-of-day, which has to be
+completable when the Worker is unreachable. Blocking a cash-up on a network call
+would be a worse failure than the one being fixed. The hourly monitor reports it at
+any size, which is the visibility that covers it.
+
+Everything else in the ledger is still the till's to write, on purpose: a sale has to
+be recordable when the Worker is down, and putting a network hop in front of the
+counter would be a bad trade.
+
+**Stock moved the same way, and further.** `inventory.html` checked a PIN in the page
+and then wrote `inventory/stock` itself, so the prompt was advice twice over: it ran
+in a browser the person filling it in controls, *and* the write did not need it —
+`inventory` was writable by any staff role, so someone covering shrinkage could adjust
+stock directly and leave no log line at all. Stock that moved with nothing explaining
+it is worse than a log line with the wrong name on it.
+
+`inventory/stock` and `inventory/logs` are written by exactly one page, so unlike the
+till there is nothing that has to keep working when the Worker is unreachable — a
+delivery can be logged ten minutes later. That is what made it possible to say the
+robot is the only writer and mean it, which closes the direct-write hole as well as
+the PIN one. The Worker reads the *recipe* rather than being told it, too: a client
+that computes its own deductions can under-report what a batch consumed.
+
+That tablet no longer holds the staff map or the salt at all. It used to download
+every PIN hash in the café to answer a question it was never the right place to
+answer.
+
+### The void, and why it is not the same
+
+The PIN in front of a **void** still runs in `pos.html`. I looked at moving it and
+decided against, which is a different answer from "not yet".
+
+A void's record already carries `deviceUid` — the signed-in account, which a borrowed
+PIN cannot forge — alongside the PIN's name, so its attribution is already real. And
+the thing worth protecting is not the void record: it is `pos/activeTables`, which the
+void mutates. Anyone who can open the till can edit a table directly and never write a
+void record at all. Moving the *record* into the Worker would not close that; closing
+it means putting the Worker in front of every order and every payment, which is a
+network hop in front of the counter and a second thing that has to be up for the café
+to sell anything.
+
+So the void stays where it is, and what makes it safe is that every one is pushed to
+the owner's phone as it happens.
+
+### What `staff` is still readable for
+
+`pos.html` is now the only page that reads it, for that void prompt. Restricting the
+read was never the fix — it would remove the easiest attack, not the design — and the
+sections above are the design being fixed instead.
 
 ## Deploying rules
 

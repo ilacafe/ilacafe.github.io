@@ -80,6 +80,7 @@ Everything talks to the live database, so treat the till pages as live.
 npm install
 npm test              # syntax, settlement, pricing, QR, rules, Worker
 npm run test:browser  # loads the real pages in Chromium (needs a browser download)
+npm run test:rules    # runs database.rules.json in the Firebase emulator (needs Java)
 npm run access-map    # prints every database path each app reads and writes
 npm run bump          # moves every page and build.json to a new build
 ```
@@ -121,6 +122,69 @@ costs money:
   when the live model does not carry those curves. `etaInterp` reads a missing
   curve as zero, so the alarm would come in short and start calling on-time
   tickets late, silently.
+- **web-order payments** — the till knows which bank credits are already spoken
+  for. `payments/claims` is keyed by the bank's own reference, which is not a
+  clock, so a `limitToLast` on it is a limit on keys: after a few hundred credits
+  the visible set stops containing today's, a claimed credit reads as free, and a
+  pending web order is shown "✓ paid" against money the counter has already taken.
+  The claim state is watched per credit in the window instead, and the suite drives
+  the real feed against a stub that sorts the way Firebase does.
+- **kitchen DONE** — one tap on a ticket is one ticket, however many times the
+  button is pressed. The card only fades once the read behind it comes back, so on
+  a slow connection it is still tappable — and a second tap used to ring the
+  counter again and count the station done twice. On a split order that second
+  count tells the customer their food is ready while the bar has not started the
+  drinks. Both kitchen pages carry the same code, so both are checked.
+- **refunds and voids** — the two ways money goes back out are each one atomic
+  write. Flagging the record, reversing the till and writing the compensating
+  ledger line used to be three awaits in a row, so any one of them could be the
+  last to land: a refund recorded but never taken off the UPI total, or taken off
+  and still listed as owed, or a bill reading VOIDED with the till untouched and no
+  button left to finish it. Each said "Nothing was changed — try again", and doing
+  as it asked made the second copy.
+- **unpaid web orders** — a prepaid order that is not paid reaches someone. There
+  are two ways one sits unpaid — the pay link never went out, or it went out and
+  nothing came back — and the POS had an alert for each. Only the first fired: the
+  second waited on `orders/track/{id}/needsManualVerify`, which nothing in this repo
+  has ever written, while the first skipped every order whose link *had* gone out on
+  the grounds that the second covered it. A customer sent a link who never paid
+  produced no alert at all, for as long as the order existed.
+- **rules, in the emulator** — `database.rules.json` is loaded into a real database
+  and asked what each *role* may read and write. The offline suite can only read the
+  file, and `tools/probe-rules.js` asks the live database with no credentials, so it
+  can only ever ask what a stranger can read, after a deploy. This asks the question
+  the other two cannot, on every pull request. Half of it is derived from the access
+  map — every path an app uses must be permitted to the app that uses it, which is
+  what makes tightening a rule safe: a locked-out till fails here rather than at the
+  counter. The Worker gets the same treatment from `worker.js`, and needs it more:
+  its reads fail silently, so a rule that shuts the robot out stops the hourly report
+  and the monthly refit without breaking anything anyone can see. The other half is written by hand, because a list derived from the rules
+  would agree with them by construction and check nothing. It also walks everything
+  `admin.html` and `analytics.html` show and fails if any other role can reach it —
+  those two pages check the role in a browser the holder controls, which is advice
+  until the rules say the same thing.
+- **cash out of the drawer** — `expense`, `withdrawal` and `tip_payout` are written
+  by the Worker and by nothing else. Each sat behind a PIN prompt in the till, and
+  the prompt was advice: `pos` is writable by any staff role, so the entry could be
+  pushed with a colleague's name on it and no PIN at all. The Worker verifies a staff
+  token *and* the PIN, then writes the ledger line and the drawer decrement in one
+  atomic write; the rules refuse those three types from every browser, which is the
+  half that makes the prompt a gate. Everything else in the ledger is still the
+  till's to write — a sale has to be recordable when the Worker is unreachable — and
+  each of those now moves its line and its running total in one write, and says so on
+  screen if that write is refused rather than swallowing it.
+- **stock on and off the shelf** — `inventory/stock` and `inventory/logs` are written
+  by the Worker and by nothing else, so a prep or a delivery cannot be recorded without
+  a PIN and cannot happen without a log line. The prompt used to be advice twice over:
+  it ran in a browser, and `inventory` was writable by any staff role, so the write did
+  not need it. The Worker reads the recipe rather than being told it, and the stock
+  tablet no longer downloads the staff PIN hashes at all.
+- **cash-up** — the day's archive lands before the till is cleared, and the till is
+  cleared before the report is handed off to WhatsApp. That hand-off is a real
+  navigation, and it takes the socket — and any un-acked write still on it — with
+  it. The reset is one atomic update rather than four writes, because a till that
+  comes back half-reset carries yesterday's UPI total into today's takings. A write
+  that never answers ends the cash-up with a message rather than a frozen screen.
 - **write-only paths** — across the pages and the Worker, every database path
   something writes is read back somewhere, and every path something reads is
   written by something. A screen that will always be empty is harder to spot than
@@ -141,9 +205,18 @@ verify.
 
 Rules cascade downwards and cannot be revoked lower down: a `.read` on a parent
 grants read to everything beneath it, whatever the children say. So the public
-read sits on the exact nodes a customer needs and nowhere above them. `npm test`
+read sits on the exact nodes a customer needs and nowhere above them. The same cascade
+is why `pos` no longer carries a blanket `.read`: it handed the ledger, the bills,
+the drawer and the cash-up archive to every signed-in role, including the bar and
+the kitchen, which read none of them. `npm test`
 holds that list — `menu`, `settings`, `eta/model`, `eta/live`, `orders/track` —
 and fails on anything added to it or removed from it.
+
+The two nodes an anonymous visitor can *write* — `orders/pendingWeb` and
+`orders/track` — carry a shape: every field named and typed, strings bounded, cart
+lines that must be cart lines, and a `createdAt` that has to be the server's own
+clock. Checked on creation, which is the whole of what a stranger can do to either
+of them, so nothing already recorded has to satisfy a rule it predates.
 
 ## The Worker
 

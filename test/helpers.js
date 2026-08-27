@@ -104,8 +104,13 @@ function extractFunction(src, name) {
 // Source text of `window.<name> = function (...) { ... }` — the pages assign most of
 // their public entry points that way rather than declaring them, so extractFunction
 // cannot see them.
+//
+// `async` is captured when present, for the reason extractFunction gives: dropping it
+// turns an async function into a sync one returning a Promise nobody awaits. This did
+// not handle it, so every async entry point — refundDone, voidBill, promptEOD — simply
+// could not be reached from a suite at all.
 function extractAssignedFunction(src, name) {
-  const re = new RegExp('window\\.' + name + '\\s*=\\s*function');
+  const re = new RegExp('window\\.' + name + '\\s*=\\s*(async\\s+)?function');
   const m = re.exec(src);
   if (!m) {
     throw new Error(
@@ -113,7 +118,8 @@ function extractAssignedFunction(src, name) {
       'It was renamed or turned into a declaration — update the suite that reads it.');
   }
   const open = src.indexOf('{', src.indexOf('(', m.index));
-  return 'function ' + name + src.slice(src.indexOf('(', m.index), open) +
+  return (m[1] ? 'async ' : '') + 'function ' + name +
+         src.slice(src.indexOf('(', m.index), open) +
          src.slice(open, matchBraces(src, open));
 }
 
@@ -252,6 +258,16 @@ function updateBags(src) {
   return bags;
 }
 
+// The text of `e` when `e` is a single string literal and nothing else, or null.
+// skipString finds where the literal ends; if that is not the end of the expression,
+// what follows is a concatenation and the whole thing is not a key.
+function oneLiteral(e) {
+  if (!/^['"`]/.test(e)) return null;
+  let end;
+  try { end = skipString(e, 0); } catch (err) { return null; }
+  return end === e.length ? e.slice(1, -1) : null;
+}
+
 function joinPath(base, rest) {
   const r = String(rest).replace(/^\/+|\/+$/g, '');
   if (!base) return r;
@@ -271,10 +287,14 @@ function multiPathWrites(src) {
     const base = bags.get(bag);
     const e = expr.trim();
 
-    // 'a/b/c' or `a/b/${x}` — a literal, possibly with a dynamic tail.
-    const lit = /^(['"`])([\s\S]*)\1$/.exec(e);
-    if (lit) {
-      const key = lit[2];
+    // 'a/b/c' or `a/b/${x}` — ONE literal, possibly with a dynamic tail.
+    //
+    // Testing that with /^(['"`])[\s\S]*\1$/ was wrong: 'a/' + k + '/b' also starts and
+    // ends with a quote, so the whole expression was taken as a key and the map grew rows
+    // named after their own source text. The string has to end where the expression does.
+    const lit = oneLiteral(e);
+    if (lit !== null) {
+      const key = lit;
       const dyn = key.includes('${');
       const head = (dyn ? key.slice(0, key.indexOf('${')) : key);
       out.push(joinPath(base, head) + (dyn ? '/$key' : ''));
@@ -295,6 +315,72 @@ function multiPathWrites(src) {
   return out;
 }
 
+// An update can also be handed its object inline, which is the natural shape when
+// the keys are fixed:
+//
+//     db.ref('pos').update({ ledgerEntries: null, bills: null, upiTotal: 0 });
+//
+// That is the same multi-path write as the bag form above, and just as invisible to
+// a scan for db.ref('literal') — the paths are keys, not refs. It reads here as a
+// write to `pos`, which is true and useless: what the rules are reviewed against is
+// which children it clears.
+function inlineUpdateWrites(src) {
+  const out = [];
+  for (const m of src.matchAll(/db\.ref\(\s*(?:(['"`])([^'"`]*)\1)?\s*\)\s*\.update\(\s*\{/g)) {
+    const base = (m[2] || '').replace(/\/+$/, '');
+    // db.ref(`orders/active/${station}/${id}`).update({...}) — the same rule the
+    // literal scan in derivePaths uses: a template segment is covered by its
+    // literal sibling, so placing it under a made-up path would only add noise.
+    if (base.includes('${')) continue;
+    const open = src.lastIndexOf('{', m.index + m[0].length);
+    let body;
+    try { body = src.slice(open + 1, matchBraces(src, open) - 1); } catch (e) { continue; }
+    for (const key of topLevelKeys(body)) {
+      // `orders/active/${station}/${id}/destination` resolves as far as its literal
+      // head and no further, exactly as the bag form above does.
+      const dyn = key.indexOf('${');
+      out.push(joinPath(base, dyn < 0 ? key : key.slice(0, dyn)) + (dyn < 0 ? '' : '/$key'));
+    }
+  }
+  return out;
+}
+
+// The keys of one object literal, ignoring anything nested inside a value. A key
+// the scan cannot read — a computed one — becomes $key rather than being dropped,
+// on the same principle as unresolvedWrites: a map that looks complete and is not
+// is worse than one that says where it stops.
+function topLevelKeys(body) {
+  const keys = [];
+  let depth = 0, i = 0, atKey = true;
+  while (i < body.length) {
+    const c = body[i];
+    if (c === '/' && body[i + 1] === '/') { const nl = body.indexOf('\n', i); if (nl < 0) break; i = nl; continue; }
+    if (c === '/' && body[i + 1] === '*') { const e = body.indexOf('*/', i); if (e < 0) break; i = e + 2; continue; }
+    if (c === '"' || c === "'" || c === '`') {
+      if (depth === 0 && atKey) {
+        const end = skipString(body, i);
+        const after = /^\s*:/.test(body.slice(end));
+        if (after) { keys.push(body.slice(i + 1, end - 1)); atKey = false; i = end; continue; }
+      }
+      i = skipString(body, i); continue;
+    }
+    if (c === '{' || c === '[' || c === '(') {
+      if (depth === 0 && atKey && c === '[') { keys.push('$key'); atKey = false; }
+      depth++; i++; continue;
+    }
+    if (c === '}' || c === ']' || c === ')') { depth--; i++; continue; }
+    if (depth === 0 && c === ',') { atKey = true; i++; continue; }
+    if (depth === 0 && atKey && /[A-Za-z_$]/.test(c)) {
+      const w = /^[A-Za-z_$][\w$]*/.exec(body.slice(i))[0];
+      if (/^\s*:/.test(body.slice(i + w.length))) { keys.push(w); atKey = false; i += w.length; continue; }
+      atKey = false; i += w.length; continue;
+    }
+    if (depth === 0 && !/\s/.test(c)) atKey = false;
+    i++;
+  }
+  return keys;
+}
+
 // The keys the scan above could not place. Reported rather than dropped, so the
 // access map can say how much of itself is missing instead of looking complete.
 function unresolvedWrites() {
@@ -308,11 +394,56 @@ function unresolvedWrites() {
       if (!bags.has(bag)) continue;
       const e = expr.trim();
       const base = bags.get(bag);
-      if (/^(['"`])[\s\S]*\1$/.test(e)) continue;                 // literal
+      if (oneLiteral(e) !== null) continue;                       // literal
       if (/^(['"`])[^'"`]*\1\s*\+/.test(e)) continue;             // literal head
       if (base && !e.includes('+')) continue;                       // one child of a known base
       out.push({ file, role, expr: e });
     }
+  }
+  return out;
+}
+
+// Which paths the Worker touches, and how.
+//
+// It is not one of the apps, so derivePaths cannot see it — and it is the component
+// most likely to have a write nobody reads, because none of it is on a screen. It is
+// also the one whose reads fail SILENTLY: monLoad returns null on a denied response,
+// so a rule that shuts the robot out turns the hourly report into a quiet nothing.
+// Both suites that care read this from here rather than keeping a copy each.
+function deriveWorkerPaths() {
+  const src = fs.readFileSync(path.join(ROOT, 'worker', 'worker.js'), 'utf8');
+  const out = new Map();
+  const touch = (p, kind) => {
+    const key = p.replace(/^\//, '');
+    if (!key) return;                       // the root PATCH, handled below
+    const rec = out.get(key) || { read: false, write: false };
+    rec[kind] = true;
+    out.set(key, rec);
+  };
+  for (const m of src.matchAll(/DB_URL \+ '([^']+)'/g)) {
+    let p = m[1].replace(/\.json.*$/, '');
+    p = p.endsWith('/') && p !== '/' ? p + '$key' : p;
+    const after = src.slice(m.index, m.index + 260);
+    touch(p, /method\s*:\s*'(PUT|PATCH|POST|DELETE)'/.test(after) ? 'write' : 'read');
+  }
+  // monLoad only ever reads.
+  for (const m of src.matchAll(/monLoad\([^,]+,\s*'([^']+)'\)/g)) touch(m[1], 'read');
+
+  // The multi-path writes, which go out as one PATCH at the root and so carry their
+  // paths in the object keys rather than in the URL. This used to be a hardcoded
+  // `monitor` — true when the monitor was the only handler that wrote that way, and
+  // quietly wrong the moment a second one did. Both the cash-out and the stock log
+  // write like this now, and neither was visible.
+  // One pass: a literal followed by + has a dynamic tail and resolves as far as its
+  // head, exactly as the page-side deriver treats the same shape. Two passes over the
+  // same matches produced both `inventory/logs/` and `inventory/logs/$key`, and the
+  // first of those is not a path.
+  for (const m of src.matchAll(/updates\[\s*'([^']*)'\s*(\+)?/g)) {
+    const key = m[1];
+    const dyn = key.indexOf('${');
+    const head = dyn < 0 ? key : key.slice(0, dyn);
+    const open = m[2] || dyn >= 0;
+    touch('/' + head.replace(/\/+$/, '') + (open ? '/$key' : ''), 'write');
   }
   return out;
 }
@@ -322,7 +453,7 @@ function derivePaths() {
   for (const [file, role] of Object.entries(APPS)) {
     const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
 
-    for (const p of multiPathWrites(src)) {
+    for (const p of multiPathWrites(src).concat(inlineUpdateWrites(src))) {
       if (!found.has(p)) found.set(p, { read: new Set(), write: new Set(), writes: [] });
       found.get(p).write.add(role);
       found.get(p).writes.push({ role, file, snippet: 'multi-path update' });
@@ -355,4 +486,4 @@ function derivePaths() {
   return found;
 }
 
-module.exports = { ROOT, readPage, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, stripComments, APPS, derivePaths, unresolvedWrites };
+module.exports = { ROOT, readPage, deriveWorkerPaths, extractFunction, extractAssignedFunction, buildModule, loadQrEncoder, suite, stripComments, APPS, derivePaths, unresolvedWrites };
