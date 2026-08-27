@@ -19,7 +19,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { ROOT, suite, APPS, derivePaths, stripComments } = require('./helpers');
+const { ROOT, suite, APPS, derivePaths, readPage, stripComments } = require('./helpers');
 
 const RULES_FILE = path.join(ROOT, 'database.rules.json');
 
@@ -305,6 +305,42 @@ unruled.forEach(u => note('no rule governs: ' + u));
   check('and the node above each public wildcard is checked too',
         unguarded.length === 0, unguarded.join(', '));
   note('a public read one level up is the same leak, served in a single request');
+}
+
+// ------------------------------------------------- nothing fell out of the map
+// Everything above, and the whole emulator suite, is only as good as the map the
+// paths come from. That map is built by scanning for db.ref('literal') and then
+// looking at what follows for a read or a write verb — and a site whose verb it
+// does not recognise is dropped, silently, straight out of every check downstream.
+//
+// That is not a hypothetical shape of bug in this repo. The emulator's coverage half
+// looked each role up in a table of identities and skipped a miss, so `customer
+// (anonymous)` matched nothing and eighteen questions about the one caller with no
+// credentials were never asked, for as long as it had existed.
+//
+// So: every path a page names must survive into the map, as itself or as the parent
+// of something. A site whose path another site already covers is fine — what is not
+// fine is a path that no longer appears anywhere.
+{
+  const derived = [...used.keys()];
+  const missing = [];
+
+  for (const [file] of Object.entries(APPS)) {
+    const src = readPage(file);
+    for (const m of src.matchAll(/db\.ref\(\s*(['"`])([^'"`]*)\1/g)) {
+      // Cut at a template hole and trim the separator: `orders/track/` + id is a
+      // claim about orders/track, and the map records it as orders/track/$key.
+      let head = m[2].split('${')[0].replace(/\/+$/, '');
+      if (!head || head.startsWith('.info')) continue;      // .info is always readable
+      if (derived.some(k => k === head || k.startsWith(head + '/'))) continue;
+      missing.push(file + ' names ' + head + ', and nothing in the map does');
+    }
+  }
+
+  check('every path a page names survives into the access map',
+        missing.length === 0, [...new Set(missing)].join('; '));
+  note('a path the scanner drops is a path no rules check ever asks about, and');
+  note('nothing anywhere would say so — the map would simply be smaller');
 }
 
 note('this checks shape and coverage only — whether a condition is CORRECT for a');
