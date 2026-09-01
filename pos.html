@@ -442,6 +442,39 @@
         .ledger-income { color: white; font-weight: bold; }
         .ledger-out { color: rgba(255, 255, 255, 0.6); }
         .ledger-meta { font-size: 0.75rem; opacity: 0.68; display: block; margin-top: 2px;}
+
+        /* SOMETHING TO SEE WHEN YOU TAB
+           The sign-in box sets outline:none on both of its fields, and nothing replaced
+           it. Staff sign these tablets in with a Bluetooth keyboard as often as with the
+           on-screen one, and with the ring gone there was no way to tell whether the
+           next thing typed was going into Email or into Password — a password typed into
+           the email field is shown on screen, and the one visible clue that it happened
+           was missing.
+
+           :focus-visible and not :focus, so a tap on a touchscreen still draws nothing
+           on a button: the browser only matches it where an indicator is wanted. A text
+           field is always somewhere it is wanted, and matches on a tap too.
+
+           The second rule is not a duplicate. `#login-box input` carries an id, which
+           outranks a bare `:focus-visible` however far down the file it sits, so the
+           general rule above lands on every control on the page EXCEPT the two this was
+           written for. It has to be said again at least as specifically. */
+        :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        #login-box input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        /* The card is focused when its dialog opens, so that the next Tab is inside it.
+           That is not a control anyone chose, and it must not be ringed. */
+        .modal-content:focus { outline: none; }
+
+        /* Reduce Motion, as the phone or the tablet asked for it. Duration rather than
+           `animation: none`, so a zero-length transition still fires and still ends. */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
     </style>
 
 </head>
@@ -455,8 +488,8 @@
         <template id="login-box-template">
             <div id="login-box">
                 <h2>ILA Staff</h2>
-                <input type="email" id="login-email" placeholder="Email" autocomplete="username">
-                <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                <input type="email" id="login-email" aria-label="Email" placeholder="Email" autocomplete="username">
+                <input type="password" id="login-password" aria-label="Password" placeholder="Password" autocomplete="current-password">
                 <button onclick="window.signInStaff()">Sign In</button>
                 <div id="login-error"></div>
             </div>
@@ -810,7 +843,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.3"></script>
+    <script src="/build-check.js" data-build="2026-09-01.4"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -1946,7 +1979,7 @@
             ensureWebVerifyFeeds();
             renderWebVerifyBadges();
             renderCustomerBadges();
-            document.getElementById('web-orders-modal').classList.add('active');
+            openModal('web-orders-modal');
         };
 
         // Looks up each web order's phone against the repeat counter. Read per card on open
@@ -2732,26 +2765,95 @@
             window.addEventListener('orientationchange', () => setTimeout(set, 250));
         })();
 
-        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        // WHAT OPENED THIS, SO IT CAN BE GIVEN FOCUS BACK
+        // The till is a tablet, and it is also a keyboard: cashiers type into it all day,
+        // and several of these dialogs exist to be typed into. Opening one left focus on
+        // the floor plan behind it, so the first thing to do in a dialog was always to
+        // reach up and touch it — and closing dropped focus at the top of the document,
+        // which is fourteen Tab presses away from the table that was just settled.
+        const modalOpener = {};
+
+        function openModal(id) {
+            const ov = document.getElementById(id);
+            modalOpener[id] = document.activeElement;
+            ov.classList.add('active');
+            const card = ov.querySelector('.modal-content');
+            if (card) card.focus();
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+            const back = modalOpener[id];
+            delete modalOpener[id];
+            if (back && back.isConnected) back.focus();
+        }
 
         // Tap the backdrop to dismiss. Only fires when the tap lands on the overlay itself, so a
         // tap anywhere inside the card is unaffected. Some modals need their own teardown rather
         // than a bare close, and one is deliberately excluded.
-        (function bindBackdropClose(){
+        //
+        // Escape is bound to the same act, obeying the same two maps: on a till with a
+        // keyboard it was the one key that did nothing, and the way out of a dialog opened
+        // by mistake was to find the ✖ CLOSE at the bottom of a card that may be scrolled.
+        // Tab is held inside the open dialog, because the floor plan behind it is a live
+        // set of buttons and a keyboard could reach every one of them through the overlay.
+        (function bindDialogs(){
             const CUSTOM = {
                 'split-bill-modal':  () => window.closeSplitBill(),      // clears the share and reopens checkout
                 'transaction-modal': () => window.closeTransactionModal()// returns you to the Ledger
             };
             // The UPI modal is held out to the customer while they scan. A stray touch on the
             // brown around the QR must not cancel the payment watch mid-scan — that one keeps
-            // its explicit CANCEL.
+            // its explicit CANCEL. Escape is excluded for the same reason: the tablet is in
+            // someone else's hands.
             const NEVER = { 'upi-modal': true };
+
+            const dismiss = (ov) => { if (CUSTOM[ov.id]) CUSTOM[ov.id](); else closeModal(ov.id); };
+
+            // Programmatic focus only — the card is where focus starts, not a Tab stop.
+            document.querySelectorAll('.modal-overlay .modal-content')
+                    .forEach(card => card.setAttribute('tabindex', '-1'));
+
+            const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), ' +
+                              'select:not([disabled]), textarea:not([disabled]), ' +
+                              '[tabindex]:not([tabindex="-1"])';
+            // Last in document order, so a dialog opened over another wins — checkout over
+            // open tables, split over checkout.
+            const topmost = () => [...document.querySelectorAll('.modal-overlay.active')].pop();
+            // getClientRects and not offsetParent: several of these keep blocks in the
+            // document and hide the ones they are not showing, and a hidden field is not a
+            // Tab stop.
+            const reachable = ov => [...ov.querySelectorAll(FOCUSABLE)]
+                                        .filter(el => el.getClientRects().length > 0);
+
             document.querySelectorAll('.modal-overlay').forEach(ov => {
                 ov.addEventListener('click', e => {
                     if (e.target !== ov) return;             // the tap was inside the card
                     if (NEVER[ov.id]) return;
-                    if (CUSTOM[ov.id]) CUSTOM[ov.id](); else closeModal(ov.id);
+                    dismiss(ov);
                 });
+            });
+
+            document.addEventListener('keydown', e => {
+                const ov = topmost();
+                if (!ov) return;
+
+                if (e.key === 'Escape') {
+                    if (NEVER[ov.id]) return;
+                    e.preventDefault();
+                    dismiss(ov);
+                    return;
+                }
+
+                if (e.key !== 'Tab') return;
+                const stops = reachable(ov);
+                if (!stops.length) return;
+                // Focus sitting on the card itself counts as neither end: Tab from there
+                // should reach the first control and Shift+Tab the last, rather than
+                // leaving by the back door.
+                const at = stops.indexOf(document.activeElement);
+                if (e.shiftKey && at <= 0) { e.preventDefault(); stops[stops.length - 1].focus(); }
+                else if (!e.shiftKey && (at === -1 || at === stops.length - 1)) { e.preventDefault(); stops[0].focus(); }
             });
         })();
 
@@ -2799,7 +2901,7 @@
             window.pendingItemPrice = price; 
             window.isBeveragePending = requiresSweetness;
             document.getElementById('remark-item-title').innerText = finalName; 
-            document.getElementById('remark-modal').classList.add('active');
+            openModal('remark-modal');
         };
 
         window.confirmAddItem = function() {
@@ -2872,7 +2974,7 @@
                 }
             }
             list.innerHTML = rows;
-            document.getElementById('review-cart-modal').classList.add('active');
+            openModal('review-cart-modal');
         };
 
         // ===== ADD-ONS ON A CART LINE =====
@@ -2886,7 +2988,7 @@
             const line = window.cart[key]; if (!line) return;
             window.addonKey = key;
             renderAddons();
-            document.getElementById('addon-modal').classList.add('active');
+            openModal('addon-modal');
         };
         function renderAddons(){
             const line = window.cart[window.addonKey];
@@ -3060,7 +3162,7 @@
                 else if (box) { box.style.display = 'none'; }
             } catch(e){ /* estimate is best-effort; never block sending */ }
             renderTableGrid('sender-table-grid', "window.sendOrder");
-            document.getElementById('table-modal').classList.add('active');
+            openModal('table-modal');
         };
 
         // Ten identical buttons told you nothing. Showing what is already on each table means
@@ -3104,7 +3206,7 @@
                 }
             }
             list.innerHTML = rows;
-            document.getElementById('active-bills-modal').classList.add('active');
+            openModal('active-bills-modal');
         };
 
         function renderCheckoutReceipt(tableID) {
@@ -3164,7 +3266,7 @@
             window.checkoutTableID = tableID; 
             document.getElementById('checkout-phone').value = ""; 
             renderCheckoutReceipt(tableID);
-            closeModal('active-bills-modal'); document.getElementById('checkout-modal').classList.add('active');
+            closeModal('active-bills-modal'); openModal('checkout-modal');
         };
 
         window.removeTableItem = async function(tableID, itemName) {
@@ -3260,7 +3362,7 @@
                 db.ref('pos/activeTables/' + window.checkoutTableID + '/shares/count').set(t.shares.count);
             }
             renderSplit();
-            closeModal('checkout-modal'); document.getElementById('split-bill-modal').classList.add('active');
+            closeModal('checkout-modal'); openModal('split-bill-modal');
         };
         window.closeSplitBill = function() { window.splitSel = {}; window.splitOther = 0; window.splitFlow = false; closeModal('split-bill-modal'); window.openCheckout(window.checkoutTableID); };
         // After a share is taken, return to the split screen rather than the checkout. A five-way
@@ -3568,7 +3670,7 @@
             hideStaffActions();   // every payment starts in customer-facing state
             window.renderUPIQR();
             closeModal('checkout-modal'); closeModal('split-bill-modal');
-            document.getElementById('upi-modal').classList.add('active');
+            openModal('upi-modal');
         };
 
         // Rebuilds the QR for base+tip and restarts the watcher on the NEW amount. It has to be
@@ -4466,7 +4568,7 @@
             if (window.pastBills.length === 0) { rows = "<p style='opacity:0.5;'>No logs.</p>"; } 
             else { window.pastBills.forEach(bill => { rows += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${escapeHTML(bill.table)}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
             list.innerHTML = rows;
-            document.getElementById('past-bills-modal').classList.add('active');
+            openModal('past-bills-modal');
         };
 
         window.viewPastBill = function(id) {
@@ -4481,7 +4583,7 @@
             // prefill from the order if we captured it — web takeaway/delivery carries the number,
             // so "Send Receipt" is one tap instead of retyping it from memory
             document.getElementById('past-bill-phone').value = bill.phone || "";
-            closeModal('past-bills-modal'); document.getElementById('view-past-bill-modal').classList.add('active');
+            closeModal('past-bills-modal'); openModal('view-past-bill-modal');
         };
 
         window.sendPastBillWhatsApp = function() {
@@ -4584,8 +4686,8 @@
 
         // .active FIRST: renderLedger() now no-ops while the Ledger is closed, so rendering
         // before showing would have left it empty until the next data change.
-        window.openCashManagement = function() { document.getElementById('cash-modal').classList.add('active'); renderLedger(); renderTipPool(); };
-        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; if (window.ilaPin) window.ilaPin.clear(document.getElementById('transaction-pin')); else document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); document.getElementById('transaction-modal').classList.add('active'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
+        window.openCashManagement = function() { openModal('cash-modal'); renderLedger(); renderTipPool(); };
+        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; if (window.ilaPin) window.ilaPin.clear(document.getElementById('transaction-pin')); else document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); openModal('transaction-modal'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
         window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
 
         window.confirmTransaction = async function() {
@@ -4836,7 +4938,7 @@
         window.openMoveTable = function() {
             renderTableGrid('move-table-grid', "window.confirmMoveTable");
             closeModal('checkout-modal'); 
-            document.getElementById('move-table-modal').classList.add('active');
+            openModal('move-table-modal');
         };
 
         window.confirmMoveTable = function(newTableID) {

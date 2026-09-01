@@ -218,6 +218,36 @@
             .kpi-row { grid-template-columns: 1fr 1fr; }
             .grid2 { grid-template-columns: 1fr; }
         }
+
+        /* SOMETHING TO SEE WHEN YOU TAB
+           The sign-in box sets outline:none on both of its fields, and nothing replaced
+           it. Staff sign these tablets in with a Bluetooth keyboard as often as with the
+           on-screen one, and with the ring gone there was no way to tell whether the
+           next thing typed was going into Email or into Password — a password typed into
+           the email field is shown on screen, and the one visible clue that it happened
+           was missing.
+
+           :focus-visible and not :focus, so a tap on a touchscreen still draws nothing
+           on a button: the browser only matches it where an indicator is wanted. A text
+           field is always somewhere it is wanted, and matches on a tap too.
+
+           The second rule is not a duplicate. `#login-box input` carries an id, which
+           outranks a bare `:focus-visible` however far down the file it sits, so the
+           general rule above lands on every control on the page EXCEPT the two this was
+           written for. It has to be said again at least as specifically. */
+        :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        #login-box input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+        /* Reduce Motion, as the phone or the tablet asked for it. Duration rather than
+           `animation: none`, so a zero-length transition still fires and still ends. */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -230,8 +260,8 @@
         <template id="login-box-template">
             <div id="login-box">
                 <img src="logo.png" alt="ILA" width="1200" height="427" decoding="async" style="max-width: 180px; height: auto; margin: 0 auto 22px auto; display:block;">
-                <input type="email" id="login-email" placeholder="Email" autocomplete="username">
-                <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                <input type="email" id="login-email" aria-label="Email" placeholder="Email" autocomplete="username">
+                <input type="password" id="login-password" aria-label="Password" placeholder="Password" autocomplete="current-password">
                 <button onclick="window.signIn()">Sign In</button>
                 <div id="login-error"></div>
             </div>
