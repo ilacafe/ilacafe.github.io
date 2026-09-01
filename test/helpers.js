@@ -132,16 +132,15 @@ function buildModule(sources, globals, exportNames) {
   return new Function(...names, body)(...names.map(n => globals[n]));
 }
 
-// The QR encoder is an IIFE inside pos.html that exports to module.exports when
-// one exists and to window otherwise. `module` is shadowed as undefined so it
-// takes the window branch and we get the same object a browser would.
+// The QR encoder is an IIFE in /qr.js that exports to module.exports when one
+// exists and to window otherwise. `module` is shadowed as undefined so it takes
+// the window branch and we get the same object a browser would.
+//
+// It used to be read out of pos.html. It moved to its own file when the customer
+// app started drawing the same code, so both pages load one encoder rather than
+// carrying a copy each.
 function loadQrEncoder(opts) {
-  const src = readPage('pos.html');
-  const start = src.indexOf('// ===== QR ENCODER');
-  if (start < 0) throw new Error('QR encoder block not found in pos.html');
-  const end = src.indexOf('let qrToken = 0;', start);
-  if (end < 0) throw new Error('could not find the end of the QR encoder block in pos.html');
-  let body = src.slice(start, end);
+  let body = readPage('qr.js');
 
   // Forcing a mask is only for the reference comparison: two encoders can pick
   // different (both valid) masks, and comparing modules is only meaningful when

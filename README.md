@@ -20,6 +20,7 @@ the file the counter loads.
 | `analytics.html` | owner | sales history, demand model, cash-up archive, Worker health |
 | `sw.js` | — | push notifications, and caches the app shell |
 | `build-check.js` | — | tells a screen that has been open all day that a newer build exists |
+| `qr.js` | — | draws the UPI payment code, on the till and on the customer's phone |
 
 Each page is self-contained: its own HTML, CSS and JavaScript in one file, with
 Firebase loaded from a CDN. Sign-in is Firebase Auth; the role in
@@ -53,6 +54,50 @@ rules are the only thing that actually stops a read or a write, which is why
 **One component is not a browser.** The Cloudflare Worker in [`worker/`](worker/)
 holds the `robot@cafeila.app` credential and is the only thing that can refit the
 ETA model or record a bank credit. It is also the only place a secret can live.
+
+### Taking money
+
+Every payment the café takes is the same shape: **a UPI code, on a screen, scanned
+by a camera on a different device.** At the counter that is the till's screen and
+the customer's phone. For a takeaway or delivery ordered from `index.html` — which
+is prepaid, because an uncollected order costs food and a slot — it is the
+customer's own screen and a second phone, with the UPI ID printed under the code
+for anyone who only has one.
+
+There is exactly one thing that does not work, and everything above is shaped
+around it: **a `upi://` link fired from a web page cannot pay us.** From a page it
+is an NPCI *Intent* (initiation mode 04), and OC/76A bars mode 04/05 to a P2P
+payee — the app opens, the customer enters their PIN, and the payment is refused.
+No amount of rebuilding the string changes that. So no page here offers to open a
+UPI app on the device it is running on. Collection used to be handed to a WhatsApp
+pay link for exactly this reason (a link tapped inside a native app does complete),
+and in practice that failed for a different reason: WhatsApp renders a link from an
+unsaved number as dead text, and a first-time customer is an unsaved number. That
+route is gone. What is left is the one the counter has always used.
+
+`qr.js` is the encoder both pages draw with — one implementation, because a wrong
+QR is worse than a missing one: it scans, and it pays the wrong thing or nothing.
+
+The ordering page picks the VPA off `settings/upiList` (the weighted routing list —
+picking from it uniformly *is* headroom-weighted routing) and writes it onto the
+order together with `payLinkSentAt`, the moment the customer was shown a code, in
+the same push that creates the order. It has to be the same push: under the rules
+an anonymous browser may create an order and not touch it again. The till's matcher
+requires both fields, and refuses to match an order that has neither — without them
+an order would match a bank credit on amount alone and could take money belonging
+to another bill.
+
+**That VPA is written by a stranger's browser**, so the matcher does not take it on
+trust either: it also refuses any order billed to a VPA the café does not hand out.
+Without that, anyone could push an order billed to a VPA of their own, never pay,
+and wait — `upiBankMatch` cannot catch it, because an unknown VPA is not in
+`upiRouting/config` and that filter fails *open* by design. The next genuine payment
+of the same amount would be booked against their order and the real one left
+unverified.
+
+Nothing about the *staff* side of this is automatic. The till shows a live
+paid/unpaid badge per web order, the customer's phone number to call, and raises a
+push when an order has been billed for ten minutes with no matching credit.
 
 **Three things deploy separately**, and forgetting this is the most common way to
 be confused by this repo:
@@ -97,7 +142,9 @@ costs money:
 - **pricing** — a web order is priced from the menu, never from the numbers the
   customer's browser sent.
 - **QR** — the payment code is checked against a reference encoder, decoded back
-  by an independent decoder, and rendered on a real page with the network off.
+  by an independent decoder, and rendered on both real pages with the network off.
+  The customer's page is checked for one thing more: the UPI ID and amount printed
+  beside the code are the same payment the code encodes.
 - **rules** — see below.
 - **Worker** — no secret is ever a literal in `worker/worker.js` (the repo is
   served raw, so that file is public), the recalibration route is not gated by
@@ -179,6 +226,17 @@ costs money:
   when the live model does not carry those curves. `etaInterp` reads a missing
   curve as zero, so the alarm would come in short and start calling on-time
   tickets late, silently.
+- **web orders arrive billed** — a takeaway ordered from a phone reaches the till
+  carrying the VPA it is billed to and the moment the customer was shown a code, in
+  the same write that creates it, on the server's clock rather than the phone's.
+  Those two fields are the whole of what makes a web payment verifiable, and if the
+  write regresses nothing announces it: orders keep being placed and customers keep
+  paying, and every one of them silently stops auto-verifying. The suite drives the
+  real ordering page through a real cart and reads what it asked the database to
+  store. It also checks the code drawn is a code for that VPA and that total, that a
+  malformed routing entry can never end up inside the payment string, and that the
+  code goes the moment the money is seen — one still on screen is an invitation to
+  pay twice.
 - **web-order payments** — the till knows which bank credits are already spoken
   for. `payments/claims` is keyed by the bank's own reference, which is not a
   clock, so a `limitToLast` on it is a limit on keys: after a few hundred credits
@@ -200,11 +258,11 @@ costs money:
   button left to finish it. Each said "Nothing was changed — try again", and doing
   as it asked made the second copy.
 - **unpaid web orders** — a prepaid order that is not paid reaches someone. There
-  are two ways one sits unpaid — the pay link never went out, or it went out and
+  are two ways one sits unpaid — nothing ever billed it, or it was billed and
   nothing came back — and the POS had an alert for each. Only the first fired: the
   second waited on `orders/track/{id}/needsManualVerify`, which nothing in this repo
-  has ever written, while the first skipped every order whose link *had* gone out on
-  the grounds that the second covered it. A customer sent a link who never paid
+  has ever written, while the first skipped every order that *had* been billed on
+  the grounds that the second covered it. A customer who was asked and never paid
   produced no alert at all, for as long as the order existed.
 - **rules, in the emulator** — `database.rules.json` is loaded into a real database
   and asked what each *role* may read and write. The offline suite can only read the

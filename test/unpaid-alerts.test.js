@@ -1,15 +1,22 @@
 // A prepaid web order that is not paid has to reach someone.
 //
 // Takeaway and delivery are paid up front, and there are two ways one sits unpaid:
-// the pay link never went out, or it went out and nothing came back. The POS had an
+// nothing ever billed it, or it was billed and nothing came back. The POS had an
 // alert for each. Only the first one worked.
+//
+// payLinkSentAt is the moment the customer was SHOWN a payment code. The customer's
+// own app stamps it now, in the same push that creates the order, so an order that
+// arrives without it is one nothing ever asked for money — and wvFindMatch will not
+// match such an order to any credit, so it can never auto-verify. It used to be
+// stamped by a staff tap on a WhatsApp pay-link button, which is gone; what the
+// field means to this suite is unchanged.
 //
 // The second watched orders/track/{id}/needsManualVerify, and nothing in the repo
 // ever wrote that flag — it was to be set by the customer's app at 120s, and that
-// app deliberately does not, because it cannot know whether the link has even been
-// sent. So the read returned null forever. Worse, the first alert skipped every
-// order whose link HAD gone out, on the grounds that other alerts covered it:
-// a customer who was sent a link and never paid produced no alert at all.
+// app deliberately does not, because a phone cannot see the café's bank. So the read
+// returned null forever. Worse, the first alert skipped every order that HAD been
+// billed, on the grounds that other alerts covered it: a customer who was shown a
+// code and never paid produced no alert at all.
 //
 // write-only.test.js could not see this. It asks whether a path something reads is
 // written somewhere, and orders/track/{id} certainly is — by five other writers.
@@ -57,28 +64,30 @@ const NOW = 1756200000000;
 const ORDER = (extra) => Object.assign(
   { orderType: 'Takeaway', tableOrAddress: 'Takeaway', total: 480, phone: '9990001111', createdAt: NOW }, extra);
 
-// ------------------------------------------------- the link never went out
+// --------------------------------------------- nothing ever billed the order
 {
   const t = till({ o1: ORDER() });
   t.at(NOW + 4 * MIN);
-  check('a link not yet sent is left alone for the first few minutes', t.pushes.length === 0, t.titles().join(', '));
+  check('an order nothing billed is left alone for the first few minutes', t.pushes.length === 0, t.titles().join(', '));
   t.at(NOW + 6 * MIN);
   check('and is reported once it has been waiting',
-        t.pushes.length === 1 && /never sent/i.test(t.pushes[0].title), t.titles().join(', '));
+        t.pushes.length === 1 && /never billed/i.test(t.pushes[0].title), t.titles().join(', '));
+  check('and the message says why it matters — this one cannot auto-verify at all',
+        /cannot auto-verify/i.test(t.pushes[0].body), t.pushes[0].body);
   t.at(NOW + 30 * MIN);
   check('once, not every minute', t.pushes.length === 1, t.pushes.length + ' push(es)');
 }
 
-// --------------------------------------- the link went out, nothing came back
+// --------------------------------------- the code went up, nothing came back
 {
   const t = till({ o1: ORDER({ payLinkSentAt: NOW + 2 * MIN }) });
   t.at(NOW + 8 * MIN);
-  check('a link just sent is given time to be paid', t.pushes.length === 0, t.titles().join(', '));
+  check('a code just shown is given time to be paid', t.pushes.length === 0, t.titles().join(', '));
   t.at(NOW + 13 * MIN);
-  check('a link sent and unpaid IS reported',
+  check('a code shown and unpaid IS reported',
         t.pushes.length === 1 && /still unpaid/i.test(t.pushes[0].title), t.titles().join(', '));
   note('this was the alert that could never fire — it waited on a flag nobody wrote');
-  check('and the message says how long ago the link went, not how old the order is',
+  check('and the message says how long ago the customer was asked, not how old the order is',
         /11 min ago/.test(t.pushes[0].body), t.pushes[0].body);
   check('the customer’s number rides along, so it can be chased from a lock screen',
         /9990001111/.test(t.pushes[0].body));
@@ -105,10 +114,10 @@ const ORDER = (extra) => Object.assign(
 
 // ------------------------------------------------------- the gap that existed
 {
-  // The exact order the old code was silent about: link sent, never paid.
+  // The exact order the old code was silent about: billed, never paid.
   const t = till({ o1: ORDER({ payLinkSentAt: NOW }) });
   for (let m = 1; m <= 90; m++) t.at(NOW + m * MIN);
-  check('an hour and a half of a sent-and-unpaid order raises exactly one alert',
+  check('an hour and a half of a billed-and-unpaid order raises exactly one alert',
         t.pushes.length === 1 && /still unpaid/i.test(t.pushes[0].title),
         t.pushes.length + ' push(es): ' + t.titles().join(', '));
   note('the old code raised none, for as long as the order existed');

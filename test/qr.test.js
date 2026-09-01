@@ -110,7 +110,7 @@ function render(code, scale, quiet) {
 
 // ---------------------------------------------------------------- C
 {
-  const body = extractFunction(readPage('pos.html'), 'penalty');
+  const body = extractFunction(readPage('qr.js'), 'penalty');
   // The four rule weights are injected so a single rule can be isolated by
   // zeroing the others' contribution and taking the difference.
   const build = (n1, n2, n3, n4) =>
