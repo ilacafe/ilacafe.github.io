@@ -126,6 +126,13 @@ const AUDIT = () => {
     // aria-hidden text is decoration the page has already declared as such.
     if (el.closest('[disabled]') || el.closest('[aria-hidden="true"]')) continue;
 
+    // And the build stamp, which is not content: a version string nobody reads in
+    // the course of using the page, looked up maybe twice a year. Quiet in the
+    // corner is what it owes a customer reading a menu. The exemption is not free —
+    // the check below requires the stamp to come up to full white when it is
+    // touched, hovered or tabbed to, so looking it up still answers the question.
+    if (el.closest('.build-stamp')) continue;
+
     const cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || cs.display === 'none') continue;
     if (!el.getClientRects().length) continue;
@@ -196,6 +203,29 @@ const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
           list.length + ' below the line\n         ' + detail);
 
     await ctx.close();
+  }
+
+  // ------------------------------------------- the one exemption, and its condition
+  // A build stamp may be faint only because looking at it stops being faint. If that
+  // ever quietly becomes "faint, full stop", this is what says so.
+  {
+    const bad = [];
+    let stamped = 0;
+    for (const page of PAGES) {
+      const src = fs.readFileSync(path.join(ROOT, page), 'utf8');
+      // Not every page shows one — the stock tablet carries no build of its own, and
+      // build-freshness.test.js is what holds that side of it. This only asks about
+      // the pages that do show one.
+      if (!/class="[^"]*\bbuild-stamp\b/.test(src)) continue;
+      stamped++;
+      const lit = /\.build-stamp:(?:hover|focus|active)[^{,]*(?:,[^{]*)?\{[^}]*opacity:\s*1/.test(src);
+      if (!lit) bad.push(page + ': the stamp never comes up to full opacity');
+    }
+    check('the build stamp is faint only because looking at it is not',
+          bad.length === 0 && stamped > 0,
+          stamped === 0 ? 'no page shows a build stamp at all' : bad.join(', '));
+    note(stamped + ' pages show one');
+    note('exempt from contrast, on the condition that hover, focus or touch answers');
   }
 
   // ------------------------------------------------ what the browser cannot reach

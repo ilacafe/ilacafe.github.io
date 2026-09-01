@@ -145,19 +145,23 @@
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
            #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
-           message that tells someone why they cannot get in. No red can fix that
-           here: white itself is only 4.68:1 on this background, so the lightest
-           pink that would pass is white, and a white error is not an error.
+           message that tells someone why they cannot get in.
 
-           So the background moves instead. A 35% black chip takes the surface under
-           it to rgb(92,72,53), where the same pink reads 6.24:1 — and the message
-           gains the shape of an error rather than being a tinted sentence floating
-           under a form. Empty, it collapses: min-height held the space before, and
-           a chip around nothing would be a permanent grey bar under the password. */
-        #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
+           No pink fixes that. White is 4.68:1 on this background and everything
+           tinted towards red is below it, so the lightest pink that would pass is
+           white — which leaves two ways out: put the message on a different surface,
+           or stop asking the colour of the text to carry the meaning.
+
+           A panel was tried and is worse. Any box under a sign-in form reads as
+           another field of the form, and a tinted one reads as a broken field.
+
+           So the text is white and the red is a rule beside it. The message is legible
+           because white passes; it is an error because the mark next to it is red and
+           nothing else on this screen has one. Nothing is boxed, nothing is tinted,
+           and when there is no error there is nothing there at all. */
+        #login-error { color: #fff; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; text-align: left; }
         #login-error:not(:empty) {
-            background: rgba(0,0,0,0.35); border: 1px solid rgba(255,207,207,0.35);
-            border-radius: 8px; padding: 10px 12px; text-align: left; line-height: 1.4;
+            border-left: 3px solid #ff8f8f; padding: 2px 0 2px 10px; line-height: 1.45;
         }
         .ticket-elapsed { font-weight: bold; }
         .ticket-card.overdue { border-color: #ff4d4d; background: rgba(255, 77, 77, 0.15); animation: kdsPulse 1.2s infinite; }
@@ -168,11 +172,28 @@
         /* A DIAGNOSTIC IS STILL SOMETHING SOMEONE READS
            This exists so "which build is this screen on?" is answerable from the
            floor, and at 0.35 the answer was 1.88:1 — present, and unreadable, which
-           is the worst of both. It stays out of the way by being small and cornered
-           rather than by being faint: a 40% chip drops the surface under it and the
-           text goes to full white at 9.5:1. */
-        .build-stamp { position: fixed; right: 8px; bottom: 6px; font-size: 0.7rem; pointer-events: none; letter-spacing: 1px;
-                       background:rgba(0,0,0,0.4); border-radius:6px; padding:3px 8px; display:inline-block; color:#fff; }
+           is the worst of both.
+
+           It gets out of the way by being small, cornered and widely tracked, not by
+           being faint and not by wearing a pill. White on the brown is 4.68:1 unaided;
+           a chip behind eleven characters in a corner is a dark tab stuck to the
+           screen, louder than the text it was carrying. */
+        /* THE BUILD STAMP IS NOT CONTENT
+           It exists so "which build is this screen on?" is answerable from the floor
+           — a question somebody asks maybe twice a year, and nobody reads in the
+           course of using the page. Faint and cornered was the right instinct. The
+           thing that was wrong is that at 0.22 the answer was 1.5:1, so looking it up
+           still told you nothing: present, and unreadable, the worst of both.
+
+           So it is quiet by default and legible on demand. Touch it, hover it or tab
+           to it and it comes up to full white; the rest of the time it is a ghost in
+           the corner, which is what a version string owes a customer looking at a
+           menu. That is the condition on which the contrast suite exempts it, and the
+           suite checks the condition rather than taking it on trust. */
+        .build-stamp { font-size: 0.6rem; letter-spacing: 1.5px; color: #fff; opacity: 0.22;
+                       transition: opacity 0.15s ease; }
+        .build-stamp:hover, .build-stamp:focus, .build-stamp:active { opacity: 1; }
+        .build-stamp { position: fixed; right: 10px; bottom: 8px; }
 
         /* SOMETHING TO SEE WHEN YOU TAB
            The sign-in box sets outline:none on both of its fields, and nothing replaced

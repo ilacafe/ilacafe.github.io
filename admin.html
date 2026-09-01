@@ -121,19 +121,23 @@
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
            #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
-           message that tells someone why they cannot get in. No red can fix that
-           here: white itself is only 4.68:1 on this background, so the lightest
-           pink that would pass is white, and a white error is not an error.
+           message that tells someone why they cannot get in.
 
-           So the background moves instead. A 35% black chip takes the surface under
-           it to rgb(92,72,53), where the same pink reads 6.24:1 — and the message
-           gains the shape of an error rather than being a tinted sentence floating
-           under a form. Empty, it collapses: min-height held the space before, and
-           a chip around nothing would be a permanent grey bar under the password. */
-        #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
+           No pink fixes that. White is 4.68:1 on this background and everything
+           tinted towards red is below it, so the lightest pink that would pass is
+           white — which leaves two ways out: put the message on a different surface,
+           or stop asking the colour of the text to carry the meaning.
+
+           A panel was tried and is worse. Any box under a sign-in form reads as
+           another field of the form, and a tinted one reads as a broken field.
+
+           So the text is white and the red is a rule beside it. The message is legible
+           because white passes; it is an error because the mark next to it is red and
+           nothing else on this screen has one. Nothing is boxed, nothing is tinted,
+           and when there is no error there is nothing there at all. */
+        #login-error { color: #fff; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; text-align: left; }
         #login-error:not(:empty) {
-            background: rgba(0,0,0,0.35); border: 1px solid rgba(255,207,207,0.35);
-            border-radius: 8px; padding: 10px 12px; text-align: left; line-height: 1.4;
+            border-left: 3px solid #ff8f8f; padding: 2px 0 2px 10px; line-height: 1.45;
         }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; line-height: 1.6; padding: env(safe-area-inset-top) 0 calc(80px + env(safe-area-inset-bottom)); }
         body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--brand-bg); z-index: 950; pointer-events: none; }
@@ -186,7 +190,9 @@
         .item-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;}
         /* A badge is how a row says "voided" or "paused" now that it no longer says
            it by fading — so it has to be readable rather than a hint. */
-        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; letter-spacing: 0.5px; color: #fff; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.35); }
+        /* Outline only, for the same reason as the sold-out tag: white on the brown
+           already reads at 4.68:1, so the fill was weight for nothing. */
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; text-transform: uppercase; margin-left: 10px; letter-spacing: 0.5px; color: #fff; border: 1px solid rgba(255,255,255,0.45); }
 
         /* LEDGER STYLES */
         .dash-row { display: flex; justify-content: space-between; margin-bottom: 15px; text-align: center;}
@@ -295,6 +301,21 @@
                 scroll-behavior: auto !important;
             }
         }
+        /* THE BUILD STAMP IS NOT CONTENT
+           It exists so "which build is this screen on?" is answerable from the floor
+           — a question somebody asks maybe twice a year, and nobody reads in the
+           course of using the page. Faint and cornered was the right instinct. The
+           thing that was wrong is that at 0.22 the answer was 1.5:1, so looking it up
+           still told you nothing: present, and unreadable, the worst of both.
+
+           So it is quiet by default and legible on demand. Touch it, hover it or tab
+           to it and it comes up to full white; the rest of the time it is a ghost in
+           the corner, which is what a version string owes a customer looking at a
+           menu. That is the condition on which the contrast suite exempts it, and the
+           suite checks the condition rather than taking it on trust. */
+        .build-stamp { font-size: 0.6rem; letter-spacing: 1.5px; color: #fff; opacity: 0.22;
+                       transition: opacity 0.15s ease; }
+        .build-stamp:hover, .build-stamp:focus, .build-stamp:active { opacity: 1; }
     </style>
 
 </head>
@@ -574,7 +595,7 @@
                 </div>
             </details>
         </div>
-        <div id="build-stamp" style="text-align:center; font-size:0.6rem; letter-spacing:1px; margin:24px 0 8px;"><span style="background:rgba(0,0,0,0.4); border-radius:6px; padding:3px 8px; display:inline-block; color:#fff;"></span></div>
+        <div id="build-stamp" class="build-stamp" style="text-align:center; margin:24px 0 8px;"></div>
     </div>
 
     <!-- Ours, in the order they ran in when they were in the head. Nothing here
@@ -2015,7 +2036,7 @@
                 status.innerHTML = '<span style="color:#7CFC9A;">Test push sent to ' + (out.sent != null ? out.sent : subscriptions.length) + ' device(s). Lock the screen \u2014 it should still arrive.</span>';
             } catch (e) { console.error(e); status.innerText = 'Test push failed: ' + (e && e.message ? e.message : e); }
         };
-        try { const _b = document.querySelector('#build-stamp span'); if (_b) _b.textContent = 'build ' + ILA_BUILD; } catch(e){}
+        try { const _b = document.getElementById('build-stamp'); if (_b) _b.textContent = 'build ' + ILA_BUILD; } catch(e){}
         notifInit();
 
             </script>

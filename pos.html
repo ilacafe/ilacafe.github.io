@@ -124,19 +124,23 @@
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
            #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
-           message that tells someone why they cannot get in. No red can fix that
-           here: white itself is only 4.68:1 on this background, so the lightest
-           pink that would pass is white, and a white error is not an error.
+           message that tells someone why they cannot get in.
 
-           So the background moves instead. A 35% black chip takes the surface under
-           it to rgb(92,72,53), where the same pink reads 6.24:1 — and the message
-           gains the shape of an error rather than being a tinted sentence floating
-           under a form. Empty, it collapses: min-height held the space before, and
-           a chip around nothing would be a permanent grey bar under the password. */
-        #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
+           No pink fixes that. White is 4.68:1 on this background and everything
+           tinted towards red is below it, so the lightest pink that would pass is
+           white — which leaves two ways out: put the message on a different surface,
+           or stop asking the colour of the text to carry the meaning.
+
+           A panel was tried and is worse. Any box under a sign-in form reads as
+           another field of the form, and a tinted one reads as a broken field.
+
+           So the text is white and the red is a rule beside it. The message is legible
+           because white passes; it is an error because the mark next to it is red and
+           nothing else on this screen has one. Nothing is boxed, nothing is tinted,
+           and when there is no error there is nothing there at all. */
+        #login-error { color: #fff; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; text-align: left; }
         #login-error:not(:empty) {
-            background: rgba(0,0,0,0.35); border: 1px solid rgba(255,207,207,0.35);
-            border-radius: 8px; padding: 10px 12px; text-align: left; line-height: 1.4;
+            border-left: 3px solid #ff8f8f; padding: 2px 0 2px 10px; line-height: 1.45;
         }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -242,9 +246,13 @@
         /* STATE IS SAID, NOT FADED
            The row used to be dimmed to 0.4 as well as badged — which made the name
            of the sold-out item the hardest thing on the menu to read, when knowing
-           WHICH item is out is the entire point. The badge does that job on its own,
-           so it gets a chip and full white and the row keeps its contrast. */
-        .sold-out-badge { font-size: 0.65rem; color: #fff; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.35); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
+           WHICH item is out is the entire point. The badge does that job alone now.
+
+           An outline and nothing else. The only thing wrong with this tag before was
+           its text: rgba(255,255,255,0.6) on the brown is 2.8:1, while plain white is
+           4.68 and passes. It never needed a filled chip to be readable — a fill and
+           a border together made it a heavy little slab beside a light menu. */
+        .sold-out-badge { font-size: 0.65rem; color: #fff; border: 1px solid rgba(255,255,255,0.45); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; }
         #cart-banner.visible { transform: translateY(0); }
@@ -500,6 +508,21 @@
                 scroll-behavior: auto !important;
             }
         }
+        /* THE BUILD STAMP IS NOT CONTENT
+           It exists so "which build is this screen on?" is answerable from the floor
+           — a question somebody asks maybe twice a year, and nobody reads in the
+           course of using the page. Faint and cornered was the right instinct. The
+           thing that was wrong is that at 0.22 the answer was 1.5:1, so looking it up
+           still told you nothing: present, and unreadable, the worst of both.
+
+           So it is quiet by default and legible on demand. Touch it, hover it or tab
+           to it and it comes up to full white; the rest of the time it is a ghost in
+           the corner, which is what a version string owes a customer looking at a
+           menu. That is the condition on which the contrast suite exempts it, and the
+           suite checks the condition rather than taking it on trust. */
+        .build-stamp { font-size: 0.6rem; letter-spacing: 1.5px; color: #fff; opacity: 0.22;
+                       transition: opacity 0.15s ease; }
+        .build-stamp:hover, .build-stamp:focus, .build-stamp:active { opacity: 1; }
     </style>
 
 </head>
@@ -524,7 +547,7 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo" width="1200" height="427" decoding="async">
-            <div id="offline-indicator" style="display:none; background:rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.5); color:white; padding:6px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
+            <div id="offline-indicator" style="display:none; background:transparent; border: 1px solid rgba(255,255,255,0.5); color:white; padding:6px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
         </header>
 
         <div id="notification-area"></div>
@@ -570,7 +593,7 @@
                 </div>
             </aside>
         </div>
-        <div id="build-stamp" style="text-align:center; font-size:0.6rem; letter-spacing:1px; margin-top:22px;"><span style="background:rgba(0,0,0,0.4); border-radius:6px; padding:3px 8px; display:inline-block; color:#fff;"></span></div>
+        <div id="build-stamp" class="build-stamp" style="text-align:center; margin-top:22px;"></div>
     </div>
 
     <div id="cart-banner">
@@ -1454,7 +1477,7 @@
         // saveLocalCart(), so the build only appeared once a cashier had put
         // something in a cart — blank at sign-in and blank at open, which is
         // exactly when someone looks.
-        try { const _b = document.querySelector('#build-stamp span');
+        try { const _b = document.getElementById('build-stamp');
               if (_b) _b.textContent = 'build ' + (window.ILA_BUILD || '?'); } catch(e){}
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 

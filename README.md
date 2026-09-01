@@ -161,6 +161,11 @@ costs money:
   composited rather than skipped, and none of that is visible in the file. A second
   check reads the source, because most of these pages build their rows from data that
   never renders in a test, and the rule those rows broke is stateable without them.
+  The build stamp is the one exemption, and it is not a free one: it is a version
+  string nobody reads while using the page, so it stays a ghost in the corner — on the
+  condition that hover, focus or a touch brings it to full white, which the suite
+  checks rather than takes on trust. Faint was always right; unreadable when you
+  finally look was the bug.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line

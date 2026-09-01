@@ -173,9 +173,13 @@
         /* STATE IS SAID, NOT FADED
            The row used to be dimmed to 0.4 as well as badged — which made the name
            of the sold-out item the hardest thing on the menu to read, when knowing
-           WHICH item is out is the entire point. The badge does that job on its own,
-           so it gets a chip and full white and the row keeps its contrast. */
-        .sold-out-badge { font-size: 0.65rem; color: #fff; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.35); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
+           WHICH item is out is the entire point. The badge does that job alone now.
+
+           An outline and nothing else. The only thing wrong with this tag before was
+           its text: rgba(255,255,255,0.6) on the brown is 2.8:1, while plain white is
+           4.68 and passes. It never needed a filled chip to be readable — a fill and
+           a border together made it a heavy little slab beside a light menu. */
+        .sold-out-badge { font-size: 0.65rem; color: #fff; border: 1px solid rgba(255,255,255,0.45); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
         /* Purely a separator between two links, and marked aria-hidden in the
@@ -319,6 +323,21 @@
                 scroll-behavior: auto !important;
             }
         }
+        /* THE BUILD STAMP IS NOT CONTENT
+           It exists so "which build is this screen on?" is answerable from the floor
+           — a question somebody asks maybe twice a year, and nobody reads in the
+           course of using the page. Faint and cornered was the right instinct. The
+           thing that was wrong is that at 0.22 the answer was 1.5:1, so looking it up
+           still told you nothing: present, and unreadable, the worst of both.
+
+           So it is quiet by default and legible on demand. Touch it, hover it or tab
+           to it and it comes up to full white; the rest of the time it is a ghost in
+           the corner, which is what a version string owes a customer looking at a
+           menu. That is the condition on which the contrast suite exempts it, and the
+           suite checks the condition rather than taking it on trust. */
+        .build-stamp { font-size: 0.6rem; letter-spacing: 1.5px; color: #fff; opacity: 0.22;
+                       transition: opacity 0.15s ease; }
+        .build-stamp:hover, .build-stamp:focus, .build-stamp:active { opacity: 1; }
     </style>
 
     <!-- Ours, named here and run at the foot alongside the SDK.
@@ -389,7 +408,7 @@
                 <span class="footer-divider" aria-hidden="true">|</span>
                 <a href="https://instagram.com/ila_cafe" class="contact-link" target="_blank">@ila_cafe</a>
             </div>
-            <div id="build-stamp" style="font-size:0.6rem; margin-top:10px; letter-spacing:1px;"><span style="background:rgba(0,0,0,0.4); border-radius:6px; padding:3px 8px; display:inline-block; color:#fff;"></span></div>
+            <div id="build-stamp" class="build-stamp" style="margin-top:14px;"></div>
         </div>
     </div>
 
@@ -1664,7 +1683,7 @@
             }
         };
 
-        try { const _bs = document.querySelector('#build-stamp span'); if (_bs) _bs.textContent = 'build ' + ILA_BUILD; } catch(e){}
+        try { const _bs = document.getElementById('build-stamp'); if (_bs) _bs.textContent = 'build ' + ILA_BUILD; } catch(e){}
 
         updateCartUI(); 
         if (window.watchOrderStatus) window.watchOrderStatus();
