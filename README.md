@@ -247,10 +247,9 @@ costs money:
 - **web orders arrive billed** — a takeaway ordered from a phone reaches the till
   carrying the VPA it is billed to and `billedAt`, the moment the customer was shown
   a code, in the same write that creates it, on the server's clock rather than the
-  phone's. `billedAt` was called `payLinkSentAt` when a member of staff sent a
-  WhatsApp pay link; the till still reads the old name, and the suites pin that,
-  because rules deploy separately from pages and an order placed on a browser still
-  holding the older page arrives under it.
+  phone's. An order carrying no `billedAt` was billed by nothing, and the till is
+  checked for refusing to tie any credit to it — that guard is what stops an unbilled
+  order taking a payment belonging to a bill somebody actually was shown.
   Those two fields are the whole of what makes a web payment verifiable, and if the
   write regresses nothing announces it: orders keep being placed and customers keep
   paying, and every one of them silently stops auto-verifying. The suite drives the

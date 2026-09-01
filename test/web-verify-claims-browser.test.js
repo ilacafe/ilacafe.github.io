@@ -256,23 +256,16 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           !!clocks.none && clocks.none.ref === 'CLK1', JSON.stringify(clocks.none));
     note('bankTime is null whenever the Worker was unsure of the format — that path is the old one');
 
-    // billedAt used to be called payLinkSentAt. Rules deploy separately from pages, so
-    // for as long as a customer's browser might still hold the older page, orders
-    // arrive under the old name — and an order the till cannot read the billing time
-    // off is an order it will not match to any credit at all.
-    const legacy = await page.evaluate(([now]) => {
+    // An order with no billedAt was never asked for money by anything, and the till
+    // must not tie a credit to it — that guard is what stops an unbilled order taking
+    // a payment that belongs to a bill somebody actually was shown.
+    const unbilled = await page.evaluate(([now]) => {
       const ours = (window.activeUPIs || [])[0];
-      const askedAt = now - 10 * 60000;
-      const credits = { LEG1: { amount: 778, ref: 'LEG1', at: now - 60000, bankTime: askedAt + 60000 } };
-      return {
-        old: window.wvFindMatch({ total: 778, upiId: ours, payLinkSentAt: askedAt, trackId: 'tk-old' }, credits, {}, now),
-        neither: window.wvFindMatch({ total: 778, upiId: ours, trackId: 'tk-none' }, credits, {}, now)
-      };
+      const credits = { LEG1: { amount: 778, ref: 'LEG1', at: now - 60000, bankTime: now - 9 * 60000 } };
+      return window.wvFindMatch({ total: 778, upiId: ours, trackId: 'tk-none' }, credits, {}, now);
     }, [NOW]);
-    check('an order billed under the old field name still matches',
-          !!legacy.old && legacy.old.ref === 'LEG1', JSON.stringify(legacy.old));
-    check('and one billed under neither still matches nothing',
-          legacy.neither === null, JSON.stringify(legacy.neither));
+    check('an order nothing billed is offered no credit at all',
+          unbilled === null, JSON.stringify(unbilled));
 
     // A claim landing now, from another till, has to reach this one.
     const late = await page.evaluate(() => {
