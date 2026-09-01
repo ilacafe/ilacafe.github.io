@@ -39,6 +39,7 @@ const suites = [
   'manifest.test.js',
   'accessibility.test.js',
   'focus-and-motion.test.js',
+  'probe-reachability.test.js',
 ];
 
 let failed = [];
