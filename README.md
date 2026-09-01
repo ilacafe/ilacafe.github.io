@@ -119,6 +119,40 @@ costs money:
   image that exists, at the size it claims. Both fail silently in a browser.
 - **accessibility** — on the customer page, everything clickable is reachable from
   a keyboard, every field has a name, and the wait estimate announces itself.
+- **dialogs** — every overlay here said `aria-modal="true"`, and nothing made that
+  true: aria-modal is a claim about the accessibility tree and nothing else. Opening
+  one left focus behind it, so Tab walked down into the sixty rows of the menu
+  underneath, where + and - were still live buttons beneath an overlay covering them.
+  The till was the same shape with more of it — fourteen overlays over a floor plan of
+  live table buttons, and no Escape key on a device cashiers type into all day. Focus
+  now goes in, Tab stays in, Escape gets out, and closing hands focus back to whatever
+  opened it. Two dialogs are held out of Escape on purpose and the suite checks that
+  too: the customer's payment screen is the one telling them what they owe, and the
+  till's UPI screen is in a customer's hands while they scan.
+- **touch targets** — the + and - on the ordering page are how every item the café
+  sells gets into a cart, and they were 32px and 26px wide with a 24px count between
+  them. A thumb is about 45px across, so the tap that misses lands on - when it meant
+  +, on a control whose only feedback is a number moving by one in either direction.
+  The drawing is unchanged — a 44px button on every row would double the height of a
+  sixty-row menu — and the target is not. The suite asks the browser what is hit at
+  each point rather than measuring the button, because the button is the part that was
+  deliberately left alone.
+- **the focus ring** — all seven pages set `outline: none` on their text fields and
+  none of them replaced it, so on a tablet signed in from a Bluetooth keyboard there
+  was nothing to say whether the next keystroke was going into Email or Password. This
+  is asked of a browser and not of the file, because the first version of the fix was
+  in every page, correct, and beaten: `#login-box input` carries an id, which outranks
+  a bare `:focus-visible` wherever it sits. A source check found the rule and passed;
+  the page still had no ring.
+- **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
+  no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
+  long as it was late, which on a bad Sunday is every card on the board in the eye line
+  of whoever is cooking. Honoured by shortening the motion rather than deleting it, so
+  a zero-length transition still fires and still ends.
+- **the one control a customer cannot undo** — Empty sat in the same row as Pay, the
+  same size, and deleted the whole cart on the first tap. It now takes a second tap
+  inside five seconds, and forgets if the dialog is closed — an armed button left armed
+  is the same bug with a delay on it.
 - **kitchen alarm** — the overdue threshold still adds saturation and oven time
   when the live model does not carry those curves. `etaInterp` reads a missing
   curve as zero, so the alarm would come in short and start calling on-time

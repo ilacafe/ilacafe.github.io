@@ -143,6 +143,33 @@
         .qty-btn:active { background: white; color: var(--brand-bg); }
         .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
 
+        /* A FINGER IS WIDER THAN 26 PIXELS
+           These are the most-tapped controls the café owns: every item a customer
+           orders goes through one of them, and adding four of something is four taps
+           in the same spot. Drawn, the standalone + is 32x32 and the two inside the
+           quantity control are 26 wide, separated by the 24px count between them. A
+           thumb's contact patch is around 45px across. So the tap that misses is the
+           one that lands on - when it meant +, on a control that gives no
+           confirmation beyond a number changing by one in either direction.
+
+           The size is a deliberate part of how the menu reads — a 44px button on
+           every row would double the height of a sixty-row list and push the footer
+           off a second screen. So the drawing does not change and the TARGET does:
+           a transparent ::after centred on each button, sized to the 44px both Apple
+           and Google ask for, is what the touch actually hits. A pseudo-element's
+           hits belong to the element it came from, so this needs no handler and no
+           pointer-events juggling — and because it is out of flow, nothing on screen
+           moves by a pixel.
+
+           Sold-out rows are left out: their + is disabled, and a 44px target for a
+           button that does nothing steals the taps around it. */
+        .add-btn, .qty-btn, .mini-btn { position: relative; }
+        .add-btn::after, .qty-btn::after, .mini-btn::after {
+            content: ''; position: absolute; left: 50%; top: 50%;
+            width: 44px; height: 44px; transform: translate(-50%, -50%);
+        }
+        .add-btn:disabled::after { content: none; }
+
         .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
@@ -216,6 +243,8 @@
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
         .btn-link { display: block; width: 100%; box-sizing: border-box; text-decoration: none; text-align: center; }
         
+        /* 28px, and the one in the cart dialog that takes an item back off the
+           order. It gets the 44px target from the rule above with the menu's. */
         .mini-btn { background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 28px; height: 28px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: white; color: var(--brand-bg); }
 
@@ -232,9 +261,51 @@
 
         #table-badge { display: none; background: rgba(255,255,255,0.15); padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); }
         
+        /* SOMETHING TO SEE WHEN YOU TAB
+           Every text field on this page sets outline:none, which is a real choice —
+           the default ring is a grey box that does not belong on brown. What was
+           never replaced is the thing the ring was doing: on a Bluetooth keyboard,
+           or a switch, or a phone in Full Keyboard Access, there was no way to tell
+           which of the checkout dialog's four fields was about to receive typing.
+
+           :focus-visible and not :focus, so a tap does not draw a ring on a button —
+           the browser only matches it where an indicator is wanted. A text field is
+           always somewhere it is wanted, and matches on a tap too. The ring is white
+           on the brand brown at every size, and offset so it sits outside the
+           control's own border rather than replacing it.
+
+           Nothing here may hide behind an id or an inline style: both outrank this
+           rule wherever it sits in the file. The pickup-time slider carried
+           `outline: none` inline, which no stylesheet can answer, so that was taken
+           off rather than argued with. */
+        :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        /* The card is focused when its dialog opens, so that the next Tab is inside
+           it. That is not a control the person chose, and it must not be ringed. */
+        .modal-content:focus { outline: none; }
+
         .table-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
         .table-btn { background-color: transparent; color: white; border: 1px solid rgba(255,255,255,0.4); padding: 12px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; transition: all 0.2s;}
         .table-btn.selected { background-color: white; color: var(--brand-bg); border-color: white; }
+
+        /* WHEN THE PHONE HAS ASKED FOR LESS MOVEMENT
+           Reduce Motion is not a preference about taste. It is set by people for whom
+           a sliding panel or a spinning logo brings on nausea or a migraine, and iOS
+           and Android both put it two taps from the home screen. This page moved
+           without ever asking: the cart banner slides up from the bottom edge on every
+           first item, three dialogs cross-fade, and the logo spins a full turn when it
+           is touched.
+
+           Duration rather than `animation: none`, because a zero-length transition
+           still fires and still ends. Anything that waits on one keeps working; it
+           simply arrives at the end state immediately, which is what was asked for. */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
     </style>
 
     <!-- Ours, named here and run at the foot alongside the SDK.
@@ -324,10 +395,10 @@
             <div style="text-align: left; width: 100%; margin: 15px 0;">
                 <label style="color: white; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Sweetness</label>
                 <div class="choice-grid" id="sweetness-grid">
-                    <button class="choice-btn selected" onclick="window.selectSweetness('Medium sweet', this)">Medium</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('No sweetness', this)">None</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('Less sweet', this)">Less</button>
-                    <button class="choice-btn" onclick="window.selectSweetness('Very sweet', this)">Extra</button>
+                    <button class="choice-btn selected" aria-pressed="true" onclick="window.selectSweetness('Medium sweet', this)">Medium</button>
+                    <button class="choice-btn" aria-pressed="false" onclick="window.selectSweetness('No sweetness', this)">None</button>
+                    <button class="choice-btn" aria-pressed="false" onclick="window.selectSweetness('Less sweet', this)">Less</button>
+                    <button class="choice-btn" aria-pressed="false" onclick="window.selectSweetness('Very sweet', this)">Extra</button>
                 </div>
             </div>
             <div class="modal-buttons">
@@ -353,9 +424,9 @@
                 <div id="order-type-section">
                     <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
                     <div class="type-row">
-                        <button class="type-btn selected" id="type-dinein" onclick="window.setOrderType('Dine-in')">Dine-in</button>
-                        <button class="type-btn" id="type-takeaway" onclick="window.setOrderType('Takeaway')">Takeaway</button>
-                        <button class="type-btn" id="type-delivery" onclick="window.setOrderType('Delivery')">Delivery</button>
+                        <button class="type-btn selected" aria-pressed="true" id="type-dinein" onclick="window.setOrderType('Dine-in')">Dine-in</button>
+                        <button class="type-btn" aria-pressed="false" id="type-takeaway" onclick="window.setOrderType('Takeaway')">Takeaway</button>
+                        <button class="type-btn" aria-pressed="false" id="type-delivery" onclick="window.setOrderType('Delivery')">Delivery</button>
                     </div>
                 </div>
 
@@ -385,7 +456,7 @@
                         </div>
                         <div id="takeaway-schedule-row" style="display:none; text-align:center; margin-top:10px;">
                             <div style="font-size:0.85rem; margin-bottom:6px;">Pick up in <span id="sched-display" style="font-weight:bold;">45</span> min</div>
-                            <input type="range" id="takeaway-sched-time" aria-label="Minutes from now to collect" min="30" max="120" step="5" value="45" oninput="document.getElementById('sched-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); height: 2px; outline: none; border-radius: 2px;">
+                            <input type="range" id="takeaway-sched-time" aria-label="Minutes from now to collect" min="30" max="120" step="5" value="45" oninput="document.getElementById('sched-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); height: 2px; border-radius: 2px;">
                             <div style="font-size:0.75rem; opacity:0.6; margin-top:4px;">Can't be earlier than the kitchen estimate above.</div>
                         </div>
                     </div>
@@ -393,7 +464,7 @@
             </div>
 
             <div class="modal-buttons" style="margin-top: 20px;">
-                <button class="btn btn-secondary" onclick="window.clearCart()">Empty</button>
+                <button class="btn btn-secondary" id="btn-empty" onclick="window.clearCart()">Empty</button>
                 <button class="btn btn-primary" id="btn-pay" onclick="window.proceedToPayment()">Pay</button>
             </div>
             <button class="close-modal" onclick="closeModal('checkout-modal')">✖ CLOSE</button>
@@ -435,7 +506,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.3"></script>
+    <script src="/build-check.js" data-build="2026-09-01.4"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -878,7 +949,7 @@
         const tableGrid = document.getElementById('customer-table-grid');
         {
             let grid = "";
-            for(let i=1; i<=10; i++) { grid += `<button class="table-btn" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
+            for(let i=1; i<=10; i++) { grid += `<button class="table-btn" aria-pressed="false" aria-label="Table ${i}" onclick="window.setDineInTable('${i}', this)">${i}</button>`; }
             tableGrid.innerHTML = grid;
         }
 
@@ -1013,7 +1084,7 @@
             const btnDel = document.getElementById('type-delivery'); const btnTak = document.getElementById('type-takeaway'); const btnDin = document.getElementById('type-dinein'); const scanMsg = document.getElementById('scan-instruction'); const payBtn = document.getElementById('btn-pay');
             
             if(urlTable) {
-                btnDin.classList.add('selected'); btnDin.style.display = 'block'; btnDel.style.display = 'none'; btnTak.style.display = 'none'; scanMsg.style.display = 'none'; window.currentOrderType = 'Dine-in'; window.updateDynamicFields(); return;
+                markSelected(btnDin, true); btnDin.style.display = 'block'; btnDel.style.display = 'none'; btnTak.style.display = 'none'; scanMsg.style.display = 'none'; window.currentOrderType = 'Dine-in'; window.updateDynamicFields(); return;
             }
 
             if(window.storeStatus.delivery) btnDel.classList.remove('hidden'); else btnDel.classList.add('hidden');
@@ -1034,18 +1105,91 @@
         }
 
         function saveCart() { localStorage.setItem('ila_customer_cart', JSON.stringify(window.cart)); localStorage.setItem('ila_customer_amount', window.totalAmount); localStorage.setItem('ila_customer_items', window.totalItems); updateCartUI(); }
-        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        // A DIALOG THAT BEHAVES LIKE ONE
+        //
+        // All three overlays here say aria-modal="true". Nothing made that true. Opening
+        // one left focus on whatever had just been tapped — behind the dialog — so the
+        // next Tab walked into the menu underneath it, and someone on a keyboard could
+        // press + on a row they could no longer see. Closing dropped focus at the top of
+        // the document, which on a phone reading the screen aloud means finding your
+        // place in sixty rows again.
+        //
+        // Four things, and they are the whole of what a dialog owes the person in it:
+        // focus goes in, Tab stays in, Escape gets out, and closing puts focus back on
+        // the control that opened it.
+        //
+        // Focus lands on the CARD and not on the first field. The first field in the
+        // checkout dialog is the notes textarea, and focusing that opens the phone's
+        // keyboard over the order the customer opened the dialog to read.
+        const modalOpener = {};
+
+        function openModal(id) {
+            const ov = document.getElementById(id);
+            modalOpener[id] = document.activeElement;
+            ov.classList.add('active');
+            const card = ov.querySelector('.modal-content');
+            if (card) card.focus();
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+            if (id === 'checkout-modal' && window.disarmEmpty) window.disarmEmpty();
+            const back = modalOpener[id];
+            delete modalOpener[id];
+            if (back && back.isConnected) back.focus();
+        }
 
         // Tap the backdrop to dismiss — only when the tap lands on the overlay itself.
         // The payment modal is excluded: the customer is mid-flow and an accidental dismissal
-        // there loses the screen telling them what to pay.
-        (function bindBackdropClose(){
+        // there loses the screen telling them what to pay. Escape is held to the same rule,
+        // because it is the same act.
+        (function bindDialogs(){
             const NEVER = { 'payment-modal': true };
+
+            // Programmatic focus only — the card is not a Tab stop, it is where focus
+            // starts. The stylesheet suppresses the focus ring on it alone, for that
+            // reason; every other control on the page keeps it.
+            document.querySelectorAll('.modal-overlay .modal-content')
+                    .forEach(card => card.setAttribute('tabindex', '-1'));
+
+            const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), ' +
+                              'select:not([disabled]), textarea:not([disabled]), ' +
+                              '[tabindex]:not([tabindex="-1"])';
+            // Last in document order, so a dialog opened over another wins.
+            const topmost = () => [...document.querySelectorAll('.modal-overlay.active')].pop();
+            // getClientRects rather than offsetParent: the checkout dialog keeps its
+            // delivery, dine-in and takeaway blocks in the document and hides the two it
+            // is not showing, and a hidden field is not a Tab stop.
+            const reachable = ov => [...ov.querySelectorAll(FOCUSABLE)]
+                                        .filter(el => el.getClientRects().length > 0);
+
             document.querySelectorAll('.modal-overlay').forEach(ov => {
                 ov.addEventListener('click', e => {
                     if (e.target !== ov || NEVER[ov.id]) return;
                     closeModal(ov.id);
                 });
+            });
+
+            document.addEventListener('keydown', e => {
+                const ov = topmost();
+                if (!ov) return;
+
+                if (e.key === 'Escape') {
+                    if (NEVER[ov.id]) return;
+                    e.preventDefault();
+                    closeModal(ov.id);
+                    return;
+                }
+
+                if (e.key !== 'Tab') return;
+                const stops = reachable(ov);
+                if (!stops.length) return;
+                // Focus sitting on the card itself counts as neither end: it is where
+                // focus starts, and Tab from there should reach the first control while
+                // Shift+Tab reaches the last, rather than leaving by the back door.
+                const at = stops.indexOf(document.activeElement);
+                if (e.shiftKey && at <= 0) { e.preventDefault(); stops[stops.length - 1].focus(); }
+                else if (!e.shiftKey && (at === -1 || at === stops.length - 1)) { e.preventDefault(); stops[0].focus(); }
             });
         })();
         
@@ -1081,8 +1225,14 @@
                 if (container.dataset.sig === sig) return;   // nothing about this row changed
                 container.dataset.sig = sig;
 
-                if (qty > 0) { container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`; } 
-                else { container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`; }
+                // The button's whole accessible name was "+". Sixty rows of it, each one
+                // read out identically, with nothing to say which item it would add or
+                // what is already in the cart. The visible label stays the sign — the
+                // name is what the row means.
+                const item = escapeHTML(safeName.replace(/\\'/g, "'").replace(/&quot;/g, '"'));
+
+                if (qty > 0) { container.innerHTML = `<div class="qty-ctrl"><button class="qty-btn" aria-label="Remove one ${item}" onclick="window.decrementInline('${safeName}')">-</button><span class="qty-num">${qty}</span><button class="qty-btn" aria-label="Add another ${item}, ${qty} in your order" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button></div>`; } 
+                else { container.innerHTML = `<span style="margin-right: 10px;">₹${price}</span><button class="add-btn" aria-label="Add ${item}, ₹${price}" onclick="window.promptRemark('${safeName}', ${price}, ${reqSweet})">+</button>`; }
             });
         };
 
@@ -1125,7 +1275,7 @@
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) { catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`; } 
-                    else { catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`; }
+                    else { catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled aria-label="${escapeHTML(item.originalName)} is sold out">+</button></div></div>`; }
                 });
 
                 if (sizedItems.length > 0) {
@@ -1170,7 +1320,22 @@
             saveCart(); window.setOrderType(window.lastOrderType || 'Dine-in'); window.openCheckoutModal();
         };
 
-        window.selectSweetness = function(val, btn) { window.currentSweetness = val; let siblings = btn.parentNode.children; for(let s of siblings) s.classList.remove('selected'); btn.classList.add('selected'); };
+        // WHICH ONE IS CHOSEN, SAID RATHER THAN COLOURED
+        // Order type, sweetness and table number are each a row of buttons where one is
+        // filled in white and the rest are outlined. That is the whole of what said which
+        // was chosen: a colour, to a page that is read aloud as "Dine-in button, Takeaway
+        // button, Delivery button". aria-pressed is the button-shaped way to say it, and
+        // it moves with the class rather than being set once in the markup and forgotten.
+        function markSelected(btn, on) {
+            btn.classList.toggle('selected', on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        function selectOnly(btn) {
+            for (const sib of btn.parentNode.children) if (sib.tagName === 'BUTTON') markSelected(sib, false);
+            markSelected(btn, true);
+        }
+
+        window.selectSweetness = function(val, btn) { window.currentSweetness = val; selectOnly(btn); };
 
         window.promptRemark = function(itemName, price, requiresSweetness = false) {
             let finalName = itemName.replace(/&quot;/g, '"');
@@ -1181,8 +1346,8 @@
             }
             window.pendingItemName = itemName; window.pendingItemPrice = price; document.getElementById('remark-item-title').innerText = finalName; 
             window.currentSweetness = "Medium sweet"; const btns = document.querySelectorAll('#sweetness-grid .choice-btn');
-            btns.forEach(b => b.classList.remove('selected')); if(btns.length > 0) btns[0].classList.add('selected');
-            document.getElementById('remark-modal').classList.add('active');
+            btns.forEach(b => markSelected(b, false)); if(btns.length > 0) markSelected(btns[0], true);
+            openModal('remark-modal');
         };
 
         window.confirmAddItem = function() {
@@ -1191,7 +1356,37 @@
             window.totalAmount += window.pendingItemPrice; window.totalItems += 1; saveCart(); closeModal('remark-modal');
         };
 
-        window.clearCart = function() { window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('checkout-modal'); };
+        // ONE TAP SHOULD NOT THROW THE ORDER AWAY
+        // Empty sits in the same row as Pay, the same size, half an inch away, and it
+        // deleted the whole cart on the first tap with nothing to undo it. The customer
+        // who hits it has to walk the menu again and remember what they had chosen —
+        // which, on a table of four ordering together, is most of what they came to the
+        // page to do.
+        //
+        // A second tap inside five seconds, rather than a confirm dialog: this is already
+        // inside a dialog, and stacking a second one over it to ask about the first is
+        // worse than the mistake. The button says what the next tap will do, and forgets
+        // it again if nothing follows, so the deliberate case is still two taps and no
+        // reading.
+        let emptyArmed = null;
+        window.clearCart = function() {
+            const btn = document.getElementById('btn-empty');
+            if (!emptyArmed) {
+                emptyArmed = setTimeout(window.disarmEmpty, 5000);
+                if (btn) { btn.innerText = 'Tap again to empty'; btn.setAttribute('aria-label', 'Tap again to empty your order'); }
+                return;
+            }
+            window.disarmEmpty();
+            window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); closeModal('checkout-modal');
+        };
+        // Called on close too: an armed button left armed is a cart emptied by the first
+        // tap of whatever the customer does next time they open this.
+        window.disarmEmpty = function() {
+            if (emptyArmed) clearTimeout(emptyArmed);
+            emptyArmed = null;
+            const btn = document.getElementById('btn-empty');
+            if (btn) { btn.innerText = 'Empty'; btn.removeAttribute('aria-label'); }
+        };
 
         window.openCheckoutModal = function() {
             if (window.totalItems === 0) return alert("Your cart is empty!");
@@ -1204,11 +1399,11 @@
             let rows = "";
             for (let item in window.cart) {
                 const safeItemName = item.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                rows += `<div class="bill-receipt-row"><span style="flex:1;">${escapeHTML(item)}</span><span style="display:flex; align-items:center;"><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
+                rows += `<div class="bill-receipt-row"><span style="flex:1;">${escapeHTML(item)}</span><span style="display:flex; align-items:center;"><button class="mini-btn" aria-label="Remove one ${escapeHTML(item)}" onclick="window.modifyCartItem('${safeItemName}', -1)">-</button><span style="width:24px; text-align:center;">${window.cart[item].qty}</span><button class="mini-btn" aria-label="Add another ${escapeHTML(item)}" onclick="window.modifyCartItem('${safeItemName}', 1)">+</button></span></div>`;
             }
             list.innerHTML = rows;
             document.getElementById('cart-notes').value = ""; document.getElementById('modal-checkout-total').innerText = window.totalAmount;
-            document.getElementById('checkout-modal').classList.add('active'); updateCheckoutOptions();
+            openModal('checkout-modal'); updateCheckoutOptions();
             // Always recompute the takeaway ETA on open with the CURRENT cart — updateCheckoutOptions
             // only calls setOrderType (which refreshes) when it needs to switch type, so reopening
             // with the same type would otherwise leave the previous item's estimate on screen.
@@ -1226,11 +1421,11 @@
 
         window.setOrderType = function(type) {
             window.currentOrderType = type;
-            document.getElementById('type-dinein').classList.remove('selected'); document.getElementById('type-takeaway').classList.remove('selected'); document.getElementById('type-delivery').classList.remove('selected');
-            document.getElementById('type-' + type.toLowerCase().replace('-', '')).classList.add('selected'); window.updateDynamicFields();
+            markSelected(document.getElementById('type-dinein'), false); markSelected(document.getElementById('type-takeaway'), false); markSelected(document.getElementById('type-delivery'), false);
+            markSelected(document.getElementById('type-' + type.toLowerCase().replace('-', '')), true); window.updateDynamicFields();
         };
 
-        window.setDineInTable = function(num, btn) { window.currentDineInTable = num; let siblings = btn.parentNode.children; for(let s of siblings) s.classList.remove('selected'); btn.classList.add('selected'); };
+        window.setDineInTable = function(num, btn) { window.currentDineInTable = num; selectOnly(btn); };
 
         window.updateDynamicFields = function() {
             const type = window.currentOrderType;
@@ -1313,7 +1508,7 @@
                 // dine-in: skip straight to payment options
                 phoneStep.style.display = 'none';
                 window.currentOrderInfo.phone = null;
-                document.getElementById('payment-modal').classList.add('active');
+                openModal('payment-modal');
                 document.getElementById('pay-step-status').style.display = 'none';
                 window.startPayment(true);   // skipPhone
                 return;
@@ -1324,7 +1519,7 @@
             phoneStep.style.display = 'block';
             document.getElementById('pay-step-status').style.display = 'none';
             document.getElementById('phone-error').style.display = 'none';
-            document.getElementById('payment-modal').classList.add('active');
+            openModal('payment-modal');
         };
 
         // STEP 1 → PLACE. There is no in-browser payment step.

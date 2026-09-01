@@ -185,6 +185,39 @@
 
         #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: white; color: var(--brand-bg); padding: 12px 25px; border-radius: 30px; font-weight: bold; font-size: 0.9rem; transition: transform 0.3s ease; z-index: 3000; box-shadow: 0 5px 15px rgba(0,0,0,0.3); white-space: nowrap; pointer-events: none;}
         #toast.show { transform: translateX(-50%) translateY(0); }
+
+        /* SOMETHING TO SEE WHEN YOU TAB
+           The sign-in box sets outline:none on both of its fields, and nothing replaced
+           it. Staff sign these tablets in with a Bluetooth keyboard as often as with the
+           on-screen one, and with the ring gone there was no way to tell whether the
+           next thing typed was going into Email or into Password — a password typed into
+           the email field is shown on screen, and the one visible clue that it happened
+           was missing.
+
+           :focus-visible and not :focus, so a tap on a touchscreen still draws nothing
+           on a button: the browser only matches it where an indicator is wanted. A text
+           field is always somewhere it is wanted, and matches on a tap too.
+
+           The second rule is not a duplicate. `#login-box input` carries an id, which
+           outranks a bare `:focus-visible` however far down the file it sits, so the
+           general rule above lands on every control on the page EXCEPT the two this was
+           written for. It has to be said again at least as specifically. */
+        :focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        #login-box input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        /* The card is focused when its dialog opens, so that the next Tab is inside it.
+           That is not a control anyone chose, and it must not be ringed. */
+        .modal-content:focus { outline: none; }
+
+        /* Reduce Motion, as the phone or the tablet asked for it. Duration rather than
+           `animation: none`, so a zero-length transition still fires and still ends. */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -197,8 +230,8 @@
         <template id="login-box-template">
             <div id="login-box">
                 <h2>ILA Inventory</h2>
-                <input type="email" id="login-email" placeholder="Email" autocomplete="username">
-                <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                <input type="email" id="login-email" aria-label="Email" placeholder="Email" autocomplete="username">
+                <input type="password" id="login-password" aria-label="Password" placeholder="Password" autocomplete="current-password">
                 <button onclick="window.signInInventory()">Sign In</button>
                 <div id="login-error"></div>
             </div>
@@ -520,6 +553,9 @@
             }
         }
 
+        // Whatever was touched to open the dialog, so closing can put focus back on it.
+        let modalOpener = null;
+
         function openModal(type, itemName) {
             activeAction = { type, itemName };
             document.getElementById('modal-qty').value = "";
@@ -533,13 +569,49 @@
                 document.getElementById('modal-subtitle').innerText = "Add incoming supplier deliveries to stock.";
             }
             
+            modalOpener = document.activeElement;
             document.getElementById('action-modal').classList.add('active');
             setTimeout(() => document.getElementById('modal-qty').focus(), 100);
         }
 
         function closeModal() {
             document.getElementById('action-modal').classList.remove('active');
+            // Back to the Prep or Receive button that opened it, rather than the top of a
+            // list that is as long as the stock room.
+            const back = modalOpener; modalOpener = null;
+            if (back && back.isConnected) back.focus();
         }
+
+        // A WAY OUT THAT IS NOT THE CANCEL BUTTON
+        // This dialog asks for a quantity and a PIN, so it is opened with a keyboard up
+        // and it is where a mis-tap on the wrong shelf item lands. Escape and a tap on the
+        // brown around the card both cancel it, which is what every other dialog in this
+        // repo already did and this one did not. Tab is held inside it: the stock list
+        // behind is a live column of Prep and Receive buttons, and a keyboard could reach
+        // all of them straight through the overlay.
+        (function bindDialog(){
+            const ov = document.getElementById('action-modal');
+            const card = ov.querySelector('.modal-content');
+            if (card) card.setAttribute('tabindex', '-1');
+
+            ov.addEventListener('click', e => { if (e.target === ov) closeModal(); });
+
+            const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), ' +
+                              'select:not([disabled]), textarea:not([disabled]), ' +
+                              '[tabindex]:not([tabindex="-1"])';
+            document.addEventListener('keydown', e => {
+                if (!ov.classList.contains('active')) return;
+
+                if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+
+                if (e.key !== 'Tab') return;
+                const stops = [...ov.querySelectorAll(FOCUSABLE)].filter(el => el.getClientRects().length > 0);
+                if (!stops.length) return;
+                const at = stops.indexOf(document.activeElement);
+                if (e.shiftKey && at <= 0) { e.preventDefault(); stops[stops.length - 1].focus(); }
+                else if (!e.shiftKey && (at === -1 || at === stops.length - 1)) { e.preventDefault(); stops[0].focus(); }
+            });
+        })();
 
         function showToast(msg) {
             const toast = document.getElementById('toast');

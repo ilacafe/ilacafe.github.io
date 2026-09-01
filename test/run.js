@@ -38,6 +38,7 @@ const suites = [
   'build-freshness.test.js',
   'manifest.test.js',
   'accessibility.test.js',
+  'focus-and-motion.test.js',
 ];
 
 let failed = [];

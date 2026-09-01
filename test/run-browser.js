@@ -23,6 +23,10 @@ const suites = [
   'modal-layout-browser.test.js',
   'menu-cache-browser.test.js',
   'pos-menu-cache-browser.test.js',
+  'dialog-focus-browser.test.js',
+  'touch-targets-browser.test.js',
+  'cart-guards-browser.test.js',
+  'focus-ring-browser.test.js',
 ];
 
 let failed = [];
