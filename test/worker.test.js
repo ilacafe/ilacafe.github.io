@@ -285,6 +285,76 @@ async function main() {
   note('these guard the hand-port out of the dashboard, not the banks\' formats');
 }
 
+// ------------------------------------------------- when the BANK says it happened
+// `at` on a credit is when the Worker ingested the alert; bankTime is when the bank
+// says the money moved. The POS decides whether a credit belongs to a sale by how
+// close the two are in time, so on an alert that sat in a queue for hours `at` is
+// the delay and not the payment — and a payment made before a customer had even
+// ordered still looked like it could be theirs.
+//
+// Two things are being checked, and the second is the one that would be silent.
+// The parser must refuse anything it is not sure of, because a reader falls back to
+// `at` on null and behaviour is then unchanged. And it must read the printed clock
+// as IST: these alerts carry no offset, so parsing one as UTC is a 5.5-hour error
+// sitting inside a 3-hour matching window — it would not fail, it would attach
+// credits to the wrong sales.
+{
+  const api = buildModule([
+    "const IST_OFFSET_MS = 5.5 * 3600 * 1000;",
+    "const MONTH3 = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };",
+    extractFunction(src, 'parseBankTime'),
+  ], { parseInt, parseFloat, String, Date, Math, isFinite }, ['parseBankTime']);
+
+  // 12 Aug 2025, 14:22:07 IST is 08:52:07 UTC the same day.
+  const IST_CASE = Date.UTC(2025, 7, 12, 8, 52, 7);
+  const NOW = IST_CASE + 3 * 3600000;            // the alert lands three hours late
+
+  const axisSms = api.parseBankTime(
+    'Amount Credited: INR 2,340.50\nAccount Number: XXXX7788\n' +
+    'Transaction Info: UPI/P2M/512398765432/PRIYA N/AXIS\nDate & Time: 12-08-2025, 14:22:07 IST', NOW);
+  check('the Axis alert\u2019s own clock is read, to the second', axisSms === IST_CASE,
+        axisSms === null ? 'null' : new Date(axisSms).toISOString());
+  check('and it is read as IST, not as UTC',
+        axisSms !== Date.UTC(2025, 7, 12, 14, 22, 7),
+        'parsed as if the printed time were UTC — 5.5 hours out');
+
+  check('a named month parses too, and is never read as a day',
+        api.parseBankTime('credited on 12-Aug-2025 at 14:22:07', NOW) === IST_CASE,
+        String(api.parseBankTime('credited on 12-Aug-2025 at 14:22:07', NOW)));
+  check('a 12-hour clock parses',
+        api.parseBankTime('on 12/08/2025 02:22:07 PM', NOW) === IST_CASE,
+        String(api.parseBankTime('on 12/08/2025 02:22:07 PM', NOW)));
+  check('midnight on a 12-hour clock is not noon',
+        api.parseBankTime('on 12/08/2025 12:10 AM', NOW) === Date.UTC(2025, 7, 11, 18, 40, 0),
+        String(api.parseBankTime('on 12/08/2025 12:10 AM', NOW)));
+  check('a two-digit year is this century',
+        api.parseBankTime('on 12-08-25 14:22:07', NOW) === IST_CASE,
+        String(api.parseBankTime('on 12-08-25 14:22:07', NOW)));
+
+  // Everything below must be null. A reader falls back to `at`, so refusing costs
+  // nothing; a confident wrong answer moves money onto the wrong sale.
+  const nulls = [
+    ['a date with no time at all', 'credited on 12-08-2025'],
+    ['a date with no year', 'INR 1,499.00 has been credited ... on 12-Aug'],
+    ['a time with no date', 'credited at 14:22:07 IST'],
+    ['a clock that is not a clock', 'credited on 12-08-2025 at 33:99'],
+    ['a month that is not a month', 'credited on 12-19-2025 14:22:07'],
+    ['an alert dated in the future', 'credited on 12-08-2026 14:22:07'],
+    ['an alert dated a year ago', 'credited on 12-08-2024 14:22:07'],
+    ['no alert at all', ''],
+    ['nothing that looks like either', 'Your OTP is 445566. Do not share it.'],
+  ];
+  const wrong = nulls.filter(([, txt]) => api.parseBankTime(txt, NOW) !== null)
+                     .map(([what]) => what);
+  check('anything it cannot be sure of comes back as nothing', wrong.length === 0, wrong.join('; '));
+  note('null falls back to the ingest clock, which is exactly the old behaviour');
+
+  // The pairing rule: a date in one line and a clock far away in another are not
+  // evidence of anything, and pairing them would invent a timestamp.
+  check('a clock too far from the date is not paired with it',
+        api.parseBankTime('Date 12-08-2025' + ' '.repeat(60) + 'call us on 14:22:07', NOW) === null);
+}
+
 // ---------------------------------------------------------------- the robot can reach what it reads
 // Every write the Worker needs was granted to robot@cafeila.app by email. Not one
 // read was — they were all gated on users/{auth.uid}/role, and a service account

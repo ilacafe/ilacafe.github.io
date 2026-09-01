@@ -97,6 +97,81 @@ function parseAxis(t){ const info=_grp(/Transaction Info:\s*([^\n\r]+)/i,t)||'';
   return { source:'axis', amount:_num(/Amount Credited:\s*INR\s*([\d,]+(?:\.\d+)?)/i,t),
   acct:_grp(/Account Number:\s*([A-Z0-9]+)/i,t), bankTime:(_grp(/Date & Time:\s*([0-9:\- ,]+IST)/i,t)||'').trim()||null,
   ref:m?m[1]:null, payer:m?m[2].trim():null }; }
+// ---- When the BANK says the money moved ------------------------------------
+// `at` is when this Worker ingested the alert. That is the arrival clock, it is
+// what payments/incoming is indexed and ordered by, and it stays exactly as it
+// is. What it is NOT is when the customer paid: a bank alert can sit in a queue
+// for hours, and does. The POS ties a credit to a settlement by how close the
+// two are in time, so on a delayed alert it was measuring the delay rather than
+// the payment, and a genuine credit could arrive too late to be tied to the sale
+// it belonged to. Worse in the other direction: with only an ingest clock, a
+// payment made BEFORE a customer had even ordered still looked like it could be
+// theirs, because its email happened to land afterwards.
+//
+// So the bank's own stated time is parsed out and written alongside, as epoch
+// millis. Two rules make it safe to trust:
+//   - null unless BOTH a date and a time were found, and found together. A date
+//     alone means midnight, which is up to 24 hours wrong — worse than nothing.
+//   - null unless the result is sane against the clock: not in the future, not a
+//     fortnight old. A month/day swap or a two-digit-year slip then yields
+//     nothing rather than a confident wrong answer.
+// Every reader falls back to `at` when it is null, so a format this does not
+// recognise leaves the behaviour exactly as it was.
+//
+// IST, done by hand and not by Date.parse. Indian bank alerts print a local wall
+// clock and either say "IST" or say nothing; none of them carry an offset a date
+// parser would honour, so parsing one as UTC is a 5.5-hour error sitting inside a
+// 3-hour matching window — which would attach credits to the wrong sales rather
+// than fail visibly.
+const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+const MONTH3 = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+function parseBankTime(text, nowMs){
+  const t = String(text || '');
+  const now = (typeof nowMs === 'number' && isFinite(nowMs)) ? nowMs : Date.now();
+  // A date and a time have to belong to each other. Scanning for each separately
+  // would happily pair a date in the header with a clock time from a footer, so a
+  // time is only accepted from the text immediately around the date it sits with.
+  const TIME = /(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp])\.?[Mm]\.?|(\d{1,2}):(\d{2})(?::(\d{2}))?/;
+  const forms = [
+    // 12-Aug-2025, 01 Sep 26 — a named month cannot be confused with a day
+    { re: /(\d{1,2})[-\/\s]([A-Za-z]{3,9})[-\/\s](\d{2,4})/g, named: true },
+    // 12-08-2025, 01/09/26 — Indian alerts are day first
+    { re: /(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/g, named: false }
+  ];
+  for (const form of forms){
+    form.re.lastIndex = 0;
+    let m;
+    while ((m = form.re.exec(t)) !== null){
+      let d = parseInt(m[1], 10);
+      let mo = form.named ? (MONTH3[String(m[2]).slice(0, 3).toLowerCase()] || 0) : parseInt(m[2], 10);
+      let y = parseInt(m[3], 10);
+      if (!d || !mo || !y) continue;
+      if (y < 100) y += 2000;
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) continue;
+      // the clock that goes with THIS date: just before it, or just after it
+      const from = Math.max(0, m.index - 25);
+      const to = Math.min(t.length, m.index + m[0].length + 40);
+      const near = t.slice(from, to);
+      const tm = near.match(TIME);
+      if (!tm) continue;
+      const ampm = tm[4] ? String(tm[4]).toLowerCase() : '';
+      let h  = parseInt(ampm ? tm[1] : tm[5], 10);
+      const mi = parseInt(ampm ? tm[2] : tm[6], 10);
+      const se = parseInt((ampm ? tm[3] : tm[7]) || '0', 10);
+      if (!isFinite(h) || !isFinite(mi) || !isFinite(se)) continue;
+      if (ampm === 'p' && h < 12) h += 12;
+      if (ampm === 'a' && h === 12) h = 0;
+      if (h > 23 || mi > 59 || se > 59) continue;
+      const ms = Date.UTC(y, mo - 1, d, h, mi, se) - IST_OFFSET_MS;
+      if (!isFinite(ms)) continue;
+      if (ms > now + 6 * 60000) continue;              // an alert is about the past
+      if (ms < now - 14 * 24 * 3600000) continue;      // and about the recent past
+      return ms;
+    }
+  }
+  return null;
+}
+
 function parsePayment(source, text){
   source=(source||'').toLowerCase();
   if(source==='icici') return parseICICI(text);
@@ -132,8 +207,12 @@ async function handleIngest(data){
   if(!data || !authOk(data.secret, INGEST_SECRET)) return { status:401, body:{ error:'unauthorized' } };
   const p = parsePayment(data.source, data.text||'');
   if(!p || !p.amount || !p.ref) return { status:422, body:{ error:'could not parse', parsed:p } };
+  // bankTime is EPOCH MILLIS or null. parseAxis also lifts the raw "Date & Time:"
+  // string, which is the human-readable half and not something a matcher can use,
+  // so the number is taken from the whole alert rather than from that field.
+  const _now = Date.now();
   const payment = { amount:p.amount, payer:p.payer||null, ref:String(p.ref), source:p.source,
-    acct:p.acct||null, bankTime:p.bankTime||null, at: Date.now() };
+    acct:p.acct||null, bankTime: parseBankTime(data.text||'', _now), at: _now };
   let token; try{ token=await getRobotToken(); }catch(e){ return { status:502, body:{ error:String(e.message||e) } }; }
   const url = DB_URL + '/payments/incoming/' + encodeURIComponent(p.ref) + '.json?auth=' + token;
   const res = await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payment) });
@@ -1633,9 +1712,15 @@ export default {
       stage = 'token';
       const token = await getRobotToken();
       stage = 'write';
-      const payment = { amount: p.amount, payer: p.payer || null, ref: String(p.ref), source: hit.bank + '-email', bank: hit.bank, acct: p.acct || null, bankTime: null, at: Date.now() };
+      // One clock reading for both: `at` is when this alert was ingested, bankTime is
+      // when the bank says the money moved (null when the alert does not say, or
+      // does not say it in a shape this is sure of — see parseBankTime).
+      const nowMs = Date.now();
+      const payment = { amount: p.amount, payer: p.payer || null, ref: String(p.ref), source: hit.bank + '-email', bank: hit.bank, acct: p.acct || null, bankTime: parseBankTime(text, nowMs), at: nowMs };
       const res = await fetch(DB_URL + '/payments/incoming/' + encodeURIComponent(String(p.ref)) + '.json?auth=' + token, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payment) });
-      console.log('upi-email: OK ' + hit.bank + ' ' + p.amount + ' ref ' + p.ref + ' acct ' + (p.acct || '-') + ' -> ' + res.status);
+      console.log('upi-email: OK ' + hit.bank + ' ' + p.amount + ' ref ' + p.ref + ' acct ' + (p.acct || '-')
+                  + ' bankTime ' + (payment.bankTime ? new Date(payment.bankTime).toISOString() : 'none')
+                  + ' -> ' + res.status);
     } catch(e){ console.log('upi-email error at stage=' + stage + ':', e && (e.stack || e.message)); }
   }
 };
