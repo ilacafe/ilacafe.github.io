@@ -16,6 +16,7 @@ const suites = [
   'push-health-browser.test.js',
   'eod-browser.test.js',
   'web-verify-claims-browser.test.js',
+  'web-order-billing-browser.test.js',
   'auth-gate-browser.test.js',
   'pin-mask-browser.test.js',
   'kds-board-browser.test.js',

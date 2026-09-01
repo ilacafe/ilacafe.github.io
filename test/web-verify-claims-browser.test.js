@@ -199,12 +199,17 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const matched = await page.evaluate(([now]) => {
       const taken = Object.keys(window._wvCredits).find(r => window._wvClaims[r]);
       const free = Object.keys(window._wvCredits).find(r => !window._wvClaims[r]);
-      const order = (ref) => ({ total: window._wvCredits[ref].amount, upiId: 'ila@okyesbank',
-                                payLinkSentAt: window._wvCredits[ref].at - 60000, trackId: 'tk1' });
+      // Billed to a VPA the café actually offers — which is what an order carries,
+      // since the ordering page picks it off the same routing list this till reads.
+      const ours = (window.activeUPIs || [])[0];
+      const order = (ref, vpa) => ({ total: window._wvCredits[ref].amount, upiId: vpa || ours,
+                                     payLinkSentAt: window._wvCredits[ref].at - 60000, trackId: 'tk1' });
       return {
-        taken: taken, free: free,
+        taken: taken, free: free, ours: ours,
         onTaken: window.wvFindMatch(order(taken), window._wvCredits, window._wvClaims, now),
-        onFree: window.wvFindMatch(order(free), window._wvCredits, window._wvClaims, now)
+        onFree: window.wvFindMatch(order(free), window._wvCredits, window._wvClaims, now),
+        // The same free credit, wanted by an order billed to somebody else's VPA.
+        onStranger: window.wvFindMatch(order(free, 'attacker@ybl'), window._wvCredits, window._wvClaims, now)
       };
     }, [NOW]);
     check('a credit the counter has taken is not offered to a web order',
@@ -213,6 +218,15 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     check('and one nobody has taken still is',
           !!matched.onFree && matched.onFree.ref === matched.free,
           'got ' + JSON.stringify(matched.onFree && matched.onFree.ref));
+
+    // The VPA on a web order is written by the customer's own browser, so it proves
+    // nothing by itself. An order billed to a VPA the café does not hand out would
+    // otherwise take the next credit of its amount from whoever actually paid it —
+    // upiBankMatch cannot stop it, because an unknown VPA fail-opens by design.
+    check('an order billed to a VPA the café does not own is offered nothing',
+          matched.onStranger === null,
+          'offered ' + JSON.stringify(matched.onStranger && matched.onStranger.ref));
+    note('the customer picks the VPA now; this is what makes that safe');
 
     // A claim landing now, from another till, has to reach this one.
     const late = await page.evaluate(() => {

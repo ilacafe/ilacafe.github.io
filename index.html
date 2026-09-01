@@ -267,6 +267,46 @@
 
         .close-modal { background: transparent; color: rgba(255,255,255,0.8); border: none; font-weight: bold; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 20px; letter-spacing: 1px; padding: 10px;}
 
+        /* ============================================================
+           PAY — the code the customer scans FROM A SECOND DEVICE.
+           A upi:// fired from this page is an NPCI Intent (mode 04) and is
+           refused for our payees, so there is deliberately nothing here that
+           tries to open a UPI app on this phone. The code is drawn to be
+           pointed a camera at, so it is large and on white with a real quiet
+           zone; the UPI ID under it is the same payment by hand.
+           ============================================================ */
+        #cust-qr { width: 200px; height: 200px; margin: 0 auto; border-radius: 8px; display: none; background: white; padding: 8px; }
+        /* drawn at device-pixel scale — keep the browser from smoothing it */
+        #cust-qr { image-rendering: pixelated; }
+        /* Stands in for the code until one for THIS order has actually been drawn.
+           A code is money: showing one that is not this order's is worse than none. */
+        /* White on the brand brown is 4.68:1 — it clears AA and nothing else does, so
+           none of this is dimmed to mark it as secondary. Size, case and letter-spacing
+           carry that instead. Everything below is a payment instruction, which is the
+           worst possible text to have to squint at. */
+        .qr-wait { width: 216px; height: 216px; margin: 0 auto; border-radius: 8px; display: none;
+                   align-items: center; justify-content: center; text-align: center; padding: 14px;
+                   box-sizing: border-box; border: 1px dashed rgba(255,255,255,0.45);
+                   font-size: 0.85rem; line-height: 1.4; }
+        .qr-wait.qr-err { border-color: rgba(255,150,150,0.6); color: #ffb3b3; }
+        .pay-lead { font-size: 0.95rem; font-weight: 700; margin: 0 0 4px; }
+        .pay-sub { font-size: 0.78rem; margin: 0 0 14px; line-height: 1.45; }
+        .pay-or { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; font-size: 0.7rem;
+                  text-transform: uppercase; letter-spacing: 2px; }
+        .pay-or::before, .pay-or::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.35); }
+        .pay-manual { text-align: left; border: 1px solid rgba(255,255,255,0.35); border-radius: 8px; padding: 12px 14px; }
+        .pay-manual-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; }
+        .pay-manual-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+        /* The ID is the payment. It wraps rather than truncates: a VPA cut off by an
+           ellipsis is one a customer would type wrong and send to nobody. */
+        .pay-vpa { flex: 1 1 auto; min-width: 0; font-weight: 700; font-size: 1rem; word-break: break-all; }
+        .pay-copy { flex: 0 0 auto; padding: 10px 14px; font-size: 0.8rem; min-height: 44px; }
+        .pay-amount-note { font-size: 0.8rem; margin-top: 8px; }
+        /* Reopens the code from the status banner — the payment screen is closable and
+           a customer who closes it must not be stranded with an order and no way to pay. */
+        #status-pay-btn { display: none; margin-top: 12px; width: 100%; padding: 12px; border: none;
+                          border-radius: 10px; background: #8D6E52; color: #fff; font-weight: 700; cursor: pointer; }
+
         .bill-receipt { background-color: transparent; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 15px; border-radius: 8px; text-align: left; font-size: 0.95rem; }
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 10px; }
         .bill-receipt-row:last-child { margin-bottom: 0; border-bottom: none; padding-bottom: 0;}
@@ -356,6 +396,7 @@
          same-origin and fetched in that mode by default, so declaring it would
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/build-check.js">
+    <link rel="preload" as="script" href="/qr.js">
 </head>
 <body>
 
@@ -387,6 +428,11 @@
                 <div id="status-label" style="font-size:1.05rem; font-weight:700; color:#3a2f24;">Order received</div>
                 <div id="status-sub" style="font-size:0.85rem; color:#6a5b48; margin-top:2px;"></div>
                 <div id="status-oven-note" style="display:none; font-size:0.82rem; color:#a05a2c; margin-top:8px; padding:7px 10px; background:rgba(224,122,44,0.08); border-radius:8px; border:1px solid rgba(224,122,44,0.2);">🔥 The oven's warming up for your pizza — thanks for your patience.</div>
+                <!-- The payment screen is closable, and a customer who closes it before paying
+                     would otherwise have an order and no way to pay for it. This brings the
+                     code back. It appears only while a prepaid order of this phone's is
+                     still unpaid, and goes as soon as the money lands. -->
+                <button id="status-pay-btn" onclick="window.reopenPayment()">Show payment code</button>
                 <button id="status-dismiss" onclick="window.dismissStatus()" style="display:none; margin-top:12px; width:100%; padding:10px; border:none; border-radius:10px; background:#8D6E52; color:#fff; font-weight:700; cursor:pointer;">Done</button>
             </div>
         </div>
@@ -520,11 +566,36 @@
                 <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
             </div>
 
-            <!-- STEP 3: order placed, live payment status -->
+            <!-- STEP 2: order placed, live payment status -->
             <div id="pay-step-status" style="display:none; text-align:center; padding:10px 0;">
                 <div id="status-icon" style="font-size:2.5rem; margin-bottom:10px;">⏳</div>
                 <div id="status-title" style="font-size:1.1rem; font-weight:700; margin-bottom:8px;">Order placed</div>
                 <div id="status-detail" aria-live="polite" style="font-size:0.85rem;  line-height:1.5;">Confirming your payment automatically…</div>
+            </div>
+
+            <!-- STEP 3: pay. Takeaway and delivery only — a dine-in table settles on the
+                 till's own code when the bill comes, and a second code here would take
+                 money the table's bill would never know about.
+                 The code is for ANOTHER DEVICE to scan. Tapping a upi:// on this page
+                 opens the app as an NPCI Intent (initiation mode 04), which OC/76A bars
+                 to a P2P payee — it dies after the PIN, every time — so nothing here
+                 offers to open a UPI app on this phone. The UPI ID below is the same
+                 payment made by hand, for a customer who has only one phone. -->
+            <div id="pay-step-pay" style="display:none;">
+                <p class="pay-lead">Scan with a UPI app on another phone</p>
+                <p class="pay-sub">Any UPI app — GPay, PhonePe, Paytm. This screen updates on its own the moment your payment reaches us.</p>
+                <canvas id="cust-qr" width="200" height="200" role="img" aria-label="UPI payment code — scan this to pay"></canvas>
+                <div id="cust-qr-wait" class="qr-wait">Preparing your code…</div>
+
+                <div class="pay-or">or pay by hand</div>
+                <div class="pay-manual">
+                    <div class="pay-manual-label">UPI ID</div>
+                    <div class="pay-manual-row">
+                        <span id="cust-upi-id" class="pay-vpa">—</span>
+                        <button type="button" class="btn btn-secondary pay-copy" id="cust-upi-copy" onclick="window.copyUPIId()">Copy</button>
+                    </div>
+                    <div class="pay-amount-note">Send exactly ₹<span id="cust-upi-amount">0</span> — we match your payment by its amount.</div>
+                </div>
             </div>
 
             <button class="close-modal" onclick="closeModal('payment-modal')">✖ CLOSE</button>
@@ -538,7 +609,10 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.5"></script>
+    <script src="/build-check.js" data-build="2026-09-01.6"></script>
+    <!-- The payment QR, drawn on this phone rather than fetched. The same encoder the
+         till uses, so the code a customer scans here is the code the counter draws. -->
+    <script src="/qr.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -805,6 +879,7 @@
             }
             window.dismissStatus=function(){
                 localStorage.removeItem('ila_track_id'); localStorage.removeItem('ila_track_items'); localStorage.removeItem('ila_track_started');
+                if(window.clearPayPrompt) window.clearPayPrompt();
                 if(statusRef){ statusRef.off(); statusRef=null; } if(etaTimer){clearInterval(etaTimer);etaTimer=null;}
                 document.getElementById('order-status-banner').style.display='none';
             };
@@ -830,12 +905,22 @@
                         chip.style.display='none';
                         const note=document.getElementById('status-oven-note'); if(note) note.style.display='none';
                         dismiss.style.display='block';
+                        // never leave a code up on an order the café has refused
+                        if(window.clearPayPrompt) window.clearPayPrompt();
                         if(etaTimer){clearInterval(etaTimer);etaTimer=null;}
                         return;
                     }
                     if(t.status==='received'){
-                        setSteps('received'); label.textContent='Order received'; sub.textContent='Waiting for the café to confirm…';
+                        setSteps('received'); label.textContent='Order received';
+                        // A prepaid order sitting at 'received' is usually waiting on the
+                        // customer, not on the café. Saying "waiting for the café" there sends
+                        // someone off to wait for a thing that is waiting for them.
+                        const _owe = window.savedPayPrompt ? window.savedPayPrompt() : null;
+                        const owed = !!_owe && _owe.trackId === trackId && t.paymentVerified !== true;
+                        sub.textContent = owed ? 'Waiting for your payment.' : 'Waiting for the café to confirm…';
                         chip.style.display='none'; dismiss.style.display='none';
+                        if(t.paymentVerified === true){ if(window.clearPayPrompt) window.clearPayPrompt(); }
+                        else if(window.refreshPayPrompt) window.refreshPayPrompt(trackId);
                         showLiveETA(trackItems);
                     } else if(t.status==='preparing'){
                         // distinguish "in queue" (orders ahead) from "being made" — both truthful from load signal
@@ -855,6 +940,7 @@
                             setSteps('preparing'); label.textContent='Preparing your order'; sub.textContent='Our kitchen is on it.';
                         }
                         chip.style.display='inline-block'; dismiss.style.display='none';
+                        if(window.clearPayPrompt) window.clearPayPrompt();   // accepted: nothing left to pay here
                         showLiveETA(trackItems);
                         if(!etaTimer) etaTimer=setInterval(()=>{ showLiveETA(trackItems);
                             // refresh queue/preparing label live too
@@ -868,6 +954,7 @@
                     } else if(t.status==='ready'){
                         setSteps('ready'); label.textContent='Ready! 🎉'; sub.textContent='Your order is ready.';
                         chip.style.display='none'; dismiss.style.display='block';
+                        if(window.clearPayPrompt) window.clearPayPrompt();
                         const note=document.getElementById('status-oven-note'); if(note) note.style.display='none';
                         if(etaTimer){clearInterval(etaTimer);etaTimer=null;}
                     }
@@ -946,11 +1033,50 @@
             }[c]));
         }
 
-        const OWNER_WHATSAPP = "918882946526"; 
-        // No UPI routing here any more. This app never collects payment: a upi:// fired from a
-        // web page is an NPCI Intent and is refused for our payees. The POS assigns the VPA when
-        // it sends the WhatsApp pay link (sendPayLink), and writes it back onto the order so the
-        // bank matcher can tie the credit to it.
+        // ===== WHERE A PREPAID WEB ORDER'S MONEY GOES =====
+        // This app collects payment again, and it does it the one way that is known to work:
+        // it DRAWS the café's UPI code and asks the customer to scan it from a second phone.
+        //
+        // What it must never do is fire a upi:// at this device. From a web page that is an
+        // NPCI Intent (initiation mode 04), and OC/76A bars mode 04/05 to a P2P payee: it dies
+        // after the PIN however the string is built. That is the whole reason collection used
+        // to be handed to a WhatsApp pay link — a link tapped inside a native app completes.
+        // In practice the link did not arrive as a link: WhatsApp renders one from an unsaved
+        // number as dead text, and a first-time customer is exactly an unsaved number. A code
+        // in front of a camera has neither problem, and it is the route the counter has been
+        // taking money through all along.
+        //
+        // The VPA is chosen HERE, on the customer's phone, and written onto the order in the
+        // same push that creates it, with payLinkSentAt — the moment the customer was shown a
+        // code. The POS matcher (wvFindMatch) requires both: without them an order matches a
+        // bank credit on amount alone and can take money that belongs to another bill.
+        //
+        // settings/upiList is world-readable and is the weighted list the routing keeps (VPAs
+        // repeated in proportion to remaining monthly headroom, capped-out ones dropped), so
+        // picking uniformly from it IS headroom-weighted routing — the same pick the till makes.
+        // The fallback, for a routing list that has not landed or is unusable. It must stay
+        // the same string as the one in pos.html: the till only books a payment against a web
+        // order whose VPA is one the café hands out, and this is the one entry in that answer
+        // that is not read from the database.
+        const CAFE_UPI_ID = "sraveen.chirania-1@okaxis";
+        // A VPA out of this list ends up inside a upi:// query string that a customer is asked
+        // to pay. Anything with an & or a space in it would silently change what that string
+        // says, so the shape is checked before it can be used, and a bad entry falls back to
+        // the café's own ID rather than drawing a code that pays somewhere unintended.
+        const VPA_OK = /^[a-zA-Z0-9][a-zA-Z0-9._-]{1,63}@[a-zA-Z][a-zA-Z0-9.-]{1,31}$/;
+        window.activeUPIs = [CAFE_UPI_ID];
+        db.ref('settings/upiList').on('value', snap => {
+            const v = snap.val();
+            // Firebase hands a sparse array back as an object, so take either shape.
+            const list = (Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []))
+                            .filter(x => typeof x === 'string' && VPA_OK.test(x.trim()))
+                            .map(x => x.trim());
+            window.activeUPIs = list.length ? list : [CAFE_UPI_ID];
+        }, () => { window.activeUPIs = [CAFE_UPI_ID]; });
+        window.pickUPI = function(){
+            const list = window.activeUPIs && window.activeUPIs.length ? window.activeUPIs : [CAFE_UPI_ID];
+            return list[Math.floor(Math.random() * list.length)];
+        };
         
         const urlParams = new URLSearchParams(window.location.search);
         const urlTable = urlParams.get('table');
@@ -1528,7 +1654,7 @@
             window.currentOrderInfo.gated = gated;
             const gnote = document.getElementById('large-order-note');
             if (gnote){
-                if (gated){ gnote.style.display = 'block'; gnote.innerText = 'We\u2019ll WhatsApp your payment link on this number. Your order goes to the kitchen as soon as the payment lands.'; }
+                if (gated){ gnote.style.display = 'block'; gnote.innerText = 'Next you\u2019ll get a UPI code to scan. Your order reaches the kitchen as soon as the payment lands \u2014 the number is so we can reach you about it.'; }
                 else { gnote.style.display = 'none'; }
             }
 
@@ -1536,6 +1662,10 @@
             // dine-in (they're at a table). Prefill a saved number for repeat customers.
             const phoneStep = document.getElementById('pay-step-phone');
             window._needPhone = !isDineIn;
+            // Whatever this dialog was last showing is the PREVIOUS order's. A code left on it
+            // belongs to an amount that is no longer the one above it, so it goes before the
+            // dialog is opened rather than as the next step draws over it.
+            window.hidePayStep();
             if (isDineIn){
                 // dine-in: skip straight to payment options
                 phoneStep.style.display = 'none';
@@ -1554,11 +1684,13 @@
             openModal('payment-modal');
         };
 
-        // STEP 1 → PLACE. There is no in-browser payment step.
-        // A upi:// handoff from a WEB PAGE is an NPCI "Intent" (initiation mode 04), and
-        // OC/76A bars mode 04/05 to a P2P payee — it dies after the PIN no matter how the
-        // string is built. The same link tapped inside a native app completes, so collection
-        // happens there: a WhatsApp pay link for takeaway/delivery, the POS QR for dine-in.
+        // STEP 1 → PLACE, then show the code.
+        // The order is written first and the payment screen follows it, not the other way
+        // round: the kitchen's record is what the customer's status, the POS card and the bank
+        // matcher all hang off, and an order sitting unpaid is recoverable where a payment
+        // against no order is not.
+        // The code on that step is for a SECOND device to scan — see the routing note above
+        // for why this page must never hand a upi:// to the phone it is running on.
         window.startPayment = function(skipPhone){
             if (!skipPhone && window._needPhone){
                 const raw = (document.getElementById('cust-phone').value || '').replace(/\D/g,'');
@@ -1582,15 +1714,30 @@
             localStorage.setItem('ila_track_items', JSON.stringify(orderItemsSnapshot));
             localStorage.setItem('ila_track_started', Date.now());
 
+            // Takeaway and delivery are prepaid, so this order is billed the moment it is
+            // written: a VPA off the routing list, and payLinkSentAt — the moment the customer
+            // was shown a code. Both go in the SAME push. They cannot be added afterwards:
+            // an update to an existing order is staff-only under the rules, and the POS
+            // matcher needs both or it will not match this order to any bank credit at all.
+            // A dine-in table settles on the till, so it is billed by nothing here.
+            const isDineInOrder = (info.type === 'Dine-in');
+            const payVPA = isDineInOrder ? null : window.pickUPI();
+            // The amount the code will ask for, fixed here. The cart is emptied a few lines
+            // below, so reading window.totalAmount later would draw a code for ₹0.
+            const payAmount = Math.round((parseFloat(window.totalAmount) || 0) * 100) / 100;
+            info.upiId = payVPA; info.payAmount = payAmount;
+
             ensureAuth().then(() => {
-                db.ref('orders/pendingWeb').push({ orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: null, phone: info.phone || null, gated: !!info.gated, trackId: trackId, createdAt: firebase.database.ServerValue.TIMESTAMP });
+                const orderRecord = { orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: payVPA, phone: info.phone || null, gated: !!info.gated, trackId: trackId, createdAt: firebase.database.ServerValue.TIMESTAMP };
+                if (payVPA) orderRecord.payLinkSentAt = firebase.database.ServerValue.TIMESTAMP;
+                db.ref('orders/pendingWeb').push(orderRecord);
                 // Seed a status record the POS will advance as the order progresses.
                 // NO PHONE NUMBER HERE. orders/track is world-readable (the rules need it:
                 // a customer who scans a table QR queries this node by `table`, and it is
                 // indexed for that), so anything written here can be read by anyone, and
-                // the whole node can be enumerated. The number the counter needs for the
-                // WhatsApp pay link lives on the order in orders/pendingWeb, which is
-                // staff-only — sendPayLink and contactRow both read it from there.
+                // the whole node can be enumerated. The number the counter needs to chase a
+                // payment or say a takeaway is ready lives on the order in orders/pendingWeb,
+                // which is staff-only — the POS contact row reads it from there.
                 // Only a table label may go into the public track record. orders/track is
                 // world-readable — the table lookup below queries the whole node — so a
                 // delivery address written here is readable by anyone. Nothing reads this
@@ -1638,6 +1785,125 @@
             window._orderPlaced = true;
         };
 
+        // ===== THE CODE ON THE CUSTOMER'S SCREEN =====
+        // Drawn here, from the payment string, in about a millisecond by the same encoder the
+        // till uses (/qr.js). Nothing is fetched, so there is no loading state to get stuck in
+        // and no outside company standing between a customer and paying us.
+        //
+        // showPayStep is the only thing that puts a code on screen, and it takes the VPA and
+        // the amount as arguments rather than reading them back off the page — the code and
+        // the figure printed beside it are then the same number by construction.
+        window.showPayStep = function(vpa, amount){
+            const block = document.getElementById('pay-step-pay');
+            const canvas = document.getElementById('cust-qr');
+            const wait = document.getElementById('cust-qr-wait');
+            if (!block || !canvas || !wait) return;
+            if (!vpa || !(amount > 0)){ block.style.display = 'none'; return; }
+            block.style.display = 'block';
+            const idEl = document.getElementById('cust-upi-id');
+            const amtEl = document.getElementById('cust-upi-amount');
+            if (idEl) idEl.innerText = vpa;
+            if (amtEl) amtEl.innerText = amount;
+            window._payVPA = vpa; window._payAmount = amount;
+            const copy = document.getElementById('cust-upi-copy'); if (copy) copy.innerText = 'Copy';
+            wait.classList.remove('qr-err');
+            try {
+                window.ilaQR.drawToCanvas(canvas, 'upi://pay?pa=' + vpa + '&pn=ILA&am=' + amount + '&cu=INR', 200);
+                canvas.style.display = 'block';
+                wait.style.display = 'none';
+            } catch (e){
+                // Only reachable if /qr.js did not load. Say what to do instead of showing an
+                // unscannable box — the UPI ID below is still a complete way to pay.
+                console.error('QR render failed', e);
+                canvas.style.display = 'none';
+                wait.textContent = 'Couldn’t draw the code — pay to the UPI ID below instead.';
+                wait.classList.add('qr-err');
+                wait.style.display = 'flex';
+            }
+        };
+        window.hidePayStep = function(){
+            const block = document.getElementById('pay-step-pay');
+            const canvas = document.getElementById('cust-qr');
+            if (block) block.style.display = 'none';
+            // The ID the Copy button reads goes with the code it belonged to.
+            window._payVPA = null; window._payAmount = 0;
+            // A hidden canvas keeps its bitmap. Wipe it, so a paid order's code is never one
+            // style change away from being back on screen.
+            if (canvas){
+                try { canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); } catch(e){}
+                canvas.style.display = 'none';
+            }
+        };
+
+        // The ID is the whole payment for anyone holding one phone, so copying it has to
+        // actually work. navigator.clipboard needs a secure context and can be refused
+        // outright; the textarea fallback is what older in-app browsers give you. If both
+        // fail the button says so rather than pretending — the ID is on screen to be read
+        // either way.
+        window.copyUPIId = function(){
+            const btn = document.getElementById('cust-upi-copy');
+            const id = window._payVPA || '';
+            if (!id) return;
+            const ok = () => { if (btn){ btn.innerText = 'Copied'; setTimeout(() => { if (btn) btn.innerText = 'Copy'; }, 2000); } };
+            const fail = () => {
+                let copied = false;
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = id; ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+                    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, id.length);
+                    copied = document.execCommand('copy');
+                    document.body.removeChild(ta);
+                } catch(e){ copied = false; }
+                if (copied) ok();
+                else if (btn){ btn.innerText = 'Copy it'; setTimeout(() => { if (btn) btn.innerText = 'Copy'; }, 3000); }
+            };
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(id).then(ok).catch(fail);
+                else fail();
+            } catch(e){ fail(); }
+        };
+
+        // Brings the code back after the payment screen has been closed. The order is already
+        // written, so this only redraws — it never places anything. The live watch stays where
+        // it was put when the order went in; rebinding it here would double it up.
+        window.reopenPayment = function(){
+            const saved = window.savedPayPrompt();
+            if (!saved) return;
+            document.getElementById('pay-step-phone').style.display = 'none';
+            document.getElementById('pay-step-status').style.display = 'block';
+            document.getElementById('payment-amount').innerText = saved.amount;
+            const i = document.getElementById('status-icon'), t = document.getElementById('status-title'), d = document.getElementById('status-detail');
+            if (i) i.innerText = '⏳';
+            if (t) t.innerText = 'Waiting for your payment';
+            if (d) d.innerText = 'Scan the code below with a UPI app on another phone, or pay to the UPI ID. This screen updates on its own when the payment reaches us.';
+            openModal('payment-modal');
+            window.showPayStep(saved.vpa, saved.amount);
+        };
+
+        // The code is remembered for exactly as long as it is owed, and these three are the
+        // only things that read or write that: the button in the banner, the code on screen
+        // and what is stored can then never disagree. A code still offered to somebody who
+        // has already paid is an invitation to pay twice.
+        window.savedPayPrompt = function(){
+            let saved = null;
+            try { saved = JSON.parse(localStorage.getItem('ila_pay') || 'null'); } catch(e){ saved = null; }
+            return (saved && saved.vpa && saved.amount > 0) ? saved : null;
+        };
+        window.clearPayPrompt = function(){
+            try { localStorage.removeItem('ila_pay'); } catch(e){}
+            window.hidePayStep();
+            const b = document.getElementById('status-pay-btn'); if (b) b.style.display = 'none';
+        };
+        window.refreshPayPrompt = function(trackId){
+            const b = document.getElementById('status-pay-btn'); if (!b) return;
+            const saved = window.savedPayPrompt();
+            // Only for the order the banner is actually showing. A code left over from an
+            // earlier order must not be offered against this one.
+            const mine = saved && (!trackId || saved.trackId === trackId);
+            b.style.display = mine ? 'block' : 'none';
+        };
+
         // Live, honest payment status: watches for the auto-verification (bank credit matched to
         // this order's account+amount) and updates the view. Never blind, never auto-dismisses.
         window.watchPaymentStatus = function(trackId, info){
@@ -1647,9 +1913,17 @@
             };
             const isDineIn = (info.type === 'Dine-in');
             if (isDineIn){
-                setStatus('\u2705', 'Order placed', 'It\u2019s with the kitchen. Pay at your table when you\u2019re done \u2014 our staff will bring the bill.');
+                // A dine-in table settles on the till's own code when the bill comes. A second
+                // code here would take money that table's bill would never know about.
+                setStatus('✅', 'Order placed', 'It’s with the kitchen. Pay at your table when you’re done — our staff will bring the bill.');
+                // clearPayPrompt, not just hidePayStep: this phone is now tracking THIS order,
+                // so a code stored against an earlier one has nothing left to lead back to.
+                window.clearPayPrompt();
             } else {
-                setStatus('\u23f3', 'Order received \u2014 awaiting payment', 'We\u2019ll WhatsApp your payment link' + (info.phone ? ' on ' + info.phone : '') + ' in a moment. Your order goes to the kitchen as soon as the payment lands.');
+                setStatus('⏳', 'Order received — pay to confirm', 'Scan the code below with a UPI app on another phone, or pay to the UPI ID. Your order goes to the kitchen as soon as the payment lands.');
+                window.showPayStep(info.upiId, info.payAmount);
+                try { localStorage.setItem('ila_pay', JSON.stringify({ trackId: trackId, vpa: info.upiId, amount: info.payAmount })); } catch(e){}
+                window.refreshPayPrompt(trackId);
             }
             // Clear cart now that the order is safely recorded.
             window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI();
@@ -1663,22 +1937,24 @@
                 if (v.paymentVerified === true || (v.status && v.status !== 'received' && v.status !== 'cancelled')){
                     done = true;
                     // dine-in settles at the table, so confirming a PAYMENT here would be false
-                    if (isDineIn) setStatus('\u2705', 'In the kitchen', 'Your order is being made. Pay at your table when you\u2019re done.');
-                    else setStatus('\u2705', 'Payment confirmed', 'Your order is placed and on its way to the kitchen. You can track it below.');
+                    if (isDineIn) setStatus('✅', 'In the kitchen', 'Your order is being made. Pay at your table when you’re done.');
+                    else setStatus('✅', 'Payment confirmed', 'Your order is placed and on its way to the kitchen. You can track it below.');
+                    window.clearPayPrompt();
                 } else if (v.status === 'cancelled'){
                     done = true;
                     setStatus('⚠️', 'Order not accepted', 'This order was cancelled. If you were charged, it will be refunded — please contact us.');
+                    window.clearPayPrompt();
                 }
             });
-            // Safety timeout: at 120s unverified, flag this order so the POS notifies staff to
-            // verify manually. Keep watching — when they do, paymentVerified flips and the view
-            // updates to confirmed (the loop closes; nothing dead-ends).
-            // Nudge only. This page cannot know whether the pay link has been sent yet, so it
-            // must not assert that a payment is late — the POS card carries that state.
+            // Safety timeout: at 120s unverified, say so and LEAVE THE CODE UP. Keep watching —
+            // when the credit lands paymentVerified flips and the view updates to confirmed
+            // (the loop closes; nothing dead-ends).
+            // Nudge only. This phone cannot see the café's bank, so it must not assert that a
+            // payment is late — the POS card carries that state.
             if (info.type !== 'Dine-in'){
                 setTimeout(() => {
                     if (done) return;
-                    setStatus('\u231b', 'Waiting for your payment', 'If the WhatsApp payment link hasn\u2019t arrived, please check your messages or speak to our staff.');
+                    setStatus('⌛', 'Waiting for your payment', 'If you’ve already paid, this will update on its own — it can take a minute. If nothing happens, show this screen to our staff.');
                 }, 120000);
             }
         };
