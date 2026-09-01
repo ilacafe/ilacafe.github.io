@@ -114,9 +114,6 @@
           "billedAt": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
           },
-          "payLinkSentAt": {
-            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
-          },
           "payment": {
             ".validate": "newData.hasChildren(['ref','amount'])",
             "ref": {
