@@ -172,8 +172,85 @@ const rows = (tab) => tab.evaluate(() => document.querySelectorAll('.menu-row,.c
         !nowWorks.noButton && nowWorks.cartLines === 1 && nowWorks.total === 165,
         JSON.stringify(nowWorks));
 
-  check('no page threw while any of that ran', threw.length === 0, threw.join(' | '));
   await ctx.close();
+
+  // ---------------------------------------------------------------- OFFLINE
+  // The till must still take orders with no connection. This is not a nice-to-have
+  // on this page: a counter mid-service whose wifi has gone is the case the offline
+  // branch exists for, and it works from this same cached menu.
+  //
+  // Showing the cache without trusting it nearly broke that. The provisional flag
+  // was cleared only by the live menu listener — and a till that OPENS while
+  // disconnected never receives that listener at all, so nothing would ever clear
+  // it. Menu on screen, price map populated, OFFLINE showing, and every tap
+  // refused, for as long as the wifi stayed down. It was caught by being asked
+  // whether the till still worked offline, not by anything here, which is why it is
+  // here now.
+  {
+    const off = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1024, height: 900 } });
+    await off.addInitScript(`try{
+      localStorage.setItem('ila.role.v1', JSON.stringify({uid:'u1',role:'cashier',name:'T'}));
+      localStorage.setItem('ila_cached_menu', ${JSON.stringify(JSON.stringify(CACHED))});
+      localStorage.setItem('ila_cached_category_order', ${JSON.stringify(JSON.stringify(Object.keys(CACHED)))});
+      localStorage.setItem('ila_cached_item_order', '{}');
+      localStorage.removeItem('ila_pos_cart');
+    }catch(e){}`);
+    // .info/connected answers false and NOTHING else ever answers — which is what a
+    // disconnected Realtime Database actually does. No menu listener, ever.
+    await off.addInitScript(`
+      (() => {const noop=()=>{};const chain=()=>new Proxy(function(){},{get:()=>chain(),apply:()=>chain()});
+       const snap=v=>({val:()=>v,exists:()=>v!=null,forEach:()=>{},numChildren:()=>0});
+       const db={ref:p=>{const q=String(p==null?'':p);return {on:(e,cb)=>{
+           if(e==='value'&&q==='.info/connected')setTimeout(()=>{try{cb(snap(false))}catch(e){}},30);
+           return cb;},
+         off:noop,once:()=>new Promise(()=>{}),
+         limitToLast:()=>chain(),orderByChild:()=>chain(),push:()=>({key:'k'}),
+         set:()=>Promise.resolve(),remove:()=>Promise.resolve(),update:()=>Promise.resolve(),
+         transaction:(f,cb)=>{if(cb)cb(null,false,snap(null));return Promise.resolve({committed:false});}};},
+        goOnline:noop,goOffline:noop};
+       window.firebase={initializeApp:noop,apps:[{}],database:Object.assign(()=>db,{ServerValue:{TIMESTAMP:0}}),
+        auth:()=>({onAuthStateChanged:cb=>setTimeout(()=>{try{cb({uid:'u1'})}catch(e){}},0),
+         signInWithEmailAndPassword:()=>Promise.resolve({}),signOut:()=>Promise.resolve(),currentUser:{uid:'u1'}}),
+        messaging:()=>({getToken:()=>Promise.resolve(null),onMessage:noop})};})();`);
+
+    const otab = await off.newPage();
+    otab.on('pageerror', e => threw.push('offline: ' + e.message));
+    otab.on('dialog', d => d.dismiss().catch(() => {}));
+    await otab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await otab.goto(base + '/pos.html', { waitUntil: 'commit' });
+
+    const drew = await waitFor(otab, () => document.querySelectorAll('.menu-row').length > 0, 8000);
+    check('a till that opens with no connection still gets its menu', drew,
+          drew ? '' : 'no menu was drawn at all');
+
+    // Wait for the offline branch to have RUN, rather than assuming it already has.
+    // The cached menu is drawn from a microtask within about 50ms, well before
+    // .info/connected has reported anything — so checking straight after the rows
+    // appear catches the page mid-boot and fails a page that is perfectly fine. It
+    // did exactly that on the first run of this block.
+    const wentOffline = await waitFor(otab,
+      () => getComputedStyle(document.getElementById('offline-indicator')).display !== 'none', 8000);
+    check('and says it is offline', wentOffline,
+          wentOffline ? '' : 'the offline indicator never appeared');
+
+    const state = await otab.evaluate(() => {
+      const btn = document.querySelector('.swap-container [data-add], .add-btn[data-add]');
+      if (btn) btn.click();
+      return { provisional: window.menuIsProvisional,
+               offlineShown: getComputedStyle(document.getElementById('offline-indicator')).display !== 'none',
+               priceMap: Object.keys(window.itemPriceMap || {}).length,
+               cartLines: Object.keys(window.cart || {}).length,
+               total: window.totalAmount || 0 };
+    });
+    check('and can still take an order — the whole point of the offline path',
+          state.cartLines === 1 && state.total === 150, JSON.stringify(state));
+    check('because offline deliberately trusts the cached menu, flag and price map together',
+          state.provisional === false && state.priceMap > 0, JSON.stringify(state));
+    note('online the truth is half a second away; offline the cache is all there is');
+    await off.close();
+  }
+
+  check('no page threw while any of that ran', threw.length === 0, threw.join(' | '));
   await browser.close();
   server.close();
   done();

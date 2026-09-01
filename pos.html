@@ -810,7 +810,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.2"></script>
+    <script src="/build-check.js" data-build="2026-09-01.3"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -2513,7 +2513,22 @@
                 let cachedMenu = JSON.parse(localStorage.getItem('ila_cached_menu'));
                 let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
                 window.currentItemOrder = JSON.parse(localStorage.getItem('ila_cached_item_order')) || {};
-                if(cachedMenu) { buildMenuMaps(cachedMenu); renderPOSMenu(cachedMenu, cachedOrder || []); }
+                // A till with no connection works from this cached menu — that is the
+                // whole point of this branch, and buildMenuMaps above is it deciding to
+                // trust the cache for pricing. So the provisional flag has to come off
+                // with it, or the page contradicts itself: the price map says trust me
+                // and the tap handler says do not.
+                //
+                // This matters most in the case that has no other way out. A till that
+                // OPENS while disconnected never receives the live menu listener at all,
+                // so nothing else would ever clear the flag, and the counter would be
+                // looking at a menu it could not tap for as long as the wifi stayed
+                // down. Which is exactly when it must keep serving.
+                if(cachedMenu) {
+                    buildMenuMaps(cachedMenu);
+                    renderPOSMenu(cachedMenu, cachedOrder || []);
+                    markMenuProvisional(false);
+                }
             }
         });
 
