@@ -45,7 +45,7 @@ const server = http.createServer((req, res) => {
 //
 // TIMESTAMP is the real sentinel Firebase sends rather than a number, so the
 // suite can tell a server clock from the phone's. That distinction matters here:
-// the till compares payLinkSentAt against the times on bank credits, and a phone
+// the till compares billedAt against the times on bank credits, and a phone
 // with a wrong clock would put the order outside its own payment window.
 const STUB = `
 (() => {
@@ -151,11 +151,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     check('it carries a VPA off the café’s routing list',
           ['ila.one@okaxis', 'ila.two@okhdfcbank'].includes(rec.upiId), 'upiId was ' + JSON.stringify(rec.upiId));
     check('and the moment the customer was asked, on the SERVER’s clock',
-          !!rec.payLinkSentAt && rec.payLinkSentAt['.sv'] === 'timestamp',
-          JSON.stringify(rec.payLinkSentAt));
+          !!rec.billedAt && rec.billedAt['.sv'] === 'timestamp',
+          JSON.stringify(rec.billedAt));
     note('a phone with a wrong clock would put its own order outside its payment window');
     check('both in the same write — nothing may be added to the order afterwards',
-          r.pushes === 1 && !!rec.upiId && !!rec.payLinkSentAt);
+          r.pushes === 1 && !!rec.upiId && !!rec.billedAt);
     note('the rules let an anonymous browser create an order and never touch it again');
 
     check('the code is on screen', r.payStep === 'block', 'display: ' + r.payStep);
@@ -181,7 +181,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const rec = r.record || {};
     check('a dine-in order is written', r.pushes === 1, r.pushes + ' push(es)');
     check('and is billed by nothing here',
-          !rec.upiId && !rec.payLinkSentAt, JSON.stringify({ upiId: rec.upiId, sent: rec.payLinkSentAt }));
+          !rec.upiId && !rec.billedAt, JSON.stringify({ upiId: rec.upiId, billed: rec.billedAt }));
     check('no code is shown for it', r.payStep === 'none', 'display: ' + r.payStep);
     check('and it says to pay at the table', /at your table/i.test(r.detail), r.detail);
     check('nothing is remembered to bring a code back to', r.stored === null, String(r.stored));

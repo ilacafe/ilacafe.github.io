@@ -4,7 +4,7 @@
 // nothing ever billed it, or it was billed and nothing came back. The POS had an
 // alert for each. Only the first one worked.
 //
-// payLinkSentAt is the moment the customer was SHOWN a payment code. The customer's
+// billedAt is the moment the customer was SHOWN a payment code. The customer's
 // own app stamps it now, in the same push that creates the order, so an order that
 // arrives without it is one nothing ever asked for money — and wvFindMatch will not
 // match such an order to any credit, so it can never auto-verify. It used to be
@@ -25,7 +25,7 @@
 // The interval is lifted out of the page and run against a clock, so what is under
 // test is which orders it decides to alert on and when.
 
-const { readPage, suite } = require('./helpers');
+const { readPage, extractAssignedFunction, suite } = require('./helpers');
 
 const { check, note, done } = suite('Unpaid web orders — both alerts, or neither is a net');
 
@@ -49,9 +49,16 @@ const TICK = src.slice(bodyStart + 1, bodyEnd);
 
 const MIN = 60000;
 
+// The watcher asks the page how an order is billed rather than reading a field, so
+// the real helper comes out of pos.html too — otherwise this suite would be testing
+// a second implementation of the one thing the rename is about.
+const BILLED_AT = new Function('return ' +
+  extractAssignedFunction(src, 'orderBilledAt').replace(/^function orderBilledAt/, 'function'))();
+
 function till(orders, matched) {
   const pushes = [];
-  const win = { pendingWebOrders: orders, _plAlerted: {}, _mvAlerted: {}, _wvMatch: matched || {} };
+  const win = { pendingWebOrders: orders, _plAlerted: {}, _mvAlerted: {}, _wvMatch: matched || {},
+                orderBilledAt: BILLED_AT };
   const tick = new Function('window', 'Date', 'Math', 'posSendPush', 'now_', TICK.replace('const now = Date.now();', 'const now = now_;'));
   return {
     pushes,
@@ -80,7 +87,7 @@ const ORDER = (extra) => Object.assign(
 
 // --------------------------------------- the code went up, nothing came back
 {
-  const t = till({ o1: ORDER({ payLinkSentAt: NOW + 2 * MIN }) });
+  const t = till({ o1: ORDER({ billedAt: NOW + 2 * MIN }) });
   t.at(NOW + 8 * MIN);
   check('a code just shown is given time to be paid', t.pushes.length === 0, t.titles().join(', '));
   t.at(NOW + 13 * MIN);
@@ -97,11 +104,11 @@ const ORDER = (extra) => Object.assign(
 
 // ------------------------------------------------------------ nothing to say
 {
-  const paid = till({ o1: ORDER({ payLinkSentAt: NOW, payment: { ref: '5123', amount: 480 } }) });
+  const paid = till({ o1: ORDER({ billedAt: NOW, payment: { ref: '5123', amount: 480 } }) });
   paid.at(NOW + 60 * MIN);
   check('an order already booked is not chased', paid.pushes.length === 0, paid.titles().join(', '));
 
-  const matching = till({ o1: ORDER({ payLinkSentAt: NOW }) }, { o1: '5123' });
+  const matching = till({ o1: ORDER({ billedAt: NOW }) }, { o1: '5123' });
   matching.at(NOW + 60 * MIN);
   check('nor is one whose credit has matched and is being booked', matching.pushes.length === 0,
         matching.titles().join(', '));
@@ -112,10 +119,23 @@ const ORDER = (extra) => Object.assign(
   check('and a dine-in order is not prepaid at all', dinein.pushes.length === 0, dinein.titles().join(', '));
 }
 
+// ------------------------------------- an order from a page that predates the rename
+// billedAt was called payLinkSentAt. Until no browser can still be holding the older
+// page, orders arrive under the old name — and reading them as never-billed would
+// tell staff to take payment on the till for an order already asked for.
+{
+  const t = till({ o1: ORDER({ payLinkSentAt: NOW }) });
+  t.at(NOW + 13 * MIN);
+  check('an order billed under the old field name is chased, not called unbilled',
+        t.pushes.length === 1 && /still unpaid/i.test(t.pushes[0].title), t.titles().join(', '));
+  check('and the clock runs from when it was billed',
+        /13 min ago/.test(t.pushes[0].body), t.pushes[0].body);
+}
+
 // ------------------------------------------------------- the gap that existed
 {
   // The exact order the old code was silent about: billed, never paid.
-  const t = till({ o1: ORDER({ payLinkSentAt: NOW }) });
+  const t = till({ o1: ORDER({ billedAt: NOW }) });
   for (let m = 1; m <= 90; m++) t.at(NOW + m * MIN);
   check('an hour and a half of a billed-and-unpaid order raises exactly one alert',
         t.pushes.length === 1 && /still unpaid/i.test(t.pushes[0].title),

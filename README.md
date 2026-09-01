@@ -80,8 +80,8 @@ QR is worse than a missing one: it scans, and it pays the wrong thing or nothing
 
 The ordering page picks the VPA off `settings/upiList` (the weighted routing list —
 picking from it uniformly *is* headroom-weighted routing) and writes it onto the
-order together with `payLinkSentAt`, the moment the customer was shown a code, in
-the same push that creates the order. It has to be the same push: under the rules
+order together with `billedAt`, the moment the customer was shown a code, in the
+same push that creates the order. It has to be the same push: under the rules
 an anonymous browser may create an order and not touch it again. The till's matcher
 requires both fields, and refuses to match an order that has neither — without them
 an order would match a bank credit on amount alone and could take money belonging
@@ -245,8 +245,12 @@ costs money:
   curve as zero, so the alarm would come in short and start calling on-time
   tickets late, silently.
 - **web orders arrive billed** — a takeaway ordered from a phone reaches the till
-  carrying the VPA it is billed to and the moment the customer was shown a code, in
-  the same write that creates it, on the server's clock rather than the phone's.
+  carrying the VPA it is billed to and `billedAt`, the moment the customer was shown
+  a code, in the same write that creates it, on the server's clock rather than the
+  phone's. `billedAt` was called `payLinkSentAt` when a member of staff sent a
+  WhatsApp pay link; the till still reads the old name, and the suites pin that,
+  because rules deploy separately from pages and an order placed on a browser still
+  holding the older page arrives under it.
   Those two fields are the whole of what makes a web payment verifiable, and if the
   write regresses nothing announces it: orders keep being placed and customers keep
   paying, and every one of them silently stops auto-verifying. The suite drives the
