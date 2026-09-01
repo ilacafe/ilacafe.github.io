@@ -629,12 +629,6 @@ const SAMPLES = {
     check('and it arrives billed: the VPA, and when the customer was asked',
           (await asAnon('web', (o) => { o.upiId = 'cafe.ila.blr@okaxis'; o.billedAt = { '.sv': 'timestamp' }; })));
     await call('PUT', 'orders/pendingWeb/billed', OWNER, WEB());
-    // The old name is still accepted, and has to be until no browser can still be
-    // holding a page that writes it. An order that arrives under it is a real order.
-    check('an order from a page still using the old field name is not refused',
-          (await asAnon('web', (o) => { delete o.billedAt; o.payLinkSentAt = { '.sv': 'timestamp' }; })));
-    note('drop this, the rule, and the till\u2019s fallback together — not before');
-
     check('but cannot be re-billed to somewhere else afterwards',
           !(await canWrite('orders/pendingWeb/billed/upiId', 'anon', 'attacker@ybl')) &&
           !(await canWrite('orders/pendingWeb/billed/billedAt', 'anon', Date.now())));
@@ -645,6 +639,11 @@ const SAMPLES = {
     };
     await must('a field nobody wrote', 'track', (o) => { o.payload = 'x'; });
     await must('a field nobody wrote, on an order', 'web', (o) => { o.payload = 'x'; });
+    // payLinkSentAt was billedAt's old name. It is no longer a field: nothing writes
+    // it and the rules no longer name it, so it falls to the $other catch-all like
+    // any other key nobody wrote. This is the line that says the retirement is real.
+    await must('the field name that was retired', 'web',
+               (o) => { delete o.billedAt; o.payLinkSentAt = { '.sv': 'timestamp' }; });
     await must('a field nobody wrote, nested in a cart line', 'track',
                (o) => { o.items.Latte.payload = 'x'.repeat(4000); });
     await must('a status longer than a status', 'track', (o) => { o.status = 'x'.repeat(500); });
