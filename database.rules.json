@@ -111,6 +111,9 @@
           "createdAt": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
           },
+          "billedAt": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+          },
           "payLinkSentAt": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
           },
