@@ -198,6 +198,18 @@ costs money:
   `admin.html` and `analytics.html` show and fails if any other role can reach it —
   those two pages check the role in a browser the holder controls, which is advice
   until the rules say the same thing.
+- **the deploy probe's own footing** — `tools/probe-rules.js` reads a refusal as a
+  pass, twenty-odd times, and that is sound only while the refusals are Firebase's.
+  Every way of not reaching Firebase produces refusals too — a proxy that denies the
+  host, a network policy, an outage — so run without a route to the database, every
+  forbidden path is "denied" and the report is a clean bill of health for a database
+  the process never spoke to. Found by running it inside a sandbox whose egress proxy
+  answers 403 to CONNECT: all six public paths failed loudly, and all twenty-two
+  forbidden ones passed. The public paths are now a positive control — one of them
+  must answer before any refusal below counts — and this suite drives the real script
+  against a stub answering the way each of those worlds answers: unreachable, healthy,
+  reachable-and-leaking, and one-public-path-down, which is a finding about the rules
+  and must not be mistaken for the network.
 - **the SDK the till runs on** — every other browser suite stubs `window.firebase`,
   because what those suites ask about is the page's own code. That left the Firebase
   SDK itself with no coverage, on pages pinned to a 2021 release that had to move

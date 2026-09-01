@@ -12,6 +12,25 @@
 // Read-only, and only ever against paths already declared public or already
 // expected to be denied. Runs after a rules deploy rather than on every pull
 // request, so a Firebase outage cannot fail somebody's PR.
+//
+// A REFUSAL IS ONLY EVIDENCE IF IT CAME FROM THE DATABASE
+//
+// Most of this reads a refusal as a pass, and that is sound exactly as long as the
+// refusals are Firebase's. Every way of not reaching Firebase at all also produces
+// refusals — a proxy that denies the host, a network policy, a DNS answer that goes
+// nowhere, a corporate gateway. Run somewhere without a route to the database, the
+// twenty-odd paths that must be denied are all "denied", and the report is a clean
+// bill of health for a database this process never spoke to.
+//
+// That is not hypothetical either: run inside a sandbox whose egress proxy answers
+// 403 to CONNECT, every single path came back 403, and the whole "what a stranger
+// cannot" section printed OK. The half that matters most is the half that fails
+// safe-looking.
+//
+// So the public paths are the POSITIVE CONTROL and they are checked first. If not
+// one of them answers, this is not a test that failed — it is a test that never
+// ran, and it says so and stops rather than reporting on refusals it cannot
+// attribute.
 
 const fs = require('fs');
 const path = require('path');
@@ -137,11 +156,35 @@ async function main() {
   const problems = [];
 
   console.log('what a stranger can read:');
+  let reached = 0;
   for (const p of open) {
     const code = await status(toDbPath(p));
     const ok = code === 200;
+    if (ok) reached++;
     console.log('  ' + (ok ? 'OK   ' : 'FAIL ') + String(code) + '  ' + label(p));
     if (!ok) problems.push(p + ' should be public but answered ' + code);
+  }
+
+  // THE POSITIVE CONTROL, BEFORE ANY REFUSAL IS READ AS A PASS
+  //
+  // One public path answering 200 is proof that this process is talking to the
+  // database and that the database is answering unauthenticated reads. Without
+  // that, a refusal below could be Firebase's rules or it could be a proxy, a
+  // network policy or an outage, and there is no way to tell them apart from a
+  // status code — so nothing below is evidence of anything.
+  //
+  // Some public paths failing while others answer is a different thing entirely:
+  // that is a real finding about the rules, and it goes through `problems` with
+  // the rest. This only stops when NONE of them answered.
+  if (reached === 0) {
+    console.log('');
+    console.log('::error::not one public path answered — this process is not reaching the database.');
+    console.log('::error::' + DB);
+    console.log('::error::Every path a stranger must not read would also be refused by whatever is');
+    console.log('::error::in the way, so this run cannot tell a locked-down database from an');
+    console.log('::error::unreachable one. Nothing about the rules has been checked.');
+    console.log('::error::The deployed rules are NOT verified by this run.');
+    process.exit(1);
   }
 
   console.log('\nwhat a stranger cannot:');
