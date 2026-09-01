@@ -21,6 +21,8 @@ const suites = [
   'kds-board-browser.test.js',
   'boot-order-browser.test.js',
   'modal-layout-browser.test.js',
+  'menu-cache-browser.test.js',
+  'pos-menu-cache-browser.test.js',
 ];
 
 let failed = [];
