@@ -233,6 +233,72 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     note('a code still offered to someone who has paid is an invitation to pay twice');
   }
 
+  // ------------------------------- accepted is not paid, and must not read as paid
+  // The counter can start an order whose credit has not landed — that override is
+  // exactly what it uses when a bank's email is running late. The customer's phone
+  // sees only orders/track: the status advancing off 'received' means staff pressed
+  // Accept, and says nothing about money. Reading it as payment told the one
+  // customer whose money had NOT arrived that it had, and took away their code.
+  {
+    await fresh();
+    await place('Takeaway');
+    const r = await pg.evaluate(() => {
+      const trackId = localStorage.getItem('ila_track_id');
+      // staff Accept, no credit matched: status advances, paymentVerified absent
+      window.__DATA['orders/track/' + trackId] = { status: 'preparing', acceptedAt: Date.now() };
+      window.__emit('orders/track/' + trackId);
+      const started = { step: document.getElementById('pay-step-pay').style.display,
+                        stored: localStorage.getItem('ila_pay') !== null,
+                        title: document.getElementById('status-title').textContent,
+                        detail: document.getElementById('status-detail').textContent };
+      // the credit lands late — the till's reconciler flips the track record
+      window.__DATA['orders/track/' + trackId] = { status: 'preparing', paymentVerified: true };
+      window.__emit('orders/track/' + trackId);
+      return { started, after: { step: document.getElementById('pay-step-pay').style.display,
+                                 stored: localStorage.getItem('ila_pay') !== null,
+                                 title: document.getElementById('status-title').textContent } };
+    });
+    check('a started-but-unpaid order is never called paid',
+          !/confirm/i.test(r.started.title), r.started.title);
+    check('and says the payment has not been seen',
+          /haven\u2019t seen your payment/i.test(r.started.detail), r.started.detail);
+    check('and the code is STILL on screen to pay with',
+          r.started.step === 'block' && r.started.stored, JSON.stringify(r.started));
+    note('taking the code away here strands the one customer who has not paid');
+    check('a credit that lands afterwards still confirms',
+          /confirmed/i.test(r.after.title), r.after.title);
+    check('and only then is the code taken away',
+          r.after.step === 'none' && !r.after.stored, JSON.stringify(r.after));
+    note('the watch stays live through the started state, so late money is not a dead end');
+  }
+
+  // ------------------- and the same on a reload, where the banner is the only view
+  {
+    await fresh();
+    await place('Takeaway');
+    // The reload is the point: localStorage carries ila_track_id and ila_pay across it,
+    // and the banner rebinds from those alone. The stub's data is re-seeded by the init
+    // script on every navigation, so the record is delivered after the page is up —
+    // through the watch the page's own bindStatus registered.
+    await pg.reload({ waitUntil: 'domcontentloaded' });
+    await pg.waitForTimeout(400);
+    const after = await pg.evaluate(() => {
+      const tid = localStorage.getItem('ila_track_id');
+      window.__DATA['orders/track/' + tid] =
+        { status: 'preparing', items: { 'Flat White': { qty: 2, price: 180 } }, table: 'Order' };
+      window.__emit('orders/track/' + tid);
+      return {
+        btn: document.getElementById('status-pay-btn').style.display,
+        note: document.getElementById('status-pay-note').style.display,
+        stored: localStorage.getItem('ila_pay') !== null
+      };
+    });
+    check('reopening the page on an accepted-but-unpaid order still offers the code',
+          after.btn === 'block' && after.stored, JSON.stringify(after));
+    check('and says why it is still there',
+          after.note === 'block', JSON.stringify(after));
+  }
+
   check('the page threw nothing while any of that ran', threw.length === 0, threw.slice(0, 3).join(' | '));
 
   done();
