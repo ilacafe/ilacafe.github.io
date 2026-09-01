@@ -99,6 +99,24 @@ Nothing about the *staff* side of this is automatic. The till shows a live
 paid/unpaid badge per web order, the customer's phone number to call, and raises a
 push when an order has been billed for ten minutes with no matching credit.
 
+**Only a matched credit says "paid".** Staff can Accept an order whose credit has
+not landed — that is the override the counter uses when a bank's email is slow —
+and the sale goes to the ledger `unverified` until the credit arrives. That is not
+payment, and the customer's phone says so: the code stays on their screen, and the
+watch stays live so a credit landing later still turns into a confirmation. When
+one lands after the order has left `orders/pendingWeb`, the ledger reconciler is
+what notices, and it flips `orders/track/{id}/paymentVerified` too — otherwise the
+books would settle and the customer would never be told.
+
+**Two clocks on every credit.** `at` is when the Worker ingested the bank's alert;
+`bankTime` is when the bank says the money moved, parsed out of the alert. The feed
+is ordered by `at`, because arrival order is what a "newest 60" window means. Every
+question about whether a credit *belongs* to a sale uses `bankTime` — a bank alert
+can queue for hours, so on `at` alone a late credit looks far from its own sale,
+and, worse, a payment made before the customer had even ordered looks like it could
+be theirs. `bankTime` is null whenever the Worker was not certain of the format,
+and every reader falls back to `at`, so an unrecognised format is not a failure.
+
 **Three things deploy separately**, and forgetting this is the most common way to
 be confused by this repo:
 

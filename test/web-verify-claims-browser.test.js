@@ -228,6 +228,34 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           'offered ' + JSON.stringify(matched.onStranger && matched.onStranger.ref));
     note('the customer picks the VPA now; this is what makes that safe');
 
+    // WHICH CLOCK DECIDES.
+    //
+    // A credit carries `at` — when the Worker ingested the bank's alert — and
+    // bankTime, when the bank says the money actually moved. A bank alert can sit in
+    // a queue for hours, so judged on `at` alone a payment made an hour BEFORE this
+    // customer had even ordered still looked like it could be theirs, purely because
+    // its email happened to land afterwards. That is somebody else's money.
+    const clocks = await page.evaluate(([now]) => {
+      const ours = (window.activeUPIs || [])[0];
+      const askedAt = now - 10 * 60000;                       // code shown 10 minutes ago
+      const order = { total: 777, upiId: ours, payLinkSentAt: askedAt, trackId: 'tk-clock' };
+      // same credit every time; only the bank's stated time moves. `at` is always
+      // recent, which is what a delayed email looks like.
+      const credit = (bankTime) => ({ CLK1: { amount: 777, ref: 'CLK1', at: now - 60000, bankTime: bankTime } });
+      return {
+        before: window.wvFindMatch(order, credit(now - 70 * 60000), {}, now),
+        after:  window.wvFindMatch(order, credit(askedAt + 60000), {}, now),
+        none:   window.wvFindMatch(order, credit(null), {}, now)
+      };
+    }, [NOW]);
+    check('a payment made before the customer ordered is not theirs, however late the email',
+          clocks.before === null, 'offered ' + JSON.stringify(clocks.before && clocks.before.ref));
+    check('one made after they were asked still is, however late the email',
+          !!clocks.after && clocks.after.ref === 'CLK1', JSON.stringify(clocks.after));
+    check('and a credit with no bank clock falls back to the ingest one, as before',
+          !!clocks.none && clocks.none.ref === 'CLK1', JSON.stringify(clocks.none));
+    note('bankTime is null whenever the Worker was unsure of the format — that path is the old one');
+
     // A claim landing now, from another till, has to reach this one.
     const late = await page.evaluate(() => {
       const free = Object.keys(window._wvCredits).find(r => !window._wvClaims[r]);

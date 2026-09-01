@@ -15,7 +15,7 @@ It does four things:
 | | trigger | what it does |
 |---|---|---|
 | **Push relay** | `POST /` from the pages | encrypts and sends Web Push to admin devices |
-| **Payment ingest** | `POST /ingest`, and Email Routing | parses a bank credit alert → `payments/incoming/{utr}` |
+| **Payment ingest** | `POST /ingest`, and Email Routing | parses a bank credit alert → `payments/incoming/{utr}`, with both clocks: `at` (ingested) and `bankTime` (what the bank says, epoch ms, `null` when unsure) |
 | **ETA recalibration** | cron `0 20 1 * *` | refits `eta/model` from 75 days of completions |
 | **Verification monitor** | cron `0 * * * *` | unverified-payment alerts, per-bank alarm, weekly digest |
 | **Table index prune** | on the same hourly tick | drops `orders/tableIndex` entries older than six hours |

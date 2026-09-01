@@ -891,7 +891,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.7"></script>
+    <script src="/build-check.js" data-build="2026-09-01.8"></script>
     <!-- The payment QR, drawn on this device rather than fetched. Shared with the
          customer app, which now shows the same code on the customer's own phone. -->
     <script src="/qr.js"></script>
@@ -1588,6 +1588,25 @@
         window.upiBankCompatible = function(p){
             return window.upiBankMatch(window.tableUPIVPA[window.checkoutTableID] || null, p);
         };
+        // WHEN THE MONEY MOVED, not when we heard about it.
+        //
+        // A credit carries two clocks. `at` is when the Worker ingested the bank's alert,
+        // and it is what payments/incoming is indexed and ordered by — the feed below still
+        // uses it, because arrival order is what a "newest 60" window means. `bankTime` is
+        // when the bank says the payment happened, parsed out of the alert itself.
+        //
+        // Every question about whether a credit BELONGS to a sale is about the second one. A
+        // bank alert can sit in a queue for hours: judged on `at`, a late credit looks far
+        // from the settlement it came from, and — the worse direction — a payment made before
+        // the customer had even ordered looks like it could be theirs, because its email
+        // happened to land afterwards. bankTime is null whenever the Worker was not sure of
+        // the format, and then this is exactly what it always was.
+        window.creditPaidAt = function(p){
+            if (!p) return 0;
+            const bt = parseFloat(p.bankTime);
+            if (isFinite(bt) && bt > 0) return bt;
+            return p.at || 0;
+        };
         // IS THIS ONE OF OURS?
         //
         // A web order's VPA is chosen by the CUSTOMER'S BROWSER now — the ordering page picks
@@ -1765,7 +1784,8 @@
                     if (claims && claims[ref] && !(myTok && claims[ref] === myTok)) continue;
                     if (Math.abs((parseFloat(p.amount) || 0) - total) >= 0.5) continue;
                     if (!window.upiBankMatch((order && order.upiId) || null, p)) continue;
-                    const at = p.at || 0;
+                    // the customer cannot have paid before they were asked — see creditPaidAt
+                    const at = window.creditPaidAt(p);
                     if (at < lo || at > nowMs + 60000) continue;
                     if (!best || at > best.at) best = { ref: ref, at: at, p: p };
                 }
@@ -4190,7 +4210,10 @@
                 if (Math.abs((parseFloat(p.amount)||0) - (parseFloat(entryTag.amt)||0)) >= 0.5) return false;
                 if (entryTag.bankTag && p.bank && entryTag.bankTag !== String(p.bank).trim().toLowerCase()) return false;
                 if (entryTag.acctTag && p.acct && String(entryTag.acctTag) !== String(p.acct)) return false;
-                const at = p.at || 0;
+                // This is the whole reason bankTime exists: PROXIMITY is what makes a match
+                // trustworthy, and measured on the ingest clock it was measuring how late the
+                // bank's email was rather than how close the payment was to the sale.
+                const at = window.creditPaidAt(p);
                 if (at && Math.abs(at - entryTs) > win) return false;   // credit must be near the settlement in time
                 return true;
             }
@@ -4223,7 +4246,7 @@
                 for (const ref in credits){
                     if (usedRefs.has(String(ref))) continue;
                     const p = credits[ref]; if (!p) continue;
-                    if (ents.some(it => creditFits(g.tag, it.ts, p, it.win))) cands.push({ ref: ref, p: p, at: p.at || 0 });
+                    if (ents.some(it => creditFits(g.tag, it.ts, p, it.win))) cands.push({ ref: ref, p: p, at: window.creditPaidAt(p) });
                 }
                 if (!cands.length) continue;
                 // counts must line up — 2 entries and 1 credit stays ambiguous, as does 1 and 2
