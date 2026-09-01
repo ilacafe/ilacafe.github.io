@@ -122,7 +122,22 @@
         #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
         #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
+           #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
+           message that tells someone why they cannot get in. No red can fix that
+           here: white itself is only 4.68:1 on this background, so the lightest
+           pink that would pass is white, and a white error is not an error.
+
+           So the background moves instead. A 35% black chip takes the surface under
+           it to rgb(92,72,53), where the same pink reads 6.24:1 — and the message
+           gains the shape of an error rather than being a tinted sentence floating
+           under a form. Empty, it collapses: min-height held the space before, and
+           a chip around nothing would be a permanent grey bar under the password. */
         #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
+        #login-error:not(:empty) {
+            background: rgba(0,0,0,0.35); border: 1px solid rgba(255,207,207,0.35);
+            border-radius: 8px; padding: 10px 12px; text-align: left; line-height: 1.4;
+        }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
         .pos-panes { display: block; }
@@ -140,7 +155,7 @@
             .rail-row:last-child { border-bottom: none; }
             .rail-row .nm { flex: 1 1 0; min-width: 0; }
             .rail-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.25); font-weight: 700; font-size: 1.25rem; }
-            .rail-eta { font-size: 0.78rem; opacity: 0.7; margin-top: 6px; }
+            .rail-eta { font-size: 0.78rem; margin-top: 6px; }
             .pane-cart .table-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0; }
             #cart-banner { display: none; }
             .cat-strip { top: env(safe-area-inset-top); }
@@ -177,7 +192,10 @@
         .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1 1 0; min-width: 0; transition: opacity 0.2s; }
         .dash-stat:active { opacity: 0.5; }
-        .dash-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 2px; font-weight: bold; }
+        /* Uppercase at 0.65rem with letter-spacing is already three signals that
+           this is a label rather than a value. The 0.7 added a fourth that only
+           took it to 3.19:1. */
+        .dash-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; font-weight: bold; }
         .dash-value { font-size: 1rem; font-weight: 700; white-space: nowrap; }
         @media (max-width: 380px) { .dash-value { font-size: 0.85rem; } .dash-label { font-size: 0.58rem; letter-spacing: 0.3px; } .dashboard-bar { padding: 14px 6px; } .dash-divider { display: none; } }
         .dash-divider { width: 1px; height: 25px; background-color: rgba(255, 255, 255, 0.2); }
@@ -198,7 +216,7 @@
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; min-width: 0; }
         
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
+        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         
         .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
@@ -214,27 +232,34 @@
         .qty-num { width: 24px; text-align: center; font-weight: bold; font-size: 1.1rem; }
 
         /* Marks a row whose + opens options rather than adding straight away. */
-        .opt-mark { display: inline-block; margin-left: 6px; font-size: 0.7rem; opacity: 0.6; vertical-align: middle; }
+        .opt-mark { display: inline-block; margin-left: 6px; font-size: 0.7rem; vertical-align: middle; }
         /* A cart line you can tap to attach add-ons. Looks like text, behaves like a button. */
         .cart-name { flex: 1 1 0; min-width: 0; background: transparent; border: none; color: var(--brand-text);
                      font-family: 'Quicksand', sans-serif; font-size: inherit; font-weight: inherit; text-align: left;
                      padding: 4px 0; cursor: pointer; }
-        .cart-name .opt-mark { opacity: 0.55; font-weight: 700; }
+        .cart-name .opt-mark { font-weight: 700; }
         .cart-name:active { opacity: 0.6; }
-        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.75); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+        /* STATE IS SAID, NOT FADED
+           The row used to be dimmed to 0.4 as well as badged — which made the name
+           of the sold-out item the hardest thing on the menu to read, when knowing
+           WHICH item is out is the entire point. The badge does that job on its own,
+           so it gets a chip and full white and the row keeps its contrast. */
+        .sold-out-badge { font-size: 0.65rem; color: #fff; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.35); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; }
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; cursor: pointer; }
         .cart-total { font-weight: 700; font-size: 1.1rem; }
-        .cart-clear { font-size: 0.8rem; opacity: 0.7; }
+        /* Brown on the white banner, same 4.68:1 knife-edge as white on brown, so
+           the 0.7 took it to 2.71. Smaller and letter-spaced instead. */
+        .cart-clear { font-size: 0.75rem; letter-spacing: 0.5px; text-transform: uppercase; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
         #notification-area { position: fixed; top: calc(15px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; z-index: 3000; pointer-events: none; }
         
         .toast-card { background: var(--brand-bg); color: #fff; padding: 20px; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); margin-bottom: 10px; font-family: 'Quicksand', sans-serif; display: flex; flex-direction: column; pointer-events: auto; animation: slideDown 0.3s ease-out; border-left: 5px solid #fff; }
         .toast-header { font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
-        .toast-details { font-size: 0.95rem; opacity: 0.9; margin-bottom: 15px; font-weight: 500; line-height: 1.4; }
+        .toast-details { font-size: 0.95rem; margin-bottom: 15px; font-weight: 500; line-height: 1.4; }
         .toast-btn { background: transparent; color: #fff; border: 1px solid #fff; padding: 8px 0; border-radius: 4px; font-weight: bold; font-size: 0.8rem; cursor: pointer; text-transform: uppercase; width: 100%; transition: background 0.2s; }
         .toast-btn:active { background: rgba(255,255,255,0.15); }
 
@@ -264,7 +289,7 @@
            controls are dimmed so nobody wonders why a tap did nothing. The refusal
            itself is in the click handler, not here — this is only the affordance. */
         #live-menu-container.menu-provisional .swap-container,
-        #live-menu-container.menu-provisional .add-btn { opacity: 0.35; }
+        #live-menu-container.menu-provisional .add-btn { }
         #provisional-note { display: none; text-align: center; font-size: 0.8rem; opacity: 0.75;
             padding: 6px 0 2px; letter-spacing: 0.5px; }
         #live-menu-container.menu-provisional ~ #provisional-note,
@@ -310,12 +335,12 @@
         .modal-foot { border-top: 1px solid rgba(255,255,255,0.12); margin-top: 12px; padding-top: 6px; }
         .modal-foot-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .modal-foot .close-modal { margin-top: 0; flex: 1 1 auto; text-align: left; padding-left: 0; }
-        .link-quiet { background: transparent; border: none; color: var(--brand-text); opacity: 0.45; font-family: 'Quicksand', sans-serif; font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; padding: 10px 2px; cursor: pointer; flex: 0 0 auto; }
+        .link-quiet { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; padding: 10px 2px; cursor: pointer; flex: 0 0 auto; }
 
         .stat-row { display: flex; justify-content: space-around; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
-        .stat-row .lbl { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.72; display: block; margin-bottom: 1px; }
+        .stat-row .lbl { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 1px; }
         .stat-row .val { font-size: 1.5rem; font-weight: 700; line-height: 1.15; white-space: nowrap; }
-        .section-label { text-align: left; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.7; margin: 2px 0 6px; }
+        .section-label { text-align: left; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; margin: 2px 0 6px; }
                 
         .remark-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); }
@@ -328,7 +353,7 @@
         .table-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         .table-btn { position: relative; line-height: 1.1; }
         .table-btn.occupied { background-color: #ffffff; color: #8D6E52; border: none;}
-        .table-sub { display: block; font-size: 0.6rem; font-weight: 700; opacity: 0.65; letter-spacing: 0; margin-top: 1px; }
+        .table-sub { display: block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0; margin-top: 1px; }
         @media (max-width: 400px) {
             .modal-content { padding: 20px 16px; }
             .btn { font-size: 0.9rem; padding: 12px 8px; letter-spacing: 0.5px; }
@@ -374,12 +399,12 @@
         .tip-clear-link { background: none; border: none; color: inherit; font-family: 'Quicksand', sans-serif;
                           font-size: 0.8rem; font-weight: 700; text-decoration: underline; cursor: pointer;
                           padding: 0 0 0 6px; }
-        .tip-note { font-size: 0.8rem; opacity: 0.7; margin: 2px 0 0; }
+        .tip-note { font-size: 0.8rem; margin: 2px 0 0; }
         /* Deliberately quiet: a customer looking at the QR shouldn't notice it, staff know it's there. */
         .split-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px dashed rgba(255,255,255,0.18); }
         .split-row:last-child { border-bottom: none; }
         .split-row .nm { flex: 1; min-width: 0; font-size: 0.9rem; }
-        .split-row .sub { font-size: 0.72rem; opacity: 0.7; }
+        .split-row .sub { font-size: 0.72rem; }
         /* "÷ heads" needs ~66px of text and only gets 41-56px across four columns on a phone,
            and .btn is nowrap so it spilled instead of wrapping. Two columns below 430px. */
         .split-ops { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
@@ -388,7 +413,7 @@
         .split-line:last-child { border-bottom: none; }
         .split-line-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 7px; }
         .split-line-head .nm { font-size: 0.92rem; font-weight: 500; min-width: 0; }
-        .split-line-head .sub { font-size: 0.74rem; opacity: 0.72; flex-shrink: 0; white-space: nowrap; }
+        .split-line-head .sub { font-size: 0.74rem; flex-shrink: 0; white-space: nowrap; }
         .split-line-ctrl { display: flex; align-items: center; gap: 8px; }
         .split-chips { display: flex; gap: 5px; flex: 1 1 0; min-width: 0; flex-wrap: wrap; }
         .split-chip { flex: 1 1 38px; min-width: 0; background: transparent; border: 1px solid rgba(255,255,255,0.35); color: var(--brand-text); border-radius: 5px; padding: 7px 0; font-family: 'Quicksand', sans-serif; font-size: 0.78rem; font-weight: bold; cursor: pointer; transition: all 0.2s; }
@@ -397,9 +422,9 @@
            which happens on every single share of a split bill. */
         .split-amt { width: 80px; flex-shrink: 0; padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 16px; font-weight: bold; text-align: right; outline: none; box-sizing: border-box; }
         .split-amt::placeholder { color: rgba(255,255,255,0.35); font-weight: normal; }
-        .split-paid { opacity: 0.5; }
+        .split-paid { }
 
-        .staff-reveal { background: transparent; border: none; color: var(--brand-text); opacity: 0.3; font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 10px 16px; margin-top: 6px; cursor: pointer; }
+        .staff-reveal { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 10px 16px; margin-top: 6px; cursor: pointer; }
 
         /* Visual size unchanged, but the touch area extends 8px above and below — a 28px target
            is well under the 44px guideline and this is a counter, often one-handed. */
@@ -415,7 +440,7 @@
         .bill-receipt-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 8px; }
         .bill-receipt-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0;}
         .bill-grand-total { font-size: 1.5rem; font-weight: bold; text-align: right; margin-top: 8px; border-top: 1px solid white; padding-top: 10px; }
-        .bill-sub { font-size: 0.85rem; opacity: 0.7; text-align: right; margin-top: 10px; }
+        .bill-sub { font-size: 0.85rem; text-align: right; margin-top: 10px; }
         .item-remove-x { color: rgba(255,255,255,0.6); font-weight: normal; font-size: 1.2rem; cursor: pointer; padding: 5px 12px 5px 0; }
         
         #qr-image { width: 150px; height: 150px; margin: 16px auto 0; border-radius: 8px; display: block; background: white; padding: 5px; }
@@ -441,7 +466,7 @@
         .ledger-item:last-child { border-bottom: none; }
         .ledger-income { color: white; font-weight: bold; }
         .ledger-out { color: rgba(255, 255, 255, 0.6); }
-        .ledger-meta { font-size: 0.75rem; opacity: 0.68; display: block; margin-top: 2px;}
+        .ledger-meta { font-size: 0.75rem; display: block; margin-top: 2px;}
 
         /* SOMETHING TO SEE WHEN YOU TAB
            The sign-in box sets outline:none on both of its fields, and nothing replaced
@@ -499,7 +524,7 @@
     <div class="container">
         <header>
             <img src="logo.png" alt="ILA Logo" class="logo" width="1200" height="427" decoding="async">
-            <div id="offline-indicator" style="display:none; background:transparent; border: 1px solid rgba(255,255,255,0.5); color:white; opacity: 0.8; padding:5px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
+            <div id="offline-indicator" style="display:none; background:rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.5); color:white; padding:6px; border-radius:4px; font-size:0.75rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;">OFFLINE MODE</div>
         </header>
 
         <div id="notification-area"></div>
@@ -524,7 +549,7 @@
                      what says so, instead of leaving a cashier tapping a dead button. -->
                 <div id="provisional-note" role="status">last known menu — prices loading…</div>
                 <div id="live-menu-container">
-                    <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
+                    <p style="text-align: center;  margin-top: 50px;">Loading...</p>
                 </div>
             </div>
 
@@ -545,7 +570,7 @@
                 </div>
             </aside>
         </div>
-        <div id="build-stamp" style="text-align:center; font-size:0.6rem; opacity:0.22; letter-spacing:1px; margin-top:22px;"></div>
+        <div id="build-stamp" style="text-align:center; font-size:0.6rem; letter-spacing:1px; margin-top:22px;"><span style="background:rgba(0,0,0,0.4); border-radius:6px; padding:3px 8px; display:inline-block; color:#fff;"></span></div>
     </div>
 
     <div id="cart-banner">
@@ -580,7 +605,7 @@
         <div class="modal-content">
             <h3 id="remark-item-title">Item</h3>
             <div style="text-align: left; width: 100%; margin: 15px auto 8px;">
-                <label style="opacity: 0.7; font-size: 0.8rem; text-transform: uppercase;">Tap one to add</label>
+                <label style=" font-size: 0.8rem; text-transform: uppercase;">Tap one to add</label>
                 <div class="choice-grid" id="pos-sweetness-grid"></div>
             </div>
             <button class="close-modal" onclick="closeModal('remark-modal')">✖ CANCEL</button>
@@ -590,9 +615,9 @@
     <div id="addon-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="addon-title">Add-ons</h3>
-            <div id="addon-sub" style="font-size:0.8rem; opacity:0.7; margin:-10px 0 14px;"></div>
+            <div id="addon-sub" style="font-size:0.8rem;  margin:-10px 0 14px;"></div>
             <div class="choice-grid" id="addon-grid"></div>
-            <div id="addon-empty" style="display:none; opacity:0.55; font-size:0.9rem; padding:10px 0;">No add-ons set up for this category yet.</div>
+            <div id="addon-empty" style="display:none;  font-size:0.9rem; padding:10px 0;">No add-ons set up for this category yet.</div>
             <button class="close-modal" onclick="closeModal('addon-modal')">✖ DONE</button>
         </div>
     </div>
@@ -640,7 +665,7 @@
     <div id="view-past-bill-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="past-bill-title">Receipt</h3>
-            <p id="past-bill-date" style="font-size: 0.8rem; margin-top: -10px; margin-bottom: 15px; opacity: 0.6;"></p>
+            <p id="past-bill-date" style="font-size: 0.8rem; margin-top: -10px; margin-bottom: 15px; "></p>
             <div id="past-bill-receipt" class="bill-receipt"></div>
             <input type="tel" id="past-bill-phone" class="remark-input" placeholder="Phone No." maxlength="10">
             <button class="btn btn-secondary" style="width: 100%; margin-top: 5px;" onclick="sendPastBillWhatsApp()">Send Receipt</button>
@@ -691,7 +716,7 @@
 
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
                     <div style="text-align:left; min-width:0;">
-                        <span class="lbl" style="font-size:0.64rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.6; display:block;">Paying separately</span>
+                        <span class="lbl" style="font-size:0.64rem; text-transform:uppercase; letter-spacing:1.5px;  display:block;">Paying separately</span>
                         <div id="split-progress" style="font-size:0.9rem; font-weight:700;">—</div>
                     </div>
                     <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
@@ -718,10 +743,10 @@
 
             <div class="modal-foot">
                 <div style="display:flex; align-items:center; gap:10px; margin:8px 0 4px;">
-                    <label style="margin:0; flex:1 1 0; min-width:0; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:1px; opacity:0.65;">Other (not an item)</label>
+                    <label style="margin:0; flex:1 1 0; min-width:0; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:1px; ">Other (not an item)</label>
                     <input type="number" id="split-other" class="split-amt" inputmode="numeric" placeholder="₹0" oninput="window.setSplitOther(this.value)">
                 </div>
-                <div id="split-alloc-note" style="font-size:0.75rem; opacity:0.75; text-align:left; min-height:1em;"></div>
+                <div id="split-alloc-note" style="font-size:0.75rem;  text-align:left; min-height:1em;"></div>
                 <div style="font-size:1.4rem; font-weight:700; margin:8px 0 4px;">Collecting ₹<span id="split-share-total">0</span></div>
                 <div class="modal-buttons" style="margin: 6px 0 0;">
                     <button class="btn btn-primary" id="split-pay-upi" onclick="processSplit('upi')">UPI</button>
@@ -782,11 +807,11 @@
                 <div id="tip-pool-box" style="display:none; border:1px solid rgba(255,255,255,0.25); border-radius:8px; padding:14px; margin-bottom:12px; text-align:left;">
                     <div class="section-label" style="margin:0;">Tips today</div>
                     <div id="tip-pool-amount" style="font-size:1.5rem; font-weight:700; line-height:1.2;">₹0</div>
-                    <div id="tip-pool-sub" style="font-size:0.78rem; opacity:0.7; margin-top:2px;"></div>
+                    <div id="tip-pool-sub" style="font-size:0.78rem;  margin-top:2px;"></div>
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px;">
                         <div style="text-align:left; min-width:0;">
-                            <span class="lbl" style="font-size:0.64rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.65; display:block;">Sharing between</span>
-                            <div id="tip-heads-each" style="font-size:0.82rem; opacity:0.8;"></div>
+                            <span class="lbl" style="font-size:0.64rem; text-transform:uppercase; letter-spacing:1.5px;  display:block;">Sharing between</span>
+                            <div id="tip-heads-each" style="font-size:0.82rem; "></div>
                         </div>
                         <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
                             <button class="mini-btn" onclick="window.setTipHeads(-1)">−</button>
@@ -843,7 +868,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.4"></script>
+    <script src="/build-check.js" data-build="2026-09-01.5"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -1429,7 +1454,7 @@
         // saveLocalCart(), so the build only appeared once a cashier had put
         // something in a cart — blank at sign-in and blank at open, which is
         // exactly when someone looks.
-        try { const _b = document.getElementById('build-stamp');
+        try { const _b = document.querySelector('#build-stamp span');
               if (_b) _b.textContent = 'build ' + (window.ILA_BUILD || '?'); } catch(e){}
 
         const CAFE_WEBSITE_LINK = "https://ila.cafe"; 
@@ -1917,7 +1942,7 @@
             // discarded and remade each time round.
             let cards = "";
             if (Object.keys(window.pendingWebOrders).length === 0) {
-                cards = "<p style='opacity:0.5;'>No pending web orders.</p>";
+                cards = "<p>No pending web orders.</p>";
             } else {
                 // #1 auto-expire (flag-and-sink): an unpaid order older than 20 min is likely
                 // abandoned. We DON'T delete it (a late bank credit could still verify it) — we mark
@@ -1936,11 +1961,11 @@
                     const o = window.pendingWebOrders[id];
                     const verified = !!(window._wvMatch && window._wvMatch[id]);
                     const stale = !verified && o.createdAt && (now - o.createdAt) > STALE_MS;
-                    let itemsHTML = "<div style='margin: 10px 0; font-size: 0.9rem; opacity: 0.8; padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.3);'>";
+                    let itemsHTML = "<div style='margin: 10px 0; font-size: 0.9rem;  padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.3);'>";
                     for(let itemName in o.items) {
                         itemsHTML += `<div style="margin-bottom: 3px;">${o.items[itemName].qty}x ${escapeHTML(itemName)}</div>`;
                     }
-                    if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem; opacity:0.8; overflow-wrap:anywhere;">Notes: ${escapeHTML(o.notes)}</div>`;
+                    if(o.notes) itemsHTML += `<div style="margin-top:5px; font-style:italic; font-size:0.85rem;  overflow-wrap:anywhere;">Notes: ${escapeHTML(o.notes)}</div>`;
                     itemsHTML += "</div>";
 
                     // The badge already says whether the money has landed, so no separate
@@ -1957,7 +1982,7 @@
                         ? `<div style="font-size:0.78rem; color:#ffd08a; margin-top:6px; overflow-wrap:anywhere;">\u26a0\ufe0f Ordered at \u20b9${rp.sentTotal}, menu price \u20b9${rp.total}${rp.unknown.length ? ' \u00b7 ' + rp.unknown.length + ' item(s) not on the menu' : ''}</div>`
                         : '';
 
-                    cards += `<div style="border:1px solid rgba(255,255,255,${stale?'0.12':'0.2'}); padding:15px; margin-bottom:15px; border-radius:8px; text-align:left; ${stale?'opacity:0.6;':''}">
+                    cards += `<div style="border:1px solid ${stale?'rgba(255,179,179,0.5)':'rgba(255,255,255,0.2)'}; padding:15px; margin-bottom:15px; border-radius:8px; text-align:left;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                             <strong style="font-size:1.1rem; text-transform:uppercase; min-width:0; overflow-wrap:anywhere;">${escapeHTML(o.tableOrAddress)}</strong>
                             <span id="wv-${id}"></span>
@@ -2262,7 +2287,7 @@
             const box = document.getElementById('rail-cart'); if (!box) return;
             const names = Object.keys(window.cart || {});
             if (!names.length){
-                box.innerHTML = "<div style='opacity:0.45; font-size:0.9rem; padding:6px 0;'>Nothing yet — tap items to build the order.</div>";
+                box.innerHTML = "<div style='font-size:0.85rem; padding:6px 0; letter-spacing:1px; text-transform:uppercase;'>Nothing yet — tap items to build the order</div>";
             } else {
                 box.innerHTML = names.map(item => {
                     const safe = jsAttr(item);
@@ -2667,7 +2692,7 @@
                         const optMark = item.requiresSweetness ? '<span class="opt-mark" title="has options">\u2022</span>' : '';
                         catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}${optMark}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`;
                     } else {
-                        catHTML += `<div class="menu-row" style="opacity: 0.55;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
+                        catHTML += `<div class="menu-row"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled>+</button></div></div>`;
                     }
                 });
 
@@ -2676,15 +2701,15 @@
                     sizedItems.forEach(item => {
                         let safeNameReg = jsAttr(item.originalName + " (Regular)");
                         let safeNameLrg = jsAttr(item.originalName + " (Large)");
-                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
-                        let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+                        let regHTML = `<span aria-hidden="true">&mdash;</span>`;
+                        let lrgHTML = `<span aria-hidden="true">&mdash;</span>`;
 
                         if (item.inStock) {
                             if(item.priceReg) regHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '<div style="width:100%; text-align:right;">-</div>';
                             if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
                         }
                         const optMarkS = item.requiresSweetness ? '<span class="opt-mark" title="has options">\u2022</span>' : '';
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.55;' : ''}"><span>${item.originalName}${optMarkS}</span>${regHTML}${lrgHTML}</div>`;
+                        catHTML += `<div class="coffee-row"><span>${item.originalName}${optMarkS}${item.inStock ? '' : ' <span class="sold-out-badge">Out</span>'}</span>${regHTML}${lrgHTML}</div>`;
                     });
                 }
                 catHTML += `</section>`;
@@ -2962,7 +2987,7 @@
         window.openReviewCartModal = function() {
             const list = document.getElementById('review-cart-list');
             let rows = "";
-            if (window.totalItems === 0) { rows = "<p style='text-align:center; opacity:0.5;'>Empty</p>"; } 
+            if (window.totalItems === 0) { rows = "<p style='text-align:center; '>Empty</p>"; } 
             else {
                 for (let item in window.cart) {
                     const safeItemName = jsAttr(item);
@@ -3189,7 +3214,7 @@
         window.openActiveBills = function() {
             const list = document.getElementById('active-bills-list');
             let rows = "";
-            if (Object.keys(window.activeTables).length === 0) { rows = "<p style='opacity:0.5;'>No active tables.</p>"; } 
+            if (Object.keys(window.activeTables).length === 0) { rows = "<p>No active tables.</p>"; } 
             else {
                 for (let table in window.activeTables) {
                     const t = window.activeTables[table];
@@ -3219,7 +3244,7 @@
             let receiptHTML = "";
             
             if (tableData.notes) {
-                receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic; overflow-wrap:anywhere;">Notes: ${escapeHTML(tableData.notes)}</div>`;
+                receiptHTML += `<div style="font-size: 0.8rem;  margin-bottom: 10px; font-style: italic; overflow-wrap:anywhere;">Notes: ${escapeHTML(tableData.notes)}</div>`;
             }
 
             const stillDue = [];
@@ -3232,12 +3257,12 @@
                 if (ll > 0 && lp > 0) stillDue.push(escapeHTML(item) + ' \u20b9' + Math.round(ll));
                 else if (ll > 0) stillDue.push(escapeHTML(item));
                 const paidMark = lp > 0
-                    ? `<span style="font-size:0.7rem; opacity:0.6; margin-left:6px;">${ll > 0 ? ('₹' + Math.round(lp) + ' paid') : 'paid'}</span>`
+                    ? `<span style="font-size:0.7rem;  margin-left:6px;">${ll > 0 ? ('₹' + Math.round(lp) + ' paid') : 'paid'}</span>`
                     : '';
                 // The void trigger sits on the RIGHT, past the price — away from the line the eye and
                 // finger travel while reading the bill. Tapping it starts a reason + PIN + a
                 // cancellation ticket, so it must not be adjacent to a scanning target.
-                receiptHTML += `<div class="bill-receipt-row" style="${ll <= 0 ? 'opacity:0.5;' : ''}"><span style="flex:1; min-width:0;">${it.qty}x ${escapeHTML(item)}${paidMark}</span><span style="display:flex; align-items:center; gap:2px; flex-shrink:0;">₹${Math.round(lt)}<span class="item-remove-x" onclick="window.removeTableItem('${jsAttr(tableID)}', '${safeItemName}')">✖</span></span></div>`;
+                receiptHTML += `<div class="bill-receipt-row"><span style="flex:1; min-width:0;">${it.qty}x ${escapeHTML(item)}${paidMark}</span><span style="display:flex; align-items:center; gap:2px; flex-shrink:0;">₹${Math.round(lt)}<span class="item-remove-x" onclick="window.removeTableItem('${jsAttr(tableID)}', '${safeItemName}')">✖</span></span></div>`;
             }
             // Once anything has been paid, DUE is the number staff act on — it is what they charge.
             // Total used to be the biggest thing on the screen and Due a footnote under it.
@@ -3249,7 +3274,7 @@
             }
             if (paid > 0) {
                 // Naming WHAT is unpaid is far easier to raise with a group than a bare number.
-                if (stillDue.length && remaining > 0) receiptHTML += `<div style="text-align:right; font-size:0.78rem; opacity:0.75; margin-top:4px;">Still unpaid: ${stillDue.join(', ')}</div>`;
+                if (stillDue.length && remaining > 0) receiptHTML += `<div style="text-align:right; font-size:0.78rem;  margin-top:4px;">Still unpaid: ${stillDue.join(', ')}</div>`;
             }
             const sh = tableData.shares || null;
             if (sh && parseInt(sh.count) > 0){
@@ -3487,7 +3512,7 @@
                      +   '</div>'
                      + '</div>';
             }
-            document.getElementById('split-item-list').innerHTML = html || "<p style='opacity:0.5; font-size:0.9rem; text-align:center;'>Everything on this table is paid for.</p>";
+            document.getElementById('split-item-list').innerHTML = html || "<p style=' font-size:0.9rem; text-align:center;'>Everything on this table is paid for.</p>";
 
             if (!skipOtherField) document.getElementById('split-other').value = window.splitOther || '';
             const share = Math.round((splitSelTotal() + (parseFloat(window.splitOther) || 0)) * 100) / 100;
@@ -4525,11 +4550,11 @@
             // of the day, and it is opened at the busiest possible moment. Written once.
             let rows = "";
             if (window.ledgerDenied) {
-                list.innerHTML = "<p style='opacity:0.7;'>The cash-up is only shown to the counter and the owner."
+                list.innerHTML = "<p>The cash-up is only shown to the counter and the owner."
                                + "<br>Ask for cashier access if you need it.</p>";
                 return;
             }
-            if (window.salesLedger.length === 0) { list.innerHTML = "<p style='opacity:0.5;'>No logs.</p>"; return; }
+            if (window.salesLedger.length === 0) { list.innerHTML = "<p>No logs.</p>"; return; }
             window.salesLedger.forEach(entry => {
                 let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
                 if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'CASH: '; } 
@@ -4565,7 +4590,7 @@
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list');
             let rows = "";
-            if (window.pastBills.length === 0) { rows = "<p style='opacity:0.5;'>No logs.</p>"; } 
+            if (window.pastBills.length === 0) { rows = "<p>No logs.</p>"; } 
             else { window.pastBills.forEach(bill => { rows += `<div class="active-bill-item" style="border:none;" onclick="window.viewPastBill(${bill.id})"><div><span style="font-weight: bold;">${escapeHTML(bill.table)}</span><span class="ledger-meta">${bill.date}</span></div><span>₹${bill.total}</span></div>`; }); }
             list.innerHTML = rows;
             openModal('past-bills-modal');
@@ -4576,7 +4601,7 @@
             document.getElementById('past-bill-title').innerText = bill.table;
             document.getElementById('past-bill-date').innerText = bill.date;
             let receiptHTML = ""; 
-            if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 10px; font-style: italic;">Notes: ${escapeHTML(bill.notes)}</div>`;
+            if (bill.notes) receiptHTML += `<div style="font-size: 0.8rem;  margin-bottom: 10px; font-style: italic;">Notes: ${escapeHTML(bill.notes)}</div>`;
             for (let item in bill.items) { receiptHTML += `<div class="bill-receipt-row"><span>${bill.items[item].qty}x ${escapeHTML(item)}</span><span>₹${bill.items[item].qty * bill.items[item].price}</span></div>`; }
             receiptHTML += `<div class="bill-grand-total">Total: ₹${bill.total}</div>`;
             document.getElementById('past-bill-receipt').innerHTML = receiptHTML;

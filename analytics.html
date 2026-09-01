@@ -126,7 +126,22 @@
         #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
         #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; outline: none; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
+        /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
+           #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
+           message that tells someone why they cannot get in. No red can fix that
+           here: white itself is only 4.68:1 on this background, so the lightest
+           pink that would pass is white, and a white error is not an error.
+
+           So the background moves instead. A 35% black chip takes the surface under
+           it to rgb(92,72,53), where the same pink reads 6.24:1 — and the message
+           gains the shape of an error rather than being a tinted sentence floating
+           under a form. Empty, it collapses: min-height held the space before, and
+           a chip around nothing would be a permanent grey bar under the password. */
         #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
+        #login-error:not(:empty) {
+            background: rgba(0,0,0,0.35); border: 1px solid rgba(255,207,207,0.35);
+            border-radius: 8px; padding: 10px 12px; text-align: left; line-height: 1.4;
+        }
 
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0 0 80px 0; line-height: 1.6; overflow-x: hidden; }
         .container { width: 92%; max-width: 1100px; margin: 0 auto; padding: 20px; }
@@ -140,75 +155,85 @@
 
         /* date range bar */
         .range-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-        .range-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 7px 13px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+        /* The unselected pill's own translucent white fill LIGHTENS the surface
+           under its white label — 4.01:1, worse than the plain brown beside it.
+           Darkening the fill instead of lightening it both separates the pill from
+           the page and gives the label its contrast back. */
+        .range-btn { background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 7px 13px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit; }
         .range-btn.active { background: #fff; color: var(--brand-bg); }
         .range-custom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
-        .rc-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.55; font-weight: 700; }
-        .rc-to { opacity: 0.6; font-size: 0.85rem; }
+        /* THE LABELS ON THIS PAGE WERE THE WORST OF IT
+             Every label here is uppercase, letter-spaced and small — three signals
+             that it is a label and not a number. The opacity was a fourth, and the
+             only one that cost legibility: 0.55 and 0.6 land at 2.57 and 2.77:1,
+             which is under AA for large text as well as body. The typography that
+             was already doing the work keeps doing it. */
+        .rc-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+        .rc-to { font-size: 0.85rem; }
         .range-custom input { padding: 7px 9px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
-        #range-label { font-size: 0.8rem; opacity: 0.75; margin-top: 10px; }
+        #range-label { font-size: 0.8rem; margin-top: 10px; }
 
         /* KPI */
         .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
         .kpi { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 16px; border-radius: 10px; text-align: center; }
         .kpi-val { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
-        .kpi-label { font-size: 0.68rem; text-transform: uppercase; opacity: 0.6; letter-spacing: 1px; margin-top: 6px; }
+        .kpi-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 6px; }
         .kpi-cmp { font-size: 0.72rem; font-weight: 700; margin-top: 4px; }
         .up { color: #6cd07f; } .down { color: #ff8a80; } .flat { opacity: 0.5; }
 
         .chart-full { background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; height: 250px; position: relative; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
         .chart-box { background: rgba(0,0,0,0.15); padding: 15px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); min-width: 0; }
-        .chart-box h4 { margin: 0 0 10px 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; text-align: center; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 6px; }
+        .chart-box h4 { margin: 0 0 10px 0; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.5px; text-align: center; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 6px; }
         .chart-wrap { position: relative; height: 200px; overflow: hidden; }
         .chart-full { overflow: hidden; }
         canvas { max-width: 100%; display: block; }
 
         /* tables */
         .tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-        .tbl th { text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.6; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.2); cursor: pointer; white-space: nowrap; }
+        .tbl th { text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1.5px; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,0.2); cursor: pointer; white-space: nowrap; }
         .tbl td { padding: 8px 6px; border-bottom: 1px dashed rgba(255,255,255,0.08); vertical-align: top; }
         .tbl tr:last-child td { border-bottom: none; }
         .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .scroll { max-height: 460px; overflow-y: auto; overflow-x: auto; margin-top: 8px; }
         select, input[type="text"] { padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
         .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
-        .muted { opacity: 0.55; text-align: center; padding: 20px 0; font-size: 0.85rem; }
+        .muted { text-align: center; padding: 20px 0; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; }
         .pull-right { margin-left: auto; }
 
         /* ---------- demand map ---------- */
         .view-switch { display: flex; gap: 8px; justify-content: center; margin: 0 0 18px 0; flex-wrap: wrap; }
         .err-card { background-color: rgba(0, 0, 0, 0.15); border-radius: 12px; padding: 14px 20px; margin-bottom: 22px; border: 1px solid rgba(244,67,54,0.35); color: #ffd2d2; font-size: 0.88rem; display: none; word-break: break-word; }
         .err-card.warn { border-color: rgba(244,197,66,0.45); color: #f4c542; }
-        .sub { font-size: 0.8rem; opacity: 0.75; margin: 0 0 12px 0; }
+        .sub { font-size: 0.8rem; margin: 0 0 12px 0; }
         .hm { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .hmg { display: grid; gap: 2px; min-width: 560px; }
         .hmc { height: 24px; border-radius: 4px; background: rgba(255,255,255,0.05); position: relative; }
-        .hml { font-size: 0.72rem; opacity: 0.7; display: flex; align-items: center; font-weight: 700; }
-        .hmh { font-size: 0.62rem; opacity: 0.6; text-align: center; align-self: end; }
+        .hml { font-size: 0.72rem; display: flex; align-items: center; font-weight: 700; }
+        .hmh { font-size: 0.62rem; text-align: center; align-self: end; }
         .hmc.today-row { outline: 1.5px solid rgba(255,255,255,0.75); outline-offset: -1.5px; }
         .hmc.nowcell::after { content: ""; position: absolute; inset: 2px; border: 1.5px dashed rgba(0,0,0,0.55); border-radius: 3px; }
         .hmc.closedcell { background: repeating-linear-gradient(45deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 4px, rgba(255,255,255,0.09) 4px, rgba(255,255,255,0.09) 8px); }
-        #hmReadout { font-size: 0.84rem; margin-top: 10px; min-height: 1.2em; opacity: 0.9; }
+        #hmReadout { font-size: 0.84rem; margin-top: 10px; min-height: 1.2em; }
         #todayChip { display: inline-block; max-width: 100%; line-height: 1.5; font-size: 0.85rem; font-weight: 700; padding: 6px 14px; border-radius: 14px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); }
         #todayChip.on-pace { border-color: rgba(108,208,127,0.55); color: #6cd07f; }
         #todayChip.surge { border-color: rgba(244,197,66,0.55); color: #f4c542; }
         #todayChip.slump { border-color: rgba(255,138,128,0.55); color: #ff8a80; }
-        #todayChip.idle { opacity: 0.75; }
-        .tstats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.82rem; opacity: 0.85; margin-top: 10px; }
+        #todayChip.idle { }
+        .tstats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.82rem; margin-top: 10px; }
         .tstats b { font-weight: 700; }
-        .closed { opacity: 0.55; font-style: italic; }
+        .closed { font-style: italic; }
         .todayrow td { background: rgba(255,255,255,0.05); }
-        .tbl-note { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.55; font-weight: 700; margin: 16px 0 6px 0; }
+        .tbl-note { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin: 16px 0 6px 0; }
         .pblock { background: rgba(0,0,0,0.15); border-left: 2px solid rgba(255,255,255,0.4); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
         .pbig { font-size: 0.95rem; font-weight: 700; }
-        .pnote { font-size: 0.8rem; opacity: 0.75; margin-top: 3px; }
+        .pnote { font-size: 0.8rem; margin-top: 3px; }
         .rin { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
-        .rin label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; font-weight: 700; }
+        .rin label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
         .rin input { padding: 7px 9px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
         .urgent { color: #ff8a80; font-weight: 700; }
         .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.84rem; }
-        .kv div:nth-child(odd) { opacity: 0.6; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; padding-top: 2px; }
+        .kv div:nth-child(odd) { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; padding-top: 2px; }
         @media(max-width: 720px) {
             .kv { grid-template-columns: 1fr; gap: 0 0; }
             .kv div:nth-child(odd) { margin-top: 8px; }
@@ -345,7 +370,7 @@
                 <div id="modelKv"></div>
                 <div class="sub" style="margin-top:10px; margin-bottom:0;" id="modelNote"></div>
             </div>
-            <div style="text-align:center;"><button class="lnk" onclick="window.toggleEodReport('how-it-works')" style="background:none; opacity:0.35; font-size:0.62rem; letter-spacing:1px; padding:4px 8px;">how this works</button></div>
+            <div style="text-align:center;"><button class="lnk" onclick="window.toggleEodReport('how-it-works')" style="background:none;  font-size:0.62rem; letter-spacing:1px; padding:4px 8px;">how this works</button></div>
         </div>
 
         <div id="analytics-block">
@@ -399,9 +424,9 @@
         <div class="card">
             <h2>Item Performance</h2>
             <div class="controls">
-                <label style="font-size:0.75rem; opacity:0.7;">Category</label>
+                <label style="font-size:0.72rem; letter-spacing:1px; text-transform:uppercase;">Category</label>
                 <select id="top-cat" onchange="window.renderTop()"><option value="__all">All categories</option></select>
-                <label style="font-size:0.75rem; opacity:0.7;" class="pull-right">Sort</label>
+                <label style="font-size:0.72rem; letter-spacing:1px; text-transform:uppercase;" class="pull-right">Sort</label>
                 <select id="top-sort" onchange="window.renderTop()">
                     <option value="rev">By Revenue</option>
                     <option value="qty">By Quantity</option>
@@ -420,7 +445,7 @@
             <h2>Item Drill-down</h2>
             <div class="controls">
                 <select id="drill-select" onchange="window.renderDrill()" style="min-width:220px;"><option value="">Select an item…</option></select>
-                <div id="drill-stats" style="font-size:0.85rem; opacity:0.85;"></div>
+                <div id="drill-stats" style="font-size:0.85rem; "></div>
             </div>
             <div class="chart-full" style="height:230px;"><canvas id="chart-drill"></canvas></div>
         </div>
@@ -433,7 +458,7 @@
                 <button class="lnk" onclick="window.exportTxns()">Export CSV</button>
                 <button class="lnk" onclick="window.exportItemLines()">Export Item Lines</button>
             </div>
-            <div id="txn-count" style="font-size:0.78rem; opacity:0.6; margin:6px 0;"></div>
+            <div id="txn-count" style="font-size:0.78rem;  margin:6px 0;"></div>
             <div class="scroll">
                 <table class="tbl">
                     <thead><tr><th>Date / Time</th><th>Type</th><th>Table / Address</th><th>Items</th><th>Pay</th><th class="num">Total</th></tr></thead>
@@ -450,14 +475,14 @@
 
         <!-- SECURITY / VOID LOG -->
         <div class="card" style="border-color: rgba(244,67,54,0.35);">
-            <h2 style="color:#ffd2d2;">Security · Void Log</h2>
+            <h2>Security &middot; Void Log</h2>
             <div id="voids-summary" style="font-size:0.9rem; margin-bottom:10px;"></div>
             <div id="voids-bystaff" style="margin-bottom:14px;"></div>
             <div class="controls">
                 <input type="text" id="void-search" placeholder="Search staff, item, table, reason…" oninput="window.renderVoidLog()" style="flex:1; min-width:180px;">
                 <button class="lnk" onclick="window.exportVoids()">Export CSV</button>
             </div>
-            <div id="void-count" style="font-size:0.78rem; opacity:0.6; margin:6px 0;"></div>
+            <div id="void-count" style="font-size:0.78rem;  margin:6px 0;"></div>
             <div class="scroll">
                 <table class="tbl">
                     <thead><tr><th>Time</th><th>By</th><th>Table</th><th>Item</th><th class="num">Value</th><th>Reason</th></tr></thead>
@@ -472,14 +497,14 @@
              who authorised writing it off. The ledger shows the money; this is the
              only place the rest of it was ever kept, and nothing read it. -->
         <div class="card" style="border-color: rgba(244,67,54,0.35);">
-            <h2 style="color:#ffd2d2;">Security · Walkouts written off</h2>
+            <h2>Security &middot; Walkouts written off</h2>
             <div id="unpaid-summary" style="font-size:0.9rem; margin-bottom:10px;"></div>
             <div id="unpaid-bystaff" style="margin-bottom:14px;"></div>
             <div class="controls">
                 <input type="text" id="unpaid-search" placeholder="Search staff, table, reason, item…" oninput="window.renderUnpaidLog()" style="flex:1; min-width:180px;">
                 <button class="lnk" onclick="window.exportUnpaid()">Export CSV</button>
             </div>
-            <div id="unpaid-count" style="font-size:0.78rem; opacity:0.6; margin:6px 0;"></div>
+            <div id="unpaid-count" style="font-size:0.78rem;  margin:6px 0;"></div>
             <div class="scroll">
                 <table class="tbl">
                     <thead><tr><th>Time</th><th>By</th><th>Table</th><th class="num">Unpaid</th><th>What was on it</th><th>Reason</th></tr></thead>
@@ -488,7 +513,7 @@
             </div>
         </div>
         </div><!-- /analytics-block -->
-        <div style="text-align:center; opacity:0.22; font-size:0.62rem; letter-spacing:1px; margin-top:4px;">layout build &middot; 2026-07-10 &middot; demand-merge h</div>
+        <div style="text-align:center; font-size:0.62rem; letter-spacing:1px; margin-top:4px;"><span style="background:rgba(0,0,0,0.4); border-radius:6px; padding:3px 8px; display:inline-block; color:#fff;">layout build &middot; 2026-07-10 &middot; demand-merge h</span></div>
     </div>
 
     <!-- Ours, in the order they ran in when they were in the head. Nothing here
@@ -873,7 +898,7 @@
             rows.sort((a,b)=> sort==='qty' ? b.qty-a.qty : b.rev-a.rev);
             if(!rows.length){ body.innerHTML = '<tr><td colspan="5" class="muted">No sales in this range.</td></tr>'; return; }
             const tot = LAST.totalRev || rows.reduce((s,r)=>s+r.rev,0) || 1;
-            body.innerHTML = rows.map(r => `<tr><td>${escapeHTML(r.name)}</td><td style="opacity:0.7;">${escapeHTML(r.cat)}</td><td class="num">${r.qty}</td><td class="num">${rupee(r.rev)}</td><td class="num">${(r.rev/tot*100).toFixed(1)}%</td></tr>`).join('');
+            body.innerHTML = rows.map(r => `<tr><td>${escapeHTML(r.name)}</td><td>${escapeHTML(r.cat)}</td><td class="num">${r.qty}</td><td class="num">${rupee(r.rev)}</td><td class="num">${(r.rev/tot*100).toFixed(1)}%</td></tr>`).join('');
         };
 
         // ---------- drill-down ----------
@@ -972,7 +997,7 @@
             rows.forEach(r => { if(!byStaff[r.by]) byStaff[r.by] = {count:0, val:0}; byStaff[r.by].count++; byStaff[r.by].val += r.value; });
             const staff = Object.keys(byStaff).sort((a,b) => byStaff[b].count - byStaff[a].count);
             document.getElementById('voids-bystaff').innerHTML = staff.length
-                ? '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.55; margin-bottom:6px;">Voids by staff</div>' +
+                ? '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px;  margin-bottom:6px;">Voids by staff</div>' +
                   staff.map(st => `<div class="top-item-row"><span>${escapeHTML(st)}</span><span style="font-weight:bold;">${byStaff[st].count} · ${rupee(byStaff[st].val)}</span></div>`).join('')
                 : '';
             renderVoidLog();
@@ -988,7 +1013,7 @@
             const rows = voidFilter();
             cnt.textContent = rows.length + (rows.length === VOID_ROWS.length ? '' : ' of ' + VOID_ROWS.length) + ' voids' + (rows.length > 500 ? ' (showing first 500)' : '');
             if(!rows.length){ body.innerHTML = '<tr><td colspan="6" class="muted">No voids.</td></tr>'; return; }
-            body.innerHTML = rows.slice(0,500).map(r => `<tr><td style="white-space:nowrap;">${escapeHTML(r.time)}</td><td>${escapeHTML(r.by)}${r.role ? ` <span style="opacity:0.5; font-size:0.72rem;">(${escapeHTML(r.role)})</span>` : ''}${(r.device && r.device !== r.by) ? `<div style="opacity:0.45; font-size:0.7rem;">on ${escapeHTML(r.device)}'s device</div>` : ''}</td><td>${escapeHTML(r.table)}</td><td>${escapeHTML(r.item)}</td><td class="num">${rupee(r.value)}</td><td style="opacity:0.85;">${escapeHTML(r.reason)}</td></tr>`).join('');
+            body.innerHTML = rows.slice(0,500).map(r => `<tr><td style="white-space:nowrap;">${escapeHTML(r.time)}</td><td>${escapeHTML(r.by)}${r.role ? ` <span style=" font-size:0.72rem;">(${escapeHTML(r.role)})</span>` : ''}${(r.device && r.device !== r.by) ? `<div style=" font-size:0.7rem;">on ${escapeHTML(r.device)}'s device</div>` : ''}</td><td>${escapeHTML(r.table)}</td><td>${escapeHTML(r.item)}</td><td class="num">${rupee(r.value)}</td><td>${escapeHTML(r.reason)}</td></tr>`).join('');
         };
         window.exportVoids = function(){
             const rows = voidFilter();
@@ -1046,7 +1071,7 @@
 
         function renderRestore(el){
             if (!MODELPREV) {
-                el.innerHTML = '<div style="opacity:0.55; font-size:0.85rem;">' +
+                el.innerHTML = '<div style=" font-size:0.85rem;">' +
                     'No previous model has been kept yet. The refit saves one each time it ' +
                     'accepts a new model.</div>';
                 return;
@@ -1059,15 +1084,15 @@
             }
             const prev = modelSummary(MODELPREV), now = modelSummary(MODEL);
             if (MODEL && sameModel(MODEL, MODELPREV)) {
-                el.innerHTML = '<div style="opacity:0.55; font-size:0.85rem;">' +
+                el.innerHTML = '<div style=" font-size:0.85rem;">' +
                     'The previous model is identical to the one in use — nothing to restore.</div>';
                 return;
             }
             el.innerHTML =
-                '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.55;">If the current model is wrong</div>' +
+                '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; ">If the current model is wrong</div>' +
                 '<div style="margin-top:6px; font-size:0.9rem;">In use: <strong>v' + escapeHTML(now ? now.version : '—') + '</strong>' +
                     (now ? ' &middot; pizza base ' + escapeHTML(now.pizza) + ' min &middot; ' + escapeHTML(now.items) + ' items' : '') + '</div>' +
-                '<div style="font-size:0.9rem; opacity:0.8;">Saved: <strong>v' + escapeHTML(prev.version) + '</strong>' +
+                '<div style="font-size:0.9rem; ">Saved: <strong>v' + escapeHTML(prev.version) + '</strong>' +
                     ' &middot; pizza base ' + escapeHTML(prev.pizza) + ' min &middot; ' + escapeHTML(prev.items) + ' items</div>' +
                 '<button class="lnk" id="restore-btn" onclick="window.restorePreviousModel()" ' +
                     'style="margin-top:10px;">Put the saved model back</button>' +
@@ -1108,7 +1133,7 @@
         function recalLine(){
             const m = RECAL;
             if (!m || (!m.lastRunAt && !m.lastSkippedAt)) {
-                return '<span style="opacity:0.7;">No refit has been recorded yet. ' +
+                return '<span>No refit has been recorded yet. ' +
                        'The first one runs at 20:00 UTC on the 1st.</span>';
             }
             const ran = Number(m.lastRunAt) || 0;
@@ -1127,7 +1152,7 @@
                     parts.push('<strong style="color:#ffcc66;">Refit rejected</strong> ' + agoText(ran) +
                                ' &middot; the previous model is still in use');
                     const why = Array.isArray(m.reasons) ? m.reasons : (m.reasons ? [m.reasons] : []);
-                    if (why.length) parts.push('<div style="opacity:0.75; font-size:0.85rem; margin-top:4px;">' +
+                    if (why.length) parts.push('<div style=" font-size:0.85rem; margin-top:4px;">' +
                         why.map(r => escapeHTML(String(r))).join(' &middot; ') + '</div>');
                 }
             }
@@ -1138,7 +1163,7 @@
             if (restored && restored > ran && restored > skipped) {
                 return '<strong style="color:#ffcc66;">Restored by hand</strong> ' + agoText(restored) +
                        (m.lastRestoredTo != null ? ' &middot; back to version ' + escapeHTML(m.lastRestoredTo) : '') +
-                       '<div style="opacity:0.75; font-size:0.85rem; margin-top:4px;">' +
+                       '<div style=" font-size:0.85rem; margin-top:4px;">' +
                        'The last refit was undone. The next one runs on the 1st as usual.</div>';
             }
 
@@ -1149,7 +1174,7 @@
                 const fresh = Number(m.lastSkippedFresh) || 0;
                 parts.push('<div style="margin-top:6px;"><strong>Skipped</strong> ' + agoText(skipped) +
                            ' &middot; ' + fresh + ' new orders since the last refit' +
-                           '<div style="opacity:0.7; font-size:0.85rem;">It waits for 1,500 before refitting, so the model is unchanged.</div></div>');
+                           '<div style=" font-size:0.85rem;">It waits for 1,500 before refitting, so the model is unchanged.</div></div>');
             }
 
             return parts.join('');
@@ -1158,7 +1183,7 @@
         function cronLine(){
             const f = CRONFAIL;
             if (!f || typeof f !== 'object') {
-                return '<div style="opacity:0.6; font-size:0.85rem;">Scheduled jobs: nothing failing.</div>';
+                return '<div style=" font-size:0.85rem;">Scheduled jobs: nothing failing.</div>';
             }
             const rows = [];
             for (const job in f) {
@@ -1168,11 +1193,11 @@
                     '<strong>' + escapeHTML(job) + '</strong> has failed ' +
                     escapeHTML(Number(v.consecutive) || 1) + ' time(s)' +
                     (since ? ', since ' + escapeHTML(agoText(since)) : '') +
-                    (v.lastError ? '<div style="opacity:0.8; font-size:0.82rem;">' + escapeHTML(v.lastError) + '</div>' : '') +
+                    (v.lastError ? '<div style=" font-size:0.82rem;">' + escapeHTML(v.lastError) + '</div>' : '') +
                     '</div>');
             }
-            if (!rows.length) return '<div style="opacity:0.6; font-size:0.85rem;">Scheduled jobs: nothing failing.</div>';
-            return '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.55;">Scheduled jobs</div>' +
+            if (!rows.length) return '<div style=" font-size:0.85rem;">Scheduled jobs: nothing failing.</div>';
+            return '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; ">Scheduled jobs</div>' +
                    rows.join('');
         }
 
@@ -1212,7 +1237,7 @@
             rows.forEach(r => { if(!byStaff[r.by]) byStaff[r.by] = {count:0, val:0}; byStaff[r.by].count++; byStaff[r.by].val += r.due; });
             const staff = Object.keys(byStaff).sort((a,b) => byStaff[b].val - byStaff[a].val);
             document.getElementById('unpaid-bystaff').innerHTML = staff.length
-                ? '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; opacity:0.55; margin-bottom:6px;">Written off by</div>' +
+                ? '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px;  margin-bottom:6px;">Written off by</div>' +
                   staff.map(st => `<div class="top-item-row"><span>${escapeHTML(st)}</span><span style="font-weight:bold;">${byStaff[st].count} · ${rupee(byStaff[st].val)}</span></div>`).join('')
                 : '';
             renderUnpaidLog();
@@ -1245,7 +1270,7 @@
             const rows = unpaidFilter();
             cnt.textContent = rows.length + (rows.length === UNPAID_ROWS.length ? '' : ' of ' + UNPAID_ROWS.length) + ' written off' + (rows.length > 500 ? ' (showing first 500)' : '');
             if(!rows.length){ body.innerHTML = '<tr><td colspan="6" class="muted">Nothing written off.</td></tr>'; return; }
-            body.innerHTML = rows.slice(0,500).map(r => `<tr><td style="white-space:nowrap;">${escapeHTML(r.time)}</td><td>${escapeHTML(r.by)}</td><td>${escapeHTML(r.table)}</td><td class="num">${rupee(r.due)}${r.paid > 0 ? `<div style="opacity:0.45; font-size:0.7rem;">of ${rupee(r.total)}</div>` : ''}</td><td style="opacity:0.85;">${escapeHTML(r.items)}</td><td style="opacity:0.85;">${escapeHTML(r.reason)}</td></tr>`).join('');
+            body.innerHTML = rows.slice(0,500).map(r => `<tr><td style="white-space:nowrap;">${escapeHTML(r.time)}</td><td>${escapeHTML(r.by)}</td><td>${escapeHTML(r.table)}</td><td class="num">${rupee(r.due)}${r.paid > 0 ? `<div style=" font-size:0.7rem;">of ${rupee(r.total)}</div>` : ''}</td><td>${escapeHTML(r.items)}</td><td>${escapeHTML(r.reason)}</td></tr>`).join('');
         };
 
         window.exportUnpaid = function(){
@@ -1278,7 +1303,7 @@
                 const closedBy = d.closedBy ? escapeHTML(String(d.closedBy)) : '—';
                 let closedAt = ''; if(d.closedAt){ try { closedAt = new Date(d.closedAt).toLocaleString('en-IN'); } catch(e){} }
                 const rid = 'eodrep-' + String(k).replace(/[^0-9]/g, '');
-                return `<div style="background:rgba(0,0,0,0.15); border-left:2px solid rgba(255,255,255,0.4); border-radius:8px; padding:10px 12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${escapeHTML(String(k).slice(0,10))}</strong><strong style="opacity:0.9;">${rupee(total)}</strong></div><div style="font-size:0.82rem; opacity:0.8;">Cash ${rupee(cash)} · UPI ${rupee(upi)} · ${billCount} bill(s)</div><div style="font-size:0.76rem; opacity:0.55; margin-top:2px;">Closed by ${closedBy}${closedAt ? ' · ' + closedAt : ''}</div>` + (d.report ? `<button onclick="window.toggleEodReport('${rid}')" class="lnk" style="margin-top:8px; padding:4px 10px; font-size:0.72rem;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.78rem; opacity:0.85; margin-top:8px; background:rgba(0,0,0,0.2); padding:10px; border-radius:6px;">${escapeHTML(String(d.report))}</pre>` : '') + `</div>`;
+                return `<div style="background:rgba(0,0,0,0.15); border-left:2px solid rgba(255,255,255,0.4); border-radius:8px; padding:10px 12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${escapeHTML(String(k).slice(0,10))}</strong><strong>${rupee(total)}</strong></div><div style="font-size:0.82rem; ">Cash ${rupee(cash)} · UPI ${rupee(upi)} · ${billCount} bill(s)</div><div style="font-size:0.76rem;  margin-top:2px;">Closed by ${closedBy}${closedAt ? ' · ' + closedAt : ''}</div>` + (d.report ? `<button onclick="window.toggleEodReport('${rid}')" class="lnk" style="margin-top:8px; padding:4px 10px; font-size:0.72rem;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.78rem;  margin-top:8px; background:rgba(0,0,0,0.2); padding:10px; border-radius:6px;">${escapeHTML(String(d.report))}</pre>` : '') + `</div>`;
             }).join('');
         }
 
@@ -1821,7 +1846,7 @@ if (typeof module !== "undefined") module.exports = {
                 const d = addDays(today, i);
                 const pc = predictDay(model, "chef", d, wxMultFor("chef", d));
                 const pb = predictDay(model, "barista", d, wxMultFor("barista", d));
-                const name = (i === 0 ? "Today" : i === 1 ? "Tomorrow" : PY_DAYS[pc.pyDow]) + " <span style='opacity:0.55;font-size:0.72rem;'>" + d.slice(5) + "</span>";
+                const name = (i === 0 ? "Today" : i === 1 ? "Tomorrow" : PY_DAYS[pc.pyDow]) + " <span style='font-size:0.72rem;'>" + d.slice(5) + "</span>";
                 rows += "<tr class='" + (i === 0 ? "todayrow" : "") + "'><td>" + name + "</td><td>" + (wxByDate[d] ? wxIcon(d) : "—") + "</td>" +
                     (pc.noHistory
                         ? "<td class='num closed' colspan='2'>usually closed</td>"
@@ -1833,7 +1858,7 @@ if (typeof module !== "undefined") module.exports = {
             if (wxLearned) {
                 wtb.innerHTML = ["chef", "barista"].map(st =>
                     "<tr><td>" + (st === "chef" ? "Chef" : "Barista") + "</td>" +
-                    wxLearned[st].map(b => "<td class='num'>×" + b.mult.toFixed(2) + " <span style='opacity:0.55;font-size:0.72rem;'>seen " + b.n + "×</span></td>").join("") + "</tr>").join("");
+                    wxLearned[st].map(b => "<td class='num'>×" + b.mult.toFixed(2) + " <span style='font-size:0.72rem;'>seen " + b.n + "×</span></td>").join("") + "</tr>").join("");
             } else {
                 wtb.innerHTML = "<tr><td colspan='5' class='muted'>Still learning — needs live orders and a weather connection.</td></tr>";
             }
@@ -1913,12 +1938,12 @@ if (typeof module !== "undefined") module.exports = {
                 ? " Adding the weather cut the kitchen error from ±" + holdout.chef.mapeDow + "% to ±" + holdout.chef.mapeWx + "%."
                 : "";
             $("modelKv").innerHTML =
-                "<div style='font-size:0.86rem; opacity:0.92; line-height:1.65;'>" +
+                "<div style='font-size:0.86rem;  line-height:1.65;'>" +
                 "It reads every completed order — " + rec + " so far — and trusts recent weeks the most, so it keeps up as the café changes. " +
                 "Rain effects come from Ila's own rainy days, not assumptions. " +
                 "Tested on two weeks it had never seen, kitchen forecasts landed within about ±" + kM + "% and drinks within about ±" + bM + "% — that's why everything here is a range, not a single number." + wxBit +
                 "</div>";
-            $("modelNote").innerHTML = "<span style='opacity:0.45; font-size:0.7rem;'>" +
+            $("modelNote").innerHTML = "<span style=' font-size:0.7rem;'>" +
                 (model.meta.source === 'live' ? "live refit" : "June snapshot") + " · through " + model.meta.refDate +
                 " · half-life 28d · K6 · 14-day holdout</span>";
         }
