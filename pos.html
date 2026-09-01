@@ -2025,8 +2025,14 @@
 
                     // The badge already says whether the money has landed, so no separate
                     // "wait for payment" banner. Stale is a one-line note, not a block.
+                    // The two readings are different jobs. An order that WAS billed and is
+                    // still unpaid is a customer who walked away — chase it on the number, or
+                    // leave it. An order carrying no payLinkSentAt was never asked for money
+                    // by anything, and no bank credit will ever match it however long it sits
+                    // (wvFindMatch requires the VPA and the ask), so it has to be taken on the
+                    // till and settled there. Saying "unpaid" for both would hide that.
                     const staleBanner = stale
-                        ? `<div style="font-size:0.78rem; color:#ffb3b3; margin-top:6px;">⏰ Unpaid 20+ min — ${o.payLinkSentAt ? 'likely abandoned' : 'no pay link was ever sent'}</div>`
+                        ? `<div style="font-size:0.78rem; color:#ffb3b3; margin-top:6px;">⏰ Unpaid 20+ min — ${o.payLinkSentAt ? 'likely abandoned' : 'never billed: take payment on the till'}</div>`
                         : '';
 
                     // The total on the card is the customer's browser's arithmetic. Price the
