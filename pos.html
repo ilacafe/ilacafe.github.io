@@ -891,7 +891,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.6"></script>
+    <script src="/build-check.js" data-build="2026-09-01.7"></script>
     <!-- The payment QR, drawn on this device rather than fetched. Shared with the
          customer app, which now shows the same code on the customer's own phone. -->
     <script src="/qr.js"></script>
@@ -4213,6 +4213,7 @@
             }
 
             const updates = {};
+            const lateWebTracks = [];   // web orders whose customer is still waiting to be told
             for (const gk in groups){
                 const g = groups[gk];
                 const ents = g.items.slice().sort((a,b) => a.ts - b.ts);
@@ -4244,9 +4245,36 @@
                     updates[base + '/ref'] = String(cand.ref);
                     updates[base + '/lateVerified'] = true;
                     try { claimPayment(cand.ref, cand.p, function(){}); } catch(e){}
+                    // TELL THE CUSTOMER'S PHONE TOO.
+                    //
+                    // A web order accepted before its credit arrived left the till with an
+                    // unverified ledger line, and this loop is what settles that line when the
+                    // bank's email finally lands. It settled the BOOKS and nothing else: the
+                    // order is out of orders/pendingWeb by then, so sweepWebPayments can no
+                    // longer see it, and orders/track/{id}/paymentVerified — the one thing the
+                    // customer's app watches — was never written by anybody. The customer was
+                    // left on a screen still asking them to pay for an order that was paid for,
+                    // with no way to ever find out. The ledger entry carries the track id in
+                    // its payId (web_{trackId}, written by both bookWebPayment and the unpaid
+                    // accept), so the phone can be told from here.
+                    const payId = (item.src === 'carry') ? item.key : ((item.e && item.e.payId) || null);
+                    if (payId && String(payId).indexOf('web_') === 0){
+                        const tid = String(payId).slice(4);
+                        if (tid) lateWebTracks.push(tid);
+                    }
                 }
             }
-            if (Object.keys(updates).length){ try { db.ref().update(updates); } catch(e){} }
+            if (Object.keys(updates).length){
+                try { db.ref().update(updates); } catch(e){}
+                // Deliberately NOT part of the update above. orders/track/{id} carries a
+                // .validate that a bare paymentVerified on a node no longer there would fail,
+                // and one refused path in a multi-path update takes every other path in it down
+                // with it — which would mean a credit that really did arrive never being
+                // recorded against the ledger at all. The books are the thing that must land.
+                for (const tid of lateWebTracks){
+                    try { db.ref('orders/track/' + tid + '/paymentVerified').set(true); } catch(e){}
+                }
+            }
         }
 
         function renderLedger() {

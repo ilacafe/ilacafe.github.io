@@ -432,6 +432,7 @@
                      would otherwise have an order and no way to pay for it. This brings the
                      code back. It appears only while a prepaid order of this phone's is
                      still unpaid, and goes as soon as the money lands. -->
+                <div id="status-pay-note" style="display:none; font-size:0.82rem; color:#a05a2c; margin-top:8px; padding:7px 10px; background:rgba(224,122,44,0.08); border-radius:8px; border:1px solid rgba(224,122,44,0.2);">We haven’t seen your payment yet.</div>
                 <button id="status-pay-btn" onclick="window.reopenPayment()">Show payment code</button>
                 <button id="status-dismiss" onclick="window.dismissStatus()" style="display:none; margin-top:12px; width:100%; padding:10px; border:none; border-radius:10px; background:#8D6E52; color:#fff; font-weight:700; cursor:pointer;">Done</button>
             </div>
@@ -609,7 +610,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.6"></script>
+    <script src="/build-check.js" data-build="2026-09-01.7"></script>
     <!-- The payment QR, drawn on this phone rather than fetched. The same encoder the
          till uses, so the code a customer scans here is the code the counter draws. -->
     <script src="/qr.js"></script>
@@ -920,7 +921,7 @@
                         sub.textContent = owed ? 'Waiting for your payment.' : 'Waiting for the café to confirm…';
                         chip.style.display='none'; dismiss.style.display='none';
                         if(t.paymentVerified === true){ if(window.clearPayPrompt) window.clearPayPrompt(); }
-                        else if(window.refreshPayPrompt) window.refreshPayPrompt(trackId);
+                        else if(window.refreshPayPrompt) window.refreshPayPrompt(trackId, false);
                         showLiveETA(trackItems);
                     } else if(t.status==='preparing'){
                         // distinguish "in queue" (orders ahead) from "being made" — both truthful from load signal
@@ -940,7 +941,11 @@
                             setSteps('preparing'); label.textContent='Preparing your order'; sub.textContent='Our kitchen is on it.';
                         }
                         chip.style.display='inline-block'; dismiss.style.display='none';
-                        if(window.clearPayPrompt) window.clearPayPrompt();   // accepted: nothing left to pay here
+                        // Accepted is not paid. The counter can start an order whose credit has
+                        // not landed — that is the override it uses when a bank email is late —
+                        // so clearing the code here would take away the only way left to pay it.
+                        if(t.paymentVerified === true){ if(window.clearPayPrompt) window.clearPayPrompt(); }
+                        else if(window.refreshPayPrompt) window.refreshPayPrompt(trackId, true);
                         showLiveETA(trackItems);
                         if(!etaTimer) etaTimer=setInterval(()=>{ showLiveETA(trackItems);
                             // refresh queue/preparing label live too
@@ -954,7 +959,9 @@
                     } else if(t.status==='ready'){
                         setSteps('ready'); label.textContent='Ready! 🎉'; sub.textContent='Your order is ready.';
                         chip.style.display='none'; dismiss.style.display='block';
-                        if(window.clearPayPrompt) window.clearPayPrompt();
+                        // Ready is not paid either — see the note in the 'preparing' branch.
+                        if(t.paymentVerified === true){ if(window.clearPayPrompt) window.clearPayPrompt(); }
+                        else if(window.refreshPayPrompt) window.refreshPayPrompt(trackId, true);
                         const note=document.getElementById('status-oven-note'); if(note) note.style.display='none';
                         if(etaTimer){clearInterval(etaTimer);etaTimer=null;}
                     }
@@ -1894,14 +1901,22 @@
             try { localStorage.removeItem('ila_pay'); } catch(e){}
             window.hidePayStep();
             const b = document.getElementById('status-pay-btn'); if (b) b.style.display = 'none';
+            const n = document.getElementById('status-pay-note'); if (n) n.style.display = 'none';
         };
-        window.refreshPayPrompt = function(trackId){
-            const b = document.getElementById('status-pay-btn'); if (!b) return;
+        // `started` says the kitchen has the order while the money has NOT been seen — a staff
+        // Accept on an unpaid order, which is what happens when a bank's email is slow. The
+        // note goes in its own element rather than in the banner's sub line, because that line
+        // is rewritten every 15 seconds by the ETA timer and anything about money left there
+        // would blink out between refreshes.
+        window.refreshPayPrompt = function(trackId, started){
+            const b = document.getElementById('status-pay-btn');
+            const n = document.getElementById('status-pay-note');
             const saved = window.savedPayPrompt();
             // Only for the order the banner is actually showing. A code left over from an
             // earlier order must not be offered against this one.
-            const mine = saved && (!trackId || saved.trackId === trackId);
-            b.style.display = mine ? 'block' : 'none';
+            const mine = !!saved && (!trackId || saved.trackId === trackId);
+            if (b) b.style.display = mine ? 'block' : 'none';
+            if (n) n.style.display = (mine && started) ? 'block' : 'none';
         };
 
         // Live, honest payment status: watches for the auto-verification (bank credit matched to
@@ -1928,32 +1943,58 @@
             // Clear cart now that the order is safely recorded.
             window.cart = {}; window.totalAmount = 0; window.totalItems = 0; saveCart(); updateCartUI();
 
-            // Watch this order's pendingWeb record for a verification flag the POS/worker sets,
-            // OR the track status advancing (POS accepted). Either confirms to the customer.
-            let done = false;
+            // ONLY paymentVerified MEANS PAID.
+            //
+            // This used to treat the status advancing off 'received' as confirmation too, and
+            // that is a different fact: it means a member of staff pressed Accept. Accepting an
+            // unpaid order is a supported override at the till — it writes the sale to the
+            // ledger as UNVERIFIED and waits for the credit — and it is exactly what happens
+            // when a bank's email is running late and the counter does not want to keep a
+            // customer standing there. On that signal this screen said "Payment confirmed" and
+            // took the code away. So the one customer whose money had NOT arrived was told it
+            // had, and lost the means to send it.
+            //
+            // paymentVerified is written only where a bank credit has actually been matched and
+            // booked against this order, so it is the only thing here that may say "paid".
+            // 'Started' is reported as what it is, and the code stays up underneath it.
+            let done = false;              // terminal: paid, or cancelled
+            let started = false;           // the kitchen has it; says nothing about the money
             const trackRef = db.ref('orders/track/' + trackId);
             const onTrack = trackRef.on('value', snap => {
                 const v = snap.val(); if (!v || done) return;
-                if (v.paymentVerified === true || (v.status && v.status !== 'received' && v.status !== 'cancelled')){
-                    done = true;
-                    // dine-in settles at the table, so confirming a PAYMENT here would be false
-                    if (isDineIn) setStatus('✅', 'In the kitchen', 'Your order is being made. Pay at your table when you’re done.');
-                    else setStatus('✅', 'Payment confirmed', 'Your order is placed and on its way to the kitchen. You can track it below.');
-                    window.clearPayPrompt();
-                } else if (v.status === 'cancelled'){
+                const isStarted = !!(v.status && v.status !== 'received' && v.status !== 'cancelled');
+                if (v.status === 'cancelled'){
                     done = true;
                     setStatus('⚠️', 'Order not accepted', 'This order was cancelled. If you were charged, it will be refunded — please contact us.');
                     window.clearPayPrompt();
+                    return;
+                }
+                if (isDineIn){
+                    // dine-in settles at the table, so confirming a PAYMENT here would be false
+                    if (isStarted){ done = true; setStatus('✅', 'In the kitchen', 'Your order is being made. Pay at your table when you’re done.'); }
+                    return;
+                }
+                if (v.paymentVerified === true){
+                    done = true;
+                    setStatus('✅', 'Payment confirmed', 'Your order is placed and on its way to the kitchen. You can track it below.');
+                    window.clearPayPrompt();
+                } else if (isStarted){
+                    // Not done: the watch stays live, so a credit that lands later still turns
+                    // this into a confirmation rather than dead-ending here.
+                    started = true;
+                    setStatus('👩‍🍳', 'In the kitchen', 'Our staff have started your order. We haven’t seen your payment reach us yet — if you’ve already paid it will confirm here on its own; if not, the code below is still live.');
+                    window.refreshPayPrompt(trackId, true);
                 }
             });
             // Safety timeout: at 120s unverified, say so and LEAVE THE CODE UP. Keep watching —
             // when the credit lands paymentVerified flips and the view updates to confirmed
             // (the loop closes; nothing dead-ends).
             // Nudge only. This phone cannot see the café's bank, so it must not assert that a
-            // payment is late — the POS card carries that state.
+            // payment is late — the POS card carries that state. It also must not talk over the
+            // 'in the kitchen' line above, which is both newer and more specific.
             if (info.type !== 'Dine-in'){
                 setTimeout(() => {
-                    if (done) return;
+                    if (done || started) return;
                     setStatus('⌛', 'Waiting for your payment', 'If you’ve already paid, this will update on its own — it can take a minute. If nothing happens, show this screen to our staff.');
                 }, 120000);
             }
