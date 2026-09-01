@@ -27,6 +27,7 @@ const suites = [
   'touch-targets-browser.test.js',
   'cart-guards-browser.test.js',
   'focus-ring-browser.test.js',
+  'contrast-browser.test.js',
 ];
 
 let failed = [];

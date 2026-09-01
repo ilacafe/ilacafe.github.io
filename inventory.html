@@ -115,7 +115,26 @@
         #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
         #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
-        #login-error { color: #ffcfcf; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; }
+        /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
+           #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
+           message that tells someone why they cannot get in.
+
+           No pink fixes that. White is 4.68:1 on this background and everything
+           tinted towards red is below it, so the lightest pink that would pass is
+           white — which leaves two ways out: put the message on a different surface,
+           or stop asking the colour of the text to carry the meaning.
+
+           A panel was tried and is worse. Any box under a sign-in form reads as
+           another field of the form, and a tinted one reads as a broken field.
+
+           So the text is white and the red is a rule beside it. The message is legible
+           because white passes; it is an error because the mark next to it is red and
+           nothing else on this screen has one. Nothing is boxed, nothing is tinted,
+           and when there is no error there is nothing there at all. */
+        #login-error { color: #fff; font-size: 0.9rem; margin-top: 12px; min-height: 1.2em; text-align: left; }
+        #login-error:not(:empty) {
+            border-left: 3px solid #ff8f8f; padding: 2px 0 2px 10px; line-height: 1.45;
+        }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 60px; }
         .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 15px; box-sizing: border-box; }
         
@@ -126,19 +145,23 @@
         /* TABS NAV */
         .tab-bar { display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.2); margin-bottom: 25px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; }
         .tab-bar::-webkit-scrollbar { display: none; }
-        .tab-btn { background: transparent; color: white; border: none; font-family: 'Quicksand', sans-serif; font-size: 0.95rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 10px 15px; cursor: pointer; opacity: 0.4; transition: opacity 0.2s, border-bottom 0.2s; white-space: nowrap; }
-        .tab-btn.active { opacity: 1; border-bottom: 3px solid white; }
+        /* An unselected tab is still a button someone has to read to know where
+           they are going. At 0.4 it was 2.04:1. Which one is current is carried by
+           weight and the underline it already had, both of which survive being
+           looked at across a stock room; opacity did not. */
+        .tab-btn { background: transparent; color: white; border: none; font-family: 'Quicksand', sans-serif; font-size: 0.95rem; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; padding: 10px 15px; cursor: pointer; transition: border-bottom 0.2s; white-space: nowrap; }
+        .tab-btn.active { font-weight: 700; border-bottom: 3px solid white; }
 
         .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
         .tab-content.active { display: block; }
         .log-row { border-bottom: 1px solid rgba(255,255,255,0.12); padding: 12px 2px; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
         .log-what { font-weight: 700; }
-        .log-who { opacity: 0.75; font-size: 0.85rem; }
-        .log-when { opacity: 0.55; font-size: 0.8rem; white-space: nowrap; }
-        .log-detail { opacity: 0.6; font-size: 0.8rem; margin-top: 3px; }
+        .log-who { font-size: 0.85rem; }
+        .log-when { font-size: 0.8rem; white-space: nowrap; }
+        .log-detail { font-size: 0.8rem; margin-top: 3px; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-        h2 { font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-top: 0; margin-bottom: 15px; opacity: 0.9; }
+        h2 { font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-top: 0; margin-bottom: 15px; }
 
         /* GRID BUTTONS */
         .grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 35px; }
@@ -146,7 +169,7 @@
         .action-btn:active { transform: scale(0.97); }
         .action-btn.outline { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); box-shadow: none; }
         
-        .stock-badge { font-size: 0.75rem; font-weight: normal; opacity: 0.8; margin-top: 5px; background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 12px; }
+        .stock-badge { font-size: 0.75rem; font-weight: normal; margin-top: 5px; background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 12px; }
 
         /* MODAL */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: flex-start; padding-top: 10vh; box-sizing: border-box; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
@@ -173,7 +196,7 @@
         .modal-content { background-color: var(--brand-bg); border: 1px solid rgba(255,255,255,0.2); padding: 25px 20px; border-radius: 12px; text-align: center; width: 85%; max-width: 400px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); }
         
         .modal-title { font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 0; margin-bottom: 5px; }
-        .modal-subtitle { font-size: 0.85rem; opacity: 0.7; margin-bottom: 20px; font-style: italic; }
+        .modal-subtitle { font-size: 0.85rem; margin-bottom: 20px; font-style: italic; }
 
         .remark-input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1.1rem; background-color: rgba(0,0,0,0.1); color: white; display: block; box-sizing: border-box; outline: none; text-align: center; font-weight: bold;}
         .remark-input::placeholder { color: rgba(255,255,255,0.4); font-weight: normal; }
@@ -241,7 +264,7 @@
     <div class="container">
         <header>
             <h1>Kitchen & Prep</h1>
-            <p style="opacity: 0.7; font-size: 0.8rem; margin-top: 5px; text-transform: uppercase; letter-spacing: 1px;">Live Inventory Log</p>
+            <p style="font-size: 0.75rem; margin-top: 5px; text-transform: uppercase; letter-spacing: 2px;">Live Inventory Log</p>
         </header>
 
         <div class="tab-bar">
@@ -257,13 +280,13 @@
         </div>
 
         <div id="dynamic-tabs-container">
-            <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading Database...</p>
+            <p style="text-align: center; margin-top: 50px; font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase;">Loading database&hellip;</p>
         </div>
 
         <div id="tab-log" class="tab-content">
             <h2>Recent activity</h2>
             <div id="log-list">
-                <p style="opacity:0.5;">Loading…</p>
+                <p>Loading…</p>
             </div>
         </div>
 
@@ -461,7 +484,7 @@
             });
             rows.sort((a, b) => b.at - a.at);
             if (!rows.length) {
-                el.innerHTML = '<p style="opacity:0.5;">Nothing logged yet.</p>';
+                el.innerHTML = '<p>Nothing logged yet.</p>';
                 return;
             }
             let html = '';

@@ -144,6 +144,28 @@ costs money:
   in every page, correct, and beaten: `#login-box input` carries an id, which outranks
   a bare `:focus-visible` wherever it sits. A source check found the rule and passed;
   the page still had no ring.
+- **contrast** — pure white on the brand brown `#8D6E52` is 4.68:1, and AA asks 4.5.
+  That 0.18 of margin means there is no such thing as legible dimmed white on this
+  background: at 0.8 it is 3.65, at 0.7 it is 3.19, at 0.6 it is 2.77 — under the bar
+  for large text as well as body. The pages used opacity as their only device for
+  hierarchy, 226 declarations of it, so a browser audit found 47 distinct failing text
+  styles: "No Orders" on the kitchen board at 2.39:1, every KPI label on analytics at
+  2.77:1, and the sign-in error at 3.36:1 — the one line on that screen that has to be
+  read, at full opacity, and no red fixes it because the lightest pink that would pass
+  on this brown is white. The brand does not move. Hierarchy is size, weight and
+  letter-spacing now; what genuinely has to recede sits on a darkened chip, which
+  lowers the surface under it and buys back what dimming spent; and state that used to
+  be said by fading — sold out, voided, paused, already paid — is said in words. This
+  is asked of a browser because the cascade is the whole question: inherited opacity
+  multiplies down the tree, a chip is a semi-transparent layer that has to be
+  composited rather than skipped, and none of that is visible in the file. A second
+  check reads the source, because most of these pages build their rows from data that
+  never renders in a test, and the rule those rows broke is stateable without them.
+  The build stamp is the one exemption, and it is not a free one: it is a version
+  string nobody reads while using the page, so it stays a ghost in the corner — on the
+  condition that hover, focus or a touch brings it to full white, which the suite
+  checks rather than takes on trust. Faint was always right; unreadable when you
+  finally look was the bug.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line

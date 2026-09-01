@@ -129,7 +129,7 @@
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; padding-right: 5px;}
         
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; opacity: 0.6; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
+        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
         .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         
         .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
@@ -170,18 +170,35 @@
         }
         .add-btn:disabled::after { content: none; }
 
-        .sold-out-badge { font-size: 0.65rem; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.3); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; }
+        /* STATE IS SAID, NOT FADED
+           The row used to be dimmed to 0.4 as well as badged — which made the name
+           of the sold-out item the hardest thing on the menu to read, when knowing
+           WHICH item is out is the entire point. The badge does that job alone now.
+
+           An outline and nothing else. The only thing wrong with this tag before was
+           its text: rgba(255,255,255,0.6) on the brown is 2.8:1, while plain white is
+           4.68 and passes. It never needed a filled chip to be readable — a fill and
+           a border together made it a heavy little slab beside a light menu. */
+        .sold-out-badge { font-size: 0.65rem; color: #fff; border: 1px solid rgba(255,255,255,0.45); padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
 
         .contact-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); width: 100%; text-align: center; }
+        /* Purely a separator between two links, and marked aria-hidden in the
+           markup, so it is decoration and exempt — it may stay faint. */
         .footer-divider { opacity: 0.4; }
-        .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.85rem; opacity: 0.7; }
+        /* The phone number and the Instagram handle are the two ways a customer
+           reaches the café when something has gone wrong with an order. They were
+           at 3.19:1. Small and quiet is the intent; unreadable was not. */
+        .footer-links { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; font-size: 0.8rem; }
         .contact-link { color: var(--brand-text); text-decoration: none; }
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; cursor: pointer;}
         #cart-banner.visible { transform: translateY(0); }
         .cart-info { display: flex; flex-direction: column; flex-grow: 1; min-width: 0;}
         .cart-total { font-weight: 700; font-size: 1.1rem; }
-        .cart-clear { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+        /* Brown on the white banner is 4.68:1 — the same knife-edge as white on
+           brown — so dimming it to 0.7 took it to 2.71. It is secondary because it
+           is smaller and letter-spaced under the total, not because it is faded. */
+        .cart-clear { font-size: 0.75rem; margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: calc(12px + env(safe-area-inset-top)) 0 calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; }
@@ -306,6 +323,21 @@
                 scroll-behavior: auto !important;
             }
         }
+        /* THE BUILD STAMP IS NOT CONTENT
+           It exists so "which build is this screen on?" is answerable from the floor
+           — a question somebody asks maybe twice a year, and nobody reads in the
+           course of using the page. Faint and cornered was the right instinct. The
+           thing that was wrong is that at 0.22 the answer was 1.5:1, so looking it up
+           still told you nothing: present, and unreadable, the worst of both.
+
+           So it is quiet by default and legible on demand. Touch it, hover it or tab
+           to it and it comes up to full white; the rest of the time it is a ghost in
+           the corner, which is what a version string owes a customer looking at a
+           menu. That is the condition on which the contrast suite exempts it, and the
+           suite checks the condition rather than taking it on trust. */
+        .build-stamp { font-size: 0.6rem; letter-spacing: 1.5px; color: #fff; opacity: 0.22;
+                       transition: opacity 0.15s ease; }
+        .build-stamp:hover, .build-stamp:focus, .build-stamp:active { opacity: 1; }
     </style>
 
     <!-- Ours, named here and run at the foot alongside the SDK.
@@ -330,7 +362,7 @@
     <div id="closed-screen">
         <img src="logo.png" alt="ILA Logo" width="1200" height="427" decoding="async" style="max-width: 200px; height: auto; margin-bottom: 20px;">
         <h1 style="text-transform: uppercase; font-size: 1.5rem; letter-spacing: 2px;">Closed</h1>
-        <p style="opacity: 0.7; font-size: 1rem;">We are currently not accepting orders.</p>
+        <p style=" font-size: 1rem;">We are currently not accepting orders.</p>
     </div>
 
     <div class="container">
@@ -363,20 +395,20 @@
              role="button" tabindex="0" aria-label="Reorder your usual" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}"
              style="display: none;">
             <div style="font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Reorder Your Usual</div>
-            <div id="usual-order-desc" style="font-size: 0.9rem; opacity: 0.7;"></div>
+            <div id="usual-order-desc" style="font-size: 0.9rem; "></div>
         </div>
 
         <div id="live-menu-container">
-            <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
+            <p style="text-align: center; margin-top: 50px; font-weight: 400; letter-spacing: 2px; text-transform: uppercase; font-size: 0.85rem;">Loading…</p>
         </div>
 
         <div class="contact-footer">
             <div class="footer-links">
                 <a href="https://wa.me/918882946526" class="contact-link" target="_blank">+91 88829 46526</a>
-                <span class="footer-divider">|</span>
+                <span class="footer-divider" aria-hidden="true">|</span>
                 <a href="https://instagram.com/ila_cafe" class="contact-link" target="_blank">@ila_cafe</a>
             </div>
-            <div id="build-stamp" style="font-size:0.6rem; opacity:0.25; margin-top:10px; letter-spacing:1px;"></div>
+            <div id="build-stamp" class="build-stamp" style="margin-top:14px;"></div>
         </div>
     </div>
 
@@ -393,7 +425,7 @@
         <div class="modal-content">
             <h3 id="remark-item-title">Item</h3>
             <div style="text-align: left; width: 100%; margin: 15px 0;">
-                <label style="color: white; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Sweetness</label>
+                <label style="color: white; font-size: 0.8rem; text-transform: uppercase; font-weight: bold; ">Sweetness</label>
                 <div class="choice-grid" id="sweetness-grid">
                     <button class="choice-btn selected" aria-pressed="true" onclick="window.selectSweetness('Medium sweet', this)">Medium</button>
                     <button class="choice-btn" aria-pressed="false" onclick="window.selectSweetness('No sweetness', this)">None</button>
@@ -417,12 +449,12 @@
 
             <div style="text-align: left; margin-top: 15px;">
                 <div style="margin-bottom: 15px;">
-                    <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Special Requests</label>
+                    <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; ">Special Requests</label>
                     <textarea id="cart-notes" aria-label="Notes for the kitchen" maxlength="200" class="remark-input" placeholder="e.g. Oat milk, extra napkins..." style="height: 50px; resize: none; margin-top: 5px;"></textarea>
                 </div>
 
                 <div id="order-type-section">
-                    <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Order Type</label>
+                    <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; ">Order Type</label>
                     <div class="type-row">
                         <button class="type-btn selected" aria-pressed="true" id="type-dinein" onclick="window.setOrderType('Dine-in')">Dine-in</button>
                         <button class="type-btn" aria-pressed="false" id="type-takeaway" onclick="window.setOrderType('Takeaway')">Takeaway</button>
@@ -441,7 +473,7 @@
                     </div>
                     <div id="field-dinein" style="display: none;">
                         <div id="manual-table-selector">
-                            <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; opacity: 0.8;">Table Number</label>
+                            <label style="font-size: 0.8rem; text-transform: uppercase; font-weight: bold; ">Table Number</label>
                             <div class="table-grid" id="customer-table-grid"></div>
                         </div>
                         <div id="fixed-table-display" style="display:none; text-align:center; padding:10px; font-weight:bold; color:#ffcc00; border:1px solid rgba(255,255,255,0.2); border-radius:6px;">
@@ -449,15 +481,15 @@
                     </div>
                     <div id="field-takeaway" style="display: none; padding: 10px 0;">
                         <div style="text-align:center; font-weight: bold; font-size: 1rem;" id="takeaway-eta-line" aria-live="polite">Ready in ~25–30 min</div>
-                        <div style="text-align:center; font-size:0.8rem; opacity:0.65; margin-top:4px;">Estimated from your order and the current kitchen.</div>
+                        <div style="text-align:center; font-size:0.8rem;  margin-top:4px;">Estimated from your order and the current kitchen.</div>
                         <div style="margin-top:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
                             <input type="checkbox" id="takeaway-schedule-toggle" onchange="window.toggleSchedule()" style="width:auto;">
-                            <label for="takeaway-schedule-toggle" style="font-size:0.85rem; opacity:0.85;">I'll pick up later</label>
+                            <label for="takeaway-schedule-toggle" style="font-size:0.85rem; ">I'll pick up later</label>
                         </div>
                         <div id="takeaway-schedule-row" style="display:none; text-align:center; margin-top:10px;">
                             <div style="font-size:0.85rem; margin-bottom:6px;">Pick up in <span id="sched-display" style="font-weight:bold;">45</span> min</div>
                             <input type="range" id="takeaway-sched-time" aria-label="Minutes from now to collect" min="30" max="120" step="5" value="45" oninput="document.getElementById('sched-display').innerText = this.value" style="-webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.4); height: 2px; border-radius: 2px;">
-                            <div style="font-size:0.75rem; opacity:0.6; margin-top:4px;">Can't be earlier than the kitchen estimate above.</div>
+                            <div style="font-size:0.75rem;  margin-top:4px;">Can't be earlier than the kitchen estimate above.</div>
                         </div>
                     </div>
                 </div>
@@ -475,16 +507,16 @@
         <div class="modal-content">
             <h3>Checkout</h3>
             <div style="border: 1px solid rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; margin-bottom: 18px;">
-                <div style="font-size: 0.8rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px;">Amount Due</div>
+                <div style="font-size: 0.8rem;  text-transform: uppercase; letter-spacing: 1px;">Amount Due</div>
                 <div style="font-size: 1.8rem; font-weight: 700;">₹<span id="payment-amount">0</span></div>
             </div>
 
             <!-- STEP 1: phone number (required) -->
             <div id="pay-step-phone">
-                <label style="display:block; font-size:0.8rem; opacity:0.75; margin-bottom:6px;">Your mobile number</label>
+                <label style="display:block; font-size:0.8rem;  margin-bottom:6px;">Your mobile number</label>
                 <input type="tel" id="cust-phone" aria-label="Your phone number" inputmode="numeric" maxlength="10" placeholder="10-digit number" style="width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.06); color:inherit; font-size:1rem; letter-spacing:1px;">
                 <div id="phone-error" style="font-size:0.75rem; color:#ff9e9e; margin-top:6px; display:none;">Please enter a valid 10-digit Indian mobile number.</div>
-                <div id="large-order-note" style="font-size:0.78rem; opacity:0.75; margin-top:10px; display:none; line-height:1.4;"></div>
+                <div id="large-order-note" style="font-size:0.78rem;  margin-top:10px; display:none; line-height:1.4;"></div>
                 <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
             </div>
 
@@ -492,7 +524,7 @@
             <div id="pay-step-status" style="display:none; text-align:center; padding:10px 0;">
                 <div id="status-icon" style="font-size:2.5rem; margin-bottom:10px;">⏳</div>
                 <div id="status-title" style="font-size:1.1rem; font-weight:700; margin-bottom:8px;">Order placed</div>
-                <div id="status-detail" aria-live="polite" style="font-size:0.85rem; opacity:0.8; line-height:1.5;">Confirming your payment automatically…</div>
+                <div id="status-detail" aria-live="polite" style="font-size:0.85rem;  line-height:1.5;">Confirming your payment automatically…</div>
             </div>
 
             <button class="close-modal" onclick="closeModal('payment-modal')">✖ CLOSE</button>
@@ -506,7 +538,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.4"></script>
+    <script src="/build-check.js" data-build="2026-09-01.5"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -1248,7 +1280,7 @@
 
         function renderCustomerMenu() {
             const container = document.getElementById('live-menu-container');
-            if (Object.keys(currentMenuData).length === 0) { container.innerHTML = "<p style='text-align: center; opacity:0.5;'>Menu updating...</p>"; return; }
+            if (Object.keys(currentMenuData).length === 0) { container.innerHTML = "<p style='text-align:center; font-weight:400; letter-spacing:2px; text-transform:uppercase; font-size:0.85rem;'>Menu updating…</p>"; return; }
             // Accumulated, then written once. `container.innerHTML += catHTML` per
             // category serialises the whole menu back out to a string and reparses it
             // for every section — quadratic in the number of categories, and it throws
@@ -1275,19 +1307,19 @@
                 standardItems.forEach(item => {
                     const safeName = item.originalName.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     if (item.inStock) { catHTML += `<div class="menu-row"><span class="item-name">${item.originalName}</span><div class="swap-container" data-item="${safeName}" data-price="${item.price || 0}" data-sweet="${item.requiresSweetness || false}"></div></div>`; } 
-                    else { catHTML += `<div class="menu-row" style="opacity: 0.4;"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled aria-label="${escapeHTML(item.originalName)} is sold out">+</button></div></div>`; }
+                    else { catHTML += `<div class="menu-row"><span class="item-name">${item.originalName} <span class="sold-out-badge">Out</span></span><div style="display:flex; justify-content:flex-end; align-items:center;"><span style="margin-right:10px;">₹${item.price || 0}</span><button class="add-btn" disabled aria-label="${escapeHTML(item.originalName)} is sold out">+</button></div></div>`; }
                 });
 
                 if (sizedItems.length > 0) {
                     catHTML += `<div class="coffee-header"><div></div><div style="text-align: right;">Reg</div><div style="text-align: right;">Lrg</div></div>`;
                     sizedItems.forEach(item => {
                         let safeNameReg = (item.originalName + " (Regular)").replace(/'/g, "\\'").replace(/"/g, "&quot;"); let safeNameLrg = (item.originalName + " (Large)").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                        let regHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`; let lrgHTML = `<span class="sold-out-badge" style="margin:0; border:none;">-</span>`;
+                        let regHTML = `<span aria-hidden="true">&mdash;</span>`; let lrgHTML = `<span aria-hidden="true">&mdash;</span>`;
                         if (item.inStock) {
                             if(item.priceReg) regHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameReg}" data-price="${item.priceReg}" data-sweet="${item.requiresSweetness || false}"></div>`; else regHTML = '<div style="width:100%; text-align:right;">-</div>';
                             if(item.priceLrg) lrgHTML = `<div class="swap-container" style="width:100%; justify-content:flex-end;" data-item="${safeNameLrg}" data-price="${item.priceLrg}" data-sweet="${item.requiresSweetness || false}"></div>`; else lrgHTML = '<div style="width:100%; text-align:right;">-</div>';
                         }
-                        catHTML += `<div class="coffee-row" style="${!item.inStock ? 'opacity: 0.4;' : ''}"><span>${item.originalName}</span>${regHTML}${lrgHTML}</div>`;
+                        catHTML += `<div class="coffee-row"><span>${item.originalName}${item.inStock ? '' : ' <span class="sold-out-badge">Out</span>'}</span>${regHTML}${lrgHTML}</div>`;
                     });
                 }
                 catHTML += `</section>`; menuHTML += catHTML;
