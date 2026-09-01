@@ -435,7 +435,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-08-27.17"></script>
+    <script src="/build-check.js" data-build="2026-09-01.1"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -892,6 +892,60 @@
         window.currentSweetness = "Medium sweet"; window.currentDineInTable = "";
         
         let currentMenuData = {}; let currentCategoryOrder = []; window.currentItemOrder = {};
+
+        // THE MENU IS DRAWN FROM THE LAST ONE THIS PHONE SAW, THEN CORRECTED
+        //
+        // The page itself paints in about 140ms. The menu did not appear until the
+        // database answered — measured at 484ms on a 400ms round trip and 960ms on a
+        // 900ms one — so a customer standing in the café spent most of a second
+        // looking at "Loading...", on a page that was otherwise ready and waiting.
+        //
+        // The last menu is kept here and drawn immediately on the next open. The live
+        // one replaces it the moment it lands, through the same render path, so the
+        // steady state is exactly what it was.
+        //
+        // WHY A STALE PRICE HERE CANNOT COST ANYBODY MONEY
+        //
+        // Because nothing on this page decides what anyone pays. Every line of a web
+        // order is re-priced against the live menu at the till before it is booked —
+        // that is what test/reprice.test.js exists to hold — and a disagreement puts a
+        // banner on the order card and a confirmation in front of the cashier rather
+        // than being applied silently. So the worst a stale price can do is show a
+        // customer a number that the till then corrects out loud. That is also why
+        // this is not done on pos.html: there the menu IS what the bill is priced
+        // from, and a stale one would be a wrong bill rather than a caught one.
+        //
+        // Capped at a week. The live data always wins within a second, so the cap is
+        // not about correctness — it is so that a phone which last opened this months
+        // ago does not flash a menu of things the café has stopped making.
+        const MENU_CACHE_KEY = 'ila_cached_menu';
+        const MENU_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+        function cacheMenu(){
+            if (!currentMenuData || !Object.keys(currentMenuData).length) return;
+            try {
+                localStorage.setItem(MENU_CACHE_KEY, JSON.stringify({
+                    at: Date.now(), menu: currentMenuData,
+                    order: currentCategoryOrder, items: window.currentItemOrder
+                }));
+            } catch(e){}
+        }
+        // Queued rather than run here, and it has to be. renderCustomerMenu finishes by
+        // calling window.renderInlineControls, which is an assignment further down this
+        // script rather than a declaration — so it is not hoisted and does not exist
+        // yet at this line. A microtask runs as soon as this script has finished, which
+        // is still before the browser paints, so nothing is drawn any later for it.
+        queueMicrotask(function menuFromCache(){
+            let c = null;
+            try { c = JSON.parse(localStorage.getItem(MENU_CACHE_KEY) || 'null'); } catch(e){}
+            if (!c || !c.menu || !c.at || (Date.now() - c.at) > MENU_CACHE_MAX_AGE) return;
+            if (!Object.keys(c.menu).length) return;
+            if (Object.keys(currentMenuData).length) return;   // the live one already landed
+            currentMenuData = c.menu;
+            currentCategoryOrder = c.order || [];
+            window.currentItemOrder = c.items || {};
+            buildCustRouting();
+            renderCustomerMenu();
+        });
         window.flatMenu = {}; 
 
         db.ref('settings/storeStatus').on('value', snap => { window.storeStatus = snap.val() || { delivery: true, takeaway: true }; updateCheckoutOptions(); });
@@ -918,8 +972,8 @@
             _menuRenderQueued = true;
             requestAnimationFrame(() => { _menuRenderQueued = false; renderCustomerMenu(); });
         }
-        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; scheduleCustomerMenu(); });
-        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; scheduleCustomerMenu(); });
+        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; cacheMenu(); scheduleCustomerMenu(); });
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; cacheMenu(); scheduleCustomerMenu(); });
         // Which station makes an item is configured per item in admin. The POS reads that
         // map; this page used to guess from the name alone, so anything routed to the chef
         // that is not recognised as a pizza (garlic bread, hot food) landed on the barista
@@ -953,7 +1007,7 @@
             }
             return null;
         }
-        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; buildCustRouting(); scheduleCustomerMenu(); });
+        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; buildCustRouting(); cacheMenu(); scheduleCustomerMenu(); });
 
         function updateCheckoutOptions() {
             const btnDel = document.getElementById('type-delivery'); const btnTak = document.getElementById('type-takeaway'); const btnDin = document.getElementById('type-dinein'); const scanMsg = document.getElementById('scan-instruction'); const payBtn = document.getElementById('btn-pay');
