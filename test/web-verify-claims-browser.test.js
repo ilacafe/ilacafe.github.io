@@ -203,7 +203,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       // since the ordering page picks it off the same routing list this till reads.
       const ours = (window.activeUPIs || [])[0];
       const order = (ref, vpa) => ({ total: window._wvCredits[ref].amount, upiId: vpa || ours,
-                                     payLinkSentAt: window._wvCredits[ref].at - 60000, trackId: 'tk1' });
+                                     billedAt: window._wvCredits[ref].at - 60000, trackId: 'tk1' });
       return {
         taken: taken, free: free, ours: ours,
         onTaken: window.wvFindMatch(order(taken), window._wvCredits, window._wvClaims, now),
@@ -238,7 +238,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const clocks = await page.evaluate(([now]) => {
       const ours = (window.activeUPIs || [])[0];
       const askedAt = now - 10 * 60000;                       // code shown 10 minutes ago
-      const order = { total: 777, upiId: ours, payLinkSentAt: askedAt, trackId: 'tk-clock' };
+      const order = { total: 777, upiId: ours, billedAt: askedAt, trackId: 'tk-clock' };
       // same credit every time; only the bank's stated time moves. `at` is always
       // recent, which is what a delayed email looks like.
       const credit = (bankTime) => ({ CLK1: { amount: 777, ref: 'CLK1', at: now - 60000, bankTime: bankTime } });
@@ -255,6 +255,24 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     check('and a credit with no bank clock falls back to the ingest one, as before',
           !!clocks.none && clocks.none.ref === 'CLK1', JSON.stringify(clocks.none));
     note('bankTime is null whenever the Worker was unsure of the format — that path is the old one');
+
+    // billedAt used to be called payLinkSentAt. Rules deploy separately from pages, so
+    // for as long as a customer's browser might still hold the older page, orders
+    // arrive under the old name — and an order the till cannot read the billing time
+    // off is an order it will not match to any credit at all.
+    const legacy = await page.evaluate(([now]) => {
+      const ours = (window.activeUPIs || [])[0];
+      const askedAt = now - 10 * 60000;
+      const credits = { LEG1: { amount: 778, ref: 'LEG1', at: now - 60000, bankTime: askedAt + 60000 } };
+      return {
+        old: window.wvFindMatch({ total: 778, upiId: ours, payLinkSentAt: askedAt, trackId: 'tk-old' }, credits, {}, now),
+        neither: window.wvFindMatch({ total: 778, upiId: ours, trackId: 'tk-none' }, credits, {}, now)
+      };
+    }, [NOW]);
+    check('an order billed under the old field name still matches',
+          !!legacy.old && legacy.old.ref === 'LEG1', JSON.stringify(legacy.old));
+    check('and one billed under neither still matches nothing',
+          legacy.neither === null, JSON.stringify(legacy.neither));
 
     // A claim landing now, from another till, has to reach this one.
     const late = await page.evaluate(() => {

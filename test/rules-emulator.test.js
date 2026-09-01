@@ -111,15 +111,15 @@ const KEY_FOR = {
 };
 
 const SAMPLES = {
-  // What the ordering page actually pushes for a takeaway. upiId and payLinkSentAt
-  // are in here because they go in on CREATE: the customer's phone picks the VPA and
-  // stamps the moment it drew the code, and under these rules an anonymous browser
-  // may create an order and never touch it again — so if either field were refused,
-  // the whole write would be, and no web order could be placed at all.
+  // What the ordering page actually pushes for a takeaway. upiId and billedAt are in
+  // here because they go in on CREATE: the customer's phone picks the VPA and stamps
+  // the moment it drew the code, and under these rules an anonymous browser may
+  // create an order and never touch it again — so if either field were refused, the
+  // whole write would be, and no web order could be placed at all.
   'orders/pendingWeb/$key': {
     orderType: 'Takeaway', tableOrAddress: 'Takeaway', notes: '', items: { Latte: { qty: 1, price: 250 } },
     total: 250, paymentMethod: 'UPI', phone: '9990001111', gated: false,
-    upiId: 'ila@okaxis', payLinkSentAt: { '.sv': 'timestamp' },
+    upiId: 'ila@okaxis', billedAt: { '.sv': 'timestamp' },
     trackId: 'tk1', createdAt: { '.sv': 'timestamp' }
   },
   'payments/incoming/$key': { amount: 250, ref: '512345678901', at: 1756200000000, bank: 'yes', acct: '8020' },
@@ -627,11 +627,17 @@ const SAMPLES = {
     // to it — and it has to arrive with them in the SAME write, because the next
     // line is the rule that stops the same browser adding them afterwards.
     check('and it arrives billed: the VPA, and when the customer was asked',
-          (await asAnon('web', (o) => { o.upiId = 'cafe.ila.blr@okaxis'; o.payLinkSentAt = { '.sv': 'timestamp' }; })));
+          (await asAnon('web', (o) => { o.upiId = 'cafe.ila.blr@okaxis'; o.billedAt = { '.sv': 'timestamp' }; })));
     await call('PUT', 'orders/pendingWeb/billed', OWNER, WEB());
+    // The old name is still accepted, and has to be until no browser can still be
+    // holding a page that writes it. An order that arrives under it is a real order.
+    check('an order from a page still using the old field name is not refused',
+          (await asAnon('web', (o) => { delete o.billedAt; o.payLinkSentAt = { '.sv': 'timestamp' }; })));
+    note('drop this, the rule, and the till\u2019s fallback together — not before');
+
     check('but cannot be re-billed to somewhere else afterwards',
           !(await canWrite('orders/pendingWeb/billed/upiId', 'anon', 'attacker@ybl')) &&
-          !(await canWrite('orders/pendingWeb/billed/payLinkSentAt', 'anon', Date.now())));
+          !(await canWrite('orders/pendingWeb/billed/billedAt', 'anon', Date.now())));
 
     const rejected = [];
     const must = async (what, node, mutate) => {
@@ -680,7 +686,7 @@ const SAMPLES = {
           (await canWrite('orders/track/staffside/predPoint', 'cashier', 12.5)));
     await call('PUT', 'orders/pendingWeb/staffside', OWNER, WEB());
     check('and can still re-bill an order and book the payment against it',
-          (await canWrite('orders/pendingWeb/staffside/payLinkSentAt', 'cashier', Date.now())) &&
+          (await canWrite('orders/pendingWeb/staffside/billedAt', 'cashier', Date.now())) &&
           (await canWrite('orders/pendingWeb/staffside/upiId', 'cashier', 'ila@okyesbank')) &&
           (await canWrite('orders/pendingWeb/staffside/payment', 'cashier',
                           { ref: '512345678901', amount: 250, at: Date.now(), payId: 'web_tk1', bankTag: 'yes 8020' })));
