@@ -201,7 +201,15 @@
         .cart-clear { font-size: 0.75rem; margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: calc(12px + env(safe-area-inset-top)) 0 calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+        /* align-items is flex-START, and the card centres itself with margin:auto instead.
+           Centring a flex item that is TALLER than its container pushes the overflow off
+           BOTH ends, and the half above the top cannot be scrolled to — it is simply gone.
+           That is what cut the heading off the payment screen: the card outgrew an iPhone
+           the moment it started carrying a QR code, and "Checkout" went with it.
+           Auto margins centre while there is room and collapse to zero when there is not,
+           so a card that outgrows the screen starts at the top and scrolls, every pixel of
+           it reachable. pos.html has had flex-start for this reason; this page had not. */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--brand-bg); display: flex; justify-content: center; align-items: flex-start; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: calc(12px + env(safe-area-inset-top)) 0 calc(12px + env(safe-area-inset-bottom)); box-sizing: border-box; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
         /* CLOSED MODALS ARE NOT LAID OUT
            These overlays are hidden with opacity rather than display, so that they
@@ -236,7 +244,21 @@
             box-shadow: 0 32px 80px rgba(0,0,0,0.55), 0 12px 32px rgba(0,0,0,0.40), 0 2px 8px rgba(0,0,0,0.30);
             padding: 24px 22px; border-radius: 14px; text-align: center;
             width: 90%; max-width: 400px; overflow-y: auto;
-            max-height: calc(100vh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            /* BORDER-BOX, and this is the whole of the second bug. max-height caps the
+               CONTENT box by default, so 24px of padding top and bottom plus two 1px
+               borders were added back on afterwards: a card asked to be at most
+               "screen minus 24" rendered 26px TALLER than the screen, every time,
+               however much room there was. */
+            box-sizing: border-box;
+            /* 100vh does NOT shrink when the iOS keyboard opens — and this dialog has a
+               phone field in it, so the keyboard opens on it — nor does it match the
+               visible area while Safari's URL bar is showing. --app-vh tracks the real
+               visible viewport; the 100vh fallback is what a browser without JS gets,
+               which is no worse than what this page did before. Same mechanism the till
+               already uses. */
+            max-height: calc(var(--app-vh, 100vh) - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+            /* centres itself while it fits — see the note on .modal-overlay */
+            margin: auto;
             -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
         }
         .modal-content h3 { margin: 0 0 18px; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1.5px; }
@@ -296,11 +318,17 @@
         .pay-or::before, .pay-or::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.35); }
         .pay-manual { text-align: left; border: 1px solid rgba(255,255,255,0.35); border-radius: 8px; padding: 12px 14px; }
         .pay-manual-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; }
-        .pay-manual-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-        /* The ID is the payment. It wraps rather than truncates: a VPA cut off by an
-           ellipsis is one a customer would type wrong and send to nobody. */
-        .pay-vpa { flex: 1 1 auto; min-width: 0; font-weight: 700; font-size: 1rem; word-break: break-all; }
-        .pay-copy { flex: 0 0 auto; padding: 10px 14px; font-size: 0.8rem; min-height: 44px; }
+        .pay-manual-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 4px; }
+        /* The ID gets the whole line, and Copy sits under it.
+           Sharing a row with the button left the ID about 190px on a small iPhone, which
+           is narrower than a VPA: it came out broken mid-token as "…@oka / xis". Nobody
+           mistypes a thing they can copy — but the button is for people who CAN copy, and
+           the ones reading it across to a banking app are exactly the ones this screen
+           exists for. On its own line it fits unbroken at every width this page supports.
+           overflow-wrap rather than word-break: break anywhere only when it must, instead
+           of always breaking at whatever character lands on the edge. */
+        .pay-vpa { flex: 1 1 100%; min-width: 0; font-weight: 700; font-size: 1rem; overflow-wrap: anywhere; }
+        .pay-copy { flex: 1 1 auto; padding: 10px 14px; font-size: 0.8rem; min-height: 44px; }
         .pay-amount-note { font-size: 0.8rem; margin-top: 8px; }
         /* Reopens the code from the status banner — the payment screen is closable and
            a customer who closes it must not be stranded with an order and no way to pay. */
@@ -610,7 +638,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.10"></script>
+    <script src="/build-check.js" data-build="2026-09-01.11"></script>
     <!-- The payment QR, drawn on this phone rather than fetched. The same encoder the
          till uses, so the code a customer scans here is the code the counter draws. -->
     <script src="/qr.js"></script>
@@ -1999,6 +2027,27 @@
                 }, 120000);
             }
         };
+
+        // Tracks the VISIBLE viewport, for the modal card's max-height.
+        //
+        // On iOS the software keyboard shrinks visualViewport and leaves 100vh untouched,
+        // and Safari's URL bar does the same in reverse — 100vh is the height the page
+        // WOULD have with the bar hidden, not the height it has. Either way a dialog sized
+        // in vh is taller than the screen it is on, and on this page the overflow went
+        // above the top where nobody could scroll to it.
+        //
+        // Ported from pos.html, which has had it since the till's dialogs met a keyboard.
+        (function trackViewport(){
+            const vv = window.visualViewport;
+            function set(){
+                const h = vv ? vv.height : window.innerHeight;
+                document.documentElement.style.setProperty('--app-vh', h + 'px');
+            }
+            set();
+            if (vv){ vv.addEventListener('resize', set); vv.addEventListener('scroll', set); }
+            window.addEventListener('resize', set);
+            window.addEventListener('orientationchange', () => setTimeout(set, 250));
+        })();
 
         try { const _bs = document.getElementById('build-stamp'); if (_bs) _bs.textContent = 'build ' + ILA_BUILD; } catch(e){}
 
