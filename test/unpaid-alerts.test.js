@@ -5,11 +5,9 @@
 // alert for each. Only the first one worked.
 //
 // billedAt is the moment the customer was SHOWN a payment code. The customer's
-// own app stamps it now, in the same push that creates the order, so an order that
+// own app stamps it, in the same push that creates the order, so an order that
 // arrives without it is one nothing ever asked for money — and wvFindMatch will not
-// match such an order to any credit, so it can never auto-verify. It used to be
-// stamped by a staff tap on a WhatsApp pay-link button, which is gone; what the
-// field means to this suite is unchanged.
+// match such an order to any credit, so it can never auto-verify.
 //
 // The second watched orders/track/{id}/needsManualVerify, and nothing in the repo
 // ever wrote that flag — it was to be set by the customer's app at 120s, and that
@@ -117,19 +115,6 @@ const ORDER = (extra) => Object.assign(
   const dinein = till({ o1: ORDER({ orderType: 'Dine-in' }) });
   dinein.at(NOW + 60 * MIN);
   check('and a dine-in order is not prepaid at all', dinein.pushes.length === 0, dinein.titles().join(', '));
-}
-
-// ------------------------------------- an order from a page that predates the rename
-// billedAt was called payLinkSentAt. Until no browser can still be holding the older
-// page, orders arrive under the old name — and reading them as never-billed would
-// tell staff to take payment on the till for an order already asked for.
-{
-  const t = till({ o1: ORDER({ payLinkSentAt: NOW }) });
-  t.at(NOW + 13 * MIN);
-  check('an order billed under the old field name is chased, not called unbilled',
-        t.pushes.length === 1 && /still unpaid/i.test(t.pushes[0].title), t.titles().join(', '));
-  check('and the clock runs from when it was billed',
-        /13 min ago/.test(t.pushes[0].body), t.pushes[0].body);
 }
 
 // ------------------------------------------------------- the gap that existed
