@@ -140,6 +140,109 @@ const server = http.createServer((req, res) => {
   check('no page threw while any of that ran', threw.length === 0, threw.join(' | '));
   note(overlaysSeen + ' overlays checked; computed style, because measuring geometry lays them out');
 
+  // ------------------------------------------ a dialog taller than the phone it is on
+  //
+  // The customer's payment screen carries a QR code now, and that made it the tallest
+  // dialog on the page — taller than an iPhone. Two things then cut the heading off it,
+  // and both were silent:
+  //
+  //   the overlay centred it. Centring a flex item taller than its container splits the
+  //   overflow between both ends, and the half above the top cannot be scrolled to. It
+  //   is not clipped by a scroller you can reach; it is simply off the screen.
+  //
+  //   the card was content-box. max-height caps the CONTENT box, so 24px of padding top
+  //   and bottom plus two 1px borders were added back afterwards: a card asked for at
+  //   most "screen minus 24" rendered 26px taller than the screen, always.
+  //
+  // Measured at real iPhone sizes, because that is the only place it showed. What is
+  // asserted is the thing a customer would notice: the top of the dialog is on the
+  // screen, and the bottom can be reached by scrolling.
+  {
+    const SIZES = [['iPhone SE', 375, 667], ['iPhone 13', 390, 844], ['iPhone 13 with URL bar', 390, 750]];
+    for (const [label, width, height] of SIZES) {
+      const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width, height },
+                                             deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+      await ctx.addInitScript(FIREBASE_STUB);
+      const tab = await ctx.newPage();
+      tab.on('pageerror', e => threw.push(label + ': ' + e.message));
+      await tab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+      await tab.goto(base + '/index.html', { waitUntil: 'domcontentloaded' });
+      await tab.waitForTimeout(300);
+
+      const r = await tab.evaluate(async () => {
+        // the page's own checkout, through to the step that shows the code
+        window.cart = { 'Flat White': { price: 180, qty: 2 } };
+        window.totalAmount = 360; window.totalItems = 2;
+        window.currentOrderType = 'Takeaway';
+        window.proceedToPayment();
+        document.getElementById('cust-phone').value = '9990001111';
+        window.startPayment();
+        await new Promise(res => setTimeout(res, 200));
+
+        const card = document.querySelector('#payment-modal .modal-content');
+        const h3 = document.querySelector('#payment-modal h3');
+        const close = document.querySelector('#payment-modal .close-modal');
+        const cb = card.getBoundingClientRect(), hb = h3.getBoundingClientRect();
+
+        // scroll to the very bottom and see whether the last control got there
+        card.scrollTop = card.scrollHeight;
+        await new Promise(res => requestAnimationFrame(res));
+        const closeB = close.getBoundingClientRect();
+
+        return {
+          taller: card.scrollHeight > innerHeight,     // the case being tested at all
+          cardTop: Math.round(cb.top), cardBottom: Math.round(cb.bottom),
+          cardHeight: Math.round(cb.height),
+          headingTop: Math.round(hb.top), headingText: h3.textContent.trim(),
+          closeTop: Math.round(closeB.top), closeBottom: Math.round(closeB.bottom),
+          docWidth: document.documentElement.scrollWidth, vw: innerWidth, vh: innerHeight
+        };
+      });
+
+      check(label + ' — the payment dialog is taller than the screen, which is the case being tested',
+            r.taller, 'it fits, so this size proves nothing');
+      check(label + ' — the top of the dialog is on the screen',
+            r.cardTop >= 0, 'card top at ' + r.cardTop + 'px');
+      check(label + ' — and the heading with it',
+            r.headingTop >= 0 && r.headingText.length > 0,
+            '“' + r.headingText + '” at ' + r.headingTop + 'px');
+      // The border-box half, asserted on its own. Chromium's 100vh IS the visible
+      // height, so the padding overshoot only moved the card ~13px up here and the
+      // heading survived by the width of its own padding; on iOS, where 100vh is the
+      // height the page would have with the URL bar hidden, the same overshoot is
+      // ~60px more and takes the heading with it. Card height against the visible
+      // viewport is the same defect stated in a way this browser can see.
+      check(label + ' — and the dialog is not taller than the screen it is on',
+            r.cardHeight <= r.vh, r.cardHeight + 'px tall in ' + r.vh + 'px');
+      check(label + ' — the bottom can be reached by scrolling',
+            r.closeBottom <= r.vh + 1 && r.closeTop >= 0,
+            'close button at ' + r.closeTop + '–' + r.closeBottom + ' in ' + r.vh);
+      check(label + ' — and nothing pushes the page sideways',
+            r.docWidth <= r.vw, r.docWidth + ' wide in ' + r.vw);
+
+      // A dialog that DOES fit must still sit in the middle. align-items:flex-start on
+      // its own would pin every short modal to the top of the screen; margin:auto is what
+      // keeps them centred, and it is easy to remove as "redundant" while fixing the
+      // tall one. remark-modal is the short one on this page.
+      const short = await tab.evaluate(async () => {
+        closeModal('payment-modal');
+        openModal('remark-modal');
+        await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+        const card = document.querySelector('#remark-modal .modal-content');
+        const b = card.getBoundingClientRect();
+        return { top: Math.round(b.top), bottom: Math.round(b.bottom),
+                 h: Math.round(b.height), vh: innerHeight };
+      });
+      const gapAbove = short.top, gapBelow = short.vh - short.bottom;
+      check(label + ' — a dialog that fits is still centred, not pinned to the top',
+            short.h < short.vh && Math.abs(gapAbove - gapBelow) <= 4,
+            gapAbove + 'px above vs ' + gapBelow + 'px below');
+
+      await ctx.close();
+    }
+    note('centred overflow is unreachable, not clipped — no scrollbar appears to say so');
+  }
+
   await browser.close();
   server.close();
   done();
