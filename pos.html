@@ -259,6 +259,17 @@
 
            A browser too old to know the property ignores it and lays everything
            out as it did — slower, never wrong. */
+        /* The menu is the last one this till saw, and cannot price anything until the
+           live one lands. It is shown so the counter can find its way around; the add
+           controls are dimmed so nobody wonders why a tap did nothing. The refusal
+           itself is in the click handler, not here — this is only the affordance. */
+        #live-menu-container.menu-provisional .swap-container,
+        #live-menu-container.menu-provisional .add-btn { opacity: 0.35; }
+        #provisional-note { display: none; text-align: center; font-size: 0.8rem; opacity: 0.75;
+            padding: 6px 0 2px; letter-spacing: 0.5px; }
+        #live-menu-container.menu-provisional ~ #provisional-note,
+        body.menu-provisional #provisional-note { display: block; }
+        #provisional-note.flash { opacity: 1; color: #ffd08a; }
         .modal-overlay { content-visibility: hidden; }
         .modal-overlay.active { content-visibility: visible; }
         .modal-overlay { cursor: pointer; }
@@ -475,6 +486,10 @@
         <div class="pos-panes">
             <div class="pane-menu">
                 <div id="cat-strip" class="cat-strip"></div>
+                <!-- Shown only while the menu on screen is the last one this till saw
+                     rather than the live one. Taps are refused for that moment; this is
+                     what says so, instead of leaving a cashier tapping a dead button. -->
+                <div id="provisional-note" role="status">last known menu — prices loading…</div>
                 <div id="live-menu-container">
                     <p style="text-align: center; opacity: 0.5; margin-top: 50px;">Loading...</p>
                 </div>
@@ -795,7 +810,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.1"></script>
+    <script src="/build-check.js" data-build="2026-09-01.2"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -2303,6 +2318,14 @@
         (function bindMenuAdds(){
             document.addEventListener('click', function(e){
                 const btn = e.target.closest('[data-add]'); if (!btn) return;
+                // The menu on screen is the last one this till saw, not the live one, so
+                // its prices are not to be put in a cart. This is the guarantee, not the
+                // dimming in the stylesheet — CSS can be overridden and this cannot.
+                if (window.menuIsProvisional) {
+                    const n = document.getElementById('provisional-note');
+                    if (n) { n.classList.add('flash'); setTimeout(() => n.classList.remove('flash'), 600); }
+                    return;
+                }
                 const name = btn.getAttribute('data-add');
                 const price = parseFloat(btn.getAttribute('data-price')) || 0;
                 const sweet = btn.getAttribute('data-sweet') === 'true';
@@ -2409,6 +2432,64 @@
 
         let currentMenuData = {}; let liveCategoryOrder = []; window.currentItemOrder = {};
 
+        // THE MENU IS ON SCREEN BEFORE THE DATABASE ANSWERS — BUT IT CANNOT PRICE ANYTHING
+        //
+        // The till painted in about 200ms and then had an empty menu until the database
+        // answered: measured at 492ms on a 400ms round trip and 968ms on a 900ms one.
+        // Every open of every shift starts with the counter looking at nothing.
+        //
+        // The obvious fix is the one index.html uses — draw the last menu from
+        // localStorage. It is not safe here for the reason it is safe there. On the
+        // ordering page nothing decides what anyone pays; here the menu IS what the
+        // bill is priced from, and a stale price is a wrong bill rather than a caught
+        // one. So this does not trust the cache. It shows it.
+        //
+        // While the menu is provisional:
+        //
+        //   buildMenuMaps is NOT called, so window.itemPriceMap stays empty. That is
+        //   what the web-order accept path already checks before it re-prices anything
+        //   — it refuses and says the menu has not loaded — so that guard keeps working
+        //   without knowing this exists.
+        //
+        //   the add handler refuses the tap outright. A cashier cannot put a cached
+        //   price into a cart even by accident, because no code path carries it there.
+        //
+        // What is left is the part that was actually costing time: the menu is on
+        // screen, laid out, scrolled to the right category, a moment after the page is.
+        // The live data lands about half a second later and everything becomes live.
+        // Nobody can tap a specific item faster than that from a cold open anyway.
+        //
+        // Deliberately stricter than the offline path below, which DOES let the counter
+        // work from a cached menu. That is a considered trade for a till that has lost
+        // its connection and must keep serving. Online, the truth is half a second
+        // away, so there is no reason to take it.
+        window.menuIsProvisional = false;
+        function markMenuProvisional(on){
+            window.menuIsProvisional = on;
+            const c = document.getElementById('live-menu-container');
+            if (c) c.classList.toggle('menu-provisional', on);
+            document.body.classList.toggle('menu-provisional', on);
+        }
+        function bootMenuFromCache(){
+            let cached, order, items;
+            try {
+                cached = JSON.parse(localStorage.getItem('ila_cached_menu') || 'null');
+                order  = JSON.parse(localStorage.getItem('ila_cached_category_order') || 'null');
+                items  = JSON.parse(localStorage.getItem('ila_cached_item_order') || 'null');
+            } catch(e){ return; }
+            if (!cached || !Object.keys(cached).length) return;
+            if (Object.keys(currentMenuData).length) return;      // the live one beat us here
+            window.currentItemOrder = items || {};
+            markMenuProvisional(true);
+            renderPOSMenu(cached, order || []);                   // drawn, and only drawn
+        }
+
+        // Queued, not called here: renderPOSMenu finishes by calling
+        // window.renderInlineControls, which is an assignment further down this script
+        // rather than a declaration, so it does not exist yet at this line. A microtask
+        // still runs before the first paint.
+        queueMicrotask(bootMenuFromCache);
+
         db.ref('.info/connected').on('value', function(snap) {
             if (snap.val() === true) {
                 document.getElementById('offline-indicator').style.display = 'none';
@@ -2493,7 +2574,11 @@
         db.ref('menu').on('value', snap => {
             currentMenuData = snap.val() || {}; 
             localStorage.setItem('ila_cached_menu', JSON.stringify(currentMenuData)); 
-            
+
+            // The live menu is here: prices may be trusted from now on. This is the only
+            // place that clears it, and it clears it BEFORE buildMenuMaps so there is no
+            // window in which the map is populated and the flag still says otherwise.
+            markMenuProvisional(false);
             buildMenuMaps(currentMenuData);
             scheduleMenuRender(currentMenuData, liveCategoryOrder);
             calculateDailyCups(); 
