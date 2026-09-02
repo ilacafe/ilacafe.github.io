@@ -165,7 +165,12 @@
             .rail-eta { font-size: 0.78rem; margin-top: 6px; }
             .pane-cart .table-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0; }
             #cart-banner { display: none; }
-            .cat-strip { top: env(safe-area-inset-top); }
+            /* The strip's two-pane override lives beside its own rule below, not here:
+               this block comes FIRST in the sheet, so at equal specificity every
+               declaration in it loses to the .cat-strip rule further down. A `top:
+               env(safe-area-inset-top)` sat here doing nothing for exactly that reason —
+               it only looked like it worked because the rule that beat it set the same
+               value. */
         }
         header { text-align: center; margin-bottom: 25px; }
         /* A LOGO WIDER THAN THE PHONE IS A PAGE THAT SLIDES SIDEWAYS
@@ -198,19 +203,37 @@
            took 40px off everything inside it, this strip included: five categories
            that fit on one line on every iPhone started wrapping onto two.
 
-           Out to the viewport edge, which takes TWO insets, not one. The container is
-           `width: 90%` with `padding: 20px` and border-box, so between the strip and
-           the screen there is 20px of padding AND 5vw of gutter beside the container.
-           Cancelling only the padding leaves the gutter, which is why five ordinary
-           category names — PIZZA SIDES COFFEE BEVERAGES DESSERT, 362px of them — still
-           wrapped inside a 350px strip on a 390px phone. Cancelling both gives the
-           strip the whole 390 and they fit with room to spare.
+           Out to the edge of the screen, and the arithmetic is worth doing once properly
+           because I have now got it wrong twice. Between the strip and the screen sit TWO
+           insets: the container's 20px of padding, and the gutter beside a container that
+           is `width: 90%`. Cancelling only the padding left five ordinary category names
+           — PIZZA SIDES COFFEE BEVERAGES DESSERT, 362px of them — wrapping inside a 350px
+           strip on a 390px phone. Cancelling `5vw + 20px` fixed the phone and was still
+           wrong in the middle: `.container` is ALSO `max-width: 600px`, so from 666px up
+           the gutter is no longer 5vw, and on an 820px iPad in portrait the strip came out
+           682px — wider than the 600px menu it heads, narrower than the screen. Neither.
 
-           This cannot overflow: the strip's width comes to (90vw - 40) + 2(5vw + 20)
-           = 100vw exactly, which is the width it is meant to span. */
+           `50% - 50vw` is the one that is right everywhere, because it does not need to
+           know how wide the container is: the percentage resolves against the containing
+           block, so the width works out to 100vw whatever that block happens to be.
+
+           The one thing vw gets wrong is a classic scrollbar, which 100vw includes and the
+           layout viewport does not — so on a DESKTOP browser under 900px this would
+           overhang by the scrollbar's width. Not a till and not a customer's phone, both
+           of which have overlay scrollbars, and no suite here can see it either: headless
+           Chromium reports a scrollbar width of 0. Stated rather than hidden. */
         .cat-strip { position: sticky; top: env(safe-area-inset-top); z-index: 900; display: flex; flex-wrap: wrap;
-                     justify-content: center; gap: 2px 4px; margin: 0 calc(-5vw - 20px) 2px; padding: 6px 0; background: var(--brand-bg);
+                     justify-content: center; gap: 2px 4px; margin: 0 calc(50% - 50vw) 2px; padding: 6px 0; background: var(--brand-bg);
                      border-bottom: 1px solid rgba(255,255,255,0.14); }
+        /* AND IT STOPS BLEEDING ONCE THERE ARE TWO PANES. Full bleed is right for a phone,
+           where the strip is a bar across the whole screen with nothing beside it. On a
+           tablet there is something beside it: the menu becomes a column with the live
+           order to its right, and a strip pulled out by 5vw + 20px runs straight over that
+           column — 54px of it on an 11-inch iPad, which is the whole word CURRENT in
+           CURRENT ORDER, painted out by an opaque background at z-index 900.
+           In two panes the strip is a header for the menu column, so it spans the menu
+           column and nothing else. */
+        @media (min-width: 900px) { .cat-strip { margin-left: 0; margin-right: 0; } }
         .cat-strip:empty { display: none; }
         /* A 44px TARGET, NOT A 44px CHIP
            min-height: 44px gave the target honestly and made every line of this strip
@@ -993,7 +1016,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.4"></script>
+    <script src="/build-check.js" data-build="2026-09-02.5"></script>
     <!-- The payment QR, drawn on this device rather than fetched. Shared with the
          customer app, which now shows the same code on the customer's own phone. -->
     <script src="/qr.js"></script>
