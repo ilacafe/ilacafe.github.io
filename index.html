@@ -124,6 +124,14 @@
            that area came out white while an iPhone looked seamless. Said in both places
            it cannot be anything else. */
         html { background-color: var(--brand-bg); }
+        /* The platform tints these its own blue. accent-color is the whole fix — it
+           keeps the native control, its behaviour and its semantics exactly as they
+           are, and only says what colour. A hand-built checkbox would have bought the
+           same look and a pile of keyboard and screen-reader work to get back to where
+           the real one already was. */
+        input[type="checkbox"], input[type="radio"], input[type="range"], progress {
+            accent-color: var(--brand-text);
+        }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         /* 90% of 320 is 288, plus 40 of padding, is 328 inside a 320px viewport.
            border-box folds the padding into the width instead of adding to it. */
@@ -677,7 +685,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.8"></script>
+    <script src="/build-check.js" data-build="2026-09-02.9"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>

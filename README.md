@@ -413,6 +413,34 @@ costs money:
   `viewport-fit=cover` nor bottom insets, so it was the one screen that could never
   draw under the home bar at all. It has the pair now, which the reflow suite already
   insisted on for every other page.
+- **the app's own list and calendar** — a `<select>` raises the operating system's
+  picker, which on iOS is a grey drum at the bottom of the screen with none of the
+  café's colours in it, and a date field raises its calendar. They were the last places
+  these pages handed off to something that does not look like the app: eight selects on
+  admin, three and two date fields on analytics. What makes the replacement safe is
+  that nothing was replaced — the native element stays in the document, hidden, holding
+  the value, so every `.value` read and every `onchange=` still talks to it and not one
+  of the thirteen call sites changed. A branded button sits in front, opens a branded
+  list or month grid, writes the value back and dispatches a real `change`. If the
+  script never runs, every one of those controls is still a working native select; the
+  screen is less consistent and nothing is broken, which is the right way round.
+  Two things had to be learned the hard way here. The observer that catches controls
+  built at runtime — the role picker on a staff row, the ingredient rows on a recipe —
+  re-syncs every face when the document changes, and rewriting a button's text IS a
+  document change, so a paint that always writes feeds itself and pins the main thread;
+  it writes only on a real difference now. And `querySelectorAll` returns descendants,
+  never the node itself, so an added node that IS a select was skipped — which was both
+  of the runtime-built ones. The chevron on the face went in at `opacity: 0.7`, and the
+  contrast suite caught it at 3.92:1: hierarchy from size, not from dimming, because
+  this brown has no room to dim into. Eleven of the controls also had no accessible
+  name at all, which is what the dialog titles itself from — so they have one now, and
+  a screen reader has one too.
+  What is left is what genuinely cannot or should not change: the notification
+  permission prompt is the browser's and fires from a deliberate tap, and the login
+  password fields are real passwords where a manager is wanted. The checkboxes and the
+  one range slider keep their native controls and take the brand through `accent-color`,
+  which buys the look without giving back the keyboard and screen-reader behaviour a
+  hand-built one would have had to re-earn.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line
