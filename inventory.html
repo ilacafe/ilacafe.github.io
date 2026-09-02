@@ -106,6 +106,7 @@
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/auth-gate.js">
     <link rel="preload" as="script" href="/pin-mask.js">
+    <link rel="preload" as="script" href="/dialogs.js">
     <link rel="preload" as="script" href="/connection.js">
 
     <style>
@@ -334,6 +335,9 @@
     <script src="/auth-gate.js"></script>
     <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
     <script src="/pin-mask.js"></script>
+    <!-- The app's own way of saying something. alert() blocks the event loop, which
+         on a till means it stops receiving orders while it is up. See dialogs.js. -->
+    <script src="/dialogs.js"></script>
     <!-- Says so when this screen stops talking to the database. Every device here is
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
@@ -704,13 +708,13 @@
             const pinStr = (window.ilaPin ? window.ilaPin.value(_pinEl) : (_pinEl.value || '')).trim();
             const btn = document.getElementById('modal-confirm-btn');
 
-            if (isNaN(qtyInput) || qtyInput <= 0) return alert("Please enter a valid amount.");
+            if (isNaN(qtyInput) || qtyInput <= 0) return ilaFieldError('modal-qty', "Enter a valid amount");
 
             btn.innerText = "Processing...";
             btn.disabled = true;
             try {
                 const r = await invLogToWorker(activeAction.type, activeAction.itemName, qtyInput, pinStr);
-                if (!r.ok) { alert(r.why); return; }
+                if (!r.ok) { ilaTell("Cannot record that", r.why); return; }
                 closeModal();
                 showToast(`Successfully logged ${qtyInput} ${activeAction.itemName}`);
             } finally {

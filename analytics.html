@@ -105,6 +105,7 @@
          same-origin and fetched in that mode by default, so declaring it would
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/auth-gate.js">
+    <link rel="preload" as="script" href="/dialogs.js">
     <link rel="preload" as="script" href="/connection.js">
     <!-- deferred, unlike the three above, because nothing here needs it until the
          data arrives. Chart is only ever touched inside drawChart and drawToday, and
@@ -547,6 +548,9 @@
     <!-- Keeps a signed-in device signed in, and stops the login form being
          shown to somebody who is already signed in. See the top of the file. -->
     <script src="/auth-gate.js"></script>
+    <!-- The app's own way of saying something. alert() blocks the event loop, which
+         on a till means it stops receiving orders while it is up. See dialogs.js. -->
+    <script src="/dialogs.js"></script>
     <!-- Says so when this screen stops talking to the database. Every device here is
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
@@ -728,9 +732,9 @@
         }
         window.applyCustom = function(){
             const f = document.getElementById('date-from').value, t = document.getElementById('date-to').value;
-            if(!f || !t){ alert("Pick both a start and end date."); return; }
+            if(!f || !t){ ilaToast("Pick both a start and an end date"); return; }
             const start = startOfDay(new Date(f)); const end = startOfDay(new Date(t)) + 86400000; // inclusive end day
-            if(end <= start){ alert("End date must be on or after start date."); return; }
+            if(end <= start){ ilaFieldError('range-to', "End date must be on or after the start date"); return; }
             document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
             setRange(start, end, 'custom', fmtRange(start, end-1));
         };
@@ -980,13 +984,13 @@
             setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
         }
         window.exportTxns = function(){
-            const rows = filteredTxns(); if(!rows.length){ alert("Nothing to export."); return; }
+            const rows = filteredTxns(); if(!rows.length){ ilaToast('Nothing to export'); return; }
             const out = [['Date/Time','Type','Table/Address','Items','Payment','Total','Notes']];
             rows.forEach(t => out.push([t.dt, t.type, t.where, t.items, t.method, Math.round(t.total), t.notes]));
             downloadCSV(out, 'ila-transactions-'+stamp()+'.csv');
         };
         window.exportItemLines = function(){
-            const rows = filteredTxns(); if(!rows.length){ alert("Nothing to export."); return; }
+            const rows = filteredTxns(); if(!rows.length){ ilaToast('Nothing to export'); return; }
             const out = [['Date/Time','Type','Table/Address','Item','Qty','Unit Price','Line Total','Payment']];
             // build per-item lines within the filtered set
             const keep = new Set(rows.map(r=>r.ts));
@@ -1045,7 +1049,7 @@
         };
         window.exportVoids = function(){
             const rows = voidFilter();
-            if(!rows.length){ alert('Nothing to export.'); return; }
+            if(!rows.length){ ilaToast('Nothing to export'); return; }
             const out = [['Time','By','Device','Table','Item','Value','Reason']];
             rows.forEach(r => out.push([r.time, r.by, r.device, r.table, r.item, Math.round(r.value), r.reason]));
             downloadCSV(out, 'ila-voids-' + stamp() + '.csv');
@@ -1136,10 +1140,11 @@
             if (!modelIsUsable(MODELPREV)) { if (note) note.textContent = 'That snapshot is incomplete — not restoring it.'; return; }
             const prev = modelSummary(MODELPREV), now = modelSummary(MODEL);
 
-            if (!confirm('Put the saved model back?\n\n' +
+            if (!await ilaAsk('Put the saved model back?',
                     'In use now:  v' + (now ? now.version : '—') + ', pizza base ' + (now ? now.pizza : '—') + ' min\n' +
                     'Restoring:   v' + prev.version + ', pizza base ' + prev.pizza + ' min\n\n' +
-                    'Every till and the ordering page use this for wait estimates, and they pick it up straight away.')) return;
+                    'Every till and the ordering page use this for wait estimates, and they pick it up straight away.',
+                    { ok: 'Restore', cancel: 'Keep current' })) return;
 
             if (btn) { btn.disabled = true; btn.textContent = 'Restoring…'; }
             try {
@@ -1303,7 +1308,7 @@
 
         window.exportUnpaid = function(){
             const rows = unpaidFilter();
-            if(!rows.length){ alert('Nothing to export.'); return; }
+            if(!rows.length){ ilaToast('Nothing to export'); return; }
             const out = [['Time','By','Table','Unpaid','Bill total','Paid','Items','Reason']];
             rows.forEach(r => out.push([r.time, r.by, r.table, Math.round(r.due), Math.round(r.total), Math.round(r.paid), r.items, r.reason]));
             downloadCSV(out, 'ila-walkouts-' + stamp() + '.csv');

@@ -46,7 +46,19 @@ const server = http.createServer((req, res) => {
 function stub(model, prev) {
   return `
     window.__writes = [];
-    window.confirm = (t) => { window.__confirmText = t; return true; };
+    // Was window.confirm. The page asks with its own dialog now — a browser dialog
+    // blocks the event loop, and a screen holding one has stopped listening.
+    //
+    // Behind a function because this is an INIT script: it runs before the page's own
+    // tags, and /dialogs.js would put the real implementation straight back over the
+    // top, leaving the restore waiting on an overlay nobody taps. Called once the page
+    // has loaded. ilaAsk resolves a boolean, and takes the title and the detail
+    // separately, so both are kept to be asserted on.
+    window.__stubDialogs = () => {
+      window.ilaAsk = (t, d) => { window.__confirmText = String(t) + '\\n' + String(d || ''); return Promise.resolve(true); };
+      window.ilaTell = () => Promise.resolve();
+      window.ilaToast = () => {};
+    };
     window.Chart = class { constructor(){ this.data = { datasets: [] }; this.options = {}; }
                            destroy(){} update(){} resize(){} };
     const DATA = { 'eta/model': ${JSON.stringify(model)}, 'eta/modelPrevious': ${JSON.stringify(prev)},
@@ -89,6 +101,7 @@ function stub(model, prev) {
       route.request().url().startsWith(base) ? route.continue() : route.abort());
     await page.goto(base + '/analytics.html', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(400);
+    await page.evaluate(() => window.__stubDialogs());     // after /dialogs.js, not before it
     await page.click('#view-demand').catch(() => {});
     await page.waitForTimeout(250);
     return { ctx, page, errors };

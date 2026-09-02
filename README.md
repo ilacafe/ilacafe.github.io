@@ -343,6 +343,30 @@ costs money:
   because each is read with `parseFloat` and the stock field carries `step="any"`; a
   digits-only pad would take the point out of 0.5 Kg. PINs stay numeric and the two phone
   fields stay `type="tel"`, which raises a phone keypad on both platforms already.
+- **the app says things for itself** — there were 86 calls to `alert()`, `confirm()` and
+  `prompt()` across five pages, and on an estate of iPads and phones running these as
+  standalone apps only the first thing wrong with that is cosmetic. The system sheet
+  names the site, so it reads as the browser interrupting rather than the till asking.
+  It STOPS THE PAGE: `alert()` is synchronous and blocks the event loop, so every
+  Firebase listener, timer and render is frozen until somebody taps OK — a till left
+  with an unattended alert has stopped receiving orders, payments and menu changes, and
+  a kitchen board goes quietly stale, which is exactly the silent failure `connection.js`
+  exists to catch, caused on purpose. Safari and Chrome both offer to suppress repeated
+  alerts, so one tap swallows every later warning that session. And it cannot show a
+  list, carry the brand, or say which keypad to open — the whole job of a number field
+  on a device with no keyboard.
+  `dialogs.js` replaces them with four things, and choosing between them is the point:
+  `ilaToast` for something transient with nothing to decide, `ilaFieldError` to mark the
+  field that is wrong and say why beside it, `ilaTell` for what must be seen and
+  acknowledged, `ilaAsk` for what must be decided, and `ilaAskText` where something must
+  be typed — the last carrying an `inputmode`, which is the thing `prompt()` could never
+  do. The largest group turned out to want LESS interruption rather than a prettier
+  version of it: "address required" was a modal covering the very field it was talking
+  about. Cancel sits nearest the thumb on every ask, because the thumb is already
+  travelling toward where the opening button was. The suite drives the module rather
+  than trusting it — both answers and both ways of saying no, focus moved in and handed
+  back, `null` on a cancelled text prompt as distinct from an empty string, and that
+  none of the three browser dialogs comes back anywhere.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line

@@ -119,6 +119,7 @@
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/auth-gate.js">
     <link rel="preload" as="script" href="/build-check.js">
+    <link rel="preload" as="script" href="/dialogs.js">
     <link rel="preload" as="script" href="/connection.js">
 
     <style>
@@ -639,7 +640,10 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.6"></script>
+    <script src="/build-check.js" data-build="2026-09-02.7"></script>
+    <!-- The app's own way of saying something. alert() blocks the event loop, which
+         on a till means it stops receiving orders while it is up. See dialogs.js. -->
+    <script src="/dialogs.js"></script>
     <!-- Says so when this screen stops talking to the database. Every device here is
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
@@ -737,7 +741,7 @@
             document.getElementById('login-error').innerText = "Signing in...";
             auth.signInWithEmailAndPassword(email, pw).catch(() => { document.getElementById('login-error').innerText = "Sign-in failed. Check email and password."; });
         };
-        window.signOutAdmin = function() { if (confirm("Sign out?")) { roleCache.forget(); auth.signOut().then(() => location.reload()); } };
+        window.signOutAdmin = async function() { if (await ilaAsk("Sign out?", "", { ok: "Sign out", cancel: "Stay" })) { roleCache.forget(); auth.signOut().then(() => location.reload()); } };
         auth.onAuthStateChanged(async (user) => {
             if (!user) { roleCache.forget(); showLogin(); return; }
 
@@ -961,7 +965,7 @@
             let name = document.getElementById('add-name').value.trim();
             category = category.replace(/[.#$\[\]]/g, ''); name = name.replace(/[.#$\[\]]/g, '');
 
-            if (!category || !name) { alert("Please fill in Category and Name."); return; }
+            if (!category || !name) { ilaToast("Category and name are both needed"); return; }
 
             const visibility = document.getElementById('add-visibility').value; const routing = document.getElementById('add-routing').value;
             const requiresSweetness = document.getElementById('add-sweetness').checked; const hasSizes = document.getElementById('add-has-sizes').checked;
@@ -970,11 +974,11 @@
 
             if(hasSizes) {
                 const pReg = parseFloat(document.getElementById('add-price-reg').value); const pLrg = parseFloat(document.getElementById('add-price-lrg').value);
-                if(isNaN(pReg) || isNaN(pLrg)) { alert("Enter both prices."); return; }
+                if(isNaN(pReg) || isNaN(pLrg)) { ilaToast("Enter both prices"); return; }
                 updateData.priceReg = pReg; updateData.priceLrg = pLrg; updateData.price = pReg; 
             } else {
                 const price = parseFloat(document.getElementById('add-price').value);
-                if(isNaN(price)) { alert("Enter a price."); return; }
+                if(isNaN(price)) { ilaFieldError('add-price', "Enter a price"); return; }
                 updateData.price = price; updateData.priceReg = null; updateData.priceLrg = null;
             }
 
@@ -986,7 +990,7 @@
                 document.getElementById('add-name').value = ""; document.getElementById('add-price').value = ""; document.getElementById('add-price-reg').value = ""; document.getElementById('add-price-lrg').value = ""; document.getElementById('add-name').focus();
                 btn.innerText = "✅ SAVED"; btn.style.backgroundColor = "#4caf50"; btn.style.color = "white";
                 setTimeout(() => { btn.innerText = originalText; btn.style.backgroundColor = ""; btn.style.color = ""; btn.disabled = false; }, 1500);
-            }).catch(error => { alert("Error saving item: " + error.message); btn.innerText = originalText; btn.disabled = false; });
+            }).catch(error => { btn.innerText = originalText; btn.disabled = false; ilaTell("Item not saved", error.message); });
         };
 
         window.editItem = function(category, name, price, visibility, requiresSweetness, hasSizes, priceReg, priceLrg, routing) {
@@ -996,7 +1000,7 @@
         };
 
         window.toggleStock = function(cat, name, status) { db.ref('menu/' + cat + '/' + name + '/inStock').set(!status); };
-        window.deleteItem = function(cat, name) { if (confirm(`Delete ${name}?`)) db.ref('menu/' + cat + '/' + name).remove(); };
+        window.deleteItem = async function(cat, name) { if (await ilaAsk(`Delete ${name}?`, "It comes off the menu straight away.", { ok: "Delete", cancel: "Keep" })) db.ref('menu/' + cat + '/' + name).remove(); };
         
         window.addStaff = async function() {
             const name = document.getElementById('staff-name').value.trim(); const pin = document.getElementById('staff-pin').value.trim();
@@ -1004,7 +1008,7 @@
             await db.ref('staff/' + await hashPin(pin)).set(name);
             document.getElementById('staff-name').value = ""; document.getElementById('staff-pin').value = "";
         };
-        window.removeStaff = function(key, name) { if(confirm(`Remove ${name}?`)) db.ref('staff/' + key).remove(); };
+        window.removeStaff = async function(key, name) { if(await ilaAsk(`Remove ${name}?`, "", { ok: "Remove", cancel: "Keep" })) db.ref('staff/' + key).remove(); };
 
         const secondaryApp = firebase.apps.find(a => a.name === "Secondary") || firebase.initializeApp(firebaseConfig, "Secondary");
         window.createStaffAccount = async function() {
@@ -1012,17 +1016,17 @@
             const email = document.getElementById('acct-email').value.trim();
             const pw = document.getElementById('acct-password').value;
             const role = document.getElementById('acct-role').value;
-            if (!name || !email || pw.length < 6) { alert("Need a name, an email, and a password of at least 6 characters."); return; }
+            if (!name || !email || pw.length < 6) { ilaToast("Need a name, an email, and a password of at least 6 characters"); return; }
             try {
                 const cred = await secondaryApp.auth().createUserWithEmailAndPassword(email, pw);
                 await db.ref('users/' + cred.user.uid).set({ name: name, email: email, role: role });
                 await secondaryApp.auth().signOut();
                 document.getElementById('acct-name').value = ""; document.getElementById('acct-email').value = ""; document.getElementById('acct-password').value = "";
-                alert(`${name} can now log in as ${role}.`);
-            } catch (e) { alert("Could not create login: " + e.message); }
+                ilaToast(`${name} can now log in as ${role}`);
+            } catch (e) { ilaTell("Could not create the login", e.message); }
         };
         window.changeRole = function(uid, role) { db.ref('users/' + uid + '/role').set(role); };
-        window.removeAccess = function(uid, name) { if (!confirm(`Remove ${name}'s access? They won't be able to use any app.`)) return; db.ref('users/' + uid).remove(); };
+        window.removeAccess = async function(uid, name) { if (!await ilaAsk(`Remove ${name}'s access?`, "They won't be able to use any app.", { ok: 'Remove access', cancel: 'Cancel' })) return; db.ref('users/' + uid).remove(); };
 
         // ===== CAPACITY-AWARE UPI ROUTING =====
         // upiRouting/config = the IDs, labels, monthly caps, active flags (admin-managed, staff-readable)
@@ -1165,8 +1169,8 @@
         window.uvVerify = function(payId){
             db.ref('upiReview/' + payId).set({ state: 'verified', by: (window.currentAdmin && window.currentAdmin.name) || 'admin', at: Date.now() });
         };
-        window.uvIgnore = function(payId){
-            const note = prompt('Ignore this payment — optional note (why it has no bank credit):', '');
+        window.uvIgnore = async function(payId){
+            const note = await ilaAskText('Ignore this payment', 'Optional note — why it has no bank credit.', { placeholder: 'Note (optional)', maxlength: 160 });
             if (note === null) return;
             const rec = { state: 'ignored', by: (window.currentAdmin && window.currentAdmin.name) || 'admin', at: Date.now() };
             if (note.trim()) rec.note = note.trim();
@@ -1175,8 +1179,8 @@
         window.uvUnignore = function(payId){
             db.ref('upiReview/' + payId).remove();
         };
-        window.uvUnverify = function(payId){
-            if (!confirm('Un-verify this payment? It returns to Needs Review and its tick reverts in the POS. Use this if it was marked verified by mistake.')) return;
+        window.uvUnverify = async function(payId){
+            if (!await ilaAsk('Un-verify this payment?', 'It returns to Needs Review and its tick reverts in the POS. Use this if it was marked verified by mistake.', { ok: 'Un-verify', cancel: 'Cancel' })) return;
             db.ref('upiReview/' + payId).remove();   // removes the admin verification; bank-state (if any) still governs
         };
 
@@ -1205,17 +1209,17 @@
             const cat = document.getElementById('addon-cat').value.trim();
             const name = document.getElementById('addon-name').value.trim();
             const price = parseFloat(document.getElementById('addon-price').value) || 0;
-            if (!cat || !name) return alert('Category and add-on name are both required.');
+            if (!cat || !name) return ilaToast('Category and add-on name are both required');
             const list = (addonCfg[cat] || []).slice();
-            if (list.some(a => a.name === name)) return alert('That add-on already exists in this category.');
+            if (list.some(a => a.name === name)) return ilaToast('That add-on already exists in this category');
             list.push({ name: name, price: price });
             db.ref('settings/addons/' + cat).set(list);
             document.getElementById('addon-name').value = ''; document.getElementById('addon-price').value = '';
         };
-        window.addonRemove = function(cat, idx){
+        window.addonRemove = async function(cat, idx){
             const list = (addonCfg[cat] || []).slice();
             if (!list[idx]) return;
-            if (!confirm('Remove "' + list[idx].name + '" from ' + cat + '? Orders already placed keep it.')) return;
+            if (!await ilaAsk('Remove "' + list[idx].name + '" from ' + cat + '?', 'Orders already placed keep it.', { ok: 'Remove', cancel: 'Keep' })) return;
             list.splice(idx, 1);
             db.ref('settings/addons/' + cat).set(list.length ? list : null);
         };
@@ -1430,11 +1434,11 @@
         window._refunding = {};
         window.refundDone = async function(rid){
             const r = refundsCache[rid]; if (!r) return;
-            if (r.status === 'refunded'){ alert('That refund is already recorded.'); return; }
+            if (r.status === 'refunded'){ ilaToast('That refund is already recorded'); return; }
             if (window._refunding[rid]) return;
             const amt = parseFloat(r.amount) || 0;
             const where = r.tableOrAddress || 'Web order';
-            if (!confirm('Confirm you have ALREADY sent \u20b9' + Math.round(amt) + ' back to the customer' + (r.phone ? ' (' + r.phone + ')' : '') + '.\n\nThis writes the refund to the ledger and reverses it from the UPI total. It does not move any money by itself.')) return;
+            if (!await ilaAsk('Already sent \u20b9' + Math.round(amt) + ' back?', 'Confirm you have ALREADY refunded the customer' + (r.phone ? ' (' + r.phone + ')' : '') + '.\n\nThis writes the refund to the ledger and reverses it from the UPI total. It does not move any money by itself.', { ok: 'Record refund', cancel: 'Cancel' })) return;
             const by = (window.currentAdmin && window.currentAdmin.name) || 'admin';
             const now = Date.now();
             window._refunding[rid] = true;   // this device, until the row goes away
@@ -1467,7 +1471,7 @@
                 await db.ref().update(updates);
             } catch(e){
                 delete window._refunding[rid];   // nothing was written, so let them try again
-                alert('Could not record the refund: ' + (e && e.message ? e.message : e) + '\nNothing was changed \u2014 try again.');
+                ilaTell('Could not record the refund', (e && e.message ? e.message : String(e)) + '\n\nNothing was changed \u2014 try again.');
             }
         };
 
@@ -1525,19 +1529,19 @@
         window._voiding = {};
         window.voidBill = async function(key){
             const rec = voidBillsCache[key]; if (!rec) return;
-            if (rec.voided){ alert('This bill is already voided.'); return; }
+            if (rec.voided){ ilaToast('This bill is already voided'); return; }
             if (window._voiding[key]) return;
             const total = (rec.payment && rec.payment.total != null) ? parseFloat(rec.payment.total) : 0;
             const method = (rec.payment && rec.payment.method) || '';
             const where = rec.tableOrAddress || rec.orderType || 'bill';
             const isUpi = /upi/i.test(String(method));
             const wasVerified = !!(rec.payment && rec.payment.verified);
-            const reason = prompt('Void ' + where + ' (₹' + Math.round(total) + ', ' + method + ').\nReason for voiding this bill:');
+            const reason = await ilaAskText('Void ' + where, '₹' + Math.round(total) + ', ' + method + '.', { placeholder: 'Reason', label: 'Reason for voiding this bill', maxlength: 160 });
             if (reason === null) return;
-            if (!reason.trim()){ alert('A reason is required to void a bill.'); return; }
+            if (!reason.trim()){ ilaToast('A reason is required to void a bill'); return; }
             let extra = '';
             if (isUpi && wasVerified) extra = '\n\nNote: this UPI bill was bank-verified — the money DID arrive in your account. Voiding reverses the sale in the till, but you may need to refund the customer separately. Continue?';
-            if (!confirm('Void this bill and reverse ' + '₹' + Math.round(total) + ' from the till?' + extra)) return;
+            if (!await ilaAsk('Void this bill?', 'It reverses ₹' + Math.round(total) + ' from the till.' + extra, { ok: 'Void bill', cancel: 'Cancel' })) return;
 
             const by = (window.currentAdmin && window.currentAdmin.name) || 'admin';
             const now = Date.now();
@@ -1549,7 +1553,7 @@
                 const already = await db.ref('orders/history/' + key + '/voided').once('value');
                 if (already.val()){
                     delete window._voiding[key];
-                    alert('This bill has already been voided somewhere else.');
+                    ilaToast('This bill has already been voided somewhere else');
                     loadVoidBills();
                     return;
                 }
@@ -1591,7 +1595,7 @@
                 loadVoidBills();
             } catch(e){
                 delete window._voiding[key];   // nothing was written, so let them try again
-                alert('Void failed: ' + (e && e.message ? e.message : e) + '\nNothing was changed — try again.');
+                ilaTell('Void failed', (e && e.message ? e.message : String(e)) + '\n\nNothing was changed — try again.');
             }
         };
 
@@ -1746,23 +1750,23 @@
             const id = document.getElementById('upi-new-id').value.trim();
             const label = document.getElementById('upi-new-label').value.trim();
             const cap = parseFloat(document.getElementById('upi-new-cap').value) || 0;
-            if (!id || id.indexOf('@') < 1) return alert('Enter a valid VPA like name@bank.');
+            if (!id || id.indexOf('@') < 1) return ilaFieldError('upi-new-id', 'Enter a valid VPA like name@bank');
             const k = upiKey(id);
-            if (upiCfg[k]) return alert('That UPI ID is already added.');
+            if (upiCfg[k]) return ilaToast('That UPI ID is already added');
             db.ref('upiRouting/config/' + k).set({ id: id, label: label || id.split('@')[0], monthlyCap: cap, active: true });
             document.getElementById('upi-new-id').value = ''; document.getElementById('upi-new-label').value = ''; document.getElementById('upi-new-cap').value = '';
         };
-        window.upiRemove = function(k){
+        window.upiRemove = async function(k){
             const c = upiCfg[k]; if (!c) return;
             const others = Object.keys(upiCfg).filter(x => x !== k && upiCfg[x] && upiCfg[x].active !== false);
-            if (!others.length) return alert('You need at least one active UPI ID.');
-            if (confirm('Remove ' + (c.label || c.id) + '? Its month history is kept.')) db.ref('upiRouting/config/' + k).remove();
+            if (!others.length) return ilaToast('You need at least one active UPI ID');
+            if (await ilaAsk('Remove ' + (c.label || c.id) + '?', 'Its month history is kept.', { ok: 'Remove', cancel: 'Keep' })) db.ref('upiRouting/config/' + k).remove();
         };
         window.upiToggle = function(k){
             const c = upiCfg[k]; if (!c) return;
             if (c.active !== false){
                 const others = Object.keys(upiCfg).filter(x => x !== k && upiCfg[x] && upiCfg[x].active !== false);
-                if (!others.length){ renderUPIRouting(); return alert('You need at least one active UPI ID.'); }
+                if (!others.length){ renderUPIRouting(); return ilaToast('You need at least one active UPI ID'); }
             }
             db.ref('upiRouting/config/' + k + '/active').set(c.active === false);
         };
@@ -1774,13 +1778,13 @@
             const bank = String(val || '').trim().toLowerCase();
             db.ref('upiRouting/config/' + k + '/bank').set(bank || null);
         };
-        window.upiAdjust = function(k){
+        window.upiAdjust = async function(k){
             const c = upiCfg[k]; if (!c) return;
             const cur = Math.round(parseFloat(upiTot[k]) || 0);
-            const v = prompt('Received this month on ' + (c.label || c.id) + ' (\u20b9) \u2014 correct the counter if it\u2019s off:', cur);
+            const v = await ilaAskText('Received this month on ' + (c.label || c.id), 'Correct the counter if it\u2019s off.', { inputmode: 'decimal', value: cur, placeholder: '\u20b90' });
             if (v === null) return;
             const n = parseFloat(v);
-            if (isNaN(n) || n < 0) return alert('Enter a valid amount.');
+            if (isNaN(n) || n < 0) return ilaToast('Enter a valid amount');
             db.ref('upiRouting/totals/' + upiMonthKey() + '/' + k).set(n);
         };
 
@@ -1835,12 +1839,12 @@
                 db.ref(`inventory/config/items/${tab}/${type}`).set(masterInventoryConfig[tab][type]);
                 document.getElementById('inv-new-item').value = "";
             } else {
-                alert("Item already exists in this tab.");
+                ilaToast("Item already exists in this tab");
             }
         };
 
-        window.removeInventoryItem = function(tab, type, index) {
-            if (confirm("Delete this item? It will remove it from the staff's tablet.")) {
+        window.removeInventoryItem = async function(tab, type, index) {
+            if (await ilaAsk("Delete this item?", "It comes off the staff tablet straight away.", { ok: "Delete", cancel: "Keep" })) {
                 masterInventoryConfig[tab][type].splice(index, 1);
                 db.ref(`inventory/config/items/${tab}/${type}`).set(masterInventoryConfig[tab][type]);
             }
@@ -1914,13 +1918,13 @@
             });
 
             if (Object.keys(recipeData).length === 0) {
-                return alert("Please add at least one valid ingredient with a quantity.");
+                return ilaToast("Add at least one ingredient with a quantity");
             }
 
             db.ref('inventory/recipes/' + target).set(recipeData).then(() => {
-                alert(`Success: ${target} recipe is locked into the database.`);
+                ilaToast(`${target} recipe saved`);
             }).catch(e => {
-                alert("Error saving recipe: " + e.message);
+                ilaTell("Recipe not saved", e.message);
             });
         };
 

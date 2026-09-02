@@ -56,9 +56,14 @@ function speech() {
     said,
     globals: {
       firebase: { database: { ServerValue: { TIMESTAMP: 1756200000000, increment: INCREMENT } } },
-      alert: (m) => said.alerts.push(String(m)),
-      confirm: () => true,
-      prompt: () => 'wrong amount charged',
+      // These used to be alert/confirm/prompt. They are the app's own dialogs now,
+      // because a browser dialog blocks the event loop and a till holding one has
+      // stopped listening to the database. The shapes are what the page awaits:
+      // ilaAsk resolves a boolean, ilaAskText a string or null when backed out.
+      ilaAsk: () => Promise.resolve(true),
+      ilaAskText: () => Promise.resolve('wrong amount charged'),
+      ilaTell: (t, d) => { said.alerts.push(String(t) + ' ' + String(d || '')); return Promise.resolve(); },
+      ilaToast: (m) => { said.alerts.push(String(m)); },
       Date, Math, JSON, Object, parseFloat, parseInt, String, console,
     }
   };

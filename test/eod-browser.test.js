@@ -106,12 +106,26 @@ const STUB = `
     })
   };
 
-  // Real dialogs block the page and Playwright dismisses them, which would turn
-  // every confirm() into a "no". These answer deterministically and report the
-  // text, which is half of what this suite is checking.
-  window.alert = (m) => { out('dialog', { kind: 'alert', text: String(m) }); };
-  window.confirm = (m) => { out('dialog', { kind: 'confirm', text: String(m) }); return true; };
-  window.prompt = (m) => { out('dialog', { kind: 'prompt', text: String(m) }); return ${JSON.stringify(PIN)}; };
+  // These were alert/confirm/prompt. The page asks with its own dialogs now, because
+  // a browser dialog blocks the event loop and a till holding one has stopped
+  // listening to the database — the thing this suite is otherwise all about.
+  //
+  // Stubbed rather than driven through the real overlay for the same reason the old
+  // ones were: this suite is here to watch what gets WRITTEN at the end of a day, and
+  // it needs every question answered deterministically. The shapes match dialogs.js —
+  // ilaAsk resolves a boolean, ilaAskText a string or null — and the text is still
+  // reported, because half of what this checks is what the till said before it wrote.
+  //
+  // Held behind a function because this whole block is an INIT script: it runs before
+  // the page's own tags, and /dialogs.js would put the real implementations straight
+  // back over the top — leaving promptEOD waiting on an overlay nobody is going to tap.
+  // The seed calls this after the page has loaded.
+  window.__stubDialogs = () => {
+    window.ilaToast = (m) => { out('dialog', { kind: 'toast', text: String(m) }); };
+    window.ilaTell = (t, d) => { out('dialog', { kind: 'tell', text: String(t) + (d ? ' ' + d : '') }); return Promise.resolve(); };
+    window.ilaAsk = (t, d) => { out('dialog', { kind: 'ask', text: String(t) + (d ? ' ' + d : '') }); return Promise.resolve(true); };
+    window.ilaAskText = (t, d) => { out('dialog', { kind: 'asktext', text: String(t) + (d ? ' ' + d : '') }); return Promise.resolve(${JSON.stringify(PIN)}); };
+  };
 
   const realFetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
@@ -175,6 +189,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     await page.waitForTimeout(400);
     await page.evaluate(([seed, hold]) => {
       window.__held = hold;
+      window.__stubDialogs();          // after /dialogs.js, not before it
       (0, eval)(seed);
     }, [SEED, held || []]);
     return { ctx, page, seen };
@@ -187,13 +202,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     if (h === 'reject') g.reject(new Error('permission_denied')); else g.resolve();
   }, [prefix, how || 'resolve']);
   const resets = (seen) => seen.ops.filter(o => o.path === RESET && o.op === 'update');
-  const alerts = (seen) => seen.dialogs.filter(d => d.kind === 'alert').map(d => d.text).join('\n');
+  const alerts = (seen) => seen.dialogs.filter(d => d.kind === 'tell').map(d => d.text).join('\n');
   const trail = (seen) => seen.ops.filter(o => o.op !== 'push').map(o => o.op + ' ' + o.path).join(', ') || '(nothing written)';
   // The hand-off replaces the document, so waiting on the promise is not an option.
   async function settle(seen, ms) {
     const until = Date.now() + (ms || 4000);
     while (Date.now() < until) {
-      if (seen.handoffs.length || seen.dialogs.some(d => d.kind === 'alert')) return;
+      if (seen.handoffs.length || seen.dialogs.some(d => d.kind === 'tell')) return;
       await sleep(50);
     }
   }
@@ -299,7 +314,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       note('waiting out the bound — about 20s, once, deliberately');
       await settle(seen, 30000);
       check('but it does not leave the till waiting forever either',
-            seen.dialogs.some(d => d.kind === 'alert'), '(no message after 30s)');
+            seen.dialogs.some(d => d.kind === 'tell'), '(no message after 30s)');
       check('the cashier is told the till never heard back',
             /did not hear back/i.test(alerts(seen)), alerts(seen) || '(silent)');
       check('and an unconfirmed archive still clears nothing', resets(seen).length === 0, trail(seen));
