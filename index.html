@@ -455,6 +455,7 @@
          same-origin and fetched in that mode by default, so declaring it would
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/build-check.js">
+    <link rel="preload" as="script" href="/dialogs.js">
     <link rel="preload" as="script" href="/connection.js">
     <link rel="preload" as="script" href="/qr.js">
 </head>
@@ -670,7 +671,10 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.6"></script>
+    <script src="/build-check.js" data-build="2026-09-02.7"></script>
+    <!-- The app's own way of saying something. alert() blocks the event loop, which
+         on a till means it stops receiving orders while it is up. See dialogs.js. -->
+    <script src="/dialogs.js"></script>
     <!-- Says so when this screen stops talking to the database. Every device here is
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
@@ -1538,11 +1542,11 @@
             return { cart: validCart, total: newTotal, count: newCount, changed: changed, removed: removed };
         };
 
-        window.loadUsualOrder = function() {
-            if(Object.keys(window.flatMenu).length === 0) return alert("Menu syncing, please try again in a second.");
+        window.loadUsualOrder = async function() {
+            if(Object.keys(window.flatMenu).length === 0) return ilaToast("Menu syncing — try again in a second");
             let result = window.validateAndSyncCart(window.lastOrder);
             if(result.removed.length > 0) {
-                alert("Sorry, some items in your usual order are currently out of stock:\n- " + result.removed.join("\n- "));
+                await ilaTell("Out of stock", "Sorry, some items in your usual order are not available right now:\n\n- " + result.removed.join("\n- "));
                 if(result.count === 0) return; 
             }
             window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count;
@@ -1618,11 +1622,11 @@
         };
 
         window.openCheckoutModal = function() {
-            if (window.totalItems === 0) return alert("Your cart is empty!");
+            if (window.totalItems === 0) return ilaToast("Your cart is empty");
             let result = window.validateAndSyncCart(window.cart);
             if(result.changed) {
                 window.cart = result.cart; window.totalAmount = result.total; window.totalItems = result.count; saveCart(); 
-                if(result.removed.length > 0) { alert("Cart updated: Some items are no longer available and were removed."); if(window.totalItems === 0) return; }
+                if(result.removed.length > 0) { ilaTell("Cart updated", "Some items are no longer available and have been removed from your cart."); if(window.totalItems === 0) return; }
             }
             const list = document.getElementById('review-cart-list');
             let rows = "";
@@ -1693,9 +1697,9 @@
 
         window.proceedToPayment = function() {
             const type = window.currentOrderType; let details = ""; const notes = document.getElementById('cart-notes').value.trim().slice(0, 200);
-            if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { alert("Address required."); return; } } 
+            if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { ilaFieldError('delivery-address', "Address required"); return; } } 
             else if (type === 'Dine-in') { 
-                if(urlTable) details = "Table " + urlTable; else if (window.currentDineInTable) details = "Table " + window.currentDineInTable; else { alert("Please select a table number."); return; }
+                if(urlTable) details = "Table " + urlTable; else if (window.currentDineInTable) details = "Table " + window.currentDineInTable; else { ilaFieldError('customer-table-grid', "Please select a table number"); return; }
             } 
             else if (type === 'Takeaway') {
                 // Use the real kitchen estimate, not a blind slider. If they chose to schedule a
@@ -1847,7 +1851,7 @@
                 if (_label !== 'Order') db.ref('orders/tableIndex/' + _label + '/' + trackId).set(firebase.database.ServerValue.TIMESTAMP);
                 if (window.watchOrderStatus) window.watchOrderStatus();
                 window.watchPaymentStatus(trackId, info);
-            }).catch(() => alert("Couldn't place the order — check your connection and try again."));
+            }).catch(() => ilaTell("Order not placed", "Check your connection and try again."));
 
             // Show the live status step (do NOT clear the cart until payment is seen or the
             // customer closes — so nothing is lost if they need to retry payment).

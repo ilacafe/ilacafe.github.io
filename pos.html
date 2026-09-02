@@ -113,6 +113,7 @@
     <link rel="preload" as="script" href="/auth-gate.js">
     <link rel="preload" as="script" href="/pin-mask.js">
     <link rel="preload" as="script" href="/build-check.js">
+    <link rel="preload" as="script" href="/dialogs.js">
     <link rel="preload" as="script" href="/connection.js">
     <link rel="preload" as="script" href="/qr.js">
 
@@ -1017,7 +1018,10 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.6"></script>
+    <script src="/build-check.js" data-build="2026-09-02.7"></script>
+    <!-- The app's own way of saying something. alert() blocks the event loop, which
+         on a till means it stops receiving orders while it is up. See dialogs.js. -->
+    <script src="/dialogs.js"></script>
     <!-- Says so when this screen stops talking to the database. Every device here is
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
@@ -1451,8 +1455,8 @@
             auth.signInWithEmailAndPassword(email, pw)
                 .catch(() => { document.getElementById('login-error').innerText = "Sign-in failed. Check email and password."; });
         };
-        window.signOutPOS = function() {
-            if (confirm("Sign out of the POS?")) { roleCache.forget(); auth.signOut().then(() => location.reload()); }
+        window.signOutPOS = async function() {
+            if (await ilaAsk("Sign out of the POS?", "", { ok: "Sign out", cancel: "Stay" })) { roleCache.forget(); auth.signOut().then(() => location.reload()); }
         };
         let authedListenersStarted = false;
         auth.onAuthStateChanged(async (user) => {
@@ -2315,7 +2319,7 @@
             return lines.join('\n');
         }
 
-        window.acceptWebOrder = function(id) {
+        window.acceptWebOrder = async function(id) {
             const submitted = window.pendingWebOrders[id];
             if (!submitted) return;
             if (!window._webActing) window._webActing = {};
@@ -2327,12 +2331,12 @@
             // has no items yet (a cold start on a bad connection) there is nothing to check
             // against, so don't pretend to: hold the order rather than wave it through.
             if (!window.itemPriceMap || Object.keys(window.itemPriceMap).length === 0){
-                alert("The menu hasn't loaded yet, so this order's prices can't be checked.\n\nWait for the menu to appear and try again.");
                 delete window._webActing[id];
+                ilaTell("Menu not loaded yet", "This order's prices can't be checked against it. Wait for the menu to appear and try again.");
                 return;
             }
             const rp = repriceWebOrder(submitted);
-            if (rp.mismatch && !confirm(repriceWarning(rp) + '\n\nAccept at the MENU price of \u20b9' + rp.total + '?')){
+            if (rp.mismatch && !await ilaAsk('Price has changed', repriceWarning(rp) + '\n\nAccept at the MENU price of \u20b9' + rp.total + '?', { ok: 'Accept menu price', cancel: 'Cancel' })){
                 delete window._webActing[id];
                 return;
             }
@@ -2345,7 +2349,7 @@
             if (order.gated){
                 const matched = !!(order.payment && order.payment.ref);
                 if (!matched){
-                    if (!confirm("Payment for this order is NOT yet verified.\n\nStart preparing anyway? (Recommended: wait until the badge shows the credit has landed.)")) return;
+                    if (!await ilaAsk("Payment not verified", "No bank credit has matched this order yet.\n\nRecommended: wait until the badge shows the credit has landed.", { ok: "Start preparing", cancel: "Wait" })) return;
                 }
             }
 
@@ -2437,7 +2441,7 @@
             closeModal('web-orders-modal');
         };
 
-        window.rejectWebOrder = function(id) {
+        window.rejectWebOrder = async function(id) {
             const order = window.pendingWebOrders[id];
             if (!order) return;
             if (!window._webActing) window._webActing = {};
@@ -2456,7 +2460,7 @@
             const msg = paid
                 ? '\u26a0 THIS ORDER HAS BEEN PAID \u2014 \u20b9' + Math.round(amt) + '.\n\nRejecting it means you owe the customer a refund. It will be added to Refunds Due in Admin.\n\nReject anyway?'
                 : 'Reject this web order?';
-            if (!confirm(msg)) return;
+            if (!await ilaAsk("Reject this order?", msg, { ok: "Reject", cancel: "Keep" })) return;
 
             // tell the customer their order was declined (otherwise their app waits forever)
             if (order.trackId) {
@@ -3343,7 +3347,7 @@
         }
 
         window.sendOrder = function(tableID) {
-            if (window.totalItems === 0) return alert("Cart is empty!");
+            if (window.totalItems === 0) return ilaToast("Cart is empty");
             // Double-tap guard. The table total uses increment(), so a second tap on a laggy
             // connection sends a second kitchen ticket AND charges the table twice. Neither is
             // recoverable without a void.
@@ -3401,7 +3405,7 @@
         };
 
         window.openTableModal = function() {
-            if (window.totalItems === 0) return alert("Cart is empty!");
+            if (window.totalItems === 0) return ilaToast("Cart is empty");
             document.getElementById('pos-order-notes').value = "";
             // Show the live prep-time estimate for the current cart before sending
             try {
@@ -3523,13 +3527,13 @@
             const tableData = window.activeTables[tableID];
             
             if(tableData && tableData.items[realItemName]) {
-                const reason = prompt(`Removing ${realItemName}. Reason?`);
+                const reason = await ilaAskText("Remove " + realItemName, "Why is this coming off the bill?", { placeholder: "Reason", maxlength: 120 });
                 if (!reason) return; 
 
-                const voidPin = prompt("Staff PIN to authorize this void:");
+                const voidPin = await ilaAskText("Staff PIN", "Authorise this void.", { type: "password", inputmode: "numeric" });
                 if (!voidPin) return;
                 const authName = window.staffPins[await hashPin(voidPin)];
-                if (!authName) { alert("Invalid PIN — void cancelled."); return; }
+                if (!authName) { ilaTell("Invalid PIN", "The void was cancelled and nothing has changed."); return; }
 
                 const voidData = {
                     time: new Date().toLocaleString(),
@@ -3574,7 +3578,7 @@
                     }
                     return cur;
                 }, function(err, committed){
-                    if (err){ alert("Void recorded, but the table could not be updated. Check the connection."); return; }
+                    if (err){ ilaTell("Only half of that saved", "The void was recorded, but the table could not be updated. Check the connection."); return; }
                     if (!committed) return;                     // the line was already gone
                     if (cleared) archivePOSTable(tableID, cleared, "Partial/Cleared");
                     if (cleared || emptied) closeModal('checkout-modal');
@@ -3685,7 +3689,7 @@
         window.calculateSplitByHead = function(){
             const t = window.activeTables[window.checkoutTableID];
             const heads = parseInt((t.shares && t.shares.count) || 0);
-            if (heads < 1) return alert('Set how many people are paying separately first.');
+            if (heads < 1) return ilaToast('Set how many people are paying separately first');
             const left = Math.max(1, heads - (parseInt((t.shares && t.shares.paid) || 0)));
             splitEvenly(left);
         };
@@ -4004,13 +4008,13 @@
             if (r) r.style.display = '';
         }
 
-        window.setTip = function(v){
+        window.setTip = async function(v){
             const cur = parseFloat(window.pendingTip) || 0;
             if (v === 'custom'){
-                const raw = prompt('Tip amount (\u20b9):', cur ? String(cur) : '');
+                const raw = await ilaAskText('Tip amount', '', { inputmode: 'decimal', value: cur ? String(cur) : '', placeholder: '\u20b90' });
                 if (raw === null) return;
                 const n = parseFloat(raw);
-                if (isNaN(n) || n < 0) return alert('Enter a valid amount.');
+                if (isNaN(n) || n < 0) return ilaToast('Enter a valid amount');
                 window.pendingTip = n;
             } else if (v === 0){
                 window.pendingTip = 0;
@@ -4180,13 +4184,13 @@
         }
         // Manual fallback: claim a matching credit if one is already in, otherwise
         // settle as an un-verified manual confirm (the cashier is vouching for it).
-        window.confirmUPIPayment = function(){
+        window.confirmUPIPayment = async function(){
             if (window.upiSettling) return;
             const amount = parseFloat(window.pendingUPIAmount) || 0;
             // Say plainly what this does. If a credit has already matched, the watcher would
             // have settled it automatically — so reaching this button almost always means
             // vouching for money the system cannot see yet.
-            if (!confirm('Mark \u20b9' + Math.round(amount) + ' as received?\n\nNo bank credit has matched this payment yet. It will show as unverified until one does.')) return;
+            if (!await ilaAsk('Mark \u20b9' + Math.round(amount) + ' as received?', 'No bank credit has matched this payment yet. It will show as unverified until one does.', { ok: 'Mark received', cancel: 'Cancel' })) return;
             const now = serverNow();
             db.ref('payments/incoming').orderByChild('at').limitToLast(60).once('value', snap => {
                 if (window.upiSettling) return;
@@ -4256,7 +4260,7 @@
                     showToast('NOT RECORDED \u2014 \u20b9' + Math.round(Math.abs(parsedAmount)),
                               (reason || type) + ' did not save. Check the connection and enter it again.');
                 } catch(_){
-                    alert('That entry did not save. Check the connection and enter it again.');
+                    ilaTell('That entry did not save', 'Check the connection and enter it again.');
                 }
             });
             return key;
@@ -4575,12 +4579,12 @@
             const due = Math.max(0, (window.tipPool.accrued || 0) - (window.tipPool.paidOut || 0));
             if (!(due > 0)) return;
             const heads = parseInt(window.lastTipHeads) || 0;
-            if (heads < 1) return alert('Set how many people are sharing it first.');
+            if (heads < 1) return ilaToast('Set how many people are sharing it first');
             const each = Math.floor(due / heads);
-            const pinStr = prompt('\u20b9' + Math.round(due) + ' \u00f7 ' + heads + ' = \u20b9' + each + ' each.\nThis takes \u20b9' + Math.round(due) + ' OUT of the cash drawer.\n\nStaff PIN to authorise:');
+            const pinStr = await ilaAskText('Pay out \u20b9' + Math.round(due) + ' of tips', '\u20b9' + Math.round(due) + ' \u00f7 ' + heads + ' = \u20b9' + each + ' each.\n\nThis takes \u20b9' + Math.round(due) + ' OUT of the cash drawer.', { type: 'password', inputmode: 'numeric', label: 'Staff PIN to authorise' });
             if (!pinStr) return;
             const cash = parseFloat(window.cashDrawer) || 0;
-            if (due > cash && !confirm('Only \u20b9' + Math.round(cash) + ' in the drawer. Pay out anyway?')) return;
+            if (due > cash && !await ilaAsk('Drawer is short', 'Only \u20b9' + Math.round(cash) + ' in the drawer. Pay out anyway?', { ok: 'Pay out', cancel: 'Cancel' })) return;
             // The Worker checks the PIN, writes the entry and decrements the drawer in one
             // write. Only once that has landed is the pool marked paid out — the other way
             // round leaves tips the staff are owed recorded as already handed over.
@@ -4588,7 +4592,7 @@
             window._payingOutTips = true;
             const paid = await posCashOut('tip_payout', due, 'Tips \u00b7 ' + heads + ' \u00d7 \u20b9' + each, pinStr);
             window._payingOutTips = false;
-            if (!paid.ok) return alert(paid.why);
+            if (!paid.ok) return ilaTell("Payout not recorded", paid.why);
             const staffName = paid.by;
             try {
                 db.ref('pos/tips/' + tipDayKey()).update({
@@ -4615,14 +4619,14 @@
             // cannot be skipped. This page neither looks it up nor writes the entry —
             // the rules refuse these three types from here.
             let currentCash = parseFloat(window.cashDrawer) || 0;
-            if (amount > currentCash && !confirm(`Only \u20b9${currentCash} in drawer. Continue?`)) return;
+            if (amount > currentCash && !await ilaAsk('Drawer is short', `Only \u20b9${currentCash} in the drawer. Continue?`, { ok: 'Continue', cancel: 'Cancel' })) return;
 
             const btn = document.getElementById('transaction-confirm-btn');
             if (btn && btn.disabled) return;
             if (btn){ btn.disabled = true; btn.innerText = 'Recording\u2026'; }
             const r = await posCashOut(window.currentTransactionType, amount, reasonStr, pinStr);
             if (btn){ btn.disabled = false; btn.innerText = 'Confirm'; }
-            if (!r.ok) return alert(r.why);
+            if (!r.ok) return ilaTell("Not recorded", r.why);
             window.closeTransactionModal();
         };
 
@@ -4697,8 +4701,8 @@
         }
 
         window.promptEOD = async function() {
-            const pinStr = prompt("Enter PIN:"); if (!pinStr) return;
-            const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return alert("Invalid PIN.");
+            const pinStr = await ilaAskText("Staff PIN", "Closing the day is recorded against you.", { type: "password", inputmode: "numeric" }); if (!pinStr) return;
+            const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return ilaTell("Invalid PIN", "Nothing has been closed.");
             // Open tables used to be deleted outright at EOD — so a table that walked out unpaid
             // left no ledger line, no archive and no number. Force a decision instead, and write
             // the write-off as a real entry, so walkouts become something you can actually see.
@@ -4711,11 +4715,12 @@
             if (openShort.length){
                 const lines = openShort.map(x => (x.id === 'Takeaway' ? 'Takeaway' : 'Table ' + x.id) + ' \u2014 \u20b9' + Math.round(x.due)).join('\n');
                 const totalShort = openShort.reduce((a, x) => a + x.due, 0);
-                if (!confirm('These tables are still short:\n\n' + lines + '\n\nTotal unpaid: \u20b9' + Math.round(totalShort)
-                    + '\n\nCollect them first, or continue to write them off as unpaid (recorded, with a reason).')) return;
-                const reason = prompt('Reason for writing off \u20b9' + Math.round(totalShort) + ' of unpaid bills:');
+                if (!await ilaAsk('Tables still short', 'These are unpaid:\n\n' + lines + '\n\nTotal unpaid: \u20b9' + Math.round(totalShort)
+                    + '\n\nCollect them first, or write them off as unpaid — recorded, with a reason.',
+                    { ok: 'Write off', cancel: 'Collect first' })) return;
+                const reason = await ilaAskText('Write off \u20b9' + Math.round(totalShort) + '?', 'This is recorded against your name.', { placeholder: 'Reason', label: 'Reason for writing off unpaid bills', maxlength: 160 });
                 if (reason === null) return;
-                if (!reason.trim()){ alert('A reason is required to write off unpaid bills.'); return; }
+                if (!reason.trim()){ ilaToast('A reason is required to write off unpaid bills'); return; }
                 for (const x of openShort){
                     const where = x.id === 'Takeaway' ? 'Takeaway' : 'Table ' + x.id;
                     addLedgerEntry('unpaid_writeoff', x.due, 'UNPAID: ' + where + ' \u2014 ' + reason.trim() + ' (' + staffName + ')');
@@ -4729,10 +4734,10 @@
                 }
                 try { await posSendPush({ title: '\u26a0\ufe0f Unpaid bills written off', body: '\u20b9' + Math.round(totalShort) + ' across ' + openShort.length + ' table(s) \u00b7 ' + staffName + ' \u2014 ' + reason.trim(), tag: 'unpaid-' + Date.now(), url: '/admin.html' }); } catch(e){}
             } else if (Object.keys(window.activeTables).length > 0) {
-                if(!confirm("Tables open (all settled). End day?")) return;
+                if(!await ilaAsk("Tables still open", "They are all settled. End the day?", { ok: "End day", cancel: "Cancel" })) return;
             }
             const _tipDue = Math.max(0, ((window.tipPool && window.tipPool.accrued) || 0) - ((window.tipPool && window.tipPool.paidOut) || 0));
-            if (_tipDue > 0 && !confirm('\u20b9' + Math.round(_tipDue) + ' of tips has not been paid out yet.\n\nClose the day anyway? (It stays owed and will still be there tomorrow.)')) return;
+            if (_tipDue > 0 && !await ilaAsk('Tips not paid out', '\u20b9' + Math.round(_tipDue) + ' of tips has not been paid out yet.\n\nIt stays owed and will still be there tomorrow.', { ok: 'Close anyway', cancel: 'Cancel' })) return;
             
             let safeUPI = parseFloat(window.upiTotal) || 0;
             let safeCash = parseFloat(window.cashDrawer) || 0;
@@ -4753,7 +4758,7 @@
             let rev = false, revStr = '';
             window.salesLedger.forEach(e => { if (REVERSALS[e.type]) { revStr += `- \u20b9${Math.abs(parseFloat(e.amount) || 0)} | ${e.reason}\n`; rev = true; } });
             if (rev) report += `\nVOIDS, REFUNDS & UNPAID:\n` + revStr;
-            if (confirm("Close the day? Today's sales will be archived and the till reset for tomorrow.")) {
+            if (await ilaAsk("Close the day?", "Today's sales will be archived and the till reset for tomorrow.", { ok: "Close the day", cancel: "Cancel" })) {
                 const todayKey = new Date().toISOString().slice(0, 10);
                 // Snapshot the whole day BEFORE wiping, so nothing is lost if the WhatsApp
                 // hand-off fails. Then clear the live nodes for the new day.
@@ -4794,7 +4799,8 @@
                     closedBy: staffName, closedAt: firebase.database.ServerValue.TIMESTAMP
                 }));
                 if (archived !== 'ok') {
-                    alert("Today's sales could not be saved" + (archived === 'timeout' ? ' — the till did not hear back from the database.' : '.')
+                    await ilaTell("Today's sales could not be saved",
+                        (archived === 'timeout' ? 'The till did not hear back from the database.' : 'The database refused the write.')
                         + "\n\nThe day is still open and nothing has been cleared. Check the connection and close the day again.");
                     return;
                 }
@@ -4830,8 +4836,8 @@
                     ledgerEntries: null, bills: null, upiTotal: 0, activeTables: null
                 }));
                 if (reset !== 'ok') {
-                    alert("Today's sales are archived, but the till did not confirm it reset"
-                        + (reset === 'timeout' ? ' — the till did not hear back from the database.' : '.')
+                    await ilaTell("Archived, but the till did not confirm it reset",
+                        (reset === 'timeout' ? 'The till did not hear back from the database.' : 'The database refused the reset.')
                         + "\n\nReload the POS before starting tomorrow. If today's ledger is still on screen, close the day again.");
                     return;
                 }
@@ -4855,13 +4861,13 @@
             openModal('move-table-modal');
         };
 
-        window.confirmMoveTable = function(newTableID) {
+        window.confirmMoveTable = async function(newTableID) {
             const oldTableID = window.checkoutTableID;
             if (newTableID === oldTableID) {
                 closeModal('move-table-modal'); window.openCheckout(oldTableID); return;
             }
             
-            if (window.activeTables[newTableID] && !confirm(`Table ${newTableID} is already occupied. Merge bills?`)) return;
+            if (window.activeTables[newTableID] && !await ilaAsk(`Table ${newTableID} is already occupied`, 'Merge the two bills into one?', { ok: 'Merge', cancel: 'Cancel' })) return;
 
             // 1. Shift the POS Data
             const tableData = window.activeTables[oldTableID];
