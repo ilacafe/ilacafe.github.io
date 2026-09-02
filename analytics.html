@@ -105,6 +105,7 @@
          same-origin and fetched in that mode by default, so declaring it would
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/auth-gate.js">
+    <link rel="preload" as="script" href="/connection.js">
     <!-- deferred, unlike the three above, because nothing here needs it until the
          data arrives. Chart is only ever touched inside drawChart and drawToday, and
          the only way into either is through onAuthStateChanged — a sign-in, a database
@@ -546,6 +547,10 @@
     <!-- Keeps a signed-in device signed in, and stops the login form being
          shown to somebody who is already signed in. See the top of the file. -->
     <script src="/auth-gate.js"></script>
+    <!-- Says so when this screen stops talking to the database. Every device here is
+         on cafe wifi, and the failure is silent by construction: the last data stays
+         on screen and new writes wait in memory. See connection.js. -->
+    <script src="/connection.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the

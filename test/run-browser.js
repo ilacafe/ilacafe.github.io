@@ -31,6 +31,7 @@ const suites = [
   'contrast-browser.test.js',
   'reflow-browser.test.js',
   'state-visible-browser.test.js',
+  'connection-browser.test.js',
 ];
 
 let failed = [];

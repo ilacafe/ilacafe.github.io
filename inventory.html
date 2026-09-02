@@ -106,6 +106,7 @@
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/auth-gate.js">
     <link rel="preload" as="script" href="/pin-mask.js">
+    <link rel="preload" as="script" href="/connection.js">
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
@@ -312,7 +313,7 @@
             <h3 id="modal-title" class="modal-title">Log Action</h3>
             <div id="modal-subtitle" class="modal-subtitle">Details</div>
             
-            <input type="number" id="modal-qty" class="remark-input" placeholder="Amount (Units / Kg / L)" step="any">
+            <input type="number" id="modal-qty" class="remark-input" inputmode="decimal" placeholder="Amount (Units / Kg / L)" step="any">
             <input type="text" id="modal-pin" class="remark-input" placeholder="Staff PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4" autocomplete="off" data-pin>
             
             <div class="btn-group">
@@ -333,6 +334,10 @@
     <script src="/auth-gate.js"></script>
     <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
     <script src="/pin-mask.js"></script>
+    <!-- Says so when this screen stops talking to the database. Every device here is
+         on cafe wifi, and the failure is silent by construction: the last data stays
+         on screen and new writes wait in memory. See connection.js. -->
+    <script src="/connection.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the

@@ -455,6 +455,7 @@
          same-origin and fetched in that mode by default, so declaring it would
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/build-check.js">
+    <link rel="preload" as="script" href="/connection.js">
     <link rel="preload" as="script" href="/qr.js">
 </head>
 <body>
@@ -669,7 +670,11 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.5"></script>
+    <script src="/build-check.js" data-build="2026-09-02.6"></script>
+    <!-- Says so when this screen stops talking to the database. Every device here is
+         on cafe wifi, and the failure is silent by construction: the last data stays
+         on screen and new writes wait in memory. See connection.js. -->
+    <script src="/connection.js"></script>
     <!-- The payment QR, drawn on this phone rather than fetched. The same encoder the
          till uses, so the code a customer scans here is the code the counter draws. -->
     <script src="/qr.js"></script>
