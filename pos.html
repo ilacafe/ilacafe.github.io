@@ -224,8 +224,20 @@
                     min-width: 44px; border-radius: 4px; padding: 5px 8px; font-family: 'Quicksand', sans-serif; font-size: 0.7rem; font-weight: 700;
                     text-transform: uppercase; letter-spacing: 1px; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
         .cat-chip::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
-        .cat-chip.active { opacity: 1; }
-        .cat-chip:active { opacity: 1; }
+        /* THE HIGHLIGHT, MARKED RATHER THAN DIMMED
+           The chip a cashier was on used to be the only one at full strength: every other
+           chip sat at opacity 0.6. That dim is what the contrast pass removed, and rightly —
+           white on this brown clears 4.5:1 with almost nothing to spare, so 0.6 put every
+           category they were NOT on below the line. But it left .active with nothing to
+           express, and the highlight quietly stopped showing.
+           So mark the one they are on instead of dimming the five they are not: a 2px rule
+           beneath it, the way a tab strip does. Additive, so no chip is ever dimmed to be
+           read, and none of them gains a fill. Under Reduce Motion the transition collapses
+           and the rule is simply there. */
+        .cat-chip::before { content: ''; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px;
+                            border-radius: 1px; background: var(--brand-text); opacity: 0; transition: opacity 0.2s; }
+        .cat-chip.active::before { opacity: 1; }
+        .cat-chip:active { opacity: 0.5; }   /* the press. Lifting 0.6 to 1 was doing this job before */
         h2[id^="cat-"] { scroll-margin-top: 72px; }   /* replaced at runtime with the strip's real height */
 
         /* The web view runs under the translucent status bar, so page content scrolls up behind
@@ -950,7 +962,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.2"></script>
+    <script src="/build-check.js" data-build="2026-09-02.3"></script>
     <!-- The payment QR, drawn on this device rather than fetched. Shared with the
          customer app, which now shows the same code on the customer's own phone. -->
     <script src="/qr.js"></script>

@@ -258,6 +258,22 @@ costs money:
   dimension and not the other. The suite also refuses to pass on coverage it did not
   get — with the till's modals left closed it examined one control of forty-nine and
   reported clean, so each overlay is opened in turn and a floor is asserted.
+- **on-states are visibly on** — the till's category strip stopped highlighting
+  anything, and nothing broke to make it happen. `setActiveChip()` went on adding and
+  removing `.active` exactly as before; what changed was underneath it. The highlight
+  had never been a mark on the active chip — it was the absence of a dim every OTHER
+  chip carried, `opacity: 0.6`, and the contrast pass removed that dim because white
+  on this brown clears 4.5:1 with almost nothing spare, so 0.6 put every category the
+  cashier was not on below the line. Removing it was right; removing it while leaving
+  `.cat-chip.active { opacity: 1 }` behind left a rule that still matched, still
+  applied, and resolved to the value the chip already had. No selector failed, no
+  element went missing, nothing appeared in the console. So the suite looks the way a
+  cashier does: it photographs each control off, photographs it on, and requires the
+  two images to differ — with a control shot first, because two photographs of an
+  unchanged control must match or the comparison is not evidence. What the difference
+  is — a rule, a fill, a weight — is a design decision and none of the suite's
+  business; that there is one is not. The chip is marked now rather than the other
+  five dimmed: a 2px rule beneath it, the same idiom the stock page's tabs already use.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line
