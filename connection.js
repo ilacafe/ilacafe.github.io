@@ -33,12 +33,78 @@
     // everyone to ignore it — the one thing an alert like this cannot survive.
     var SETTLE_MS = 2500;
 
+    // A RESTART IS NOT AN OUTAGE.
+    //
+    // Those two cases are not the same thing and were being timed as if they were.
+    // A connection that was working and stopped is a fault the moment it happens; a
+    // connection that has not been established YET is just a page that opened a
+    // second ago. Firebase reports both as `false`, so a till reopened on perfectly
+    // good wifi got the same 2.5s clock as one whose router had died — and on a
+    // slower connect it announced an outage that had already fixed itself before
+    // anyone finished reading it.
+    //
+    // So the first connection of a session gets a quieter run-up. Nothing is said
+    // while the socket is still being opened. How long that run-up should be is not
+    // one number, because it is not one question — see the probe below.
+    var BOOT_MS = 5000;      // the network answers; the socket alone is slow
+    var BLIND_MS = 2500;     // nothing has answered yet, which is itself an answer
+
+    // ASK, RATHER THAN WAIT.
+    //
+    // A run-up long enough to cover a slow connect is also long enough to be a stare
+    // when the café's internet is simply out — five seconds of a till that will not
+    // take an order, every morning of an outage. Shortening it just moves the cost:
+    // any ceiling under a slow connect puts the false alarm back.
+    //
+    // The way out is to stop guessing. `/build.json` is the one path sw.js
+    // deliberately does not intercept (it would break the update banner), so a fetch
+    // of it is a real question put to the network rather than the cache answering on
+    // its behalf. ANY reply — a 404 included — means there is a route out of here and
+    // the socket is merely slow, so wait properly. A rejection means there is nothing
+    // out there at all, and nobody should be made to wait for it.
+    //
+    // One request, on every page, shared: pages read the verdict off window.ilaNet
+    // rather than each asking again.
+    var reachable = null;                     // null = still asking
+    var waiting = [];
+    window.ilaNet = {
+        reachable: null,
+        onVerdict: function (cb) {
+            if (reachable !== null) { try { cb(reachable); } catch (e) {} return; }
+            waiting.push(cb);
+        }
+    };
+    function verdict(ok) {
+        if (reachable !== null) return;
+        reachable = window.ilaNet.reachable = ok;
+        var cbs = waiting; waiting = [];
+        cbs.forEach(function (cb) { try { cb(ok); } catch (e) {} });
+    }
+    try {
+        fetch('/build.json', { cache: 'no-store' })
+            .then(function () { verdict(true); })
+            .catch(function () { verdict(false); });
+    } catch (e) { verdict(true); }            // no fetch here: wait it out, never call it offline
+
     // Below the notification area (3000) so a message can still be read over it, and
     // above the modals (2000), because being disconnected matters MORE while someone
     // is part-way through taking a payment, not less.
     var Z = 2600;
 
-    var bar = null, timer = null;
+    // navigator.onLine is worthless as proof that a connection WORKS — it stays true on
+    // a phone attached to a router whose uplink is down — but it is conclusive the
+    // other way: false means no network interface at all, so there is nothing to wait
+    // for and no reason to make anyone wait for it.
+    var connectedOnce = false;
+    function settleFor() {
+        if (connectedOnce) return SETTLE_MS;
+        if (navigator.onLine === false) return SETTLE_MS;
+        if (reachable === true) return BOOT_MS;
+        if (reachable === false) return 0;
+        return BLIND_MS;
+    }
+
+    var bar = null, timer = null, downSince = 0;
 
     function show() {
         if (bar) return;
@@ -72,15 +138,29 @@
 
     function hide() {
         if (timer) { clearTimeout(timer); timer = null; }
+        downSince = 0;
         if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
         bar = null;
     }
 
-    function onConnected(ok) {
-        if (ok) { hide(); return; }
-        if (bar || timer) return;
-        timer = setTimeout(function () { timer = null; show(); }, SETTLE_MS);
+    // Armed against when the connection actually went, not against now, so a verdict
+    // arriving part-way through does not hand back the time already served.
+    function arm() {
+        if (timer) { clearTimeout(timer); timer = null; }
+        var left = settleFor() - (Date.now() - downSince);
+        timer = setTimeout(function () { timer = null; show(); }, left > 0 ? left : 0);
     }
+
+    function onConnected(ok) {
+        if (ok) { connectedOnce = true; downSince = 0; hide(); return; }
+        if (bar) return;
+        if (!downSince) downSince = Date.now();
+        arm();
+    }
+
+    // The answer changes how long is worth waiting, so a wait already running is
+    // recalculated rather than left on the number it was started with.
+    window.ilaNet.onVerdict(function () { if (downSince && !bar) arm(); });
 
     // The pages initialise Firebase in their own inline script, which runs after this
     // file. Waiting for that rather than assuming it keeps this independent of where

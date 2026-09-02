@@ -53,11 +53,11 @@ const server = http.createServer((req, res) => {
 
 // A stub whose `.info/connected` is under this suite's control, and which answers
 // every other path the way the real one would while connected.
-const STUB = `
+const STUB = (initial = true) => `
 (() => {
   const snap = (o) => ({ val: () => (o === undefined ? null : o), exists: () => o != null,
                          numChildren: () => 0, forEach: () => {}, key: null });
-  window.__conn = { cbs: [], value: true };
+  window.__conn = { cbs: [], value: ${initial} };
   window.__setConnected = (v) => { window.__conn.value = v;
     window.__conn.cbs.forEach(cb => { try { cb(snap(v)); } catch (e) {} }); };
   const mk = (p) => { const s = {
@@ -99,7 +99,7 @@ const BAR = '#ila-offline-bar';
 
   for (const page of PAGES) {
     const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
-    await ctx.addInitScript(STUB);
+    await ctx.addInitScript(STUB(true));
     const pg = await ctx.newPage();
     pg.on('pageerror', e => threw.push(page + ': ' + String(e.message || e).split('\n')[0]));
     await pg.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
@@ -151,6 +151,68 @@ const BAR = '#ila-offline-bar';
     check(page + ' takes it down again when the connection returns', cleared,
           'it is still on screen after reconnecting');
 
+    await ctx.close();
+  }
+
+  // ------------------------------------------------------- and a restart is not one
+  // Every check above starts CONNECTED and then loses it, which is a fault. A page
+  // that has just opened has not lost anything — the socket is simply still being
+  // opened, and `.info/connected` reports that as false too. Timing both the same way
+  // meant a till reopened on good wifi announced an outage that had already fixed
+  // itself: "When POS restarts it shows offline", which is where this block came from.
+  //
+  // The distinction is not cosmetic. A warning that appears on every ordinary open is
+  // one everybody learns to scroll past, and then it is not there when it matters.
+  for (const page of PAGES) {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+    await ctx.addInitScript(STUB(false));            // opening, not yet connected
+    const pg = await ctx.newPage();
+    pg.on('pageerror', e => threw.push('cold ' + page + ': ' + String(e.message || e).split('\n')[0]));
+    await pg.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await pg.goto(base + '/' + page, { waitUntil: 'domcontentloaded' });
+
+    // Watch every frame, not the end state. A bar that goes up at 2.5s and comes down
+    // when the socket opens has cleared itself long before any settled check looks —
+    // which is exactly the thing being complained about, and exactly what a check of
+    // the end state cannot see.
+    await pg.evaluate((sel) => {
+      window.__barEver = false;
+      (function tick() {
+        if (document.querySelector(sel)) window.__barEver = true;
+        requestAnimationFrame(tick);
+      })();
+    }, BAR);
+
+    // Well past the 2.5s a real disconnect gets, and past any connect worth waiting on.
+    await pg.waitForTimeout(3200);
+    const quiet = await pg.evaluate((sel) => !document.querySelector(sel), BAR);
+    check(page + ' does not report an outage while it is still opening', quiet,
+          'the bar appeared during a restart that had not failed at anything');
+
+    // The socket comes up, as it does on nearly every restart.
+    await pg.evaluate(() => window.__setConnected(true));
+    await pg.waitForTimeout(200);
+    const everSaid = await pg.evaluate(() => window.__barEver);
+    check(page + ' gets through a restart having said nothing at any point', !everSaid,
+          'the bar was on screen at some point during a restart that worked');
+    await ctx.close();
+  }
+
+  // But a start that really has failed is still a fault, and still gets said. This is
+  // the half that would be easy to lose while making the other half quiet.
+  {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+    await ctx.addInitScript(STUB(false));
+    const pg = await ctx.newPage();
+    pg.on('pageerror', e => threw.push('never: ' + String(e.message || e).split('\n')[0]));
+    await pg.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await pg.goto(base + '/pos.html', { waitUntil: 'domcontentloaded' });
+    let arrived = true;
+    try { await pg.waitForSelector(BAR, { state: 'visible', timeout: 9000 }); }
+    catch (e) { arrived = false; }
+    check('a till that opens and never connects is still told so', arrived,
+          'the bar never appeared, so an outage at opening time would go unmentioned');
+    note('quiet while it might still work; not quiet once it plainly has not');
     await ctx.close();
   }
 
