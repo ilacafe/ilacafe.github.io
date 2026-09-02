@@ -39,6 +39,44 @@ function pngSize(file) {
         'two different colours means the status bar changes on install');
 }
 
+// ------------------------------------------------- the edges Android paints itself
+//
+// An iPhone looked seamless and an Android did not: the strip behind the home bar came
+// out WHITE. Three separate things chose that colour, and every one of them had to be
+// told otherwise.
+//
+//   background_color was #FBF9F6, an off-white. It is the splash, and it is what the
+//   installed app paints around the page before the page owns it.
+//
+//   Five of the seven pages declared no theme-color AT ALL, so Android used its own
+//   default for the bars on the till, the boards, the stock tablet and analytics —
+//   every screen except the two that happened to have it.
+//
+//   And no page put a background on <html>. The body's background only propagates to
+//   the canvas while the root has none of its own, and the canvas is what Android
+//   paints the overscroll gutter and the home-bar strip from. Saying it in both places
+//   removes the case where something else gets to choose.
+{
+  const BRAND = manifest.theme_color;
+  const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
+                 'chef.html', 'barista.html', 'inventory.html'];
+
+  check('the splash colour is the brand, not an off-white',
+        manifest.background_color === BRAND,
+        'background_color is ' + manifest.background_color + ', theme_color is ' + BRAND);
+  note('it is what the installed app paints around the page before the page owns it');
+
+  const noTheme = PAGES.filter(p => {
+    const m = /<meta name="theme-color" content="([^"]+)"/.exec(readPage(p));
+    return !m || m[1] !== BRAND;
+  });
+  check('every page tells Android what colour its bars are', noTheme.length === 0, noTheme.join(', '));
+
+  const noRoot = PAGES.filter(p => !/^\s*html\s*\{[^}]*background/m.test(readPage(p)));
+  check('and every page paints the canvas as well as the body', noRoot.length === 0, noRoot.join(', '));
+  note('the home-bar strip and the overscroll gutter both come off the canvas');
+}
+
 // ---------------------------------------------------------------- the icons are real
 {
   const wrong = [];

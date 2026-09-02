@@ -65,6 +65,21 @@ const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
   const NEED = ['index.html', 'pos.html', 'admin.html', 'analytics.html', 'inventory.html'];
   const missing = NEED.filter(p => !/<script src="\/dialogs\.js"><\/script>/.test(readPage(p)));
   check('every page that says anything loads the replacement', missing.length === 0, missing.join(', '));
+
+  // And no call site asks the dialog for a secure field. This is checked at the source
+  // as well as in the browser because it is what regressed: `type: 'password'` reads
+  // like the obvious thing to write for a PIN, and it is the one thing that must not
+  // be written. pin-mask.js has the reason in full.
+  const secure = [];
+  for (const page of PAGES) {
+    for (const line of readPage(page).split('\n')) {
+      if (/ilaAskText\(/.test(line) || /type:\s*['"]password/.test(line)) {
+        if (/type:\s*['"]password/.test(line)) secure.push(page + ': ' + line.trim().slice(0, 60));
+      }
+    }
+  }
+  check('and no PIN prompt asks for a password field', secure.length === 0, secure.join(' | '));
+  note('iOS offers to autofill a secure field — over a working till, mid-service');
 }
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json',
@@ -186,6 +201,53 @@ const server = http.createServer((req, res) => {
     await pg.click(dlg + ' button');
     await answer;
     check('and closes when it is', await pg.evaluate((s) => !document.querySelector(s), dlg), 'still on screen');
+  }
+
+  // ---- the PIN field is NOT a secure field ----
+  //
+  // This shipped with type="password" on the three PIN prompts, which put back exactly
+  // what pin-mask.js exists to keep out: iOS scans a page for a field it considers
+  // SECURE and offers to fill it — "Sign in to ila.cafe with your password for …" —
+  // over a working till, mid-service, on a device already signed in. A system sheet in
+  // the middle of a void, which is both the wrong look and the wrong moment.
+  //
+  // pin-mask.js records that changing the type while keeping -webkit-text-security
+  // bought nothing, because WebKit classifies on the masking rather than the type. So
+  // neither is allowed here, and the check is on both.
+  {
+    const answer = pg.evaluate(() => window.ilaAskText('Staff PIN', 'Authorise this void.',
+                                                       { mask: true, inputmode: 'numeric' }));
+    await pg.waitForSelector(dlg + ' input', { state: 'visible' });
+    const field = await pg.evaluate((s) => {
+      const i = document.querySelector(s + ' input');
+      const cs = getComputedStyle(i);
+      return { type: i.getAttribute('type'), inputmode: i.getAttribute('inputmode'),
+               security: cs.webkitTextSecurity || cs.getPropertyValue('-webkit-text-security') || 'none',
+               autocomplete: i.getAttribute('autocomplete'), pin: i.hasAttribute('data-pin') };
+    }, dlg);
+    check('a PIN prompt does not create a password field', field.type === 'text', 'type=' + field.type);
+    check('and does not mask it with -webkit-text-security either',
+          !field.security || field.security === 'none', String(field.security));
+    check('and still asks for the number keypad', field.inputmode === 'numeric', String(field.inputmode));
+    check('and tells the browser not to fill it', field.autocomplete === 'off', String(field.autocomplete));
+    check('and is marked for pin-mask.js to take over', field.pin, 'no data-pin');
+    await pg.keyboard.press('Escape');
+    await answer;
+  }
+
+  // ---- and with pin-mask.js present the digits still come back ----
+  //
+  // The box shows bullets; what the dialog resolves has to be what was typed. Without
+  // this, masking the field would silently hand every PIN check a string of bullets.
+  {
+    await pg.addScriptTag({ url: base + '/pin-mask.js' });
+    const answer = pg.evaluate(() => window.ilaAskText('Staff PIN', '', { mask: true, inputmode: 'numeric' }));
+    await pg.waitForSelector(dlg + ' input', { state: 'visible' });
+    await pg.type(dlg + ' input', '1234');
+    const shown = await pg.evaluate((s) => document.querySelector(s + ' input').value, dlg);
+    await pg.click(`${dlg} button:last-of-type`);
+    check('the box shows bullets rather than the PIN', /^[\u2022]+$/.test(shown), JSON.stringify(shown));
+    check('and the digits typed are what comes back', (await answer) === '1234', 'got something else');
   }
 
   // ---- fieldError(): marks the field, says why, and clears itself ----
