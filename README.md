@@ -269,10 +269,14 @@ costs money:
   `body::before`, and the till is the one page whose `<body>` is a flex container, where
   `::before` generates a flex item that `position: fixed` then has to take back out of
   flow; `admin.html` carries the same rule on an ordinary `<body>` and has never been
-  reported. It is a plain fixed `<div>` now. Chromium paints both, so nothing here can
-  reproduce that failure — what the suite holds is the half that is checkable, by reading
-  the pixels of the top 47px while the page scrolls under them, plus the rule the
-  photograph bought: no page covers the notch from a flex container's pseudo-element.
+  reported. It is a plain fixed `<div>` now, and the band was then checked on the iPhone
+  it bled on and is clean — so the mechanism is confirmed, not inferred. Chromium paints
+  both versions, so nothing here can reproduce the failure; what the suite holds is the
+  half that is checkable, by reading the pixels of the top 47px while the page scrolls
+  under them, plus the rule the photograph bought and the phone confirmed: no page covers
+  the notch from a flex container's pseudo-element. `admin.html` keeps its `body::before`
+  because its `<body>` is not a flex container, which is the whole of why it works; the
+  check fails the moment any page has both.
 - **target size** — every interactive control on every page has to be at least 44px in
   both directions, measured by hit-testing rather than by reading its box, so a target
   widened with a pseudo-element counts at its real size. This started as the customer's
