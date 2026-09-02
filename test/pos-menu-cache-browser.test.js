@@ -446,6 +446,87 @@ const rows = (tab) => tab.evaluate(() => document.querySelectorAll('.menu-row,.c
     await dark.close();
   }
 
+  // ------------------------------------------------------- THE UPLINK IS DEAD
+  // The café's internet is out and the router is still happily handing out wifi, so
+  // the iPad believes it is online and has no idea. This is the morning-outage case,
+  // and it used to cost five seconds of a till that would not take an order — long
+  // enough to be the wrong answer, and not fixable by simply picking a smaller
+  // number, since any ceiling under a slow connect puts the false alarm back.
+  //
+  // So it is asked rather than waited out: sw.js deliberately leaves /build.json
+  // alone, making a fetch of it a real question put to the network. Nothing answers
+  // here, and the till stops waiting on the strength of that.
+  {
+    const dead = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+    await dead.addInitScript(`try{
+      localStorage.setItem('ila.role.v1', JSON.stringify({uid:'u1',role:'cashier',name:'T'}));
+      localStorage.setItem('ila_cached_menu', ${JSON.stringify(JSON.stringify(CACHED))});
+      localStorage.setItem('ila_cached_category_order', ${JSON.stringify(JSON.stringify(Object.keys(CACHED)))});
+      localStorage.setItem('ila_cached_item_order', '{}');
+      localStorage.removeItem('ila_pos_cart');
+    }catch(e){}`);
+    await dead.addInitScript(CONTROLLED(false));
+    const dtab = await dead.newPage();
+    dtab.on('pageerror', e => threw.push('uplink-dead: ' + String(e.message).split('\n')[0]));
+    dtab.on('dialog', d => d.dismiss().catch(() => {}));
+    // The page itself is already cached on the device; it is the network that is gone.
+    await dtab.route('**/*', r => {
+      const u = r.request().url();
+      if (u.indexOf('/build.json') >= 0) return r.abort();      // nothing out there
+      return u.startsWith(base) ? r.continue() : r.abort();
+    });
+    await dtab.goto(base + '/pos.html', { waitUntil: 'commit' });
+
+    const said = await waitFor(dtab,
+      () => getComputedStyle(document.getElementById('offline-indicator')).display !== 'none', 2500);
+    const when = await dtab.evaluate(() => Math.round(performance.now()));
+    check('a till on wifi with a dead uplink stops waiting as soon as nothing answers',
+          said && when < 1500,
+          said ? ('OFFLINE at ' + when + 'ms') : 'it never said it was offline');
+    note('measured at 127ms; it was 5161ms when this was a fixed run-up');
+
+    const serving = await dtab.evaluate(() => {
+      const btn = document.querySelector('.swap-container [data-add], .add-btn[data-add]');
+      if (btn) btn.click();
+      return { cartLines: Object.keys(window.cart || {}).length, total: window.totalAmount || 0 };
+    });
+    check('and is serving from the cached menu by then', serving.cartLines === 1 && serving.total === 150,
+          JSON.stringify(serving));
+    await dead.close();
+  }
+
+  // ------------------------------------- BUT A SLOW SOCKET IS NOT A DEAD NETWORK
+  // The other half, and the one that would be easy to lose while making the first
+  // half fast: the network answers perfectly well and it is Firebase's socket alone
+  // that is taking its time. Cutting that short is how the offline chip gets back
+  // onto the screen of every slow restart, which is where this whole thread started.
+  {
+    const slow = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+    await slow.addInitScript(`try{
+      localStorage.setItem('ila.role.v1', JSON.stringify({uid:'u1',role:'cashier',name:'T'}));
+      localStorage.setItem('ila_cached_menu', ${JSON.stringify(JSON.stringify(CACHED))});
+      localStorage.setItem('ila_cached_category_order', ${JSON.stringify(JSON.stringify(Object.keys(CACHED)))});
+      localStorage.setItem('ila_cached_item_order', '{}');
+      localStorage.removeItem('ila_pos_cart');
+    }catch(e){}`);
+    await slow.addInitScript(CONTROLLED(false));      // socket still opening; /build.json answers
+    const stab = await slow.newPage();
+    stab.on('pageerror', e => threw.push('slow-socket: ' + String(e.message).split('\n')[0]));
+    stab.on('dialog', d => d.dismiss().catch(() => {}));
+    await stab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await stab.goto(base + '/pos.html', { waitUntil: 'commit' });
+    await stab.waitForTimeout(3200);                  // longer than a slow connect takes
+
+    const patient = await stab.evaluate(() => ({
+      chip: getComputedStyle(document.getElementById('offline-indicator')).display !== 'none',
+      verdict: window.ilaNet ? window.ilaNet.reachable : 'no ilaNet',
+    }));
+    check('a slow socket on a working network is not called an outage',
+          patient.chip === false && patient.verdict === true, JSON.stringify(patient));
+    note('the fast path is for no network, never for a network that is merely slow');
+    await slow.close();
+  }
+
   // ------------------------------------------------ AND LOSING IT MID-SERVICE
   // The case the offline chip exists for, and the one the quiet boot must not have
   // touched: a till that has been working all morning and loses the wifi at eleven.

@@ -2845,25 +2845,58 @@
         // The exception is a device that already knows: navigator.onLine false means no
         // network interface at all, so there is nothing to wait for and it goes straight
         // through — wifi switched off is offline immediately, as it should be.
-        const OFFLINE_BOOT_MS = 5000;
-        let connectedOnce = false, offlineTimer = null, bootGraceOver = false;
+        //
+        // How long the run-up runs is not a fixed number, because a till kept waiting
+        // is a till not taking orders and a morning outage should not cost five seconds
+        // of that. connection.js asks the network one direct question at boot and
+        // publishes the answer; this reads it rather than asking again:
+        //
+        //   nothing out there  — go now. Waiting cannot make a dead uplink live.
+        //   the network answers — then only the socket is slow, so wait properly
+        //                         rather than calling a slow connect an outage.
+        //   still asking        — a question that has not come back this long is
+        //                         itself a poor sign; do not keep the counter waiting.
+        const OFFLINE_BOOT_MS = 5000, OFFLINE_BLIND_MS = 2500;
+        let connectedOnce = false, offlineTimer = null, bootGraceOver = false, downSince = 0;
+
+        function bootCeiling(){
+            const n = window.ilaNet;
+            if (n && n.reachable === false) return 0;
+            if (n && n.reachable === true) return OFFLINE_BOOT_MS;
+            return OFFLINE_BLIND_MS;              // also the case where connection.js is absent
+        }
+        // Measured from when the connection actually went, so a verdict landing part-way
+        // through does not give back the time already served.
+        function armOffline(){
+            if (offlineTimer) { clearTimeout(offlineTimer); offlineTimer = null; }
+            const left = bootCeiling() - (Date.now() - downSince);
+            offlineTimer = setTimeout(function(){
+                offlineTimer = null; bootGraceOver = true; goOffline();
+            }, left > 0 ? left : 0);
+        }
+
         db.ref('.info/connected').on('value', function(snap) {
             if (snap.val() === true) {
-                connectedOnce = true;
+                connectedOnce = true; downSince = 0;
                 if (offlineTimer) { clearTimeout(offlineTimer); offlineTimer = null; }
                 document.getElementById('offline-indicator').style.display = 'none';
                 return;
             }
             // The run-up is spent once, not once per event: a till that has already
-            // been told it is offline does not get another five quiet seconds.
+            // been told it is offline does not get another quiet run at it.
             if (!connectedOnce && !bootGraceOver && navigator.onLine !== false) {
-                if (!offlineTimer) offlineTimer = setTimeout(function(){
-                    offlineTimer = null; bootGraceOver = true; goOffline();
-                }, OFFLINE_BOOT_MS);
+                if (!downSince) downSince = Date.now();
+                armOffline();
                 return;
             }
             goOffline();
         });
+
+        if (window.ilaNet && window.ilaNet.onVerdict) {
+            window.ilaNet.onVerdict(function(){
+                if (downSince && !connectedOnce && !bootGraceOver) armOffline();
+            });
+        }
 
         function goOffline() {
             const ind = document.getElementById('offline-indicator');
