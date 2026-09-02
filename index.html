@@ -118,6 +118,12 @@
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
+        /* The brand, on the root as well as the body. Android paints the strip behind
+           the home bar and the overscroll gutter from the canvas, and the canvas only
+           inherits the body's background while html has none of its own — so on Android
+           that area came out white while an iPhone looked seamless. Said in both places
+           it cannot be anything else. */
+        html { background-color: var(--brand-bg); }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         /* 90% of 320 is 288, plus 40 of padding, is 328 inside a 320px viewport.
            border-box folds the padding into the width instead of adding to it. */
@@ -671,7 +677,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.7"></script>
+    <script src="/build-check.js" data-build="2026-09-02.8"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>

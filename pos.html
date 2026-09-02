@@ -145,6 +145,12 @@
         #login-error:not(:empty) {
             border-left: 3px solid #ff8f8f; padding: 2px 0 2px 10px; line-height: 1.45;
         }
+        /* The brand, on the root as well as the body. Android paints the strip behind
+           the home bar and the overscroll gutter from the canvas, and the canvas only
+           inherits the body's background while html has none of its own — so on Android
+           that area came out white while an iPhone looked seamless. Said in both places
+           it cannot be anything else. */
+        html { background-color: var(--brand-bg); }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         /* 90% of 320 is 288, plus 40 of padding, is 328 inside a 320px viewport.
            border-box folds the padding into the width instead of adding to it. */
@@ -1018,7 +1024,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.7"></script>
+    <script src="/build-check.js" data-build="2026-09-02.8"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -3530,7 +3536,7 @@
                 const reason = await ilaAskText("Remove " + realItemName, "Why is this coming off the bill?", { placeholder: "Reason", maxlength: 120 });
                 if (!reason) return; 
 
-                const voidPin = await ilaAskText("Staff PIN", "Authorise this void.", { type: "password", inputmode: "numeric" });
+                const voidPin = await ilaAskText("Staff PIN", "Authorise this void.", { mask: true, inputmode: "numeric" });
                 if (!voidPin) return;
                 const authName = window.staffPins[await hashPin(voidPin)];
                 if (!authName) { ilaTell("Invalid PIN", "The void was cancelled and nothing has changed."); return; }
@@ -4581,7 +4587,7 @@
             const heads = parseInt(window.lastTipHeads) || 0;
             if (heads < 1) return ilaToast('Set how many people are sharing it first');
             const each = Math.floor(due / heads);
-            const pinStr = await ilaAskText('Pay out \u20b9' + Math.round(due) + ' of tips', '\u20b9' + Math.round(due) + ' \u00f7 ' + heads + ' = \u20b9' + each + ' each.\n\nThis takes \u20b9' + Math.round(due) + ' OUT of the cash drawer.', { type: 'password', inputmode: 'numeric', label: 'Staff PIN to authorise' });
+            const pinStr = await ilaAskText('Pay out \u20b9' + Math.round(due) + ' of tips', '\u20b9' + Math.round(due) + ' \u00f7 ' + heads + ' = \u20b9' + each + ' each.\n\nThis takes \u20b9' + Math.round(due) + ' OUT of the cash drawer.', { mask: true, inputmode: 'numeric', label: 'Staff PIN to authorise' });
             if (!pinStr) return;
             const cash = parseFloat(window.cashDrawer) || 0;
             if (due > cash && !await ilaAsk('Drawer is short', 'Only \u20b9' + Math.round(cash) + ' in the drawer. Pay out anyway?', { ok: 'Pay out', cancel: 'Cancel' })) return;
@@ -4701,7 +4707,7 @@
         }
 
         window.promptEOD = async function() {
-            const pinStr = await ilaAskText("Staff PIN", "Closing the day is recorded against you.", { type: "password", inputmode: "numeric" }); if (!pinStr) return;
+            const pinStr = await ilaAskText("Staff PIN", "Closing the day is recorded against you.", { mask: true, inputmode: "numeric" }); if (!pinStr) return;
             const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return ilaTell("Invalid PIN", "Nothing has been closed.");
             // Open tables used to be deleted outright at EOD — so a table that walked out unpaid
             // left no ledger line, no archive and no number. Force a decision instead, and write

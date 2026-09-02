@@ -243,7 +243,28 @@
         return new Promise(function (resolve) {
             var parts = build({ title: title, detail: detail });
             var input = document.createElement('input');
-            input.type = opts.type || 'text';
+            // NEVER type="password", AND NEVER -webkit-text-security.
+            //
+            // This shipped with type="password" on the three PIN prompts, which put back
+            // the exact thing pin-mask.js exists to keep out: iOS scans the document for a
+            // field it considers SECURE and offers to fill it — "Sign in to ila.cafe with
+            // your password for …" — over a working till, mid-service, on a device that is
+            // already signed in. A system sheet, in the middle of a void.
+            //
+            // pin-mask.js has the note in full, including that changing the type and
+            // keeping the CSS bought nothing: WebKit classifies on the masking, not the
+            // type. So there is no secure field here either. `mask: true` gives a plain
+            // numeric text box whose digits live in pin-mask.js and whose box shows
+            // bullets, and nothing in the document says password.
+            input.type = 'text';
+            if (opts.mask) {
+                input.setAttribute('data-pin', '');
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('autocorrect', 'off');
+                input.setAttribute('autocapitalize', 'off');
+                input.setAttribute('spellcheck', 'false');
+                if (!opts.maxlength) input.maxLength = 4;
+            }
             // The reason prompt() had to go: on a device with no keyboard, the keypad a
             // field raises IS its input method, and prompt() cannot ask for one.
             if (opts.inputmode) input.setAttribute('inputmode', opts.inputmode);
@@ -257,6 +278,14 @@
                 'background:rgba(0,0,0,0.15);color:' + FG + ';font-family:Quicksand,sans-serif;' +
                 'font-size:1rem;margin-bottom:16px');
             parts.card.appendChild(input);
+            // If pin-mask.js is not on this page the field still works and still reads
+            // correctly — the PIN is visible while typing, which is a worse screen but
+            // not a broken till. That is pin-mask's own trade-off, kept.
+            if (opts.mask && window.ilaPin && window.ilaPin.bind) window.ilaPin.bind(input);
+            var read = function () {
+                return (opts.mask && window.ilaPin && window.ilaPin.value)
+                    ? window.ilaPin.value(input) : input.value;
+            };
 
             var row = el('div', 'display:flex;gap:10px');
             var no = button(opts.cancel || 'Cancel', false);
@@ -270,9 +299,9 @@
                 if (e.target === parts.overlay) done(null);
             });
             no.addEventListener('click', function () { done(null); });
-            yes.addEventListener('click', function () { done(input.value); });
+            yes.addEventListener('click', function () { done(read()); });
             input.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') { e.preventDefault(); done(input.value); }
+                if (e.key === 'Enter') { e.preventDefault(); done(read()); }
             });
             try { input.focus(); input.select(); } catch (e) {}
         });

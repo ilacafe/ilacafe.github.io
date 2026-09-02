@@ -386,6 +386,33 @@ costs money:
   has to clear whether or not anyone is standing there to tap Okay. Dropping one
   `await` from the merge-bills guard makes it fail with `update` in the trail, which is
   two bills merged after the cashier said no.
+- **no secure field, still** — the dialogs change shipped `type="password"` on the three
+  PIN prompts, which put back precisely what `pin-mask.js` exists to keep out: iOS scans
+  a page for a field it considers SECURE and offers to fill it — *"Sign in to ila.cafe
+  with your password for …"* — over a working till, mid-service, on a device already
+  signed in. A system sheet in the middle of a void, which is the wrong look at the
+  wrong moment. `pin-mask.js` already records that changing the type while keeping
+  `-webkit-text-security` bought nothing, because WebKit classifies on the masking
+  rather than the type, so neither is allowed. The dialog takes `mask: true` instead: a
+  plain numeric text box, digits held by `pin-mask.js`, bullets in the box, nothing in
+  the document saying password. Held twice — the browser check reads the rendered
+  field's type AND its computed text-security and confirms the digits typed are the
+  digits that come back, and a source check refuses `type: 'password'` anywhere near
+  `ilaAskText`, because that is the obvious thing to write for a PIN and it is the one
+  thing that must not be written.
+- **the edges Android paints itself** — an iPhone looked seamless and an Android did
+  not: the strip behind the home bar came out white. Three separate things chose that
+  colour and every one had to be told otherwise. `background_color` in the manifest was
+  `#FBF9F6`, an off-white, and it is what the installed app paints around the page
+  before the page owns it. Five of the seven pages declared no `theme-color` at all, so
+  Android used its own default on the till, both kitchen boards, the stock tablet and
+  analytics — every screen except the two that happened to have one. And no page put a
+  background on `<html>`: the body's background only propagates to the canvas while the
+  root has none of its own, and the canvas is what Android paints the overscroll gutter
+  and the home-bar strip from. Analytics was worse again — it had neither
+  `viewport-fit=cover` nor bottom insets, so it was the one screen that could never
+  draw under the home bar at all. It has the pair now, which the reflow suite already
+  insisted on for every other page.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#8D6E52">
     <title>ILA | Chef Display</title>
     <link rel="apple-touch-icon" href="/icon-chef.png" />
     <!-- THE TWO HOSTS THE BROWSER FINDS OUT ABOUT LAST
@@ -110,6 +111,12 @@
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
+        /* The brand, on the root as well as the body. Android paints the strip behind
+           the home bar and the overscroll gutter from the canvas, and the canvas only
+           inherits the body's background while html has none of its own — so on Android
+           that area came out white while an iPhone looked seamless. Said in both places
+           it cannot be anything else. */
+        html { background-color: var(--brand-bg); }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; }
         /* THESE PAGES OPT INTO DRAWING UNDER THE NOTCH
            viewport-fit=cover in the head says "use the whole screen, including the
@@ -289,7 +296,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.7"></script>
+    <script src="/build-check.js" data-build="2026-09-02.8"></script>
     <!-- Says so when this screen stops talking to the database. Every device here is
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
