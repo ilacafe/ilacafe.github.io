@@ -33,6 +33,33 @@
     // everyone to ignore it — the one thing an alert like this cannot survive.
     var SETTLE_MS = 2500;
 
+    // A RESTART IS NOT AN OUTAGE.
+    //
+    // Those two cases are not the same thing and were being timed as if they were.
+    // A connection that was working and stopped is a fault the moment it happens; a
+    // connection that has not been established YET is just a page that opened a
+    // second ago. Firebase reports both as `false`, so a till reopened on perfectly
+    // good wifi got the same 2.5s clock as one whose router had died — and on a
+    // slower connect it announced an outage that had already fixed itself before
+    // anyone finished reading it.
+    //
+    // So the first connection of a session gets a longer, quieter run-up. Nothing is
+    // said while the socket is still being opened. If it is still not open after
+    // this, then it genuinely is not opening, and that is worth saying.
+    var BOOT_MS = 5000;
+
+    // Except when the device already knows the answer. navigator.onLine is worthless
+    // as proof that a connection WORKS — it stays true on a phone attached to a
+    // router whose uplink is down — but it is conclusive the other way: false means
+    // there is no network interface at all, so there is nothing to wait for and no
+    // reason to make someone wait for it.
+    var connectedOnce = false;
+    function settleFor() {
+        if (connectedOnce) return SETTLE_MS;
+        if (navigator.onLine === false) return SETTLE_MS;
+        return BOOT_MS;
+    }
+
     // Below the notification area (3000) so a message can still be read over it, and
     // above the modals (2000), because being disconnected matters MORE while someone
     // is part-way through taking a payment, not less.
@@ -77,9 +104,9 @@
     }
 
     function onConnected(ok) {
-        if (ok) { hide(); return; }
+        if (ok) { connectedOnce = true; hide(); return; }
         if (bar || timer) return;
-        timer = setTimeout(function () { timer = null; show(); }, SETTLE_MS);
+        timer = setTimeout(function () { timer = null; show(); }, settleFor());
     }
 
     // The pages initialise Firebase in their own inline script, which runs after this

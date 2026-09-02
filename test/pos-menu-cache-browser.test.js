@@ -24,6 +24,13 @@
 //
 // The last check is the one that matters most: after the live menu lands, a price
 // that CHANGED must be the live one, and the till must be fully usable again.
+//
+// The second half of the suite is about the OTHER cost of showing a cached menu:
+// how much the till says while it is doing it. A restart that announces itself —
+// OFFLINE MODE, then "last known menu — prices loading…" — feels slow no matter how
+// fast it is, and a normal restart has nothing to report. So the refresh is silent,
+// and each message has to earn its way onto the screen: the note when a tap is
+// actually refused, OFFLINE MODE when connecting has actually failed.
 
 const fs = require('fs');
 const path = require('path');
@@ -51,7 +58,13 @@ const server = http.createServer((req, res) => {
   res.end(fs.readFileSync(file));
 });
 
-const stub = (delay, menu) => `
+// The connect delay is not decoration. `.info/connected` is false for the first
+// moment of EVERY load while the socket is opened, and this stub used to report
+// true at 0ms — a sequence no real device produces. That hid the thing this suite
+// is now also about: on a real cold start the offline branch fired on that first
+// false, put OFFLINE MODE on screen and lifted the provisional guard, within a tick
+// of every single open.
+const stub = (delay, menu, connectAt = 400) => `
 (() => {
   const noop=()=>{}; const chain=()=>new Proxy(function(){},{get:()=>chain(),apply:()=>chain()});
   const snap=v=>({val:()=>v,exists:()=>v!=null,forEach:()=>{},numChildren:()=>v?Object.keys(v).length:0});
@@ -61,7 +74,8 @@ const stub = (delay, menu) => `
     return {on:(e,cb)=>{ if(e!=='value') return cb;
         if(q==='menu') later(cb,MENU);
         else if(q==='settings/categoryOrder') later(cb,Object.keys(MENU));
-        else if(q==='.info/connected') setTimeout(()=>{try{cb(snap(true))}catch(e){}},0);
+        else if(q==='.info/connected'){ setTimeout(()=>{try{cb(snap(false))}catch(e){}},0);
+                                        setTimeout(()=>{try{cb(snap(true))}catch(e){}},${connectAt}); }
         else later(cb,null);
         return cb; },
       off:noop, once:()=>new Promise(r=>setTimeout(()=>r(snap(q.indexOf('users/')===0?{role:'cashier',name:'T'}:null)),0)),
@@ -113,14 +127,18 @@ const rows = (tab) => tab.evaluate(() => document.querySelectorAll('.menu-row,.c
               : 'nothing was drawn before the round trip could have answered');
   note('measured on the real page: ~968ms before this, ~50ms after');
 
-  // ---- and it is marked as not-yet-live
+  // ---- it knows the menu is not live, and does not go on about it
   const marked = await tab.evaluate(() => ({
     flag: window.menuIsProvisional === true,
     cls: document.getElementById('live-menu-container').classList.contains('menu-provisional'),
     noteShown: getComputedStyle(document.getElementById('provisional-note')).display !== 'none',
+    offlineShown: getComputedStyle(document.getElementById('offline-indicator')).display !== 'none',
   }));
-  check('and says so, rather than looking live', marked.flag && marked.cls && marked.noteShown,
+  check('and knows it is not live, in the flag and the class', marked.flag && marked.cls,
         JSON.stringify(marked));
+  check('but says nothing about it — a refresh that narrates itself feels slow',
+        !marked.noteShown && !marked.offlineShown, JSON.stringify(marked));
+  note('the counter is looking at a full menu half a second in; being told so helps nobody');
 
   // ---- THE POINT: a cached price cannot reach a cart
   const tapped = await tab.evaluate(() => {
@@ -134,6 +152,15 @@ const rows = (tab) => tab.evaluate(() => document.querySelectorAll('.menu-row,.c
         !tapped.noButton && tapped.cartLines === 0 && tapped.total === 0,
         JSON.stringify(tapped));
   note('the refusal is in the click handler; dimming alone would be a suggestion, not a guarantee');
+
+  // A silent refusal is a dead button. The note is what turns one into the other, so
+  // it has to arrive with the tap and not before it.
+  const explained = await tab.evaluate(() => {
+    const n = document.getElementById('provisional-note');
+    return { shown: getComputedStyle(n).display !== 'none', text: (n.textContent || '').trim() };
+  });
+  check('and the refusal explains itself the moment it happens', explained.shown,
+        JSON.stringify(explained));
 
   // ---- and cannot reach the web-order re-pricing map either
   const priced = await tab.evaluate(() => ({
@@ -173,6 +200,61 @@ const rows = (tab) => tab.evaluate(() => document.querySelectorAll('.menu-row,.c
         JSON.stringify(nowWorks));
 
   await ctx.close();
+
+  // ------------------------------------------------------------ A RESTART
+  // The complaint that produced this block, in the words it arrived in: "When POS
+  // restarts it shows offline and last known menu, prices loading. It is irritating."
+  //
+  // Both were true, and both were the till describing a boot that was going fine.
+  // `.info/connected` is false for the first moment of every load, so OFFLINE MODE
+  // went up at ~140ms and came down again when the socket opened; the note went up
+  // with the cached menu at ~110ms and came down when the live one landed. Three
+  // announcements — the global connection bar joins in on a slow connect — for a
+  // restart that had nothing wrong with it.
+  //
+  // Checking the end state cannot catch this: by the time anything has settled, all
+  // of it has already cleared. So this watches every frame from the first one, and
+  // the assertion is about what was ever on screen, not what is on screen now.
+  {
+    const quiet = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+    await quiet.addInitScript(`try{
+      localStorage.setItem('ila_cached_menu', ${JSON.stringify(JSON.stringify(CACHED))});
+      localStorage.setItem('ila_cached_category_order', ${JSON.stringify(JSON.stringify(Object.keys(CACHED)))});
+      localStorage.setItem('ila_cached_item_order', '{}');
+      localStorage.removeItem('ila_pos_cart');
+    }catch(e){}`);
+    // A perfectly ordinary restart: socket open in 700ms, menu 150ms behind it.
+    await quiet.addInitScript(stub(850, LIVE, 700));
+    const qtab = await quiet.newPage();
+    qtab.on('pageerror', e => threw.push('restart: ' + String(e.message).split('\n')[0]));
+    qtab.on('dialog', d => d.dismiss().catch(() => {}));
+    await qtab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await qtab.goto(base + '/pos.html', { waitUntil: 'commit' });
+
+    // Installed on commit, before the page's own scripts have run.
+    await qtab.evaluate(() => {
+      window.__said = [];
+      const vis = (el) => { if (!el) return false; const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
+        const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+      (function tick() {
+        [['the offline chip', 'offline-indicator'],
+         ['the prices-loading note', 'provisional-note'],
+         ['the connection bar', 'ila-offline-bar']].forEach(([what, id]) => {
+          if (vis(document.getElementById(id)) && window.__said.indexOf(what) < 0) window.__said.push(what);
+        });
+        requestAnimationFrame(tick);
+      })();
+    });
+
+    const wentLive = await waitFor(qtab, () => window.menuIsProvisional === false, 6000);
+    const said = await qtab.evaluate(() => window.__said);
+    check('a restart on a working connection reaches the live menu', wentLive);
+    check('and gets there without saying one word about it', said.length === 0,
+          said.length ? 'it said: ' + said.join(', ') : '');
+    note('before this: “the offline chip, the prices-loading note” on every single open');
+    await quiet.close();
+  }
 
   // ---------------------------------------------------------------- OFFLINE
   // The till must still take orders with no connection. This is not a nice-to-have
