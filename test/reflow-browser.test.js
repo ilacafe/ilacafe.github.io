@@ -281,8 +281,13 @@ const BRAND = '141,110,82';
   // take back out of flow. admin.html carries the same rule on an ordinary <body> and
   // nobody has ever reported it.
   //
-  // Chromium paints both, so this cannot reproduce that. What it holds is the part that
-  // IS checkable: that the inset is covered, opaquely, above whatever scrolls under it.
+  // Chromium paints both, so this cannot reproduce that, and the fix shipped as reasoning
+  // from one photograph. It was then checked on the iPhone it bled on and the band is
+  // clean, so the mechanism is confirmed rather than suspected — which is what makes the
+  // source check below a rule and not a precaution. What this part holds is the half that
+  // IS checkable here: that the inset is covered, opaquely, above whatever scrolls under
+  // it. admin.html is in the loop because it is the page that still uses body::before,
+  // and the only reason that is safe is the non-flex <body> the check below watches.
   for (const page of ['pos.html', 'admin.html']) {
     const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
     await ctx.addInitScript(STUB);
@@ -327,7 +332,7 @@ const BRAND = '141,110,82';
     await ctx.close();
   }
 
-  // The part Chromium cannot show us, held as the rule we adopted because of it.
+  // The part Chromium cannot show us, held as the rule the phone confirmed.
   {
     const bad = [];
     for (const p of PAGES) {
@@ -337,7 +342,7 @@ const BRAND = '141,110,82';
       if (body && /display:\s*(inline-)?flex/.test(body[1])) bad.push(p);
     }
     check('no page covers the notch with a pseudo-element of a flex <body>', bad.length === 0,
-          bad.join(', ') + ' — the one construct an iPhone was seen not to paint');
+          bad.join(', ') + ' — the one construct an iPhone was seen not to paint, and seen to paint once it changed');
   }
   note('a band over the notch is the whole of what keeps the menu out of the status bar');
   check('no page threw while any of that ran', threw.length === 0, threw.join(' | '));

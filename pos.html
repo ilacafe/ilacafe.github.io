@@ -251,14 +251,19 @@
            safe-area inset to the pixel, with the strip stuck at 47px directly below it. The
            ::before of a flex container generates a flex item, and taking that back out of
            flow with position:fixed is the one unusual thing this construct was doing;
-           admin.html carries the identical rule on a non-flex <body> and was never reported.
-           A fixed div is the most ordinary way to hold a band across the top of a viewport,
-           so use that and stop depending on the answer.
+           admin.html carries the identical rule on a non-flex <body> and has never been
+           reported. A fixed div is the most ordinary way to hold a band across the top of a
+           viewport, so it holds this one.
 
-           Chromium renders both correctly, so no suite here can reproduce the failure — what
-           the suite below holds is that the band covers the inset and outranks what scrolls
-           under it, and that no page goes back to covering the notch from a flex container's
-           pseudo-element. */
+           CONFIRMED ON THE DEVICE. This shipped as reasoning from one photograph and could
+           not be tested here — Chromium paints both versions correctly — and the band was
+           then checked on the iPhone it bled on and is clean. So this is not a precaution
+           to be tidied away later: a fixed pseudo-element of a flex <body> is known not to
+           paint in iOS WebKit, and going back to one puts the menu across the status bar
+           again. admin.html keeps its body::before because its <body> is not flex, which is
+           the whole of why it works; the suite fails the moment any page has both. What the
+           suite can check directly it does — that the band covers the inset and outranks
+           whatever scrolls under it. */
         .notch-cover { position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top);
                        background: var(--brand-bg); z-index: 950; pointer-events: none; }
 
