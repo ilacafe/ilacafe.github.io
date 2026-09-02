@@ -303,18 +303,29 @@ const rows = (tab) => tab.evaluate(() => document.querySelectorAll('.menu-row,.c
     }catch(e){}`);
     // .info/connected answers false and NOTHING else ever answers — which is what a
     // disconnected Realtime Database actually does. No menu listener, ever.
+    // This one REMEMBERS the writes. Answering them and forgetting them meant nothing
+    // could ask the question that actually matters offline — not "did a tap register"
+    // but "did the order go anywhere". The real SDK holds these in memory and flushes
+    // them on reconnect, which is the SDK's job and not what is under test; whether
+    // pos.html gets far enough to issue them at all, with no connection, is.
     await off.addInitScript(`
       (() => {const noop=()=>{};const chain=()=>new Proxy(function(){},{get:()=>chain(),apply:()=>chain()});
-       const snap=v=>({val:()=>v,exists:()=>v!=null,forEach:()=>{},numChildren:()=>0});
-       const db={ref:p=>{const q=String(p==null?'':p);return {on:(e,cb)=>{
-           if(e==='value'&&q==='.info/connected')setTimeout(()=>{try{cb(snap(false))}catch(e){}},30);
+       const snap=v=>({val:()=>v,exists:()=>v!=null,forEach:()=>{},numChildren:()=>0,key:null});
+       window.__writes=[];
+       const rec=(op,p)=>{window.__writes.push(op+' '+p);return Promise.resolve();};
+       const mk=p=>{const q=String(p==null?'':p);const s={
+         key:'k'+window.__writes.length,
+         on:(e,cb)=>{ if(e==='value'&&q==='.info/connected')setTimeout(()=>{try{cb(snap(false))}catch(e){}},30);
            return cb;},
-         off:noop,once:()=>new Promise(()=>{}),
-         limitToLast:()=>chain(),orderByChild:()=>chain(),push:()=>({key:'k'}),
-         set:()=>Promise.resolve(),remove:()=>Promise.resolve(),update:()=>Promise.resolve(),
-         transaction:(f,cb)=>{if(cb)cb(null,false,snap(null));return Promise.resolve({committed:false});}};},
-        goOnline:noop,goOffline:noop};
-       window.firebase={initializeApp:noop,apps:[{}],database:Object.assign(()=>db,{ServerValue:{TIMESTAMP:0}}),
+         off:noop,once:()=>new Promise(()=>{}),child:c=>mk(q+'/'+c),
+         orderByChild:()=>s,orderByKey:()=>s,limitToLast:()=>s,limitToFirst:()=>s,
+         startAt:()=>s,endAt:()=>s,equalTo:()=>s,
+         push:v=>{if(v!==undefined)rec('push',q);const n=mk(q+'/pushed');n.key='k'+window.__writes.length;return n;},
+         set:()=>rec('set',q),update:()=>rec('update',q),remove:()=>rec('remove',q),
+         transaction:(f,cb)=>{rec('transaction',q);if(cb)cb(null,true,snap(null));
+           return Promise.resolve({committed:true,snapshot:snap(null)});}};return s;};
+       const db={ref:p=>mk(p||''),goOnline:noop,goOffline:noop};
+       window.firebase={initializeApp:noop,apps:[{}],database:Object.assign(()=>db,{ServerValue:{TIMESTAMP:1756200000000,increment:n=>({'.sv':{increment:n}})}}),
         auth:()=>({onAuthStateChanged:cb=>setTimeout(()=>{try{cb({uid:'u1'})}catch(e){}},0),
          signInWithEmailAndPassword:()=>Promise.resolve({}),signOut:()=>Promise.resolve(),currentUser:{uid:'u1'}}),
         messaging:()=>({getToken:()=>Promise.resolve(null),onMessage:noop})};})();`);
@@ -353,6 +364,44 @@ const rows = (tab) => tab.evaluate(() => document.querySelectorAll('.menu-row,.c
     check('because offline deliberately trusts the cached menu, flag and price map together',
           state.provisional === false && state.priceMap > 0, JSON.stringify(state));
     note('online the truth is half a second away; offline the cache is all there is');
+
+    // "Takes an order" is not the same as "works". A till with a cart it cannot send
+    // is no more use than one that cannot take the order — so this drives the rest of
+    // the sale: a second item routed to a DIFFERENT station, the send, and the bill.
+    const sale = await otab.evaluate(async () => {
+      const btns = [...document.querySelectorAll('.swap-container [data-add], .add-btn[data-add]')];
+      if (btns[1]) btns[1].click();                       // the Toastie — chef, not barista
+      await new Promise(r => requestAnimationFrame(r));
+      window.__writes = [];
+      let threw = null;
+      try { window.sendOrder('5'); } catch (e) { threw = String(e.message); }
+      await new Promise(r => setTimeout(r, 300));
+      const afterSend = window.__writes.slice();
+      window.__writes = [];
+      try {
+        const t = window.activeTables['5'];
+        window.settleTablePayment('5', t.total, 'Cash', {}, () => {});
+      } catch (e) { threw = threw || String(e.message); }
+      await new Promise(r => setTimeout(r, 400));
+      return { threw, afterSend, afterSettle: window.__writes.slice(),
+               table: JSON.parse(JSON.stringify(window.activeTables['5'] || null)) };
+    });
+
+    const toKitchen = (sale.afterSend || []).filter(w => /orders\/active\//.test(w));
+    check('an order taken offline still reaches the kitchen, at both stations',
+          !sale.threw && toKitchen.length === 2, sale.threw || toKitchen.join(', ') || 'nothing was sent');
+    note('routing comes off the cached menu too — a ticket with no station is a lost ticket');
+
+    check('and lands on the table, item by item',
+          (sale.afterSend || []).some(w => /pos\/activeTables\/5\/items\//.test(w)) &&
+          sale.table && sale.table.total === 330,
+          JSON.stringify({ table: sale.table, wrote: sale.afterSend }));
+
+    check('and the bill still settles',
+          (sale.afterSettle || []).some(w => /transaction pos\/activeTables\/5/.test(w)),
+          JSON.stringify(sale.afterSettle));
+    note('the SDK holds these until the wifi is back; the till must still get far enough to issue them');
+
     await off.close();
   }
 
