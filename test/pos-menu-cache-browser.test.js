@@ -90,6 +90,30 @@ const stub = (delay, menu, connectAt = 400) => `
   try{ localStorage.setItem('ila.role.v1', JSON.stringify({uid:'u1',role:'cashier',name:'T'})); }catch(e){}
 })();`;
 
+// The stubs above run a fixed timeline. These two cases need the connection turned
+// on and off from the test, because what is under test IS the transition.
+const CONTROLLED = (startConnected) => `
+(() => {
+  const noop=()=>{}; const chain=()=>new Proxy(function(){},{get:()=>chain(),apply:()=>chain()});
+  const snap=v=>({val:()=>v,exists:()=>v!=null,forEach:()=>{},numChildren:()=>0,key:null});
+  window.__conn={cbs:[],value:${startConnected}};
+  window.__setConnected=v=>{window.__conn.value=v;
+    window.__conn.cbs.forEach(cb=>{try{cb(snap(v))}catch(e){}});};
+  const db={ref:p=>{const q=String(p==null?'':p);return {on:(e,cb)=>{
+      if(e==='value'&&q==='.info/connected'){ window.__conn.cbs.push(cb);
+        setTimeout(()=>{try{cb(snap(window.__conn.value))}catch(e){}},20); }
+      return cb;},
+    off:noop, once:()=>new Promise(()=>{}), child:()=>db.ref(q),
+    limitToLast:()=>chain(), orderByChild:()=>chain(), push:()=>({key:'k'}),
+    set:()=>Promise.resolve(), remove:()=>Promise.resolve(), update:()=>Promise.resolve(),
+    transaction:(f,cb)=>{if(cb)cb(null,false,snap(null));return Promise.resolve({committed:false});}};},
+   goOnline:noop,goOffline:noop};
+  window.firebase={initializeApp:noop,apps:[{}],database:Object.assign(()=>db,{ServerValue:{TIMESTAMP:0,increment:n=>n}}),
+    auth:()=>({onAuthStateChanged:cb=>setTimeout(()=>{try{cb({uid:'u1'})}catch(e){}},0),
+      signInWithEmailAndPassword:()=>Promise.resolve({}),signOut:()=>Promise.resolve(),currentUser:{uid:'u1'}}),
+    messaging:()=>({getToken:()=>Promise.resolve(null),onMessage:noop})};
+})();`;
+
 const waitFor = async (tab, fn, ms) => {
   try { await tab.waitForFunction(fn, null, { timeout: ms }); return true; } catch (e) { return false; }
 };
@@ -330,6 +354,94 @@ const rows = (tab) => tab.evaluate(() => document.querySelectorAll('.menu-row,.c
           state.provisional === false && state.priceMap > 0, JSON.stringify(state));
     note('online the truth is half a second away; offline the cache is all there is');
     await off.close();
+  }
+
+  // ------------------------------------------------- THE WIFI IS SIMPLY OFF
+  // Making the quiet path the default puts the loud ones at risk, and this is the
+  // one with nothing else holding it up. A till whose wifi is switched off does not
+  // have to be waited for: navigator.onLine false means there is no network
+  // interface at all, so the run-up is skipped and the counter is working from cache
+  // within a frame or two. Delete that one clause and every other check in this repo
+  // still passes while a wifi-off open silently becomes a five second stare.
+  {
+    const dark = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+    await dark.addInitScript(`try{
+      localStorage.setItem('ila.role.v1', JSON.stringify({uid:'u1',role:'cashier',name:'T'}));
+      localStorage.setItem('ila_cached_menu', ${JSON.stringify(JSON.stringify(CACHED))});
+      localStorage.setItem('ila_cached_category_order', ${JSON.stringify(JSON.stringify(Object.keys(CACHED)))});
+      localStorage.setItem('ila_cached_item_order', '{}');
+      localStorage.removeItem('ila_pos_cart');
+    }catch(e){}`);
+    await dark.addInitScript(`Object.defineProperty(navigator,'onLine',{get:()=>false,configurable:true});`);
+    await dark.addInitScript(CONTROLLED(false));      // and the socket never comes up
+    const dtab = await dark.newPage();
+    dtab.on('pageerror', e => threw.push('wifi-off: ' + String(e.message).split('\n')[0]));
+    dtab.on('dialog', d => d.dismiss().catch(() => {}));
+    await dtab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await dtab.goto(base + '/pos.html', { waitUntil: 'commit' });
+
+    const said = await waitFor(dtab,
+      () => getComputedStyle(document.getElementById('offline-indicator')).display !== 'none', 2000);
+    const when = await dtab.evaluate(() => Math.round(performance.now()));
+    check('a till whose wifi is off says so at once, without serving out the run-up',
+          said && when < 2000, said ? ('OFFLINE at ' + when + 'ms; the run-up is 5000ms')
+                                    : 'it never said it was offline');
+    const works = await dtab.evaluate(() => {
+      const btn = document.querySelector('.swap-container [data-add], .add-btn[data-add]');
+      if (btn) btn.click();
+      return { cartLines: Object.keys(window.cart || {}).length, total: window.totalAmount || 0 };
+    });
+    check('and is taking orders from the cached menu straight away',
+          works.cartLines === 1 && works.total === 150, JSON.stringify(works));
+    note('the device already knows the answer; there is nothing to wait for');
+    await dark.close();
+  }
+
+  // ------------------------------------------------ AND LOSING IT MID-SERVICE
+  // The case the offline chip exists for, and the one the quiet boot must not have
+  // touched: a till that has been working all morning and loses the wifi at eleven.
+  // That is a fault from the moment it happens — nothing is still "opening" — so it
+  // is said immediately, not after a run-up. The suite tested a till that opens with
+  // no connection and never tested this, which is the wrong way round: this is the
+  // one that happens during service, with a queue.
+  {
+    const mid = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+    await mid.addInitScript(`try{
+      localStorage.setItem('ila.role.v1', JSON.stringify({uid:'u1',role:'cashier',name:'T'}));
+      localStorage.setItem('ila_cached_menu', ${JSON.stringify(JSON.stringify(CACHED))});
+      localStorage.setItem('ila_cached_category_order', ${JSON.stringify(JSON.stringify(Object.keys(CACHED)))});
+      localStorage.setItem('ila_cached_item_order', '{}');
+      localStorage.removeItem('ila_pos_cart');
+    }catch(e){}`);
+    await mid.addInitScript(CONTROLLED(true));        // a till that is up and serving
+    const mtab = await mid.newPage();
+    mtab.on('pageerror', e => threw.push('mid-service: ' + String(e.message).split('\n')[0]));
+    mtab.on('dialog', d => d.dismiss().catch(() => {}));
+    await mtab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await mtab.goto(base + '/pos.html', { waitUntil: 'commit' });
+    await mtab.waitForTimeout(600);
+
+    const quietWhileUp = await mtab.evaluate(
+      () => getComputedStyle(document.getElementById('offline-indicator')).display === 'none');
+    check('a connected till shows no offline chip', quietWhileUp);
+
+    // Eleven o'clock. The wifi goes.
+    const lost = await mtab.evaluate(() => { window.__setConnected(false); return Math.round(performance.now()); });
+    const appeared = await waitFor(mtab,
+      () => getComputedStyle(document.getElementById('offline-indicator')).display !== 'none', 1500);
+    const at = await mtab.evaluate(() => Math.round(performance.now()));
+    check('and says so the moment it goes — no run-up once it has been connected',
+          appeared && (at - lost) < 1000,
+          appeared ? ('OFFLINE ' + (at - lost) + 'ms after the drop') : 'the chip never appeared');
+    note('the run-up is for a connection being opened, never for one that was working');
+
+    // And it clears again, or the next quiet ten minutes reads as an outage.
+    await mtab.evaluate(() => window.__setConnected(true));
+    const cleared = await waitFor(mtab,
+      () => getComputedStyle(document.getElementById('offline-indicator')).display === 'none', 1500);
+    check('and takes it down again when the wifi returns', cleared,
+          'the chip outlived the outage');
+    await mid.close();
   }
 
   check('no page threw while any of that ran', threw.length === 0, threw.join(' | '));
