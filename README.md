@@ -248,7 +248,31 @@ costs money:
   Last, REG and LRG on the sized-drink rows are a separate grid from the rows they
   label: both asked for the same tracks and resolved differently, because only the row
   has content with a minimum width. The right edges matched by luck, so LRG looked
-  fine while REG sat 19px into the Large column.
+  fine while REG sat 19px into the Large column. Pinning both to the same tracks only
+  half-fixed it — `1fr` floors at its content's minimum, and the header's content is
+  0.8rem uppercase against the row's 1.1rem item name, so a long enough name pushed the
+  row's first track past the header's and the two drifted apart again. `minmax(0, 1fr)`
+  lets the name wrap instead, which is what a 320px screen wanted anyway.
+  The suite also holds the till's sticky category strip, which it has now had to be
+  taught twice. The strip is a bar across the screen living inside a container that is
+  `width: 90%` with `padding: 20px`: between it and the edge sit TWO insets, and the
+  first fix cancelled one. Five ordinary category names — PIZZA SIDES COFFEE BEVERAGES
+  DESSERT, 362px of chip — still wrapped onto two lines inside a 350px strip on a 390px
+  phone, and the check written to catch that passed, because it asked whether the strip
+  filled its container and it did. It asks about the screen now, and the stub menu
+  carries the café's own category names rather than five short invented ones that fit
+  anywhere. Last, the notch: with `viewport-fit=cover` the page owns the strip of screen
+  behind the clock, and the till pins its category strip below it, so the menu scrolls up
+  through the gap and something must be painted over it. Something was — a fixed band at
+  z-index 950 — and on the till it painted nothing: a photograph from an iPhone 13 has a
+  menu row legible across the top 47px, that phone's inset to the pixel. The band was
+  `body::before`, and the till is the one page whose `<body>` is a flex container, where
+  `::before` generates a flex item that `position: fixed` then has to take back out of
+  flow; `admin.html` carries the same rule on an ordinary `<body>` and has never been
+  reported. It is a plain fixed `<div>` now. Chromium paints both, so nothing here can
+  reproduce that failure — what the suite holds is the half that is checkable, by reading
+  the pixels of the top 47px while the page scrolls under them, plus the rule the
+  photograph bought: no page covers the notch from a flex container's pseudo-element.
 - **target size** — every interactive control on every page has to be at least 44px in
   both directions, measured by hit-testing rather than by reading its box, so a target
   widened with a pseudo-element counts at its real size. This started as the customer's
