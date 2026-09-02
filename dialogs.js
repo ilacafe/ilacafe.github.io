@@ -238,6 +238,125 @@
         });
     };
 
+    // ------------------------------------------------- picking one of a list
+    //
+    // What a <select> raises is the platform's own wheel, and on iOS that is a grey
+    // drum at the bottom of the screen with the app's colours nowhere in it. Same for
+    // the date field. They are the correct CONTROLS, but they are not this app's
+    // controls, and the till and the admin page are now the only screens that hand off
+    // to something that does not look like the café.
+    //
+    // The native element STAYS. It is hidden, it keeps the value, and it is what every
+    // `.value` read and every `onchange=` on these pages still talks to — thirteen
+    // controls across two pages, none of whose call sites had to change. What changes
+    // is what a thumb touches: a branded button that opens a branded list.
+    window.ilaChoose = function (title, options, current) {
+        return new Promise(function (resolve) {
+            var parts = build({ title: title });
+            var list = el('div', 'display:flex;flex-direction:column;gap:8px;margin-bottom:4px');
+            options.forEach(function (o) {
+                var on = String(o.value) === String(current);
+                var b = el('button',
+                    'display:block;width:100%;text-align:left;min-height:44px;padding:12px 14px;' +
+                    'border-radius:6px;font-family:Quicksand,sans-serif;font-size:0.95rem;' +
+                    'cursor:pointer;' +
+                    // The one already chosen is filled, the way a selected chip is
+                    // everywhere else here — not ticked, which reads as a checkbox.
+                    (on ? 'background:' + FG + ';color:' + BG + ';border:1px solid ' + FG + ';font-weight:700'
+                        : 'background:transparent;color:' + FG + ';border:1px solid rgba(255,255,255,0.35);font-weight:500'),
+                    o.label);
+                b.type = 'button';
+                if (on) b.setAttribute('aria-current', 'true');
+                b.addEventListener('click', function () { parts.close(); resolve(o.value); });
+                list.appendChild(b);
+            });
+            parts.card.appendChild(list);
+            var row = el('div', 'display:flex;gap:10px;margin-top:14px');
+            var no = button('Cancel', false);
+            row.appendChild(no);
+            parts.card.appendChild(row);
+            var done = function () { parts.close(); resolve(null); };
+            open(parts, done);
+            parts.overlay.addEventListener('click', function (e) { if (e.target === parts.overlay) done(); });
+            no.addEventListener('click', done);
+        });
+    };
+
+    // ------------------------------------------------------------ picking a date
+    var MONTHS = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+    var iso = function (d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+               '-' + String(d.getDate()).padStart(2, '0');
+    };
+
+    window.ilaPickDate = function (title, currentISO) {
+        return new Promise(function (resolve) {
+            var picked = currentISO ? new Date(currentISO + 'T00:00:00') : new Date();
+            if (isNaN(picked.getTime())) picked = new Date();
+            var shown = new Date(picked.getFullYear(), picked.getMonth(), 1);
+
+            var parts = build({ title: title });
+            var head = el('div', 'display:flex;align-items:center;gap:8px;margin-bottom:10px');
+            var prev = button('‹', false), label = el('div',
+                'flex:1 1 auto;text-align:center;font-weight:700;font-size:0.95rem;' +
+                'text-transform:uppercase;letter-spacing:1px'), next = button('›', false);
+            prev.style.flex = '0 0 44px'; next.style.flex = '0 0 44px';
+            prev.setAttribute('aria-label', 'Previous month');
+            next.setAttribute('aria-label', 'Next month');
+            head.appendChild(prev); head.appendChild(label); head.appendChild(next);
+            parts.card.appendChild(head);
+
+            var dows = el('div', 'display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px');
+            ['M','T','W','T','F','S','S'].forEach(function (d) {
+                dows.appendChild(el('div',
+                    'text-align:center;font-size:0.7rem;font-weight:700;letter-spacing:1px', d));
+            });
+            parts.card.appendChild(dows);
+
+            var grid = el('div', 'display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px');
+            parts.card.appendChild(grid);
+
+            function draw() {
+                label.textContent = MONTHS[shown.getMonth()] + ' ' + shown.getFullYear();
+                grid.textContent = '';
+                // Monday-first, because the café's week is.
+                var lead = (shown.getDay() + 6) % 7;
+                for (var i = 0; i < lead; i++) grid.appendChild(el('div', ''));
+                var days = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
+                for (var d = 1; d <= days; d++) {
+                    var cell = new Date(shown.getFullYear(), shown.getMonth(), d);
+                    var on = iso(cell) === iso(picked);
+                    var b = el('button',
+                        'min-height:44px;border-radius:6px;font-family:Quicksand,sans-serif;' +
+                        'font-size:0.9rem;cursor:pointer;padding:0;' +
+                        (on ? 'background:' + FG + ';color:' + BG + ';border:1px solid ' + FG + ';font-weight:700'
+                            : 'background:transparent;color:' + FG + ';border:1px solid rgba(255,255,255,0.2)'),
+                        String(d));
+                    b.type = 'button';
+                    b.setAttribute('aria-label', d + ' ' + MONTHS[shown.getMonth()] + ' ' + shown.getFullYear());
+                    if (on) b.setAttribute('aria-current', 'date');
+                    (function (when) {
+                        b.addEventListener('click', function () { parts.close(); resolve(iso(when)); });
+                    })(cell);
+                    grid.appendChild(b);
+                }
+            }
+            prev.addEventListener('click', function () { shown.setMonth(shown.getMonth() - 1); draw(); });
+            next.addEventListener('click', function () { shown.setMonth(shown.getMonth() + 1); draw(); });
+            draw();
+
+            var row = el('div', 'display:flex;gap:10px');
+            var no = button('Cancel', false);
+            row.appendChild(no);
+            parts.card.appendChild(row);
+            var done = function () { parts.close(); resolve(null); };
+            open(parts, done);
+            parts.overlay.addEventListener('click', function (e) { if (e.target === parts.overlay) done(); });
+            no.addEventListener('click', done);
+        });
+    };
+
     window.ilaAskText = function (title, detail, opts) {
         opts = opts || {};
         return new Promise(function (resolve) {
@@ -306,4 +425,187 @@
             try { input.focus(); input.select(); } catch (e) {}
         });
     };
+    // ---------------------------------------- wearing the app's clothes instead
+    //
+    // The native control keeps the value and keeps every listener. It is moved out of
+    // sight rather than removed, so `.value`, `.selectedIndex`, `onchange=` and every
+    // read on these pages go on working exactly as they did — thirteen controls across
+    // admin and analytics, and not one call site changed.
+    //
+    // What a thumb touches is a button in the app's own language, which opens the app's
+    // own list or calendar. Changing the value dispatches a real `change` event, which
+    // is what those `onchange=` attributes are listening for.
+    //
+    // If this never runs — a script error, an old cache — every one of those controls
+    // is still a working native select or date field. The screen is less consistent and
+    // nothing is broken, which is the right way round.
+    function faceFor(src) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ila-face';
+        // Layout comes from wherever the native control got it; appearance does not.
+        var st = src.style;
+        b.style.cssText =
+            'display:flex;align-items:center;justify-content:space-between;gap:10px;' +
+            'min-height:44px;padding:12px 14px;border-radius:6px;box-sizing:border-box;' +
+            'background:transparent;color:' + FG + ';border:1px solid rgba(255,255,255,0.4);' +
+            'font-family:Quicksand,sans-serif;font-size:0.95rem;font-weight:500;' +
+            'text-align:left;cursor:pointer;width:100%;' +
+            (st.flex ? 'flex:' + st.flex + ';' : '') +
+            (st.minWidth ? 'min-width:' + st.minWidth + ';' : '') +
+            (st.margin ? 'margin:' + st.margin + ';' : '');
+        return b;
+    }
+
+    function paint(btn, text, chevron) {
+        // Idempotent on purpose. The observer below re-syncs every face whenever the
+        // document changes, and rewriting a button's children IS a document change —
+        // so a paint that always writes feeds itself and pins the main thread. Writing
+        // only when the text actually differs makes the loop converge on the first
+        // pass, which is the difference between this working and the page hanging.
+        if (btn.__ilaText === text) return;
+        btn.__ilaText = text;
+        btn.textContent = '';
+        var t = document.createElement('span');
+        t.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        t.textContent = text;
+        var c = document.createElement('span');
+        // NOT opacity. 0.7 white on this brown is 3.92:1 and the contrast suite caught
+        // it, which is the same mistake this app already made once and fixed: hierarchy
+        // comes from size, not from dimming, because the brown has no room to dim into.
+        c.style.cssText = 'flex:0 0 auto;font-size:0.75em';
+        c.textContent = chevron;
+        btn.appendChild(t); btn.appendChild(c);
+    }
+
+    function hide(el) {
+        // Out of sight, still in the document, still the thing that holds the value.
+        el.style.position = 'absolute';
+        el.style.opacity = '0';
+        el.style.pointerEvents = 'none';
+        el.style.width = '1px';
+        el.style.height = '1px';
+        el.setAttribute('tabindex', '-1');
+        el.setAttribute('aria-hidden', 'true');
+    }
+
+    function named(el) {
+        // Whatever the control is called on screen, so the modal has a title rather
+        // than a bare list: its aria-label, its <label>, or the section above it.
+        return el.getAttribute('aria-label') ||
+               (el.id && (document.querySelector('label[for="' + el.id + '"]') || {}).textContent) ||
+               (el.previousElementSibling && /LABEL|DIV|SPAN/.test(el.previousElementSibling.tagName) &&
+                (el.previousElementSibling.textContent || '').trim().slice(0, 40)) ||
+               'Choose';
+    }
+
+    function enhanceSelect(sel) {
+        if (sel.__ilaFaced || sel.multiple) return;
+        sel.__ilaFaced = true;
+        var btn = faceFor(sel);
+        var title = named(sel).trim() || 'Choose';
+
+        var sync = function () {
+            var o = sel.options[sel.selectedIndex];
+            paint(btn, o ? o.text : '', '▾');
+            btn.disabled = sel.disabled;
+            btn.style.opacity = sel.disabled ? '0.5' : '1';
+            btn.setAttribute('aria-label', title + ': ' + (o ? o.text : ''));
+        };
+
+        btn.addEventListener('click', async function () {
+            if (sel.disabled) return;
+            var opts = Array.prototype.map.call(sel.querySelectorAll('option'), function (o) {
+                return { value: o.value, label: o.text };
+            });
+            if (!opts.length) return;
+            var picked = await window.ilaChoose(title, opts, sel.value);
+            if (picked === null) return;
+            sel.value = picked;
+            sync();
+            // A real event, because that is what every onchange= on these pages is on.
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        sel.parentNode.insertBefore(btn, sel);
+        hide(sel);
+        sel.__ilaSync = sync;
+        sync();
+    }
+
+    function enhanceDate(inp) {
+        if (inp.__ilaFaced) return;
+        inp.__ilaFaced = true;
+        var btn = faceFor(inp);
+        var title = named(inp).trim() || 'Pick a date';
+
+        var sync = function () {
+            var v = inp.value;
+            var shown = v;
+            if (v) {
+                var d = new Date(v + 'T00:00:00');
+                if (!isNaN(d.getTime())) shown = d.getDate() + ' ' + MONTHS[d.getMonth()].slice(0, 3) + ' ' + d.getFullYear();
+            }
+            paint(btn, shown || (inp.placeholder || 'Pick a date'), '▾');
+            btn.setAttribute('aria-label', title + ': ' + (shown || 'not set'));
+        };
+
+        btn.addEventListener('click', async function () {
+            var picked = await window.ilaPickDate(title, inp.value);
+            if (picked === null) return;
+            inp.value = picked;
+            sync();
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        inp.parentNode.insertBefore(btn, inp);
+        hide(inp);
+        inp.__ilaSync = sync;
+        sync();
+    }
+
+    window.ilaEnhanceControls = function (root) {
+        var r = root || document;
+        if (!r.querySelectorAll) return;
+
+        // The root ITSELF, first. querySelectorAll only ever returns descendants, and
+        // the node the observer hands over is frequently the control — `innerHTML = '…
+        // <select>…'` adds the select, not a wrapper around it. Looking only at
+        // descendants left every runtime-built control bare, which is both of the two
+        // on admin that are built at runtime.
+        if (r.matches) {
+            try {
+                if (r.matches('select:not([data-ila-native])')) { enhanceSelect(r); return; }
+                if (r.matches('input[type="date"]:not([data-ila-native])')) { enhanceDate(r); return; }
+            } catch (e) {}
+        }
+
+        var sels = r.querySelectorAll('select:not([data-ila-native])');
+        for (var i = 0; i < sels.length; i++) { try { enhanceSelect(sels[i]); } catch (e) {} }
+        var dates = r.querySelectorAll('input[type="date"]:not([data-ila-native])');
+        for (var j = 0; j < dates.length; j++) { try { enhanceDate(dates[j]); } catch (e) {} }
+    };
+
+    // Two of these are built at runtime — the role picker on each staff row, and the
+    // ingredient rows on a recipe — so watching is not optional. And a page that sets
+    // select.value in code has to be able to say so: __ilaSync re-reads it.
+    function watch() {
+        window.ilaEnhanceControls(document);
+        if (!window.MutationObserver) return;
+        new MutationObserver(function (muts) {
+            for (var i = 0; i < muts.length; i++) {
+                var added = muts[i].addedNodes;
+                for (var j = 0; j < added.length; j++) {
+                    if (added[j].nodeType === 1) window.ilaEnhanceControls(added[j]);
+                }
+            }
+            // Anything re-rendered under a face that still exists may hold a new value.
+            var faced = document.querySelectorAll('select, input[type="date"]');
+            for (var k = 0; k < faced.length; k++) {
+                if (faced[k].__ilaSync) faced[k].__ilaSync();
+            }
+        }).observe(document.documentElement, { childList: true, subtree: true });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch);
+    else watch();
 })();

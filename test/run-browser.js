@@ -34,6 +34,7 @@ const suites = [
   'connection-browser.test.js',
   'dialogs-browser.test.js',
   'till-dialogs-browser.test.js',
+  'native-controls-browser.test.js',
 ];
 
 let failed = [];

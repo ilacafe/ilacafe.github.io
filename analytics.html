@@ -155,6 +155,14 @@
            that area came out white while an iPhone looked seamless. Said in both places
            it cannot be anything else. */
         html { background-color: var(--brand-bg); }
+        /* The platform tints these its own blue. accent-color is the whole fix — it
+           keeps the native control, its behaviour and its semantics exactly as they
+           are, and only says what colour. A hand-built checkbox would have bought the
+           same look and a pile of keyboard and screen-reader work to get back to where
+           the real one already was. */
+        input[type="checkbox"], input[type="radio"], input[type="range"], progress {
+            accent-color: var(--brand-text);
+        }
 
         /* cover, and the insets that have to come with it. This page had neither, so it
            was the one screen that could never draw under Android's home bar — which is
@@ -426,7 +434,7 @@
             </div>
             <div class="range-custom">
                 <span class="rc-label">Custom</span>
-                <input type="date" id="date-from"><span class="rc-to">to</span><input type="date" id="date-to">
+                <input type="date" id="date-from" aria-label="From"><span class="rc-to">to</span><input type="date" id="date-to" aria-label="To">
                 <button class="lnk" onclick="window.applyCustom()">Apply</button>
             </div>
             <div id="range-label">&nbsp;</div>
@@ -479,7 +487,7 @@
         <div class="card">
             <h2>Item Drill-down</h2>
             <div class="controls">
-                <select id="drill-select" onchange="window.renderDrill()" style="min-width:220px;"><option value="">Select an item…</option></select>
+                <select id="drill-select" aria-label="Item" onchange="window.renderDrill()" style="min-width:220px;"><option value="">Select an item…</option></select>
                 <div id="drill-stats" style="font-size:0.85rem; "></div>
             </div>
             <div class="chart-full" style="height:230px;"><canvas id="chart-drill"></canvas></div>

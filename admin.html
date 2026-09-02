@@ -157,6 +157,14 @@
            that area came out white while an iPhone looked seamless. Said in both places
            it cannot be anything else. */
         html { background-color: var(--brand-bg); }
+        /* The platform tints these its own blue. accent-color is the whole fix — it
+           keeps the native control, its behaviour and its semantics exactly as they
+           are, and only says what colour. A hand-built checkbox would have bought the
+           same look and a pile of keyboard and screen-reader work to get back to where
+           the real one already was. */
+        input[type="checkbox"], input[type="radio"], input[type="range"], progress {
+            accent-color: var(--brand-text);
+        }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; line-height: 1.6; padding: env(safe-area-inset-top) 0 calc(80px + env(safe-area-inset-bottom)); }
         body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--brand-bg); z-index: 950; pointer-events: none; }
         /* 90% of 320 is 288, plus 40 of padding, is 328 inside a 320px viewport.
@@ -567,7 +575,7 @@
             <div class="row-group" style="margin-bottom: 15px;">
                 <div class="form-group" style="flex: 1.5; margin: 0;"><input type="password" id="acct-password" placeholder="Temp password (6+ chars)" autocomplete="new-password"></div>
                 <div class="form-group" style="flex: 1; margin: 0;">
-                    <select id="acct-role" style="width:100%; padding:12px; border-radius:6px; background:rgba(255,255,255,0.95); color:#333; border:none; font-family:'Quicksand',sans-serif; font-size:1rem;">
+                    <select id="acct-role" aria-label="Role" style="width:100%; padding:12px; border-radius:6px; background:rgba(255,255,255,0.95); color:#333; border:none; font-family:'Quicksand',sans-serif; font-size:1rem;">
                         <option value="cashier">Cashier</option>
                         <option value="barista">Barista</option>
                         <option value="chef">Chef</option>
@@ -582,14 +590,14 @@
 <div class="admin-card" style="margin-bottom: 25px;">
             <h2>Inventory Manager</h2>
             <div class="row-group">
-                <select id="inv-tab-select" class="remark-input" style="flex: 1;" onchange="renderInventoryManager()">
+                <select id="inv-tab-select" aria-label="Stock tab" class="remark-input" style="flex: 1;" onchange="renderInventoryManager()">
                     <option value="bar">Bar</option>
                     <option value="creamery">Creamery</option>
                     <option value="kitchen">Kitchen</option>
                     <option value="bakery">Bakery</option>
                     <option value="packaging">Packaging</option>
                 </select>
-                <select id="inv-type-select" class="remark-input" style="flex: 1;" onchange="renderInventoryManager()">
+                <select id="inv-type-select" aria-label="Item type" class="remark-input" style="flex: 1;" onchange="renderInventoryManager()">
                     <option value="raw">Raw Inputs</option>
                     <option value="prepped">Prepped Yields</option>
                 </select>
@@ -647,7 +655,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.8"></script>
+    <script src="/build-check.js" data-build="2026-09-02.9"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -805,7 +813,7 @@
                     const u = users[uid];
                     const isSelf = window.currentAdmin && window.currentAdmin.uid === uid;
                     const safeName = jsAttr(u.name || u.email || 'user');
-                    rows += `<div class="list-item"><div><strong>${escapeHTML(u.name || u.email || uid)}</strong> <span style=" margin-left:8px; font-size:0.85rem;">${escapeHTML(u.email || "")}</span></div><div style="display:flex; align-items:center; gap:8px;"><select onchange="changeRole('${uid}', this.value)" ${isSelf ? 'disabled' : ''} style="padding:6px; border-radius:6px; background:rgba(255,255,255,0.95); color:#333; border:none;"><option value="cashier" ${u.role==='cashier'?'selected':''}>Cashier</option><option value="barista" ${u.role==='barista'?'selected':''}>Barista</option><option value="chef" ${u.role==='chef'?'selected':''}>Chef</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select>${isSelf ? '<span style=" font-size:0.8rem;">you</span>' : `<button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeAccess('${uid}', '${safeName}')">✖</button>`}</div></div>`;
+                    rows += `<div class="list-item"><div><strong>${escapeHTML(u.name || u.email || uid)}</strong> <span style=" margin-left:8px; font-size:0.85rem;">${escapeHTML(u.email || "")}</span></div><div style="display:flex; align-items:center; gap:8px;"><select aria-label="Role" onchange="changeRole('${uid}', this.value)" ${isSelf ? 'disabled' : ''} style="padding:6px; border-radius:6px; background:rgba(255,255,255,0.95); color:#333; border:none;"><option value="cashier" ${u.role==='cashier'?'selected':''}>Cashier</option><option value="barista" ${u.role==='barista'?'selected':''}>Barista</option><option value="chef" ${u.role==='chef'?'selected':''}>Chef</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select>${isSelf ? '<span style=" font-size:0.8rem;">you</span>' : `<button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeAccess('${uid}', '${safeName}')">✖</button>`}</div></div>`;
                 });
                 container.innerHTML = rows;
             });
@@ -1906,7 +1914,7 @@
             }
 
             row.innerHTML = `
-                <select class="remark-input ing-name" style="flex: 2; margin: 0; padding: 12px;">${optionsHtml}</select>
+                <select aria-label="Ingredient" class="remark-input ing-name" style="flex: 2; margin: 0; padding: 12px;">${optionsHtml}</select>
                 <input type="number" inputmode="decimal" class="remark-input ing-qty" placeholder="Qty" value="${qty}" style="flex: 1; margin: 0; padding: 12px;">
                 <button class="btn-action" style="height: 44px; width: 44px;" onclick="this.parentElement.remove()">✖</button>
             `;
