@@ -119,6 +119,7 @@
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/auth-gate.js">
     <link rel="preload" as="script" href="/build-check.js">
+    <link rel="preload" as="script" href="/connection.js">
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
@@ -435,7 +436,7 @@
             <div class="form-group" style="margin-bottom: 10px;"><input type="text" id="upi-new-id" placeholder="VPA — e.g. name@okaxis"></div>
             <div class="row-group" style="margin-bottom: 15px;">
                 <div class="form-group" style="flex: 1.3; margin: 0;"><input type="text" id="upi-new-label" placeholder="Label (e.g. HDFC S)"></div>
-                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="upi-new-cap" placeholder="Cap ₹/mo (0 = none)"></div>
+                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="upi-new-cap" inputmode="decimal" placeholder="Cap ₹/mo (0 = none)"></div>
                 <button class="btn btn-secondary" style="flex: 0.7;" onclick="upiAdd()">Add</button>
             </div>
             <div id="upi-routing-list"><p style="font-size:0.8rem; letter-spacing:2px; text-transform:uppercase;">Loading&hellip;</p></div>
@@ -477,7 +478,7 @@
             <div class="row-group" style="margin-bottom: 12px;">
                 <div class="form-group" style="flex: 1.2; margin: 0;"><input type="text" id="addon-cat" placeholder="Category (exactly as on the menu)"></div>
                 <div class="form-group" style="flex: 1.2; margin: 0;"><input type="text" id="addon-name" placeholder="Add-on name"></div>
-                <div class="form-group" style="flex: 0.8; margin: 0;"><input type="number" id="addon-price" placeholder="₹"></div>
+                <div class="form-group" style="flex: 0.8; margin: 0;"><input type="number" id="addon-price" inputmode="decimal" placeholder="₹"></div>
                 <button class="btn btn-secondary" style="flex: 0.6;" onclick="addonAdd()">Add</button>
             </div>
             <div id="addon-list"><p style="font-size:0.8rem; letter-spacing:2px; text-transform:uppercase;">Loading&hellip;</p></div>
@@ -500,12 +501,12 @@
             </div>
 
             <div class="row-group" id="single-price-group" style="display: flex;">
-                <div class="form-group" style="flex: 1;"><label>Price (₹)</label><input type="number" id="add-price" placeholder="0"></div>
+                <div class="form-group" style="flex: 1;"><label>Price (₹)</label><input type="number" id="add-price" inputmode="decimal" placeholder="0"></div>
             </div>
 
             <div class="row-group" id="multi-price-group" style="display: none;">
-                <div class="form-group" style="flex: 1;"><label>Regular (₹)</label><input type="number" id="add-price-reg" placeholder="0"></div>
-                <div class="form-group" style="flex: 1;"><label>Large (₹)</label><input type="number" id="add-price-lrg" placeholder="0"></div>
+                <div class="form-group" style="flex: 1;"><label>Regular (₹)</label><input type="number" id="add-price-reg" inputmode="decimal" placeholder="0"></div>
+                <div class="form-group" style="flex: 1;"><label>Large (₹)</label><input type="number" id="add-price-lrg" inputmode="decimal" placeholder="0"></div>
             </div>
 
             <div class="row-group">
@@ -638,7 +639,11 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.5"></script>
+    <script src="/build-check.js" data-build="2026-09-02.6"></script>
+    <!-- Says so when this screen stops talking to the database. Every device here is
+         on cafe wifi, and the failure is silent by construction: the last data stays
+         on screen and new writes wait in memory. See connection.js. -->
+    <script src="/connection.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -1711,7 +1716,7 @@
                     + '</div></div>'
                     + '<div style="display:flex; align-items:center; gap:10px; margin-top:10px;">'
                     + '<label style="margin:0; flex-shrink:0;">Cap ₹/mo</label>'
-                    + '<input type="number" value="' + (cap || '') + '" placeholder="0 = no cap" style="flex:1; padding:8px;" onchange="upiSetCap(\'' + k + '\', this.value)">'
+                    + '<input type="number" inputmode="decimal" value="' + (cap || '') + '" placeholder="0 = no cap" style="flex:1; padding:8px;" onchange="upiSetCap(\'' + k + '\', this.value)">'
                     + '</div>'
                     + '<div style="display:flex; align-items:center; gap:10px; margin-top:8px;">'
                     + '<label style="margin:0; flex-shrink:0;">Bank</label>'
@@ -1891,7 +1896,7 @@
 
             row.innerHTML = `
                 <select class="remark-input ing-name" style="flex: 2; margin: 0; padding: 12px;">${optionsHtml}</select>
-                <input type="number" class="remark-input ing-qty" placeholder="Qty" value="${qty}" style="flex: 1; margin: 0; padding: 12px;">
+                <input type="number" inputmode="decimal" class="remark-input ing-qty" placeholder="Qty" value="${qty}" style="flex: 1; margin: 0; padding: 12px;">
                 <button class="btn-action" style="height: 44px; width: 44px;" onclick="this.parentElement.remove()">✖</button>
             `;
             list.appendChild(row);

@@ -113,6 +113,7 @@
     <link rel="preload" as="script" href="/auth-gate.js">
     <link rel="preload" as="script" href="/pin-mask.js">
     <link rel="preload" as="script" href="/build-check.js">
+    <link rel="preload" as="script" href="/connection.js">
     <link rel="preload" as="script" href="/qr.js">
 
     <style>
@@ -892,7 +893,7 @@
             <div class="modal-foot">
                 <div style="display:flex; align-items:center; gap:10px; margin:8px 0 4px;">
                     <label style="margin:0; flex:1 1 0; min-width:0; text-align:left; font-size:0.7rem; text-transform:uppercase; letter-spacing:1px; ">Other (not an item)</label>
-                    <input type="number" id="split-other" class="split-amt" inputmode="numeric" placeholder="₹0" oninput="window.setSplitOther(this.value)">
+                    <input type="number" id="split-other" class="split-amt" inputmode="decimal" placeholder="₹0" oninput="window.setSplitOther(this.value)">
                 </div>
                 <div id="split-alloc-note" style="font-size:0.75rem;  text-align:left; min-height:1em;"></div>
                 <div style="font-size:1.4rem; font-weight:700; margin:8px 0 4px;">Collecting ₹<span id="split-share-total">0</span></div>
@@ -996,7 +997,7 @@
     <div id="transaction-modal" class="modal-overlay">
         <div class="modal-content">
             <h3 id="transaction-title">Transaction</h3>
-            <input type="number" id="transaction-amount" class="remark-input" placeholder="Amount (₹)">
+            <input type="number" id="transaction-amount" class="remark-input" inputmode="decimal" placeholder="Amount (₹)">
             <input type="text" id="transaction-reason" class="remark-input" placeholder="Reason">
             <input type="text" id="transaction-pin" class="remark-input" placeholder="PIN" pattern="[0-9]*" inputmode="numeric" maxlength="4" autocomplete="off" data-pin>
             <div class="modal-buttons"><button id="transaction-confirm-btn" class="btn btn-primary" style="width: 100%;" onclick="confirmTransaction()">Confirm</button></div>
@@ -1016,7 +1017,11 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.5"></script>
+    <script src="/build-check.js" data-build="2026-09-02.6"></script>
+    <!-- Says so when this screen stops talking to the database. Every device here is
+         on cafe wifi, and the failure is silent by construction: the last data stays
+         on screen and new writes wait in memory. See connection.js. -->
+    <script src="/connection.js"></script>
     <!-- The payment QR, drawn on this device rather than fetched. Shared with the
          customer app, which now shows the same code on the customer's own phone. -->
     <script src="/qr.js"></script>
@@ -3727,7 +3732,7 @@
                      +      (qty > 1 ? (' \u00b7 ' + qty + ' \u00d7 \u20b9' + Math.round(unit)) : '') + '</span></div>'
                      +   '<div class="split-line-ctrl">'
                      +     '<div class="split-chips">' + chip('all','All') + (qty > 1 ? chip('unit','1\u00d7') : '') + chip('2','\u00bd') + chip('3','\u2153') + chip('4','\u00bc') + '</div>'
-                     +     '<input type="number" class="split-amt" inputmode="numeric" value="' + (sel || '') + '" placeholder="\u20b90" oninput="window.editLineAmount(\'' + safe + '\', this.value)">'
+                     +     '<input type="number" class="split-amt" inputmode="decimal" value="' + (sel || '') + '" placeholder="\u20b90" oninput="window.editLineAmount(\'' + safe + '\', this.value)">'
                      +   '</div>'
                      + '</div>';
             }

@@ -312,6 +312,37 @@ costs money:
   is — a rule, a fill, a weight — is a design decision and none of the suite's
   business; that there is one is not. The chip is marked now rather than the other
   five dimmed: a 2px rule beneath it, the same idiom the stock page's tabs already use.
+- **the connection, said out loud** — every device here is on café wifi: two tills, two
+  kitchen boards, the stock tablet, and a customer's phone at a table. Not one page had
+  a line about losing that connection — no listener, nothing, on any of the seven. The
+  failure is silent by construction: the Firebase SDK keeps the last data it received on
+  screen and holds new writes in memory, so a disconnected till looks completely normal
+  — the bill reads, the buttons press, the totals add up — and a kitchen board shows the
+  tickets it already had and none of the ones sent since. Both are indistinguishable from
+  a quiet ten minutes, and the first anyone knows is a customer asking where their food
+  is. `connection.js` watches `.info/connected`, which is the database's own answer and
+  the only one worth trusting: `navigator.onLine` knows whether the device has a network
+  interface, which stays true for a phone attached to a wifi router whose uplink is down,
+  and that is the shape of most café outages. The bar waits 2.5 seconds before appearing,
+  because that signal is false for the first moment of every load and flickers on any
+  blip, and a bar that flashes on every open is one everybody learns to ignore. The suite
+  drives the real signal through all seven pages and asks whether something a person
+  would SEE appears — painted, on screen, with words in it — then whether it goes away
+  again, because a warning that outlives the fault is the same bug.
+- **late, in words** — an overdue ticket was a red border, a red tint, a red elapsed time
+  and a pulse: four signals, every one of them colour or motion. Reduce Motion correctly
+  stops the pulse, which leaves a cook with colour alone — the case WCAG 1.4.1 exists
+  for, and also just hard to read on a tablet across a kitchen, under glare, with a red
+  tint at 15% over brown. The elapsed time now leads with the word.
+- **the keypad a number asks for** — nothing in this café has a keyboard, so the keyboard
+  a field raises IS its input method. `type="number"` alone does not settle that: on iOS
+  it brings up the numbers-and-punctuation layout, small keys among symbols, rather than
+  the big keypad. Eleven fields had no `inputmode`, and every one was money or stock —
+  the cash amount, a split, every price on the admin page, the UPI cap, an ingredient
+  quantity, and the stock count entered in Kg and L. `decimal` rather than `numeric`,
+  because each is read with `parseFloat` and the stock field carries `step="any"`; a
+  digits-only pad would take the point out of 0.5 Kg. PINs stay numeric and the two phone
+  fields stay `type="tel"`, which raises a phone keypad on both platforms already.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line

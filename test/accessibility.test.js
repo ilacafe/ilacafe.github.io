@@ -91,4 +91,39 @@ const idx = readPage('index.html');
   note(imgs.length + ' images, ' + (idx.match(/<button\b/g) || []).length + ' real buttons');
 }
 
+// -------------------------------------------------- the keypad a number asks for
+//
+// Nothing in this café has a keyboard. Two tills, two kitchen boards, the stock
+// tablet and the customers are iPads, iPhones and Android phones, so the keyboard
+// a field raises IS its input method — there is no other one to fall back on.
+//
+// `type="number"` alone does not settle that. On iOS it brings up the numbers-and-
+// punctuation layout, small keys among symbols, rather than the big keypad; the
+// thing that asks for the keypad is inputmode. Eleven fields had none, and every
+// one of them is money or stock: the cash amount, a split, every price on the admin
+// page, the UPI cap, an ingredient quantity, and the stock count that is entered in
+// Kg and L.
+//
+// decimal rather than numeric, because each of these is read with parseFloat and
+// the stock field carries step="any" — a digits-only pad would take the point out
+// of 0.5 Kg. PINs stay numeric, and the two phone fields stay type="tel", which
+// already raises a phone keypad on both platforms.
+{
+  const bad = [];
+  for (const page of ['index.html', 'pos.html', 'admin.html', 'analytics.html',
+                      'chef.html', 'barista.html', 'inventory.html']) {
+    const src = readPage(page);
+    for (const tag of src.match(/<input\b[^>]*>/g) || []) {
+      const type = (/type="([^"]*)"/.exec(tag) || [])[1];
+      if (type !== 'number') continue;                 // tel raises a keypad on its own
+      if (/inputmode="/.test(tag)) continue;
+      const id = (/id="([^"]*)"/.exec(tag) || [])[1] ||
+                 (/class="([^"]*)"/.exec(tag) || [])[1] || tag.slice(0, 40);
+      bad.push(page + ' → ' + id);
+    }
+  }
+  check('every number field says which keypad it wants', bad.length === 0, bad.join(', '));
+  note('type=number alone gives iOS the punctuation layout, not the keypad');
+}
+
 done();

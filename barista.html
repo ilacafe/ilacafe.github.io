@@ -106,6 +106,7 @@
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/auth-gate.js">
     <link rel="preload" as="script" href="/build-check.js">
+    <link rel="preload" as="script" href="/connection.js">
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
@@ -288,7 +289,11 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.5"></script>
+    <script src="/build-check.js" data-build="2026-09-02.6"></script>
+    <!-- Says so when this screen stops talking to the database. Every device here is
+         on cafe wifi, and the failure is silent by construction: the last data stays
+         on screen and new writes wait in memory. See connection.js. -->
+    <script src="/connection.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -495,7 +500,14 @@
                 if (t._card === undefined) t._card = document.getElementById('ticket-' + id);
                 if (t._el) {
                     if (t._expM == null) { const e = kdsExpectedPrep(t.items); t._expM = (e!=null) ? Math.round(e) : null; }
-                    const txt = mins + 'm' + (t._expM!=null ? ' / ~' + t._expM + 'm' : '');
+                    // LATE IN WORDS, NOT ONLY IN RED. Overdue was a red border, a red tint,
+                    // a red elapsed time and a pulse — four signals, all of them colour or
+                    // motion. Reduce Motion correctly stops the pulse, which leaves a cook
+                    // with colour alone, and colour alone is what WCAG 1.4.1 is about. It
+                    // is also just hard to read: a tablet on a shelf, across a kitchen,
+                    // under glare, with a red tint at 15% over brown. The word goes first
+                    // because it is the thing to read first.
+                    const txt = (over ? 'LATE \u00b7 ' : '') + mins + 'm' + (t._expM!=null ? ' / ~' + t._expM + 'm' : '');
                     if (txt !== t._txt) { t._txt = txt; t._el.innerText = txt; }
                 }
                 if (t._card && over !== t._over) { t._over = over; t._card.classList.toggle('overdue', over); }

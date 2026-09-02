@@ -236,6 +236,26 @@ const ticket = (dest, items, extra) => Object.assign({
     });
     check(page + ' still fills in the elapsed time on a card', /^\s*4m/i.test(elapsed || ''),
           String(elapsed));
+    check('and does not call a four-minute ticket late', !/LATE/i.test(elapsed || ''), String(elapsed));
+
+    // ---- and an overdue one says so in words ----
+    // Overdue used to be a red border, a red tint, a red elapsed time and a pulse:
+    // four signals, every one of them colour or motion. Reduce Motion correctly
+    // stops the pulse, which leaves a cook with colour alone — which is the case
+    // WCAG 1.4.1 exists for, and is also just hard to read on a tablet across a
+    // kitchen, under glare, with a red tint at 15% over brown.
+    //
+    // Two hours old is past any threshold this board computes for any item, so this
+    // does not depend on the prep-time model to be overdue.
+    await send({ o1: ticket('Table 6', { [item]: { qty: 1, price: 400 } }, { createdAt: Date.now() - 120 * 60000 }) });
+    await tab.waitForTimeout(1300);
+    const late = await tab.evaluate(() => {
+      const el = document.getElementById('elapsed-o1');
+      const card = document.getElementById('ticket-o1');
+      return { text: el ? el.innerText : null, red: !!card && card.classList.contains('overdue') };
+    });
+    check(page + ' turns a two-hour-old ticket red', late.red, JSON.stringify(late));
+    check('and says LATE in words, not only in red', /LATE/i.test(late.text || ''), String(late.text));
 
     await ctx.close();
   }
