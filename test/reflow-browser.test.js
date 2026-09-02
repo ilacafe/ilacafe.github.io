@@ -89,7 +89,10 @@ const MENU = {
     'Cortado with an extremely long name': { hasSizes: true, priceReg: 190, priceLrg: 230, inStock: true },
     'Cold Brew': { price: 220, inStock: false }
   },
-  Food: { 'Avocado Toast with Poached Eggs': { price: 340, inStock: true } }
+  Food: { 'Avocado Toast with Poached Eggs': { price: 340, inStock: true } },
+  Bakery: { 'Croissant': { price: 160, inStock: true } },
+  Shakes: { 'Banana Shake': { price: 200, inStock: true } },
+  Retail: { 'Beans 250g': { price: 600, inStock: true } }
 };
 
 const STUB = `
@@ -195,6 +198,53 @@ const NARROW = 320;
   }
 
   note('320px is a small phone, an ordinary phone at 200% zoom, and half a split screen');
+
+  // ---------------------------------------------- the till's sticky category strip
+  //
+  // This is a bar across the till — its own background, its own bottom rule — and it
+  // was living inside the container's 20px of padding. That was survivable while
+  // .container was content-box and the padding hung outside the declared width.
+  // Giving the container border-box, so it stops overflowing a 320px screen, folded
+  // that padding inwards and took 40px off everything inside it. Five categories that
+  // fit on one line on every iPhone started wrapping onto two, and because the chips
+  // had just been given min-height:44px each of those lines was twice as tall: a
+  // 39px strip became 107px of permanently sticky header, on the screen where that
+  // space is the menu.
+  //
+  // Two things are held here. The strip gets the container's full box, not its padded
+  // content — which is what regressed. And the chips fit on one line at the widths a
+  // till is actually held at, which is what anyone noticed.
+  for (const width of [375, 390]) {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width, height: 800 }, hasTouch: true });
+    await ctx.addInitScript(STUB);
+    const pg = await ctx.newPage();
+    pg.on('pageerror', e => threw.push('pos.html@' + width + ': ' + String(e.message || e).split('\n')[0]));
+    await pg.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await pg.goto(base + '/pos.html', { waitUntil: 'domcontentloaded' });
+    await pg.waitForTimeout(700);
+    await pg.evaluate(() => { const o = document.getElementById('login-overlay'); if (o) o.style.display = 'none'; });
+
+    const strip = await pg.evaluate(() => {
+      const s = document.querySelector('.cat-strip');
+      const c = document.querySelector('.container');
+      if (!s || !c) return null;
+      const chips = [...s.querySelectorAll('.cat-chip')];
+      const lines = new Set(chips.map(ch => Math.round(ch.getBoundingClientRect().top))).size;
+      return { w: Math.round(s.getBoundingClientRect().width), h: Math.round(s.getBoundingClientRect().height),
+               container: c.clientWidth, chips: chips.length, lines };
+    });
+    if (strip && strip.chips) {
+      // Clamped against the viewport, so it can land a few px inside on a narrow
+      // screen; what must not happen is losing the whole 40px of padding again.
+      check('the till\'s category strip spans the container at ' + width + 'px',
+            strip.w >= strip.container - 8,
+            strip.w + 'px inside a ' + strip.container + 'px container');
+      check('and ' + strip.chips + ' categories still fit on one line at ' + width + 'px',
+            strip.lines === 1, strip.lines + ' lines, ' + strip.h + 'px of sticky header');
+    }
+    await ctx.close();
+  }
+  note('a sticky strip is height taken from the menu for as long as the till is open');
   check('no page threw while any of that ran', threw.length === 0, threw.join(' | '));
 
   await browser.close();
