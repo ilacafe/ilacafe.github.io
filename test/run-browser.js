@@ -29,6 +29,7 @@ const suites = [
   'cart-guards-browser.test.js',
   'focus-ring-browser.test.js',
   'contrast-browser.test.js',
+  'reflow-browser.test.js',
 ];
 
 let failed = [];

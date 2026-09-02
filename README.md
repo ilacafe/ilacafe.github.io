@@ -231,6 +231,33 @@ costs money:
   condition that hover, focus or a touch brings it to full white, which the suite
   checks rather than takes on trust. Faint was always right; unreadable when you
   finally look was the bug.
+- **reflow** — `.logo` was capped with `max-width: 350px`, which caps it against
+  nothing: at a 320px viewport a 350px cap is still 350px, so the ordering page, the
+  till and admin each carried 50px of horizontal scroll. It reads as a small-phone
+  problem and is not one — browser zoom shrinks the layout viewport, so a customer at
+  200% on an ordinary phone has about 195px, and the person who zooms in because they
+  cannot read the menu is the person the menu then slides under. `analytics.html` had
+  already been fixed and the three pages that needed it most never got it. Underneath
+  it, `.container` at `width:90%; padding:20px` with no border-box came to 328px
+  inside 320. The suite also holds the viewport meta, which is the same question from
+  the other end: `admin.html` blocked pinch-zoom outright, and a page must either
+  declare `viewport-fit=cover` AND pad content back out with `env(safe-area-inset-*)`
+  or do neither — admin used the insets with no cover, so they had never resolved to
+  anything but zero, and the kitchen boards declared cover with no insets, so a board
+  mounted landscape on a notched tablet could sit its left edge under the camera.
+  Last, REG and LRG on the sized-drink rows are a separate grid from the rows they
+  label: both asked for the same tracks and resolved differently, because only the row
+  has content with a minimum width. The right edges matched by luck, so LRG looked
+  fine while REG sat 19px into the Large column.
+- **target size** — every interactive control on every page has to be at least 44px in
+  both directions, measured by hit-testing rather than by reading its box, so a target
+  widened with a pseudo-element counts at its real size. This started as the customer's
+  + and -, and the widening caught two things a narrower check would not: the till had
+  the same 32px control and never got the fix, and where it HAD been attempted the
+  pseudo-element pinned the target to the button's own width, so it was fixed in one
+  dimension and not the other. The suite also refuses to pass on coverage it did not
+  get — with the till's modals left closed it examined one control of forty-nine and
+  reported clean, so each overlay is opened in turn and a floor is asserted.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line

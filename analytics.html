@@ -151,10 +151,14 @@
         .container { width: 92%; max-width: 1100px; margin: 0 auto; padding: 20px; }
         header { text-align: center; margin-bottom: 12px; }
         .logo { max-width: min(350px, 78vw); height: auto; display: block; margin: 0 auto; }
-        .lnk { text-decoration: none; background: rgba(255,255,255,0.12); color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; border: none; }
+        .lnk { text-decoration: none; background: rgba(255,255,255,0.12); color: #fff; padding: 12px 14px; min-height: 44px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; border: none; }
         .lnk:active { opacity: 0.7; }
 
         .card { background-color: rgba(0, 0, 0, 0.15); border-radius: 12px; padding: 20px; margin-bottom: 22px; border: 1px solid rgba(255, 255, 255, 0.1); }
+        /* A date picker or a sort control that is 31px tall is a control someone
+           misses on a tablet. Padding rather than a pseudo-element here: these are
+           in flowing rows with room to grow, so the real box can just be bigger. */
+        .card select, .card input[type="date"], .tbl select, select { min-height: 44px; padding: 8px 10px; }
         .card h2 { font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 14px 0; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; }
 
         /* date range bar */
@@ -163,7 +167,7 @@
            under its white label — 4.01:1, worse than the plain brown beside it.
            Darkening the fill instead of lightening it both separates the pill from
            the page and gives the label its contrast back. */
-        .range-btn { background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 7px 13px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+        .range-btn { background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 11px 15px; min-height: 44px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit; }
         .range-btn.active { background: #fff; color: var(--brand-bg); }
         .range-custom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
         /* THE LABELS ON THIS PAGE WERE THE WORST OF IT
@@ -234,7 +238,7 @@
         .pnote { font-size: 0.8rem; margin-top: 3px; }
         .rin { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
         .rin label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
-        .rin input { padding: 7px 9px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
+        .rin input { padding: 10px 9px; min-height: 44px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
         .urgent { color: #ff8a80; font-weight: 700; }
         .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 0.84rem; }
         .kv div:nth-child(odd) { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; padding-top: 2px; }
@@ -473,7 +477,7 @@
         <div class="card">
             <h2>Transactions</h2>
             <div class="controls">
-                <input type="text" id="txn-search" placeholder="Search item, table, address, method…" oninput="window.renderTxns()" style="flex:1; min-width:180px;">
+                <input type="text" id="txn-search" placeholder="Search item, table, address, method…" oninput="window.renderTxns()" style="flex:1; min-width:180px; min-height:44px; padding:10px 12px; border-radius:6px; border:1px solid rgba(255,255,255,0.2);">
                 <button class="lnk" onclick="window.exportTxns()">Export CSV</button>
                 <button class="lnk" onclick="window.exportItemLines()">Export Item Lines</button>
             </div>
@@ -498,7 +502,7 @@
             <div id="voids-summary" style="font-size:0.9rem; margin-bottom:10px;"></div>
             <div id="voids-bystaff" style="margin-bottom:14px;"></div>
             <div class="controls">
-                <input type="text" id="void-search" placeholder="Search staff, item, table, reason…" oninput="window.renderVoidLog()" style="flex:1; min-width:180px;">
+                <input type="text" id="void-search" placeholder="Search staff, item, table, reason…" oninput="window.renderVoidLog()" style="flex:1; min-width:180px; min-height:44px; padding:10px 12px; border-radius:6px; border:1px solid rgba(255,255,255,0.2);">
                 <button class="lnk" onclick="window.exportVoids()">Export CSV</button>
             </div>
             <div id="void-count" style="font-size:0.78rem;  margin:6px 0;"></div>
@@ -520,7 +524,7 @@
             <div id="unpaid-summary" style="font-size:0.9rem; margin-bottom:10px;"></div>
             <div id="unpaid-bystaff" style="margin-bottom:14px;"></div>
             <div class="controls">
-                <input type="text" id="unpaid-search" placeholder="Search staff, table, reason, item…" oninput="window.renderUnpaidLog()" style="flex:1; min-width:180px;">
+                <input type="text" id="unpaid-search" placeholder="Search staff, table, reason, item…" oninput="window.renderUnpaidLog()" style="flex:1; min-width:180px; min-height:44px; padding:10px 12px; border-radius:6px; border:1px solid rgba(255,255,255,0.2);">
                 <button class="lnk" onclick="window.exportUnpaid()">Export CSV</button>
             </div>
             <div id="unpaid-count" style="font-size:0.78rem;  margin:6px 0;"></div>
