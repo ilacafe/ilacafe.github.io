@@ -2,7 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- TWO BUGS LIVED IN THIS LINE.
+         user-scalable=no and maximum-scale=1 blocked pinch-zoom, on the page where
+         the owner reads money. iOS has ignored both since iOS 10; Android Chrome
+         honours them, so on half the phones this page could not be zoomed at all.
+
+         And viewport-fit=cover was missing while the stylesheet below uses
+         env(safe-area-inset-*) twice — without cover those insets resolve to 0, so
+         two declarations meant to keep content clear of the notch have never once
+         done anything. Every other page here already carries cover. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ILA Admin">
@@ -141,10 +150,21 @@
         }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; line-height: 1.6; padding: env(safe-area-inset-top) 0 calc(80px + env(safe-area-inset-bottom)); }
         body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--brand-bg); z-index: 950; pointer-events: none; }
-        .container { width: 90%; max-width: 800px; margin: 0 auto; padding: 20px; }
+        /* 90% of 320 is 288, plus 40 of padding, is 328 inside a 320px viewport.
+           border-box folds the padding into the width instead of adding to it. */
+        .container { width: 90%; max-width: 800px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
         
         header { text-align: center; margin-bottom: 30px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 20px; }
-        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
+        /* A LOGO WIDER THAN THE PHONE IS A PAGE THAT SLIDES SIDEWAYS
+           max-width alone caps it against nothing: at a 320px viewport a 350px cap
+           is still 350px, and the whole page gained 50px of horizontal scroll. It
+           reads as an iPhone SE problem and is not one — browser zoom shrinks the
+           layout viewport, so a customer at 200% on an ordinary phone has about
+           195px to work with. The person who zooms in because they cannot read
+           something is exactly the person the page then starts sliding under.
+           min() caps it against the viewport as well. analytics.html has had this
+           for a while; these pages never got it. */
+        .logo { max-width: min(350px, 78vw); height: auto; display: block; margin: 0 auto; }
         
         h2 { font-size: 1.2rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;}
         
@@ -162,17 +182,27 @@
                         font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box;
                         background: rgba(255,255,255,0.9); color: #333; }
         
-        .btn { padding: 12px 20px; border-radius: 6px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; transition: opacity 0.2s; text-transform: uppercase; letter-spacing: 1px; }
+        .btn { padding: 12px 20px; min-height: 44px; border-radius: 6px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; transition: opacity 0.2s; text-transform: uppercase; letter-spacing: 1px; }
         .btn:active { opacity: 0.7; }
         
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; border: 1px solid var(--brand-text); color: var(--brand-text); }
         
-        .btn-action { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; width: auto; font-weight: bold; cursor: pointer; }
+        .btn-action { position: relative; background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; width: auto; font-weight: bold; cursor: pointer; }
         .btn-action:active { background: rgba(255,255,255,0.1); }
         
-        .btn-move { background-color: rgba(255,255,255,0.1); color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.9rem; border: none; cursor: pointer; }
-        .btn-move-item { background: transparent; border: none; color: rgba(255,255,255,0.6); cursor: pointer; padding: 4px; font-size: 1rem; line-height: 1;}
+        /* THE ARROWS THAT REORDER THE MENU
+             24x24 and 31x28, side by side, on a tablet. Missing one does not do
+             nothing — it moves the neighbouring row instead, on the menu customers
+             are reading. The drawing stays; a 44px box centred on each is what the
+             finger actually hits, and the two are far enough apart that their
+             targets do not reach each other's centres. */
+        .btn-move { position: relative; background-color: rgba(255,255,255,0.1); color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.9rem; border: none; cursor: pointer; }
+        .btn-move-item { position: relative; background: transparent; border: none; color: #fff; cursor: pointer; padding: 4px; font-size: 1rem; line-height: 1;}
+        .btn-move::after, .btn-move-item::after, .rec-mini::after, .btn-action::after {
+            content: ''; position: absolute; left: 50%; top: 50%;
+            width: 44px; height: 44px; transform: translate(-50%, -50%);
+        }
         .btn-move-item:active { color: white; }
 
         #master-status-btn { font-size: 1.2rem; padding: 15px; border-radius: 8px; }
@@ -264,7 +294,7 @@
         .rec-table td.num, .rec-table th.num { text-align: right; white-space: nowrap; }
         .rec-table tr:last-child td { border-bottom: none; }
         .rec-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 18px; }
-        .rec-mini { background: rgba(255,255,255,0.10); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 4px 10px; border-radius: 5px; font-family: 'Quicksand', sans-serif; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+        .rec-mini { position: relative; background: rgba(255,255,255,0.10); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 4px 10px; border-radius: 5px; font-family: 'Quicksand', sans-serif; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
         .rec-mini:active { background: rgba(255,255,255,0.2); }
         @media(max-width: 500px) { .rec-kpis { grid-template-columns: 1fr; } }
         @media(max-width: 430px) {
@@ -465,7 +495,7 @@
             <div class="form-group"><label>Item Name</label><input type="text" id="add-name" placeholder="e.g., Latte" required></div>
             
             <div class="form-group checkbox-group" style="border: 1px solid rgba(255,255,255,0.2); padding: 10px; border-radius: 6px;">
-                <input type="checkbox" id="add-has-sizes" style="width: 18px; height: 18px;" onchange="toggleSizeInputs()">
+                <input type="checkbox" id="add-has-sizes" style="width: 24px; height: 24px; margin: 10px;" onchange="toggleSizeInputs()">
                 <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Item has Regular &amp; Large sizes</label>
             </div>
 
@@ -497,7 +527,7 @@
             </div>
 
             <div class="form-group checkbox-group">
-                <input type="checkbox" id="add-sweetness" style="width: 18px; height: 18px;">
+                <input type="checkbox" id="add-sweetness" style="width: 24px; height: 24px; margin: 10px;">
                 <label style="margin: 0; text-transform: none; font-size: 0.9rem; letter-spacing: 0;">Requires Sweetness Level</label>
             </div>
             
@@ -608,7 +638,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.11"></script>
+    <script src="/build-check.js" data-build="2026-09-02.1"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the

@@ -136,10 +136,21 @@
             border-left: 3px solid #ff8f8f; padding: 2px 0 2px 10px; line-height: 1.45;
         }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 60px; }
-        .container { width: 100%; max-width: 600px; margin: 0 auto; padding: 15px; box-sizing: border-box; }
+        /* THESE PAGES OPT INTO DRAWING UNDER THE NOTCH
+           viewport-fit=cover in the head says "use the whole screen, including the
+           parts hardware sits over". That is worth having on a wall-mounted board —
+           and it is only half a decision. The other half is padding the content back
+           out of those corners, which nothing here did: on a notched tablet in
+           landscape, which is how a kitchen screen is mounted, the left edge of the
+           board can sit under the camera housing.
+
+           env() resolves to 0 wherever there is no notch, so this costs nothing on
+           the displays that do not have one. */
+        .container { width: 100%; max-width: 600px; margin: 0 auto; box-sizing: border-box;
+                     padding: calc(15px + env(safe-area-inset-top)) calc(15px + env(safe-area-inset-right)) calc(15px + env(safe-area-inset-bottom)) calc(15px + env(safe-area-inset-left)); }
         
         header { text-align: center; margin-bottom: 20px; margin-top: 10px; }
-        .logo { max-width: 250px; height: auto; display: block; margin: 0 auto; }
+        .logo { max-width: min(250px, 78vw); height: auto; display: block; margin: 0 auto; }
         h1 { font-weight: 700; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 3px; margin: 10px 0 0 0; }
         
         /* TABS NAV */
@@ -149,7 +160,11 @@
            they are going. At 0.4 it was 2.04:1. Which one is current is carried by
            weight and the underline it already had, both of which survive being
            looked at across a stock room; opacity did not. */
-        .tab-btn { background: transparent; color: white; border: none; font-family: 'Quicksand', sans-serif; font-size: 0.95rem; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; padding: 10px 15px; cursor: pointer; transition: border-bottom 0.2s; white-space: nowrap; }
+        /* Six tabs at 15px of side padding came to 584px inside a 570px container,
+           so Log — the last one, and the prep and delivery record that nothing showed
+           for years — hung off the right edge: clipped, and not tappable without
+           scrolling a strip that gives no sign it scrolls. 10px fits all six. */
+        .tab-btn { background: transparent; color: white; border: none; font-family: 'Quicksand', sans-serif; font-size: 0.95rem; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; padding: 12px 10px; min-height: 44px; cursor: pointer; transition: border-bottom 0.2s; white-space: nowrap; }
         .tab-btn.active { font-weight: 700; border-bottom: 3px solid white; }
 
         .tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }

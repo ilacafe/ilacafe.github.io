@@ -110,11 +110,23 @@
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: 0; line-height: 1.6; }
-        header { text-align: center; padding: 20px 0; border-bottom: 1px solid rgba(255,255,255,0.2); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; padding: 20px 5%;}
-        .logo { max-width: 150px; height: auto; display: block; }
+        /* THESE PAGES OPT INTO DRAWING UNDER THE NOTCH
+           viewport-fit=cover in the head says "use the whole screen, including the
+           parts hardware sits over". That is worth having on a wall-mounted board —
+           and it is only half a decision. The other half is padding the content back
+           out of those corners, which nothing here did: on a notched tablet in
+           landscape, which is how a kitchen screen is mounted, the left edge of the
+           board can sit under the camera housing.
+
+           env() resolves to 0 wherever there is no notch, so this costs nothing on
+           the displays that do not have one. */
+        header { text-align: center; border-bottom: 1px solid rgba(255,255,255,0.2); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;
+                 padding: calc(20px + env(safe-area-inset-top)) calc(5% + env(safe-area-inset-right)) 20px calc(5% + env(safe-area-inset-left)); }
+        .logo { max-width: min(150px, 40vw); height: auto; display: block; }
         .header-title { font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin: 0;}
         .clock { font-size: 1.2rem; font-weight: bold; }
-        .kds-container { padding: 0 5%; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; align-items: start; padding-bottom: 50px;}
+        .kds-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; align-items: start;
+                         padding: 0 calc(5% + env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) calc(5% + env(safe-area-inset-left)); }
         .ticket-card { background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .ticket-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px dashed rgba(255,255,255,0.3); padding-bottom: 15px; margin-bottom: 15px; }
@@ -193,7 +205,7 @@
         .build-stamp { font-size: 0.6rem; letter-spacing: 1.5px; color: #fff; opacity: 0.22;
                        transition: opacity 0.15s ease; }
         .build-stamp:hover, .build-stamp:focus, .build-stamp:active { opacity: 1; }
-        .build-stamp { position: fixed; right: 10px; bottom: 8px; }
+        .build-stamp { position: fixed; right: calc(10px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); }
 
         /* SOMETHING TO SEE WHEN YOU TAB
            The sign-in box sets outline:none on both of its fields, and nothing replaced
@@ -276,7 +288,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.11"></script>
+    <script src="/build-check.js" data-build="2026-09-02.1"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the

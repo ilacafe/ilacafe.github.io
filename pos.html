@@ -144,7 +144,9 @@
             border-left: 3px solid #ff8f8f; padding: 2px 0 2px 10px; line-height: 1.45;
         }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
-        .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; }
+        /* 90% of 320 is 288, plus 40 of padding, is 328 inside a 320px viewport.
+           border-box folds the padding into the width instead of adding to it. */
+        .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
         .pos-panes { display: block; }
         .pane-cart { display: none; }
 
@@ -166,7 +168,16 @@
             .cat-strip { top: env(safe-area-inset-top); }
         }
         header { text-align: center; margin-bottom: 25px; }
-        .logo { max-width: 350px; height: auto; display: block; margin: 0 auto; }
+        /* A LOGO WIDER THAN THE PHONE IS A PAGE THAT SLIDES SIDEWAYS
+           max-width alone caps it against nothing: at a 320px viewport a 350px cap
+           is still 350px, and the whole page gained 50px of horizontal scroll. It
+           reads as an iPhone SE problem and is not one — browser zoom shrinks the
+           layout viewport, so a customer at 200% on an ordinary phone has about
+           195px to work with. The person who zooms in because they cannot read
+           something is exactly the person the page then starts sliding under.
+           min() caps it against the viewport as well. analytics.html has had this
+           for a while; these pages never got it. */
+        .logo { max-width: min(350px, 78vw); height: auto; display: block; margin: 0 auto; }
 
         /* 5-ITEM DASHBOARD - Tuned to fit perfectly on mobile */
         /* Every drink order used to mean scrolling past the pizzas. Sticks under the top of the
@@ -182,7 +193,7 @@
                      justify-content: center; gap: 2px 4px; padding: 8px 0; margin-bottom: 2px; background: var(--brand-bg);
                      border-bottom: 1px solid rgba(255,255,255,0.14); }
         .cat-strip:empty { display: none; }
-        .cat-chip { flex: 0 1 auto; background: transparent; border: none; color: var(--brand-text); opacity: 0.6;
+        .cat-chip { flex: 0 1 auto; background: transparent; border: none; color: var(--brand-text); min-height: 44px;
                     border-radius: 4px; padding: 5px 8px; font-family: 'Quicksand', sans-serif; font-size: 0.7rem; font-weight: 700;
                     text-transform: uppercase; letter-spacing: 1px; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
         .cat-chip.active { opacity: 1; }
@@ -221,8 +232,21 @@
         .menu-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         .item-name { flex-grow: 1; min-width: 0; }
         
-        .coffee-header { display: grid; grid-template-columns: 2fr 1fr 1fr; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
-        .coffee-row { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        /* A HEADER ONLY MEANS SOMETHING IF ITS COLUMNS ARE THE ROW'S COLUMNS
+           These are two independent grids that were both asked for 2fr 1fr 1fr and
+           resolved differently, because an fr track's minimum is its content and only
+           one of them has content with a minimum: .swap-container sets min-width:76px,
+           so the ROW's price columns are 76px while the HEADER's are 57. The right
+           edges happened to match, which is why LRG looked fine and REG sat 19px to
+           the right of the column it names — over the Large price, on the row where
+           reading the wrong column costs the customer a drink.
+
+           Pinning both to the same explicit tracks is the fix, because the two grids
+           then cannot drift whatever they contain: a long item name can no longer
+           squeeze the price columns in one and not the other. 76px is what the swap
+           container already asked for. */
+        .coffee-header { display: grid; grid-template-columns: 1fr 76px 76px; column-gap: 10px; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
+        .coffee-row { display: grid; grid-template-columns: 1fr 76px 76px; column-gap: 10px; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
         
         .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
         
@@ -262,7 +286,7 @@
         /* Brown on the white banner, same 4.68:1 knife-edge as white on brown, so
            the 0.7 took it to 2.71. Smaller and letter-spaced instead. */
         .cart-clear { font-size: 0.75rem; letter-spacing: 0.5px; text-transform: uppercase; }
-        .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
+        .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 14px 20px; min-height: 44px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
         #notification-area { position: fixed; top: calc(15px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; z-index: 3000; pointer-events: none; }
         
@@ -344,7 +368,7 @@
         .modal-foot { border-top: 1px solid rgba(255,255,255,0.12); margin-top: 12px; padding-top: 6px; }
         .modal-foot-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .modal-foot .close-modal { margin-top: 0; flex: 1 1 auto; text-align: left; padding-left: 0; }
-        .link-quiet { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; padding: 10px 2px; cursor: pointer; flex: 0 0 auto; }
+        .link-quiet { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; padding: 14px 2px; min-height: 44px; cursor: pointer; flex: 0 0 auto; }
 
         .stat-row { display: flex; justify-content: space-around; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
         .stat-row .lbl { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 1px; }
@@ -386,7 +410,7 @@
         @keyframes upiPulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
         /* min-width:0 is load-bearing: without it a flex item refuses to shrink below its text
            width, so three uppercase buttons burst out of a 287px-wide modal on an iPhone. */
-        .btn { padding: 12px 14px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1 1 0; min-width: 0; text-transform: uppercase; letter-spacing: 1px; border: none; white-space: nowrap; }
+        .btn { padding: 12px 14px; min-height: 44px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1 1 0; min-width: 0; text-transform: uppercase; letter-spacing: 1px; border: none; white-space: nowrap; }
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
         .btn-dark { background-color: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); }
@@ -403,7 +427,7 @@
            which is an admin.html class and doesn't exist here, so they rendered as raw
            browser buttons.) */
         .tip-row { display: flex; gap: 6px; justify-content: center; margin: 14px 0 0; }
-        .tip-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: var(--brand-text); border-radius: 6px; padding: 10px 0; flex: 1 1 0; min-width: 0; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; font-weight: bold; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; }
+        .tip-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: var(--brand-text); border-radius: 6px; padding: 10px 0; min-height: 44px; flex: 1 1 0; min-width: 0; font-family: 'Quicksand', sans-serif; font-size: 0.85rem; font-weight: bold; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; }
         .tip-btn:active { background: var(--brand-text); color: var(--brand-bg); }
         .tip-clear-link { background: none; border: none; color: inherit; font-family: 'Quicksand', sans-serif;
                           font-size: 0.8rem; font-weight: 700; text-decoration: underline; cursor: pointer;
@@ -429,20 +453,27 @@
         .split-chip:active, .split-chip.selected { background: var(--brand-text); color: var(--brand-bg); border-color: var(--brand-text); }
         /* 16px minimum: anything smaller and iOS zooms the entire POS in when the box is tapped,
            which happens on every single share of a split bill. */
-        .split-amt { width: 80px; flex-shrink: 0; padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 16px; font-weight: bold; text-align: right; outline: none; box-sizing: border-box; }
+        .split-amt { width: 80px; flex-shrink: 0; padding: 8px; min-height: 44px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 16px; font-weight: bold; text-align: right; outline: none; box-sizing: border-box; }
         .split-amt::placeholder { color: rgba(255,255,255,0.35); font-weight: normal; }
         .split-paid { }
 
-        .staff-reveal { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 10px 16px; margin-top: 6px; cursor: pointer; }
+        .staff-reveal { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 14px 16px; min-height: 44px; margin-top: 6px; cursor: pointer; }
 
-        /* Visual size unchanged, but the touch area extends 8px above and below — a 28px target
-           is well under the 44px guideline and this is a counter, often one-handed. */
+        /* Visual size unchanged, and the touch area is a 44px box centred on the button.
+           It used to extend 8px above and below and nothing to either side — left:0;
+           right:0 pins the target to the button's own 32px width, so a thumb landing
+           slightly wide of a 32px button still missed it. A counter, often one-handed,
+           is the last place to be precise about horizontal aim. */
         .mini-btn { position: relative; background-color: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 4px; width: 32px; height: 32px; font-size: 1.2rem; cursor: pointer; margin: 0 5px; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; }
         .mini-btn:active { background-color: white; color: var(--brand-bg); }
-        .mini-btn::after, .qty-btn::after, .add-btn::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
         .qty-btn, .add-btn { position: relative; }
+        .mini-btn::after, .qty-btn::after, .add-btn::after {
+            content: ''; position: absolute; left: 50%; top: 50%;
+            width: 44px; height: 44px; transform: translate(-50%, -50%);
+        }
+        .add-btn:disabled::after { content: none; }
 
-        .close-modal { background: transparent; color: rgba(255,255,255,0.8); border: none; font-weight: bold; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 20px; letter-spacing: 1px; padding: 10px;}
+        .close-modal { background: transparent; color: rgba(255,255,255,0.8); border: none; font-weight: bold; cursor: pointer; font-size: 0.85rem; font-family: 'Quicksand', sans-serif; margin-top: 20px; letter-spacing: 1px; padding: 14px 10px; min-height: 44px;}
 
         .active-bill-item { border-bottom: 1px solid rgba(255,255,255,0.2); padding: 15px 5px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
         .bill-receipt { background-color: transparent; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; font-size: 0.9rem; }
@@ -891,7 +922,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-01.11"></script>
+    <script src="/build-check.js" data-build="2026-09-02.1"></script>
     <!-- The payment QR, drawn on this device rather than fetched. Shared with the
          customer app, which now shows the same code on the customer's own phone. -->
     <script src="/qr.js"></script>
