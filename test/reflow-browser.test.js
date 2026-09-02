@@ -266,6 +266,52 @@ const BRAND = '141,110,82';
   }
   note('a sticky strip is height taken from the menu for as long as the till is open');
 
+  // -------------------------------------------------- and the same strip in two panes
+  //
+  // Every check above is a phone held in one hand, and the till is not always that. At
+  // 900px the layout becomes two columns — menu left, live order right — and the strip
+  // stays inside the left one. A full-bleed strip in a two-column layout does not span
+  // the screen: it spans the screen ACROSS the other column. On an 11-inch iPad it ran
+  // 54px into the live order and painted out the word CURRENT in CURRENT ORDER, with an
+  // opaque background at z-index 900, on the pane a cashier reads to know what they are
+  // charging for.
+  //
+  // Nothing caught it because nothing above 430px was ever measured. The widths here are
+  // the two-pane layout at the sizes a till is actually stood up at, and the question is
+  // the one the phone checks cannot ask: does the strip stay in its own column?
+  for (const [width, height, what] of [[1194, 834, 'an 11-inch iPad in landscape'],
+                                       [1024, 768, 'a 10-inch iPad in landscape'],
+                                       [900, 700, 'the breakpoint itself']]) {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width, height }, hasTouch: true });
+    await ctx.addInitScript(STUB);
+    const pg = await ctx.newPage();
+    pg.on('pageerror', e => threw.push('pos.html@' + width + ': ' + String(e.message || e).split('\n')[0]));
+    await pg.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await pg.goto(base + '/pos.html', { waitUntil: 'domcontentloaded' });
+    await pg.waitForTimeout(700);
+    await pg.evaluate(() => { const o = document.getElementById('login-overlay'); if (o) o.style.display = 'none'; });
+
+    const panes = await pg.evaluate(() => {
+      const s = document.querySelector('.cat-strip');
+      const menu = document.querySelector('.pane-menu');
+      const cart = document.querySelector('.pane-cart');
+      if (!s || !menu || !cart) return null;
+      const S = s.getBoundingClientRect(), M = menu.getBoundingClientRect(), C = cart.getBoundingClientRect();
+      return { twoPane: C.width > 0, gap: Math.round(C.left - S.right),
+               widerThanPane: Math.round(S.width - M.width), left: Math.round(M.left - S.left) };
+    });
+
+    if (!panes || !panes.twoPane) { note(what + ': the two-pane layout did not engage; nothing measured'); await ctx.close(); continue; }
+
+    check('on ' + what + ' the category strip keeps out of the live order',
+          panes.gap > 0, 'it runs ' + (-panes.gap) + 'px into the pane the cashier reads the bill from');
+    check('and stays inside its own column there',
+          panes.widerThanPane <= 0 && panes.left >= 0,
+          panes.widerThanPane + 'px wider than the menu column, overhanging its left by ' + panes.left + 'px');
+    await ctx.close();
+  }
+  note('full bleed across one column is full bleed across the next one too');
+
   // ---------------------------------------------------------------- under the notch
   //
   // With viewport-fit=cover the page owns the strip of screen behind the clock, and the

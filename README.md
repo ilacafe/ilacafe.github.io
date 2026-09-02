@@ -261,7 +261,17 @@ costs money:
   phone, and the check written to catch that passed, because it asked whether the strip
   filled its container and it did. It asks about the screen now, and the stub menu
   carries the café's own category names rather than five short invented ones that fit
-  anywhere. Last, the notch: with `viewport-fit=cover` the page owns the strip of screen
+  anywhere. Twice was not the end of it: `-5vw - 20px` assumes the gutter beside the
+  container is always 5vw, and `.container` is also `max-width: 600px`, so from 666px up it
+  is not — on an 820px iPad in portrait the strip came out 682px, wider than the 600px menu
+  it heads and narrower than the screen. Neither. `50% - 50vw` is right at every width
+  because it never needs to know how wide the container is. And above 900px it must not
+  bleed at all: the till becomes two columns, menu left and live order right, and a strip
+  that spans the screen spans it ACROSS the other column — 54px into it on an 11-inch iPad,
+  painting out the word CURRENT in CURRENT ORDER with an opaque background at z-index 900.
+  Nothing caught that because nothing above 430px had ever been measured, so the suite now
+  stands the till up at three tablet widths and asks the question only a second column can
+  raise: does the strip stay in its own? Last, the notch: with `viewport-fit=cover` the page owns the strip of screen
   behind the clock, and the till pins its category strip below it, so the menu scrolls up
   through the gap and something must be painted over it. Something was — a fixed band at
   z-index 950 — and on the till it painted nothing: a photograph from an iPhone 13 has a
