@@ -83,13 +83,21 @@ const server = http.createServer((req, res) => {
 
 // A menu with a long name and two sized items, because an empty page reflows
 // perfectly and proves nothing: the widest thing on the ordering page is a row.
+//
+// The category names are the café's own — PIZZA SIDES COFFEE BEVERAGES DESSERT. Five
+// short invented ones fit in almost any strip and proved the strip was fixed when it
+// was not: these five come to 362px of chip, and the strip the till was giving them
+// was 350px on a 390px phone.
 const MENU = {
-  Coffee: {
-    'Latte': { hasSizes: true, priceReg: 170, priceLrg: 210, inStock: true },
-    'Cortado with an extremely long name': { hasSizes: true, priceReg: 190, priceLrg: 230, inStock: true },
-    'Cold Brew': { price: 220, inStock: false }
+  Pizza: {
+    'Margherita': { hasSizes: true, priceReg: 170, priceLrg: 210, inStock: true },
+    'Quattro Formaggi with an extremely long name': { hasSizes: true, priceReg: 190, priceLrg: 230, inStock: true },
+    'Marinara': { price: 220, inStock: false }
   },
-  Food: { 'Avocado Toast with Poached Eggs': { price: 340, inStock: true } }
+  Sides: { 'Stuffed Garlic Bread with Poached Eggs': { price: 340, inStock: true } },
+  Coffee: { 'Iced Americano': { hasSizes: true, priceReg: 200, priceLrg: 300, inStock: true } },
+  Beverages: { 'Fresh Lime Soda': { price: 200, inStock: true } },
+  Dessert: { 'Tiramisu': { price: 300, inStock: true } }
 };
 
 const STUB = `
@@ -123,6 +131,11 @@ const STUB = `
 // 320 CSS px is a small phone, and it is also an ordinary phone at 200% zoom, and a
 // phone in a split-screen pair. WCAG 1.4.10 asks for 320.
 const NARROW = 320;
+
+// An iPhone 13 in portrait, which is the phone the bleed was photographed on, and the
+// brand brown its band is painted in.
+const INSET = 47;
+const BRAND = '141,110,82';
 
 (async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -195,6 +208,138 @@ const NARROW = 320;
   }
 
   note('320px is a small phone, an ordinary phone at 200% zoom, and half a split screen');
+
+  // ---------------------------------------------- the till's sticky category strip
+  //
+  // This is a bar across the till — its own background, its own bottom rule — and it
+  // was living inside the container's 20px of padding. That was survivable while
+  // .container was content-box and the padding hung outside the declared width.
+  // Giving the container border-box, so it stops overflowing a 320px screen, folded
+  // that padding inwards and took 40px off everything inside it. Five categories that
+  // fit on one line on every iPhone started wrapping onto two, and because the chips
+  // had just been given min-height:44px each of those lines was twice as tall: a
+  // 39px strip became 107px of permanently sticky header, on the screen where that
+  // space is the menu.
+  //
+  // Two things are held here. The strip reaches the edge of the SCREEN, not the edge of
+  // the container — which is what regressed, twice. And the chips fit on one line at the
+  // widths a till is actually held at, which is what anyone noticed.
+  //
+  // Twice, because the first fix cancelled one inset and there are two: 20px of container
+  // padding, and the 5vw of gutter beside a container that is `width: 90%`. Cancelling
+  // only the padding left a 350px strip on a 390px phone, which is 12px short of the
+  // café's own five categories — so the strip still wrapped, and the check that was
+  // supposed to catch that passed, because it asked whether the strip filled the
+  // container and it did.
+  for (const width of [375, 390]) {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width, height: 800 }, hasTouch: true });
+    await ctx.addInitScript(STUB);
+    const pg = await ctx.newPage();
+    pg.on('pageerror', e => threw.push('pos.html@' + width + ': ' + String(e.message || e).split('\n')[0]));
+    await pg.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await pg.goto(base + '/pos.html', { waitUntil: 'domcontentloaded' });
+    await pg.waitForTimeout(700);
+    await pg.evaluate(() => { const o = document.getElementById('login-overlay'); if (o) o.style.display = 'none'; });
+
+    const strip = await pg.evaluate(() => {
+      const s = document.querySelector('.cat-strip');
+      const c = document.querySelector('.container');
+      if (!s || !c) return null;
+      const chips = [...s.querySelectorAll('.cat-chip')];
+      const lines = new Set(chips.map(ch => Math.round(ch.getBoundingClientRect().top))).size;
+      return { w: Math.round(s.getBoundingClientRect().width), h: Math.round(s.getBoundingClientRect().height),
+               container: c.clientWidth, chips: chips.length, lines,
+               overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    });
+    if (strip && strip.chips) {
+      check('the till\'s category strip reaches the edge of a ' + width + 'px screen',
+            strip.w >= width - 1,
+            strip.w + 'px of a ' + width + 'px screen, in a ' + strip.container + 'px container');
+      check('and ' + strip.chips + ' categories still fit on one line at ' + width + 'px',
+            strip.lines === 1, strip.lines + ' lines, ' + strip.h + 'px of sticky header');
+      // Widening a child past its parent is how you buy a horizontal scrollbar, and the
+      // strip is now deliberately wider than the box it sits in.
+      check('and reaching the edge did not push the page off it at ' + width + 'px',
+            strip.overflow <= 0, strip.overflow + 'px of horizontal scroll');
+    }
+    await ctx.close();
+  }
+  note('a sticky strip is height taken from the menu for as long as the till is open');
+
+  // ---------------------------------------------------------------- under the notch
+  //
+  // With viewport-fit=cover the page owns the strip of screen behind the clock, and the
+  // till's sticky category strip is pinned BELOW it, at env(safe-area-inset-top). So the
+  // menu scrolls up through that gap, and something has to be painted over it or the
+  // cashier reads a menu row across the top of their status bar.
+  //
+  // Something was: a fixed band at z-index 950. On the till it painted nothing. A
+  // screenshot from an iPhone 13 has a menu row legible across the top 47px — that
+  // phone's inset to the pixel — with the strip stuck at 47px directly beneath it. The
+  // band was body::before, and the till is the one page whose <body> is a flex
+  // container, where ::before generates a flex item that position:fixed then has to
+  // take back out of flow. admin.html carries the same rule on an ordinary <body> and
+  // nobody has ever reported it.
+  //
+  // Chromium paints both, so this cannot reproduce that. What it holds is the part that
+  // IS checkable: that the inset is covered, opaquely, above whatever scrolls under it.
+  for (const page of ['pos.html', 'admin.html']) {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+    await ctx.addInitScript(STUB);
+    const pg = await ctx.newPage();
+    pg.on('pageerror', e => threw.push(page + '@notch: ' + String(e.message || e).split('\n')[0]));
+    await pg.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+
+    // A notched phone, asked for from the browser rather than simulated with CSS —
+    // overriding the two env() uses by hand would be writing the answer into the test.
+    const cdp = await ctx.newCDPSession(pg);
+    let insets = true;
+    try { await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: INSET, left: 0, bottom: 34, right: 0 } }); }
+    catch (e) { insets = false; }
+
+    if (!insets) { note(page + ': this Chromium cannot be given safe-area insets; the notch is unchecked'); await ctx.close(); continue; }
+
+    await pg.goto(base + '/' + page, { waitUntil: 'domcontentloaded' });
+    await pg.waitForTimeout(700);
+    await pg.evaluate(() => { const o = document.getElementById('login-overlay'); if (o) o.style.display = 'none'; });
+    await pg.evaluate(() => window.scrollTo(0, 1400));
+    await pg.waitForTimeout(400);
+
+    const inset = await pg.evaluate(() => parseInt(getComputedStyle(document.body).paddingTop) || 0);
+    check(page + ' pads its content out of a ' + INSET + 'px notch', inset === INSET, inset + 'px');
+
+    // Read the pixels back. Nothing else can tell the difference between a band that is
+    // there and a band that is there but underneath the menu.
+    const shot = (await pg.screenshot()).toString('base64');
+    const band = await pg.evaluate(async ([b64, h]) => {
+      const im = new Image(); im.src = 'data:image/png;base64,' + b64; await im.decode();
+      const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+      c.getContext('2d').drawImage(im, 0, 0);
+      const d = c.getContext('2d').getImageData(0, 0, c.width, h).data;
+      const seen = new Set();
+      for (let i = 0; i < d.length; i += 4) seen.add(d[i] + ',' + d[i + 1] + ',' + d[i + 2]);
+      return [...seen];
+    }, [shot, INSET]);
+
+    check(page + ' paints the notch solid while the page scrolls under it',
+          band.length === 1 && band[0] === BRAND,
+          band.length + ' colours in the top ' + INSET + 'px: ' + band.slice(0, 4).join(' / '));
+    await ctx.close();
+  }
+
+  // The part Chromium cannot show us, held as the rule we adopted because of it.
+  {
+    const bad = [];
+    for (const p of PAGES) {
+      const src = readPage(p);
+      if (!/body::before\s*\{[^}]*position:\s*fixed/.test(src)) continue;
+      const body = /\n\s*body\s*\{([^}]*)\}/.exec(src);
+      if (body && /display:\s*(inline-)?flex/.test(body[1])) bad.push(p);
+    }
+    check('no page covers the notch with a pseudo-element of a flex <body>', bad.length === 0,
+          bad.join(', ') + ' — the one construct an iPhone was seen not to paint');
+  }
+  note('a band over the notch is the whole of what keeps the menu out of the status bar');
   check('no page threw while any of that ran', threw.length === 0, threw.join(' | '));
 
   await browser.close();
