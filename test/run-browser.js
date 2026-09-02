@@ -33,6 +33,7 @@ const suites = [
   'state-visible-browser.test.js',
   'connection-browser.test.js',
   'dialogs-browser.test.js',
+  'till-dialogs-browser.test.js',
 ];
 
 let failed = [];

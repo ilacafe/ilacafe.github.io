@@ -367,6 +367,25 @@ costs money:
   than trusting it — both answers and both ways of saying no, focus moved in and handed
   back, `null` on a cancelled text prompt as distinct from an empty string, and that
   none of the three browser dialogs comes back anywhere.
+- **the till's less-travelled paths** — replacing 86 browser dialogs meant converting 32
+  call sites from something synchronous to something awaited, and making 16 functions
+  async to hold them. Three existing suites caught real breakage in the paths they
+  already covered; the paths nobody covered were the ones left, and they are the
+  expensive ones: voiding a line off a table, merging two bills, marking an unverified
+  payment received, a custom tip, and accepting or rejecting a web order. Two failure
+  modes are worth naming because neither is visible in a diff. A MISSING `await`:
+  `if (!ilaAsk(…))` tests a Promise, a Promise is always truthy, so the guard inverts
+  and every confirmation silently auto-confirms — the worst possible outcome for
+  prompts that exist to stop somebody voiding a bill by accident. And a MISSING null
+  guard, because `ilaAskText` resolves `null` when it is backed out of, exactly as
+  `prompt()` returned null, and several call sites `.trim()` the answer. The suite
+  drives each real function through the real overlay and watches what it writes:
+  answering no must write nothing, backing out of a tip must leave the tip alone, an
+  unknown PIN must refuse in words and write nothing, and the web order whose menu has
+  not loaded must be released BEFORE the message rather than after — its in-flight flag
+  has to clear whether or not anyone is standing there to tap Okay. Dropping one
+  `await` from the merge-bills guard makes it fail with `update` in the trail, which is
+  two bills merged after the cashier said no.
 - **Reduce Motion** — iOS and Android both put it two taps from the home screen, and
   no page asked. The kitchen board pulsed an overdue ticket every 1.2 seconds for as
   long as it was late, which on a bad Sunday is every card on the board in the eye line
