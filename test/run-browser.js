@@ -17,6 +17,7 @@ const suites = [
   'eod-browser.test.js',
   'web-verify-claims-browser.test.js',
   'web-order-billing-browser.test.js',
+  'web-order-prep-gate-browser.test.js',
   'auth-gate-browser.test.js',
   'pin-mask-browser.test.js',
   'kds-board-browser.test.js',

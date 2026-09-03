@@ -96,17 +96,39 @@ of the same amount would be booked against their order and the real one left
 unverified.
 
 Nothing about the *staff* side of this is automatic. The till shows a live
-paid/unpaid badge per web order, the customer's phone number to call, and raises a
-push when an order has been billed for ten minutes with no matching credit.
+paid/unpaid badge per web order and the customer's phone number to call.
 
-**Only a matched credit says "paid".** Staff can Accept an order whose credit has
-not landed — that is the override the counter uses when a bank's email is slow —
-and the sale goes to the ledger `unverified` until the credit arrives. That is not
-payment, and the customer's phone says so: the code stays on their screen, and the
-watch stays live so a credit landing later still turns into a confirmation. When
-one lands after the order has left `orders/pendingWeb`, the ledger reconciler is
-what notices, and it flips `orders/track/{id}/paymentVerified` too — otherwise the
-books would settle and the customer would never be told.
+**Nothing is made before the money is confirmed.** A prepaid order has no table to
+settle at afterwards, so one that is cooked and never paid for is the food, gone.
+This used to be a confirmation box with an OK on it, and a box in the way of a queue
+gets cleared — that is what a dismissible warning *is*. It is now a refusal, with
+exactly two ways past it, and both mean somebody has seen the money:
+
+- **the bank credit matched** — the sweep books it, the badge turns green, nobody
+  had to decide anything; or
+- **a named person confirmed it**, with the bank app or the customer's own phone in
+  front of them. From the till ("Payment received", behind a staff PIN) or from
+  `admin.html`. It writes `orders/pendingWeb/{id}/manualPaid` with the name on it,
+  and the sale still goes to the ledger **`unverified`** — a person saying they saw
+  the money is not the statement agreeing, and the difference is kept. The
+  reconciler flips it when the credit turns up; the Worker's 2-hour check asks about
+  it if none ever does.
+
+Both write `orders/track/{id}/paymentVerified`, which is the only thing that tells
+the customer's phone. When a credit lands after the order has left
+`orders/pendingWeb`, the ledger reconciler is what notices, and it flips that flag
+too — otherwise the books would settle and the customer would never be told.
+
+**Blocking is only affordable because the wait is short and visible.** Three minutes
+after the customer was shown a code, an order with no confirmed money pushes a
+notification to the owner carrying the amount, the address, the phone number, **and
+the VPA it was billed to** — the café rotates several accounts, and without that,
+answering "has this arrived?" starts with working out which bank app to open. It
+opens `admin.html`, which lists exactly these orders with a confirm button on each.
+That screen is the point: until it existed a held order lived on one screen only,
+the Web Orders modal inside the till, so releasing it meant standing at the counter
+— impossible for a delivery, and slow for a takeaway. The person who can answer the
+question is the one holding the bank app, and this is what they have on their phone.
 
 **Two clocks on every credit.** `at` is when the Worker ingested the bank's alert;
 `bankTime` is when the bank says the money moved, parsed out of the alert. The feed

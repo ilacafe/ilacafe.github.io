@@ -67,7 +67,8 @@ function till(orders, matched) {
 
 const NOW = 1756200000000;
 const ORDER = (extra) => Object.assign(
-  { orderType: 'Takeaway', tableOrAddress: 'Takeaway', total: 480, phone: '9990001111', createdAt: NOW }, extra);
+  { orderType: 'Takeaway', tableOrAddress: 'Takeaway', total: 480, phone: '9990001111',
+    upiId: 'sraveen.chirania-1@okaxis', createdAt: NOW }, extra);
 
 // --------------------------------------------- nothing ever billed the order
 {
@@ -84,20 +85,61 @@ const ORDER = (extra) => Object.assign(
 }
 
 // --------------------------------------- the code went up, nothing came back
+//
+// This alert changed job. It used to report a straggler somebody would get to; now
+// prep does not start until the money is confirmed, so nothing is being made while
+// it is outstanding and the wait it describes is the CUSTOMER'S. That is why it is
+// three minutes rather than ten, and why what it carries has to be enough to answer
+// it from a lock screen.
 {
   const t = till({ o1: ORDER({ billedAt: NOW + 2 * MIN }) });
-  t.at(NOW + 8 * MIN);
-  check('a code just shown is given time to be paid', t.pushes.length === 0, t.titles().join(', '));
-  t.at(NOW + 13 * MIN);
+  t.at(NOW + 4 * MIN);
+  check('a code just shown is given a moment to be paid', t.pushes.length === 0, t.titles().join(', '));
+  t.at(NOW + 6 * MIN);
   check('a code shown and unpaid IS reported',
-        t.pushes.length === 1 && /still unpaid/i.test(t.pushes[0].title), t.titles().join(', '));
+        t.pushes.length === 1 && /waiting on payment/i.test(t.pushes[0].title), t.titles().join(', '));
   note('this was the alert that could never fire — it waited on a flag nobody wrote');
   check('and the message says how long ago the customer was asked, not how old the order is',
-        /11 min ago/.test(t.pushes[0].body), t.pushes[0].body);
+        /4 min ago/.test(t.pushes[0].body), t.pushes[0].body);
   check('the customer’s number rides along, so it can be chased from a lock screen',
         /9990001111/.test(t.pushes[0].body));
+
+  // THE ACCOUNT IT WAS BILLED TO.
+  //
+  // The café takes money on several VPAs in rotation, and the order records which one
+  // this customer was given. Without it in the body, answering "has this arrived?"
+  // begins with working out which bank app to open — on the one alert that is now
+  // holding up a kitchen.
+  check('and so does the account the money was asked to, so the right app is opened first',
+        /sraveen\.chirania-1@okaxis/.test(t.pushes[0].body), t.pushes[0].body);
+  check('and it says the kitchen is held, which is what makes it urgent',
+        /holding/i.test(t.pushes[0].body), t.pushes[0].body);
+
+  // It opens the screen that can CLEAR it. The till can too, but the till is a
+  // counter you have to be standing at — and for a delivery order nobody is going to
+  // be. The phone in the hand that just read this is the one holding the bank app.
+  check('and it opens the screen the money can be confirmed from',
+        t.pushes[0].url === '/admin.html', String(t.pushes[0].url));
+
   t.at(NOW + 40 * MIN);
   check('once, not every minute', t.pushes.length === 1, t.pushes.length + ' push(es)');
+}
+
+// ------------------------------------------------- how long the customer waits
+{
+  // The threshold is the customer's wait, so it is checked as one: someone who has
+  // paid and is standing there must not be four minutes into silence before anyone
+  // who can look at a bank statement has been told.
+  const t = till({ o1: ORDER({ billedAt: NOW }) });
+  for (let half = 1; half <= 8; half++) t.at(NOW + half * 30000);       // the real tick is 30s
+  check('nobody waits more than four minutes for the alert that unblocks them',
+        t.pushes.length === 1, t.pushes.length + ' push(es) by four minutes');
+
+  const early = till({ o1: ORDER({ billedAt: NOW }) });
+  early.at(NOW + 2 * MIN);
+  check('and a payment that is merely slow by a minute or two is not shouted about',
+        early.pushes.length === 0, early.titles().join(', '));
+  note('the bank’s email normally lands in seconds — three minutes of silence is already the exception');
 }
 
 // ------------------------------------------------------------ nothing to say
@@ -123,7 +165,7 @@ const ORDER = (extra) => Object.assign(
   const t = till({ o1: ORDER({ billedAt: NOW }) });
   for (let m = 1; m <= 90; m++) t.at(NOW + m * MIN);
   check('an hour and a half of a billed-and-unpaid order raises exactly one alert',
-        t.pushes.length === 1 && /still unpaid/i.test(t.pushes[0].title),
+        t.pushes.length === 1 && /waiting on payment/i.test(t.pushes[0].title),
         t.pushes.length + ' push(es): ' + t.titles().join(', '));
   note('the old code raised none, for as long as the order existed');
 }

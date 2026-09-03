@@ -114,8 +114,23 @@
           "billedAt": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
           },
+          "manualPaid": {
+            ".validate": "newData.hasChildren(['by','at']) && auth != null && root.child('users').child(auth.uid).child('role').exists()",
+            "by": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60"
+            },
+            "at": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999"
+            },
+            "via": {
+              ".validate": "newData.isString() && newData.val().length <= 20"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
           "payment": {
-            ".validate": "newData.hasChildren(['ref','amount'])",
+            ".validate": "newData.hasChildren(['ref','amount']) && auth != null && root.child('users').child(auth.uid).child('role').exists()",
             "ref": {
               ".validate": "newData.isString() && newData.val().length <= 60"
             },
