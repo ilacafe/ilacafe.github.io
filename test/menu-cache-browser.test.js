@@ -31,7 +31,10 @@ const { ROOT, suite } = require('./helpers');
 const { check, note, done } = suite('Ordering page — the menu it already knows, then the real one');
 
 const RTDB_MS = 700;          // the round trip this is all about
-const CACHE_KEY = 'ila_cached_menu';
+// This page's own key. It used to be 'ila_cached_menu', which is the TILL's — same
+// origin, same name, two different shapes, and the till drew this page's wrapper as if
+// it were a menu. See the comment on MENU_CACHE_KEY in index.html.
+const CACHE_KEY = 'ila_cust_menu';
 
 const MENU = { Coffee: { 'Latte':  { price: 150, inStock: true, routing: 'barista' },
                          'Mocha':  { price: 200, inStock: true, routing: 'barista' } },
