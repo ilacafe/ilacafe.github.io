@@ -31,7 +31,26 @@ function pngSize(file) {
   for (const k of ['name', 'short_name', 'start_url', 'display', 'icons']) {
     check('the manifest declares ' + k, manifest[k] !== undefined);
   }
-  check('it opens standalone rather than in a browser tab', manifest.display === 'standalone');
+  // SEAMLESS, NOT MERELY CONSISTENT.
+  //
+  // On the iPhone this app already runs to the edges — that is
+  // apple-mobile-web-app-status-bar-style: black-translucent, which lets the page
+  // draw under the status bar, and iOS ignores this field entirely. Android never
+  // matched it. Standalone hands Android a system navigation bar the page cannot
+  // reach and the web platform cannot colour: there is no manifest member or meta
+  // for it, and Chrome paints it light or dark from the scheme. So the home bar was
+  // always going to be a strip of not-the-brand at the bottom of the till.
+  //
+  // Fullscreen is the one setting that removes it rather than recolouring it. The
+  // bars go, gesture navigation still works by swipe, and the brown runs to the
+  // bottom edge the way it does on the iPhone.
+  //
+  // The fallback is the spec's own: a browser that will not do fullscreen walks down
+  // to standalone, then minimal-ui, then browser — so nothing here regresses to a
+  // browser tab on a device that cannot manage it.
+  check('it opens without browser chrome', manifest.display === 'fullscreen',
+        'display is ' + manifest.display);
+  note('standalone still leaves Android a system bar; only fullscreen takes it away');
   check('and starts at the ordering page', manifest.start_url === '/');
 
   check('theme_color matches the meta tag the page already had',
@@ -75,6 +94,38 @@ function pngSize(file) {
   const noRoot = PAGES.filter(p => !/^\s*html\s*\{[^}]*background/m.test(readPage(p)));
   check('and every page paints the canvas as well as the body', noRoot.length === 0, noRoot.join(', '));
   note('the home-bar strip and the overscroll gutter both come off the canvas');
+
+  // A FOURTH THING GETS TO CHOOSE, and the three above did not cover it.
+  //
+  // All of that shipped, and the home bar still came out white on one Android phone
+  // and BLACK on two others — the same build, three answers. A colour that differs
+  // per device is not a colour anyone chose; it is a surface following the device's
+  // own light/dark setting, which is what an undeclared `color-scheme` leaves it free
+  // to do. theme-color says what the bars are; color-scheme says which way everything
+  // the browser draws for us leans, and nothing here had said it.
+  //
+  // It has to be UNCONDITIONAL. Written inside `@media (prefers-color-scheme: ...)`
+  // it is device-dependent again — the exact bug — while still reading like a
+  // declaration and still matching any regex that only asks whether the words are
+  // present. The first version of this check passed such a page happily. So this
+  // counts braces instead: a declaration in a top-level rule sits at depth 1, and one
+  // nested inside an at-rule sits deeper, which is the difference that matters.
+  const saysItUnconditionally = (src) => {
+    const css = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)]
+      .map(m => m[1]).join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');        // a comment may hold braces of its own
+    let depth = 0;
+    for (let i = 0; i < css.length; i++) {
+      if (css[i] === '{') { depth++; continue; }
+      if (css[i] === '}') { depth--; continue; }
+      if (depth === 1 && /^color-scheme:\s*dark/.test(css.slice(i, i + 24))) return true;
+    }
+    return false;
+  };
+  const noScheme = PAGES.filter(p => !saysItUnconditionally(readPage(p)));
+  check('and every page says which scheme it is, so nothing follows the phone instead',
+        noScheme.length === 0, noScheme.join(', '));
+  note('white on one phone and black on two is the signature of nobody having said');
 }
 
 // ---------------------------------------------------------------- the icons are real

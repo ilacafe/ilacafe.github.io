@@ -124,7 +124,22 @@
     <link rel="preload" as="script" href="/connection.js">
 
     <style>
-        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff;
+            /* WHAT THE BROWSER PAINTS FOR US, AND WHICH WAY IT LEANS.
+               Reported from the floor: the same build paints the Android home bar
+               white on one phone and black on two others. That split is not random —
+               it is a surface following the DEVICE's light/dark setting, because
+               these pages never said which they were. Undeclared, `color-scheme` is
+               `normal`, and every surface the browser draws on our behalf — the
+               system bars of an installed app, native controls, scrollbars — is
+               free to pick a side per device.
+               This app is white on a mid-brown: a dark scheme, on every phone that
+               opens it. Saying so makes those surfaces agree with each other, and
+               stops Chrome's auto-dark-theme (which only touches pages that have
+               not declared one) from inverting the brand on the phones set to dark.
+               Every input here sets its own background, so nothing inherits a
+               surprise from the change. */
+            color-scheme: dark; }
         #login-overlay { position: fixed; inset: 0; background: var(--brand-bg); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; }
         #login-overlay.hidden { display: none; }
         #login-box { width: 100%; max-width: 320px; text-align: center; }
@@ -661,7 +676,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-03.1"></script>
+    <script src="/build-check.js" data-build="2026-09-03.3"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>

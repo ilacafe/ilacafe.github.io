@@ -4,7 +4,7 @@
   "description": "Order ahead from Café Ila — browse the menu, see how long the kitchen is running, and pay by UPI.",
   "start_url": "/",
   "scope": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "portrait",
   "background_color": "#8D6E52",
   "theme_color": "#8D6E52",
