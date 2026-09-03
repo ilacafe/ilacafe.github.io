@@ -1036,7 +1036,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.10"></script>
+    <script src="/build-check.js" data-build="2026-09-03.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1596,8 +1596,15 @@
             // grounds that other alerts covered it. Nothing did. A customer who was asked and
             // never paid produced no alert of any kind.
             //
-            // Ten minutes from the ask, not from the order: the clock that matters starts when
+            // Measured from the ask, not from the order: the clock that matters starts when
             // the customer was actually shown a code.
+            //
+            // Both alerts got shorter and one of them changed job when prep stopped
+            // starting on unconfirmed money. They used to be reports about an order that
+            // had gone wrong somewhere behind the counter, and ten minutes was a fine
+            // wait for that. Now they are the thing that unblocks a kitchen, so they are
+            // the customer's wait, and they carry what it takes to answer them from a
+            // lock screen.
             window._plAlerted = {}; window._mvAlerted = {};
             setInterval(function(){
                 const now = Date.now();
@@ -1613,21 +1620,41 @@
                         window._plAlerted[id] = true;
                         posSendPush({
                             title: '📤 Web order never billed',
-                            body: (o.tableOrAddress || 'Web order') + ' · ₹' + o.total + (o.phone ? ' · ' + o.phone : '') + ' — waiting ' + Math.round((now - o.createdAt)/60000) + ' min and no payment code was ever issued for it. It cannot auto-verify: take the payment on the till and settle it there.',
+                            body: (o.tableOrAddress || 'Web order') + ' · ₹' + o.total + (o.phone ? ' · ' + o.phone : '') + ' — waiting ' + Math.round((now - o.createdAt)/60000) + ' min and no payment code was ever issued for it. It cannot auto-verify and the kitchen is holding: collect the payment, then use "Payment received" on the order — accepting it books the sale.',
                             tag: 'paylink-' + id, url: '/pos.html'
                         });
                     } else {
-                        if (now - billedAt < 10*60000) continue;
+                        // THE KITCHEN IS HOLDING WHILE THIS SITS HERE.
+                        //
+                        // Prep no longer starts on a prepaid order whose money has not been
+                        // confirmed (see acceptWebOrder), so this is not a nag about a
+                        // straggler any more — it is on the critical path of a customer who
+                        // has already paid and is waiting for food nobody is making. Three
+                        // minutes, not ten: the bank's email normally lands in seconds, so
+                        // three minutes of silence is already the exception, and every
+                        // minute after it is one the customer spends waiting for nothing.
+                        //
+                        // The VPA rides in the body because the café takes money on several
+                        // accounts in rotation. Without it, answering "has this arrived?"
+                        // starts with working out which bank app to open; with it the whole
+                        // check is done from the lock screen, and the answer is one tap on
+                        // the row this notification opens.
+                        if (now - billedAt < 3*60000) continue;
                         if (window._mvAlerted[id]) continue;
                         window._mvAlerted[id] = true;
                         posSendPush({
-                            title: '⚠️ Web order still unpaid',
-                            body: (o.tableOrAddress || 'Web order') + ' · ₹' + o.total + (o.phone ? ' · 📞 ' + o.phone : '') + ' — payment code shown ' + Math.round((now - billedAt)/60000) + ' min ago and no payment has matched. Chase it on the number, or check the bank.',
-                            tag: 'manualverify-' + id, url: '/pos.html'
+                            title: '⚠️ Web order waiting on payment',
+                            body: (o.tableOrAddress || 'Web order') + ' · ₹' + o.total + (o.phone ? ' · 📞 ' + o.phone : '')
+                                + (o.upiId ? ' — paid to ' + o.upiId : '')
+                                + ' · asked ' + Math.round((now - billedAt)/60000) + ' min ago and no credit has matched. The kitchen is holding: confirm it here the moment you can see the money.',
+                            tag: 'manualverify-' + id, url: '/admin.html'
                         });
                     }
                 }
-            }, 60000);
+                // Half the alerting threshold, so "three minutes" means three and a half at
+                // the very worst rather than four. The work in here is a loop over the
+                // orders on screen right now, which is single figures.
+            }, 30000);
         }
 
         // ILA_BUILD, the build.json poll and the update banner now live in
@@ -1957,6 +1984,60 @@
                 return best;
             } catch(e){ return null; }
         };
+        // ===== WHAT "PAID" MEANS FOR A PREPAID WEB ORDER =====
+        // Two different facts, and keeping them apart is the point.
+        //
+        //   webOrderPaid      the BANK said so. A credit matched and the money is booked
+        //                     verified. Nobody had to decide anything.
+        //   webOrderAttested  a PERSON said so, by name — they had the bank app open, or
+        //                     the customer's own phone in front of them. It clears the
+        //                     order to be made, and it books unverified, because a person
+        //                     saying they saw it is not the statement agreeing.
+        //
+        // webOrderCleared is the question the accept gate asks, and it is the ONLY thing
+        // that should ever ask it. The card, the badge and admin.html all read these so
+        // the till and the phone cannot come to different answers about the same order.
+        window.webOrderPaid     = function(o){ return !!(o && o.payment && o.payment.ref); };
+        window.webOrderAttested = function(o){ return !!(o && o.manualPaid && o.manualPaid.by); };
+        window.webOrderCleared  = function(o){ return window.webOrderPaid(o) || window.webOrderAttested(o); };
+
+        // "Payment received" — the recorded way past the gate, from the counter.
+        //
+        // It takes a PIN for the same reason the voids do: not because a PIN is proof
+        // (pos/ is writable by any staff role, so it never was), but so the record carries
+        // a name and the person putting it there knows it does. The whole value of this
+        // action is that it is attributable afterwards — an order released to the kitchen
+        // and never matched by a credit has a person to ask about it.
+        //
+        // The customer's phone is told too. It is watching orders/track/{id} for exactly
+        // this, and it has spent the last few minutes on a screen asking them to pay for
+        // something they already paid for.
+        window.markWebOrderPaid = async function(id){
+            const o = window.pendingWebOrders[id]; if (!o) return;
+            if (window.webOrderCleared(o)){ ilaToast('Already confirmed'); return; }
+            const amt = Math.round(parseFloat(o.total) || 0);
+            if (!await ilaAsk('Confirm the money arrived',
+                    'Only do this if you can SEE ₹' + amt + ' in the account' +
+                    (o.upiId ? ' (' + o.upiId + ')' : '') + ' — in the bank app, or on the customer’s phone.\n\n' +
+                    'It releases the order to the kitchen and goes on the books with your name against it. ' +
+                    'The bank’s own confirmation still has to arrive: until it does this shows as unverified.\n\n' +
+                    'Accepting the order is what books the sale — don’t ring this up as a separate bill as well.',
+                    { ok: 'I can see it', cancel: 'Cancel' })) return;
+            const pin = await ilaAskText('Staff PIN', 'Whose confirmation is this?',
+                                         { mask: true, inputmode: 'numeric', label: 'Staff PIN' });
+            if (!pin) return;
+            const by = window.staffPins[await hashPin(pin)];
+            if (!by){ ilaTell('Invalid PIN', 'Nothing was recorded.'); return; }
+            try {
+                await db.ref('orders/pendingWeb/' + id + '/manualPaid')
+                        .set({ by: by, at: firebase.database.ServerValue.TIMESTAMP, via: 'pos' });
+                if (o.trackId){ try { db.ref('orders/track/' + o.trackId + '/paymentVerified').set(true); } catch(e){} }
+                ilaToast(by + ' confirmed the payment — the order can be started');
+            } catch(e){
+                ilaTell('Could not record it', 'Nothing was changed, and the order is still held. Check the connection and try again.');
+            }
+        };
+
         function renderWebVerifyBadges(){
             try {
                 const now = Date.now();
@@ -1970,15 +2051,26 @@
                     let amt = null;
                     if (o.payment && o.payment.ref){ amt = parseFloat(o.payment.amount) || parseFloat(o.total) || 0; }
                     else { const m = window.wvFindMatch(o, window._wvCredits, window._wvClaims, now); if (m) amt = parseFloat(m.p.amount) || 0; }
+                    // A confirmation by hand is shown as what it is. It is a tick, because
+                    // the order can be started; it is amber, because the bank has not
+                    // agreed yet \u2014 and it says who, so the person to ask is on the card.
+                    const attested = window.webOrderAttested(o);
                     if (amt != null){ el.innerHTML = '\u2713 \u20b9' + Math.round(amt) + ' paid'; el.style.cssText = GREEN; }
+                    else if (attested){ el.innerHTML = '\u2713 confirmed \u2014 ' + escapeHTML(o.manualPaid.by); el.style.cssText = AMBER; }
                     else { el.innerHTML = '\u23f3 unpaid'; el.style.cssText = AMBER; }
-                    // the contact row's WhatsApp text depends on whether money has landed
+                    // the contact row's WhatsApp text depends on whether the money is in
                     const cr = document.getElementById('cr-' + id);
-                    if (cr) cr.innerHTML = contactRow(o, amt != null, id);
-                    // visual state instead of a warning banner: a prepaid order that hasn't
-                    // been paid for reads as not-ready-to-start
+                    if (cr) cr.innerHTML = contactRow(o, amt != null || attested, id);
+                    // A held order does not just look unstartable, it IS unstartable \u2014 the
+                    // gate in acceptWebOrder is what refuses, and this is that refusal made
+                    // visible before a thumb reaches it. The way past it sits underneath.
+                    const held = o.orderType !== 'Dine-in' && amt == null && !attested;
                     const acc = document.getElementById('acc-' + id);
-                    if (acc) acc.style.opacity = (o.orderType !== 'Dine-in' && amt == null) ? '0.45' : '1';
+                    if (acc){ acc.disabled = held; acc.style.opacity = held ? '0.45' : '1'; }
+                    const pay = document.getElementById('pay-' + id);
+                    if (pay) pay.innerHTML = held
+                        ? '<button class="btn btn-secondary" style="width:100%; margin-top:10px;" onclick="window.markWebOrderPaid(\'' + id + '\')">Payment received \u2014 confirm by hand</button>'
+                        : '';
                 }
             } catch(e){}
         }
@@ -2191,7 +2283,8 @@
                 const now = Date.now();
                 const ids = Object.keys(window.pendingWebOrders).sort((a,b) => {
                     const oa = window.pendingWebOrders[a], ob = window.pendingWebOrders[b];
-                    const va = !!(window._wvMatch && window._wvMatch[a]), vb = !!(window._wvMatch && window._wvMatch[b]);
+                    const va = !!(window._wvMatch && window._wvMatch[a]) || window.webOrderAttested(oa),
+                          vb = !!(window._wvMatch && window._wvMatch[b]) || window.webOrderAttested(ob);
                     const sa = (!va && oa.createdAt && (now - oa.createdAt) > STALE_MS) ? 1 : 0;
                     const sb = (!vb && ob.createdAt && (now - ob.createdAt) > STALE_MS) ? 1 : 0;
                     if (sa !== sb) return sa - sb;                 // stale ones sink
@@ -2199,7 +2292,7 @@
                 });
                 for (let id of ids) {
                     const o = window.pendingWebOrders[id];
-                    const verified = !!(window._wvMatch && window._wvMatch[id]);
+                    const verified = !!(window._wvMatch && window._wvMatch[id]) || window.webOrderAttested(o);
                     const stale = !verified && o.createdAt && (now - o.createdAt) > STALE_MS;
                     let itemsHTML = "<div style='margin: 10px 0; font-size: 0.9rem;  padding-left: 8px; border-left: 2px solid rgba(255,255,255,0.3);'>";
                     for(let itemName in o.items) {
@@ -2243,6 +2336,7 @@
                             <button id="acc-${id}" class="btn btn-primary" style="flex: 2;" onclick="window.acceptWebOrder('${id}')">Accept</button>
                             <button class="btn btn-secondary" style="flex: 1;" onclick="window.rejectWebOrder('${id}')">Reject</button>
                         </div>
+                        <div id="pay-${id}"></div>
                     </div>`;
                 }
             }
@@ -2361,14 +2455,32 @@
             // Everything from here uses the menu's prices, not the browser's.
             const order = Object.assign({}, submitted, { items: rp.items, total: rp.total });
 
-            // Large-order gate: if this order is gated and payment is NOT yet verified, warn the
-            // operator before starting the kitchen (guards against phantom bulk orders). They can
-            // still override for a genuine case, but the default is to wait for the money.
-            if (order.gated){
-                const matched = !!(order.payment && order.payment.ref);
-                if (!matched){
-                    if (!await ilaAsk("Payment not verified", "No bank credit has matched this order yet.\n\nRecommended: wait until the badge shows the credit has landed.", { ok: "Start preparing", cancel: "Wait" })) return;
-                }
+            // NOTHING IS MADE BEFORE THE MONEY IS CONFIRMED.
+            //
+            // This was a confirmation box staff could clear, and clearing a box in the way
+            // of a queue is the normal thing to do with one. What it was really asking was
+            // whether to cook for money that had not arrived — and a takeaway or a delivery
+            // has no table to settle at afterwards, so an order that is never paid for is
+            // the food, gone. That is the loss this now refuses to take.
+            //
+            // There are exactly two ways past it, and both mean somebody has seen the
+            // money: the bank credit matched, in which case sweepWebPayments booked it and
+            // the badge went green on its own; or a named person confirmed it, from this
+            // till or from the owner's phone in admin.html. The second still books the
+            // entry UNVERIFIED, so the reconciler attaches the real credit when it lands
+            // and the Worker's 2-hour check still asks about it if it never does.
+            //
+            // Blocking is only affordable because the wait is short and visible: an order
+            // still unconfirmed three minutes after the customer was asked pushes a
+            // notification carrying the amount and the account it was billed to, straight
+            // to the one screen that can clear it.
+            if (order.gated && !window.webOrderCleared(order)){
+                delete window._webActing[id];
+                ilaTell('Payment not confirmed yet',
+                        'No bank credit has matched this order, and nobody has confirmed the money arrived. Takeaway and delivery are paid before anything is made.\n\n' +
+                        'If you can see the payment — in the bank app, or on the customer’s own phone — use "Payment received" on this order first.\n\n' +
+                        'Otherwise wait: the badge turns green by itself the moment the credit lands.');
+                return;
             }
 
             try {
@@ -2397,9 +2509,12 @@
             // Only an unpaid override needs an entry, and the reconciler flips it when the
             // credit arrives.
             if (!(order.payment && order.payment.ref)){
-                // Not booked yet — this is a staff override on an unpaid order. Write it
-                // unverified so it's on the books, and let the reconciler flip it if the
-                // credit turns up later.
+                // Not booked yet, so getting here means a person confirmed the money by
+                // hand. Write it UNVERIFIED anyway: what has been established is that
+                // somebody says they saw it, not that the bank has said so. The reconciler
+                // flips it to verified when the credit finally matches, and if none ever
+                // does it stays on the books as the exception it is — which is the whole
+                // point of not letting a human confirmation look like a bank one.
                 (async () => {
                     let bankTag = null;
                     try {

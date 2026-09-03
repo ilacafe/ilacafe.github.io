@@ -129,6 +129,11 @@ const SAMPLES = {
   'orders/track/$key/paymentVerified': true,
   'orders/pendingWeb/$key/payment': { ref: '512345678901', amount: 250, at: 1756200000000,
                                       payId: 'web_tk1', bankTag: 'yes 8020' },
+  // Somebody at the counter, or the owner on their phone, saying they have SEEN the
+  // money for an order the bank has not confirmed yet. It is what lets the kitchen
+  // start, so it has to be writable by staff — and it carries a name, so it has to
+  // be refused to everyone else.
+  'orders/pendingWeb/$key/manualPaid': { by: 'Priya', at: 1756200000000, via: 'pos' },
   'orders/track/$key': {
     status: 'received', items: { Latte: { qty: 1, price: 250 } }, table: 'Table 4',
     gated: false, createdAt: { '.sv': 'timestamp' }
@@ -656,6 +661,18 @@ const SAMPLES = {
     await must('a cart line priced as a string', 'web', (o) => { o.items.Latte.price = '250'; });
     await must('a thousand of something', 'track', (o) => { o.items.Latte.qty = 1000; });
     await must('a total that is not a number', 'web', (o) => { o.total = 'lots'; });
+    // The order that a person has vouched for is the one the kitchen starts on. A
+    // browser that could write this into its own order at creation would be telling
+    // the till the money had been seen — by a name it made up.
+    await must('an order that vouches for its own payment', 'web',
+               (o) => { o.manualPaid = { by: 'Priya', at: 1756200000000, via: 'pos' }; });
+    // And the older way of claiming the same thing. `payment.ref` is the till's record
+    // that a BANK CREDIT matched this order — it is what turns the badge green and,
+    // now, what lets the kitchen start. An order that arrives already carrying one has
+    // written the answer to the only question the counter asks about it.
+    await must('an order carrying a bank credit it wrote itself', 'web',
+               (o) => { o.payment = { ref: '512345678901', amount: 250, at: 1756200000000,
+                                      payId: 'web_tk1', bankTag: 'yes 8020' }; });
     await must('an order with no items at all', 'web', (o) => { delete o.items; });
     await must('a tracking record with no status', 'track', (o) => { delete o.status; });
     await must('items that are not items', 'track', (o) => { o.items = 'a string'; });
@@ -690,6 +707,20 @@ const SAMPLES = {
           (await canWrite('orders/pendingWeb/staffside/payment', 'cashier',
                           { ref: '512345678901', amount: 250, at: Date.now(), payId: 'web_tk1', bankTag: 'yes 8020' })));
     note('the shape is checked on creation, so nothing already recorded has to satisfy it');
+
+    // A prepaid order is not made until its money is confirmed, and when the bank is
+    // slow the only thing that releases it is a person saying they can see it. Both
+    // screens that can say so have to be able to write it — the counter, and the
+    // owner's phone — or the kitchen stops with no way to start it again.
+    check('and either screen can record that the money was seen by hand',
+          (await canWrite('orders/pendingWeb/staffside/manualPaid', 'cashier',
+                          { by: 'Priya', at: Date.now(), via: 'pos' })) &&
+          (await canWrite('orders/pendingWeb/staffside/manualPaid', 'admin',
+                          { by: 'Sraveen', at: Date.now(), via: 'admin' })));
+    check('but not without saying who, which is the whole of what it records',
+          !(await canWrite('orders/pendingWeb/staffside/manualPaid', 'cashier', { at: Date.now(), via: 'pos' })) &&
+          !(await canWrite('orders/pendingWeb/staffside/manualPaid', 'cashier', { by: '', at: Date.now() })) &&
+          !(await canWrite('orders/pendingWeb/staffside/manualPaid', 'cashier', true)));
   }
 
   // ------------------------------------------- one order, not the whole history

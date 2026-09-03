@@ -196,13 +196,22 @@ while it accepted any JSON of any shape and served it straight back to the inter
 Both now carry a shape. Every field is named and typed, strings are bounded, cart
 lines must be cart lines, and `createdAt` has to be the server's own clock so a
 record cannot be backdated. Anything not named is refused outright. Against the old
-rules, fourteen of the sixteen hostile writes the suite tries were accepted; none
-are now.
+rules, fourteen of the sixteen hostile writes the suite tried at the time were
+accepted; none of the nineteen it now tries are.
 
 The shape is checked **on creation**, which is where the whole exposure is: both
 nodes let a stranger create and never modify (`!data.exists() || <role>`). That
 also means no record already in the database has to satisfy a rule it was not
 written to satisfy — the tightening cannot strand what is already there.
+
+**Two fields inside that shape need more than a type, because they are claims about
+money rather than facts about an order.** `payment` is the till's record that a bank
+credit matched, and `manualPaid` is a named person saying they have seen the money;
+between them they are the whole of what decides whether the kitchen starts. Being
+merely well-formed, either could be written by the browser placing the order — an
+order that arrives already vouching for its own payment — so both also require a
+staff role, on creation as much as afterwards. The emulator suite tries exactly that
+write from an anonymous browser and expects it to be refused.
 
 A visitor still cannot overwrite or delete somebody else's order, and cannot
 enumerate `orders/pendingWeb` at all.

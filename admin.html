@@ -394,6 +394,12 @@
             <button id="master-status-btn" class="btn" onclick="toggleCafeStatus()">Loading...</button>
         </div>
 
+<div class="admin-card" id="webpay-card" style="display:none; margin-bottom: 25px; border-color: rgba(255,193,7,0.5); background: rgba(255,193,7,0.08);">
+            <h2>Waiting On Payment</h2>
+            <p class="rec-note">Takeaway and delivery are paid before anything is made, so the till holds one of these until the money is confirmed. The bank's email normally confirms it in seconds and nothing ever appears here. When it doesn't, open the account named on the row &mdash; if the money is in, confirm it and the kitchen can start straight away.</p>
+            <div id="webpay-list"></div>
+        </div>
+
 <div class="admin-card" id="refunds-card" style="display:none; margin-bottom: 25px; border-color: rgba(244,67,54,0.45); background: rgba(244,67,54,0.08);">
             <h2>Refunds Due</h2>
             <p class="rec-note">A prepaid order that was rejected after the customer's money had already arrived. The payment is real and stays in the ledger &mdash; mark it refunded once you have actually sent the money back, and a matching reversal is written to the till.</p>
@@ -655,7 +661,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.10"></script>
+    <script src="/build-check.js" data-build="2026-09-03.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -853,6 +859,7 @@
         });
         loadUPIRouting();
         loadUPIVerification();
+        loadWebPayments();
         loadRefunds();
         loadETAAccuracy();
         loadRepeatCustomers();
@@ -1391,6 +1398,115 @@
             });
             box.innerHTML = t + '</tbody></table>';
         }
+
+        // ===== WEB ORDERS WAITING ON PAYMENT =====
+        //
+        // THE SCREEN THAT DIDN'T EXIST.
+        //
+        // A takeaway or delivery ordered in the app is not made until its money is
+        // confirmed — the food is gone if it is never paid for, and there is no table to
+        // settle at afterwards. Nearly always the bank's email confirms it in seconds and
+        // nobody sees any of this. When it doesn't, the order stops, and a customer who
+        // has already paid is waiting.
+        //
+        // Until this card, that order existed on exactly one screen: the Web Orders modal
+        // inside the till. So the only way to release it was to be standing at the counter
+        // — impossible for a delivery, and slow for a takeaway. Meanwhile the person who
+        // can actually answer "did this arrive?" is the one with the bank app on their
+        // phone, and this page is what they have on it.
+        //
+        // So the row carries the whole question: the amount, and WHICH ACCOUNT it was
+        // billed to, because the café rotates several. The notification that brings them
+        // here carries both as well, so the check is done before the page is even open.
+        // Confirming writes a name against it and releases the order; it does NOT claim
+        // the bank agreed — the entry is still booked unverified and the reconciler
+        // attaches the real credit if it turns up.
+        let webPayCache = {};
+        function loadWebPayments(){
+            db.ref('orders/pendingWeb').on('value', s => { webPayCache = s.val() || {}; renderWebPayments(); });
+            // The only thing that changes between database events is how long these have
+            // been waiting, and that is the number the whole card is about.
+            setInterval(renderWebPayments, 30000);
+        }
+        function webPayWaiting(o){
+            // The clock starts when the customer was SHOWN a code, not when they ordered:
+            // that is the moment money was asked for, and the moment it should have moved.
+            const b = parseFloat(o && o.billedAt);
+            return (isFinite(b) && b > 0) ? b : (parseFloat(o && o.createdAt) || 0);
+        }
+        function renderWebPayments(){
+            const card = document.getElementById('webpay-card');
+            const box = document.getElementById('webpay-list');
+            if (!card || !box) return;
+            const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+            const now = Date.now();
+            const rows = [];
+            for (const id in webPayCache){
+                const o = webPayCache[id]; if (!o) continue;
+                if (o.orderType === 'Dine-in') continue;                    // settles at the table
+                if (o.payment && o.payment.ref) continue;                   // the bank confirmed it
+                rows.push(Object.assign({}, o, { id: id }));
+            }
+            rows.sort((a, b) => webPayWaiting(a) - webPayWaiting(b));       // longest wait first
+            if (!rows.length){ card.style.display = 'none'; box.innerHTML = ''; return; }
+            card.style.display = '';
+            let html = '';
+            rows.forEach(o => {
+                const since = webPayWaiting(o);
+                const mins = since ? Math.max(0, Math.round((now - since) / 60000)) : null;
+                const ph = o.phone ? String(o.phone).replace(/\D/g, '').slice(-10) : '';
+                const wa = 'Hi, this is ILA — we have your order and we’re holding it. We haven’t seen the payment land yet; the payment code is on the order screen in the app.';
+                const attested = !!(o.manualPaid && o.manualPaid.by);
+                const billed = !!(parseFloat(o.billedAt) > 0);
+                html += '<div style="padding:14px 0; border-bottom:1px solid rgba(255,255,255,0.08);">'
+                     +   '<div style="font-weight:700; font-size:1.05rem; overflow-wrap:anywhere;">' + inr(o.total) + ' · ' + escapeHTML(o.tableOrAddress || 'Web order') + '</div>'
+                     +   '<div style="font-size:0.78rem; margin-top:3px;">'
+                     +     (mins == null ? 'just now' : (billed ? 'asked ' + mins + ' min ago' : 'ordered ' + mins + ' min ago'))
+                     +     (billed ? '' : ' · no payment code was ever issued — take it on the till')
+                     +   '</div>'
+                     // The account, on its own line and in full. This is the one thing that
+                     // decides which bank app to open, and it must never wrap mid-token.
+                     +   (o.upiId
+                         ? '<div style="margin-top:8px; font-size:0.95rem; font-weight:700; overflow-wrap:anywhere;">Paid to ' + escapeHTML(o.upiId) + '</div>'
+                         : '')
+                     +   (ph ? '<div style="margin-top:10px;"><a href="tel:+91' + ph + '" style="color:#fff; text-decoration:none; border:1px solid rgba(255,255,255,0.3); padding:8px 12px; border-radius:5px; font-size:0.8rem; margin-right:6px; display:inline-block; min-height:44px; box-sizing:border-box; line-height:26px;">📞 ' + ph + '</a><a href="https://wa.me/91' + ph + '?text=' + encodeURIComponent(wa) + '" target="_blank" rel="noopener" style="background:#25D366; color:#fff; text-decoration:none; padding:8px 12px; border-radius:5px; font-size:0.8rem; display:inline-block; min-height:44px; box-sizing:border-box; line-height:26px;">WhatsApp</a></div>' : '')
+                     +   (attested
+                         ? '<div style="margin-top:12px; font-size:0.85rem;">✓ Confirmed by ' + escapeHTML(o.manualPaid.by) + ' — waiting for the till to start it</div>'
+                         : '<button class="btn-action" style="margin-top:12px; width:100%;" onclick="webPayConfirm(\'' + o.id + '\')">Payment received — release this order</button>')
+                     + '</div>';
+            });
+            box.innerHTML = html;
+        }
+        // Releasing an order is not the same as saying the bank has paid, and this is
+        // careful to only claim the first. The entry the till writes stays unverified
+        // until a credit actually matches it, so an order released on a confirmation that
+        // turns out to be wrong is still sitting in Needs Review at the end of the day.
+        window._webPayActing = {};
+        window.webPayConfirm = async function(id){
+            const o = webPayCache[id]; if (!o) return;
+            if (o.manualPaid && o.manualPaid.by){ ilaToast('Already confirmed'); return; }
+            if (window._webPayActing[id]) return;
+            const amt = Math.round(parseFloat(o.total) || 0);
+            if (!await ilaAsk('Confirm ₹' + amt + ' arrived?',
+                    'Only do this if you can SEE it' + (o.upiId ? ' in ' + o.upiId : '') + '.\n\n' +
+                    'It releases the order to the kitchen with your name against it. The bank’s own confirmation still has to arrive — until it does, this stays in Needs Review.',
+                    { ok: 'I can see it', cancel: 'Cancel' })) return;
+            const by = (window.currentAdmin && window.currentAdmin.name) || 'admin';
+            window._webPayActing[id] = true;
+            try {
+                await db.ref('orders/pendingWeb/' + id + '/manualPaid')
+                        .set({ by: by, at: firebase.database.ServerValue.TIMESTAMP, via: 'admin' });
+                // The customer has spent the wait on a screen still asking them to pay for
+                // something they have already paid for. Their app watches this and nothing
+                // else — it is a separate write because orders/track validates on its own,
+                // and a refusal there must not take the release down with it.
+                if (o.trackId){ try { db.ref('orders/track/' + o.trackId + '/paymentVerified').set(true); } catch(e){} }
+                ilaToast('Released — the till can start it now');
+            } catch(e){
+                delete window._webPayActing[id];
+                ilaTell('Could not record it', 'Nothing was changed and the order is still held. Check the connection and try again.');
+            }
+        };
 
         // ===== REFUNDS DUE =====
         // Written by the POS when staff reject an order whose payment had already landed.

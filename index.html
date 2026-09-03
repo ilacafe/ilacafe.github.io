@@ -685,7 +685,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-02.10"></script>
+    <script src="/build-check.js" data-build="2026-09-03.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -2036,9 +2036,16 @@
             // took the code away. So the one customer whose money had NOT arrived was told it
             // had, and lost the means to send it.
             //
-            // paymentVerified is written only where a bank credit has actually been matched and
-            // booked against this order, so it is the only thing here that may say "paid".
-            // 'Started' is reported as what it is, and the code stays up underneath it.
+            // paymentVerified is written in exactly two places, and both of them mean somebody
+            // has SEEN the money: a bank credit matched and was booked against this order, or a
+            // named member of staff confirmed it with the bank app in front of them because the
+            // email was late. Neither is a guess, so it is the only thing here that may say
+            // "paid". 'Started' is reported as what it is, and the code stays up underneath it.
+            //
+            // The till no longer starts a prepaid order without one of those two, so this
+            // branch has become the rare case rather than the routine one — but it stays,
+            // because "the kitchen has it" and "the money is here" are still two facts and
+            // this screen is not entitled to conflate them.
             let done = false;              // terminal: paid, or cancelled
             let started = false;           // the kitchen has it; says nothing about the money
             const trackRef = db.ref('orders/track/' + trackId);
