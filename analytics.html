@@ -239,6 +239,34 @@
         .tbl tr:last-child td { border-bottom: none; }
         .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .scroll { max-height: 460px; overflow-y: auto; overflow-x: auto; margin-top: 8px; }
+        /* THE TABLE THAT HOLDS HUNDREDS OF ROWS, LAID OUT ONLY WHEN LOOKED AT
+           Every other .scroll on this page holds a handful of rows. Transactions holds
+           one per order in the range — 500 by the time a café has run a month, and the
+           table is `table-layout: auto`, so sizing its columns means measuring every
+           cell in every row. That measurement was 90% of all the layout time on the
+           page, it ran on every one of the five renders a cold open does, and it grew
+           with the history: 282ms of layout at 20,000 orders, 685ms at 40,000, with no
+           upper bound but how long the café has been open.
+
+           None of it was on screen. The box is far below the fold and caps at 460px, so
+           roughly ten of those rows can ever be seen at once.
+
+           content-visibility lets the browser skip layout and paint for the subtree
+           until it comes near the viewport, and do it again when it leaves. The rows
+           are all still there — in the DOM, in find-in-page, in the CSV export, and in
+           the sort, which works off the array rather than the cells. Scrolling to the
+           table lays it out then, once.
+
+           contain-intrinsic-size gives the skipped box a stand-in height so the page is
+           not shorter than it should be and the scrollbar does not jump; `auto` means
+           the real height is remembered after the first time it is rendered. 460px is
+           not a guess — it is the max-height above, which this box always reaches.
+
+           Deliberately NOT on plain .scroll. Applied to all eight of them the three
+           boxes that sit inside collapsed panels claimed 460px they do not occupy, and
+           the document grew 1150px. Measured, not assumed: the win here is entirely
+           this one table, and so is the rule. */
+        .scroll.bulk { content-visibility: auto; contain-intrinsic-size: auto 460px; }
         select, input[type="text"] { padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
         .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
         .muted { text-align: center; padding: 20px 0; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; }
@@ -517,7 +545,7 @@
                 <button class="lnk" onclick="window.exportItemLines()">Export Item Lines</button>
             </div>
             <div id="txn-count" style="font-size:0.78rem;  margin:6px 0;"></div>
-            <div class="scroll">
+            <div class="scroll bulk">
                 <table class="tbl">
                     <thead><tr><th>Date / Time</th><th>Type</th><th>Table / Address</th><th>Items</th><th>Pay</th><th class="num">Total</th></tr></thead>
                     <tbody id="txn-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
@@ -713,16 +741,45 @@
         let _rzT; const _rz = () => { clearTimeout(_rzT); _rzT = setTimeout(() => { for(const k in charts){ try{ if(charts[k]) charts[k].resize(); }catch(e){} } }, 200); };
         window.addEventListener('resize', _rz); window.addEventListener('orientationchange', _rz);
 
+        // FIVE FULL PASSES OVER THE HISTORY, FOR ONE PICTURE
+        //
+        // render() is the whole page: it walks every order in DATA, buckets it, totals
+        // it, and rebuilds every table and chart. A cold open used to run it five times
+        // — once for the range preset, then again as each of menu, voids, unpaid and
+        // the history itself arrived, each one landing within a moment of the others
+        // and each one throwing away a picture nobody had seen yet.
+        //
+        // The cost is per-order, so it is worst exactly where it is least affordable:
+        // at 40,000 orders that was five walks of the whole history and five rebuilds
+        // of a 500-row table, 675ms of script before the owner saw a number.
+        //
+        // Coalesced onto a frame. Whatever has arrived by the time the browser is ready
+        // to paint is what gets drawn, once. render() reads DATA, VOIDS, UNPAID, CATMAP
+        // and RANGE and writes the DOM — it holds no state of its own between calls, so
+        // running it once with everything is the same picture as running it four times
+        // and keeping the last. The same helper the till and the ordering page use for
+        // their menus, for the same reason.
+        //
+        // A frame is also the right unit for the direct calls in ensureHistory: that
+        // one paints the range the owner just picked with the data already held, and it
+        // still does, one frame later, which is not a wait anybody can see.
+        let _renderQueued = false;
+        function scheduleRender(){
+            if (_renderQueued) return;
+            _renderQueued = true;
+            requestAnimationFrame(() => { _renderQueued = false; render(); });
+        }
+
         function init(){
             document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.range)));
             setPreset('30d');
-            db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); render(); });
+            db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); scheduleRender(); });
             // Voids are rare — a few a week — so 2000 is years of them, and it stops
             // this being the next node that grows without limit.
-            db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; render(); });
+            db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; scheduleRender(); });
             // Bounded like the voids beside it: append-only, and a café that ran for
             // years would otherwise pull every walkout it ever had into a phone.
-            db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; render(); });
+            db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; scheduleRender(); });
             // Small fixed-size nodes — the refit's record and the cron failure record.
             // Neither grows, so neither needs a cap.
             db.ref('eta/recalMeta').on('value', s => { RECAL = s.val()||null; renderWorkerHealth(); });
@@ -783,20 +840,20 @@
         function historyNeedsRefetch(have, want){ return have === null || have > want; }
 
         function ensureHistory(start){
-            if(!historyNeedsRefetch(historyFrom, start)){ render(); return; }
+            if(!historyNeedsRefetch(historyFrom, start)){ scheduleRender(); return; }
             if(historyQuery){ try { historyQuery.off(); } catch(e){} }
             historyFrom = start;
             // Paint the new range immediately with whatever is already held, the way
             // setRange used to before the fetch moved in here. Waiting for the round
             // trip would blank the page on every widening instead of just redrawing it.
-            render();
+            scheduleRender();
             // 'All time' deliberately drops the key filter rather than starting at 0:
             // any legacy key not of the timestamp form sorts before every digit, and a
             // startAt would silently exclude it from the one view that promises everything.
             historyQuery = start > 0
                 ? db.ref('orders/history').orderByKey().startAt(String(Math.floor(start)))
                 : db.ref('orders/history');
-            historyQuery.on('value', s => { DATA = s.val()||{}; render(); });
+            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
         }
 
         function setRange(start, end, key, label){ RANGE = {start, end, key, label}; const el=document.getElementById('range-label'); if(el) el.textContent = label; ensureHistory(start); }

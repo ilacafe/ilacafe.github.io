@@ -36,6 +36,7 @@ const suites = [
   'dialogs-browser.test.js',
   'till-dialogs-browser.test.js',
   'native-controls-browser.test.js',
+  'analytics-scale-browser.test.js',
 ];
 
 let failed = [];
