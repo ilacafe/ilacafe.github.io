@@ -72,6 +72,22 @@ const watcher = readPage('build-check.js');
         /url\.pathname === '\/build\.json'\)\s*return/.test(sw),
         'the poll would be answered with the build the page already has, forever');
 
+  // The manifest is the same trap with a longer fuse. build.json going stale stops
+  // the update banner; the manifest going stale means a device keeps opening the app
+  // the way it was configured the day it was installed — and a reinstall reads the
+  // cached copy too, so the usual remedy quietly does nothing. That is how a shipped
+  // display change came back from the floor as "reinstall done, still the same".
+  check('nor the manifest, which is what an install reads',
+        /url\.pathname === '\/manifest\.webmanifest'\)\s*return/.test(sw),
+        'an installed device would keep the display, theme and splash it first saw');
+
+  // Skipping it from now on leaves the copy already stored on every device that has
+  // one. activate() deletes any cache whose name is not the current one, so the name
+  // has to move whenever something wrongly cached needs dropping.
+  check('and the cache name moved, so the stale copy is actually dropped',
+        /const CACHE = 'ila-shell-v(?!1')/.test(sw),
+        'excluding it going forward does nothing for a device that already cached it');
+
   check('the watcher fetches build.json with cache: no-store',
         /fetch\('\/build\.json',\s*\{\s*cache:\s*'no-store'\s*\}\)/.test(watcher));
 

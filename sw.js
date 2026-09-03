@@ -4,7 +4,10 @@
 //    Strategy: serve cached instantly, revalidate in background, apply on NEXT open.
 //    Never caches Firebase data (RTDB / auth / push worker) — those stay live.
 
-const CACHE = 'ila-shell-v1';
+// Bumped to v2 so the activate handler below drops the old cache outright. Skipping
+// the manifest from here on does nothing for a device that already has one stored;
+// the stale entry has to go, and renaming the cache is what takes it.
+const CACHE = 'ila-shell-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -85,6 +88,16 @@ self.addEventListener('fetch', (event) => {
   // update banner would never appear — a mechanism that looks wired up and cannot
   // possibly fire. Always go to the network for it.
   if (sameOrigin && url.pathname === '/build.json') return;
+  // AND THE MANIFEST, for the same reason and a worse consequence.
+  //
+  // The manifest is what an install reads to decide how the app opens — display,
+  // theme_color, background_color. Served from this cache it answers with the
+  // manifest the device saw the FIRST time, so a change to any of them never
+  // reaches an already-installed device. Reinstalling does not help, which is what
+  // makes it so hard to spot: the fix looks applied, the app looks unchanged, and
+  // there is nothing on screen connecting the two. Reported from the floor exactly
+  // that way — home bar still white after a reinstall.
+  if (sameOrigin && url.pathname === '/manifest.webmanifest') return;
   if (!sameOrigin && CACHEABLE_HOSTS.indexOf(url.hostname) === -1) return;  // Firebase etc: untouched
   event.respondWith(swr(event, req, sameOrigin, isImmutable(url)));
 });
