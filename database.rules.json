@@ -301,6 +301,25 @@
         },
         ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())"
       },
+      "eodSummary": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$day": {
+          ".validate": "newData.hasChildren(['cash','upi','bills','closedAt'])",
+          "cash":     { ".validate": "newData.isNumber()" },
+          "upi":      { ".validate": "newData.isNumber()" },
+          "bills":    { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "closedBy": { ".validate": "newData.isString() && newData.val().length <= 60" },
+          "closedAt": { ".validate": "newData.isNumber()" },
+          "$other":   { ".validate": false }
+        }
+      },
+      "eodSummaryBackfill": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".validate": "newData.hasChildren(['at'])",
+        "at":   { ".validate": "newData.isNumber()" },
+        "days": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "$other": { ".validate": false }
+      },
       "eodArchive": {
         ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         "$archive": {

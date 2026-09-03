@@ -75,6 +75,11 @@ const ago = d => now - d * DAY;
     if (/^users\//.test(path)) continue;                     // a single record by uid
     if (CONFIG_NODES.includes(path.split('/')[0])) continue;  // config, not a log
     if (path === 'orders/history') continue;                  // the All-time branch, checked above
+    // A single {at, days} object, written once. It is the marker that says the closing
+    // summaries have been rebuilt from the archive already — the one small read that
+    // keeps the 5MB archive read from happening on every open. Reading it whole IS the
+    // bounded thing to do; it is named here so it is a decision rather than an omission.
+    if (path === 'pos/eodSummaryBackfill') continue;
     if (!/once|on/.test(chain)) continue;                     // not a read
     unbounded.push(path + chain);
   }

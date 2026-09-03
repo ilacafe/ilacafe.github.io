@@ -716,7 +716,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-03.9"></script>
+    <script src="/build-check.js" data-build="2026-09-03.10"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -913,7 +913,22 @@
             db.ref('eta/model').on('value', s => { MODEL = s.val()||null; renderWorkerHealth(); });
             db.ref('eta/modelPrevious').on('value', s => { MODELPREV = s.val()||null; renderWorkerHealth(); });
             db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); });
-            db.ref('pos/eodArchive').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
+            // FIVE NUMBERS A DAY, NOT A DAY'S WHOLE LEDGER
+            //
+            // This read used to be pos/eodArchive. Each archive carries that day's entire
+            // bills and ledger — 5.2MB across 120 days for a café doing 100 bills a day,
+            // measured — and renderEod below reads five fields out of a closing. 2.4MB of
+            // it was bills, fetched only so they could be counted.
+            //
+            // The archive is untouched and still the record: admin's UPI history reads its
+            // ledger, and the Worker writes late bank verifications into it. This is an
+            // index over it, written by the till at close.
+            db.ref('pos/eodSummary').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
+            // Closings that predate the index have no entry in it, and would simply vanish
+            // from the list. So the first analytics open after this shipped rebuilds them
+            // from the archive — the old 5.2MB read, once, ever — and writes a marker so
+            // no later open repeats it.
+            backfillEodSummaries();
             demandBoot();
         }
 
@@ -1621,6 +1636,49 @@
             downloadCSV(out, 'ila-walkouts-' + stamp() + '.csv');
         };
 
+        // Rebuilds pos/eodSummary from pos/eodArchive, at most once for this café.
+        //
+        // Guarded by a marker rather than by counting: analytics cannot tell whether the
+        // index is complete without listing the archive's keys, and listing them is the
+        // expensive read this exists to stop. A marker turns "is it complete?" into one
+        // small question with a definite answer.
+        //
+        // Everything it writes is derived from the archive it just read, so a failure
+        // costs nothing but a repeat next time — the marker is written last, and only
+        // if the summaries landed.
+        async function backfillEodSummaries(){
+            try {
+                const mark = await db.ref('pos/eodSummaryBackfill').once('value');
+                if (mark.exists()) return;                        // already done, once, forever
+                const arch = await db.ref('pos/eodArchive').limitToLast(120).once('value');
+                const days = arch.val() || {};
+                const keys = Object.keys(days);
+                if (!keys.length){                                // nothing to rebuild
+                    await db.ref('pos/eodSummaryBackfill').set({ at: Date.now(), days: 0 });
+                    return;
+                }
+                const updates = {};
+                keys.forEach(k => {
+                    const d = days[k] || {};
+                    const bills = d.bills ? (Array.isArray(d.bills) ? d.bills.filter(Boolean).length
+                                                                   : Object.keys(d.bills).length) : 0;
+                    updates['pos/eodSummary/' + k] = {
+                        cash: Number(d.cash) || 0, upi: Number(d.upi) || 0, bills: bills,
+                        closedBy: d.closedBy ? String(d.closedBy) : '',
+                        closedAt: Number(d.closedAt) || 0
+                    };
+                });
+                await db.ref().update(updates);
+                await db.ref('pos/eodSummaryBackfill').set({ at: Date.now(), days: keys.length });
+            } catch(e){ /* next open tries again; the list is simply shorter until then */ }
+        }
+
+        // An archive key is a date and a timestamp — "2026-08-27-1756200000000". This
+        // puts it through a JS string inside an HTML attribute, two contexts at once, so
+        // rather than escape for both it is reduced to the characters such a key is made
+        // of. Anything else could not name a real archive anyway.
+        const archKey = k => String(k).replace(/[^A-Za-z0-9_-]/g, '');
+
         function renderEod(){
             if(!RANGE) return;
             const container = document.getElementById('eod-container');
@@ -1639,11 +1697,15 @@
                 const cash = (d.cash != null) ? d.cash : 0;
                 const upi = (d.upi != null) ? d.upi : 0;
                 const total = (parseFloat(cash)||0) + (parseFloat(upi)||0);
-                const billCount = d.bills ? (Array.isArray(d.bills) ? d.bills.filter(Boolean).length : Object.keys(d.bills).length) : 0;
+                // A number now — the count written at close. The two collection shapes are
+                // still read because a café part-way through the rebuild has some of each.
+                const billCount = typeof d.bills === 'number' ? d.bills
+                                : d.bills ? (Array.isArray(d.bills) ? d.bills.filter(Boolean).length
+                                                                    : Object.keys(d.bills).length) : 0;
                 const closedBy = d.closedBy ? escapeHTML(String(d.closedBy)) : '—';
                 let closedAt = ''; if(d.closedAt){ try { closedAt = new Date(d.closedAt).toLocaleString('en-IN'); } catch(e){} }
                 const rid = 'eodrep-' + String(k).replace(/[^0-9]/g, '');
-                return `<div style="background:rgba(0,0,0,0.15); border-left:2px solid rgba(255,255,255,0.4); border-radius:8px; padding:10px 12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${escapeHTML(String(k).slice(0,10))}</strong><strong>${rupee(total)}</strong></div><div style="font-size:0.82rem; ">Cash ${rupee(cash)} · UPI ${rupee(upi)} · ${billCount} bill(s)</div><div style="font-size:0.76rem;  margin-top:2px;">Closed by ${closedBy}${closedAt ? ' · ' + closedAt : ''}</div>` + (d.report ? `<button onclick="window.toggleEodReport('${rid}')" class="lnk" style="margin-top:8px; padding:4px 10px; font-size:0.72rem;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.78rem;  margin-top:8px; background:rgba(0,0,0,0.2); padding:10px; border-radius:6px;">${escapeHTML(String(d.report))}</pre>` : '') + `</div>`;
+                return `<div style="background:rgba(0,0,0,0.15); border-left:2px solid rgba(255,255,255,0.4); border-radius:8px; padding:10px 12px; margin-bottom:8px;"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${escapeHTML(String(k).slice(0,10))}</strong><strong>${rupee(total)}</strong></div><div style="font-size:0.82rem; ">Cash ${rupee(cash)} · UPI ${rupee(upi)} · ${billCount} bill(s)</div><div style="font-size:0.76rem;  margin-top:2px;">Closed by ${closedBy}${closedAt ? ' · ' + closedAt : ''}</div>` + `<button onclick="window.toggleEodReport('${rid}','${archKey(k)}')" class="lnk" style="margin-top:8px; padding:4px 10px; font-size:0.72rem;">View report</button><pre id="${rid}" style="display:none; white-space:pre-wrap; font-family:inherit; font-size:0.78rem;  margin-top:8px; background:rgba(0,0,0,0.2); padding:10px; border-radius:6px;"></pre>` + `</div>`;
             }).join('');
         }
 
@@ -2325,7 +2387,27 @@ if (typeof module !== "undefined") module.exports = {
             if(v==='demand'){ try{ renderToday(); if(charts['chart-today']) charts['chart-today'].resize(); }catch(e){} _rz(); }
         };
 
-        window.toggleEodReport = function(id){ const el = document.getElementById(id); if(el) el.style.display = (el.style.display === 'none' ? 'block' : 'none'); };
+        // THE REPORT IS FETCHED WHEN IT IS ASKED FOR, NOT BEFORE
+        //
+        // It used to ride along inside the archive this page downloaded wholesale, so
+        // every open paid for 120 days of end-of-day reports in order to show none of
+        // them. It still lives in the archive; only the one being opened is read, once.
+        //
+        // `key` is optional on purpose: the "how this works" panel further up calls this
+        // with an id alone, and has no report to fetch.
+        window.toggleEodReport = async function(id, key){
+            const el = document.getElementById(id); if(!el) return;
+            if (el.style.display !== 'none'){ el.style.display = 'none'; return; }
+            el.style.display = 'block';
+            if (!key || el.dataset.loaded === '1') return;
+            el.textContent = 'Loading…';
+            try {
+                const snap = await db.ref('pos/eodArchive/' + key + '/report').once('value');
+                const txt = snap.val();
+                el.textContent = txt ? String(txt) : 'No report was saved for this closing.';
+                el.dataset.loaded = '1';
+            } catch(e){ el.textContent = 'Could not load the report.'; }
+        };
     </script>
 </body>
 </html>
