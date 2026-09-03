@@ -75,6 +75,38 @@ function pngSize(file) {
   const noRoot = PAGES.filter(p => !/^\s*html\s*\{[^}]*background/m.test(readPage(p)));
   check('and every page paints the canvas as well as the body', noRoot.length === 0, noRoot.join(', '));
   note('the home-bar strip and the overscroll gutter both come off the canvas');
+
+  // A FOURTH THING GETS TO CHOOSE, and the three above did not cover it.
+  //
+  // All of that shipped, and the home bar still came out white on one Android phone
+  // and BLACK on two others — the same build, three answers. A colour that differs
+  // per device is not a colour anyone chose; it is a surface following the device's
+  // own light/dark setting, which is what an undeclared `color-scheme` leaves it free
+  // to do. theme-color says what the bars are; color-scheme says which way everything
+  // the browser draws for us leans, and nothing here had said it.
+  //
+  // It has to be UNCONDITIONAL. Written inside `@media (prefers-color-scheme: ...)`
+  // it is device-dependent again — the exact bug — while still reading like a
+  // declaration and still matching any regex that only asks whether the words are
+  // present. The first version of this check passed such a page happily. So this
+  // counts braces instead: a declaration in a top-level rule sits at depth 1, and one
+  // nested inside an at-rule sits deeper, which is the difference that matters.
+  const saysItUnconditionally = (src) => {
+    const css = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)]
+      .map(m => m[1]).join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');        // a comment may hold braces of its own
+    let depth = 0;
+    for (let i = 0; i < css.length; i++) {
+      if (css[i] === '{') { depth++; continue; }
+      if (css[i] === '}') { depth--; continue; }
+      if (depth === 1 && /^color-scheme:\s*dark/.test(css.slice(i, i + 24))) return true;
+    }
+    return false;
+  };
+  const noScheme = PAGES.filter(p => !saysItUnconditionally(readPage(p)));
+  check('and every page says which scheme it is, so nothing follows the phone instead',
+        noScheme.length === 0, noScheme.join(', '));
+  note('white on one phone and black on two is the signature of nobody having said');
 }
 
 // ---------------------------------------------------------------- the icons are real
