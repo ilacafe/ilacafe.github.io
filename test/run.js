@@ -37,6 +37,7 @@ const suites = [
   'write-only.test.js',
   'build-freshness.test.js',
   'manifest.test.js',
+  'shell-cache.test.js',
   'accessibility.test.js',
   'focus-and-motion.test.js',
   'probe-reachability.test.js',

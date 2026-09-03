@@ -40,6 +40,7 @@ const suites = [
   'analytics-shell-browser.test.js',
   'analytics-drill-browser.test.js',
   'eod-summary-browser.test.js',
+  'shell-cache-browser.test.js',
 ];
 
 let failed = [];

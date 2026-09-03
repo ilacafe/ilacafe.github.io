@@ -50,15 +50,24 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // ---------------- caching (new) ----------------
-// Cache ONLY: our own files (HTML, logo, icons) + fonts + the Firebase SDK scripts.
+// Cache ONLY: our own files (HTML, logo, icons) + fonts + the Firebase SDK scripts +
+// Chart.js, which analytics draws with.
 // Exact-hostname allowlist. Everything else (RTDB, auth, ila-push worker) passes straight through.
-const CACHEABLE_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com'];
+//
+// jsdelivr was the last host on any page that was NOT here, so the charting library
+// was the one part of the app shell that came off the network however many times the
+// page had been opened. Adding a host does not disturb what is already held: the
+// cache keeps its name, nothing is re-fetched, and the new host simply starts being
+// stored the first time it is asked for.
+const CACHEABLE_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com',
+                         'cdn.jsdelivr.net'];
 
 // Of those, the ones whose URL can only ever answer with one file.
 //
-// A font file at fonts.gstatic.com is named after its own contents, and a Firebase
-// SDK under /firebasejs/12.17.1/ is pinned to a version the pages also carry an SRI
-// hash for — nothing at either URL can change without the URL changing too. Serving
+// A font file at fonts.gstatic.com is named after its own contents; a Firebase SDK
+// under /firebasejs/12.17.1/ and Chart.js at /npm/chart.js@4.5.1 are pinned to a
+// version the pages also carry an SRI hash for — nothing at any of those URLs can
+// change without the URL changing too. Serving
 // them from the cache and ALSO fetching them to see whether they moved is six
 // requests per page open, every open, that can only ever return what is already
 // held. On a kitchen tablet on café wifi that is the slowest part of the open, and
@@ -70,11 +79,21 @@ const CACHEABLE_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstat
 //
 // If one of these ever does need re-fetching — a cache entry truncated by a disk
 // eviction — changing CACHE above re-fetches every one of them on the next open.
-// SRI covers the SDKs in the meantime: a short body is rejected by the browser
-// rather than run.
+// SRI covers the SDKs and Chart.js in the meantime: a short body is rejected by the
+// browser rather than run.
 function isImmutable(url) {
   return url.hostname === 'fonts.gstatic.com' ||
-         (url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/') === 0);
+         (url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/') === 0) ||
+         // Chart.js, on the same terms as the SDK above: analytics loads it from a URL
+         // that names its version, and carries an SRI hash for that exact build. It was
+         // the one off-origin file the shell cache did not hold, so the charts were the
+         // only part of that page that needed the network a second time.
+         //
+         // The version pin is the whole condition, and it is checked rather than
+         // assumed. jsdelivr will serve /npm/chart.js unpinned, and that URL means
+         // "whatever is newest" — cache-first on it would freeze a device on one build
+         // forever, which is the opposite of what this is for.
+         (url.hostname === 'cdn.jsdelivr.net' && /@\d/.test(url.pathname));
 }
 
 self.addEventListener('fetch', (event) => {
