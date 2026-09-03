@@ -51,6 +51,22 @@ function pngSize(file) {
   check('it opens without browser chrome', manifest.display === 'fullscreen',
         'display is ' + manifest.display);
   note('standalone still leaves Android a system bar; only fullscreen takes it away');
+
+  // AND ASKED THE OTHER WAY TOO, because the first way did not take.
+  //
+  // A phone reported back: display standalone, viewport 432x893 against a screen of
+  // 432x960. Sixty-seven pixels of system bar the page was never given, on a build
+  // whose manifest plainly says fullscreen. display_override is the member Chrome
+  // reads first and the one the spec added for exactly this — display is the older
+  // key and browsers treat it more loosely.
+  //
+  // Ordered fullscreen then standalone, so a browser that will not do the first still
+  // gets an explicit second choice rather than falling through to a browser tab.
+  const over = manifest.display_override;
+  check('and says so in display_override too, which browsers read first',
+        Array.isArray(over) && over[0] === 'fullscreen' && over.indexOf('standalone') > 0,
+        JSON.stringify(over));
+  note('display alone left a phone on standalone with 67px of bar it never asked for');
   check('and starts at the ordering page', manifest.start_url === '/');
 
   check('theme_color matches the meta tag the page already had',
