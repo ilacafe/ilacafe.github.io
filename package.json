@@ -5,6 +5,7 @@
   "description": "Café Ila — customer ordering, POS, kitchen displays, inventory and admin. Static pages served by GitHub Pages, backed by Firebase Realtime Database.",
   "scripts": {
     "test": "node test/run.js",
+    "perf": "node tools/perf/probe.js",
     "test:browser": "node test/run-browser.js",
     "bump": "node tools/bump-build.js",
     "access-map": "node test/access-map.js",
