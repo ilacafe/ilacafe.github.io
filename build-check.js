@@ -107,6 +107,68 @@
         location.reload();
     }
 
+    // ---------------------------------------------------------------- what the device says
+    //
+    // WHY THIS EXISTS. "The home bar is white" was diagnosed three times from here and
+    // fixed three different ways, because the only facts available were a colour and a
+    // phone model. Whether an installed app is actually running fullscreen, what its
+    // insets are, and which browser built the WebAPK are all things ONLY the device
+    // knows, and none of them can be read from a screenshot. Guessing at them costs a
+    // deploy each time.
+    //
+    // Tapping the build stamp prints them. The stamp is already on every page and
+    // already says the build; this is the same question asked in more detail, and it
+    // works inside an installed app where there is no address bar to type a URL into.
+    //
+    // display-mode is the one that matters: `fullscreen` means the manifest took and
+    // the system bars are gone, `standalone` means it did not and they are still
+    // there being coloured by something we do not control.
+    function deviceReport() {
+        var mm = function (m) { try { return matchMedia('(display-mode: ' + m + ')').matches; } catch (e) { return false; } };
+        var probe = document.createElement('div');
+        probe.style.cssText = 'position:fixed;top:0;left:0;visibility:hidden;' +
+            'padding:env(safe-area-inset-top) env(safe-area-inset-right) ' +
+            'env(safe-area-inset-bottom) env(safe-area-inset-left)';
+        document.body.appendChild(probe);
+        var cs = getComputedStyle(probe);
+        var insets = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].join(' ');
+        probe.remove();
+        var mode = ['fullscreen', 'standalone', 'minimal-ui', 'browser'].filter(mm).join(',') || 'unknown';
+        var prefersDark = false;
+        try { prefersDark = matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
+        return [
+            'build      ' + (window.ILA_BUILD || '?'),
+            'display    ' + mode,
+            'insets     ' + insets,
+            'screen     ' + screen.width + 'x' + screen.height,
+            'viewport   ' + window.innerWidth + 'x' + window.innerHeight,
+            'scheme     ' + getComputedStyle(document.documentElement).colorScheme,
+            'prefers    ' + (prefersDark ? 'dark' : 'light'),
+            'ua         ' + navigator.userAgent
+        ];
+    }
+
+    function showDeviceReport() {
+        var old = document.getElementById('ila-device-report');
+        if (old) { old.remove(); return; }                       // tap again to dismiss
+        var lines = deviceReport();
+        var box = document.createElement('pre');
+        box.id = 'ila-device-report';
+        box.textContent = lines.join('\n');
+        box.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:3200;margin:0;' +
+            'padding:10px;border-radius:8px;background:rgba(0,0,0,0.82);color:#fff;' +
+            'font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;' +
+            'word-break:break-all;max-height:60vh;overflow:auto';
+        box.setAttribute('role', 'status');
+        box.addEventListener('click', function () { box.remove(); });
+        document.body.appendChild(box);
+    }
+
+    document.addEventListener('click', function (e) {
+        var t = e.target && e.target.closest ? e.target.closest('#build-stamp') : null;
+        if (t) showDeviceReport();
+    });
+
     setTimeout(checkForNewBuild, 30000);
     setInterval(checkForNewBuild, BUILD_POLL_MS);
     document.addEventListener('visibilitychange', function () {
