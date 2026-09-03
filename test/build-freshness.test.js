@@ -19,7 +19,13 @@ const { check, note, done } = suite('Build freshness — a screen that never clo
 
 // Every page a member of staff leaves open. index.html is here because a customer
 // tracking an order sits on it for the length of the order.
-const STAMPED = ['pos.html', 'admin.html', 'index.html', 'chef.html', 'barista.html'];
+// analytics.html is here because it is the page somebody opens TO check what is
+// running, and it was the one page whose stamp was a hand-typed literal — two months
+// stale, and stale in the one place a stale answer is worst. The list is what makes
+// that unrepeatable: a page named here must carry the tag, and the tag must agree
+// with build.json.
+const STAMPED = ['pos.html', 'admin.html', 'index.html', 'chef.html', 'barista.html',
+                 'analytics.html'];
 
 const watcher = readPage('build-check.js');
 

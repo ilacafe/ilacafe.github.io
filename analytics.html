@@ -106,6 +106,7 @@
          same-origin and fetched in that mode by default, so declaring it would
          stop the preload matching the tag and fetch each file twice. -->
     <link rel="preload" as="script" href="/auth-gate.js">
+    <link rel="preload" as="script" href="/build-check.js">
     <link rel="preload" as="script" href="/dialogs.js">
     <link rel="preload" as="script" href="/connection.js">
     <!-- deferred, unlike the three above, because nothing here needs it until the
@@ -197,24 +198,100 @@
         .card h2 { font-size: 1rem; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 14px 0; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; }
 
         /* date range bar */
-        .range-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        /* NINE PRESETS ON ONE LINE, THE WAY THE TILL DOES ITS CATEGORIES
+           These were nine 44px pills that wrapped to three rows — 148px, the bulk of a
+           card that was 503px tall on a 412px phone and pushed the revenue figure to
+           y=822, below the fold of every phone the cafe owns. The owner opened
+           analytics and saw a date picker.
+           So: pos.html's category strip, which had exactly this problem and solved it.
+           The chip is small and the TARGET is 44px — a transparent ::after centred on
+           each one — so a thumb still gets what a thumb needs without every chip
+           costing 44px of the page. One line that scrolls sideways rather than three
+           that stack: nothing is removed and nothing is behind an extra tap.
+           overflow-x on this strip is not page overflow — the strip is its own scroll
+           container and reflow-browser.test.js checks the document, which does not
+           move. */
+        .range-bar { display: flex; flex-wrap: nowrap; gap: 4px; align-items: center;
+                     overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+                     -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity;
+                     /* 8px, and not the 4px this started at, because overflow-y: hidden
+                        CLIPS the 44px ::after below to the strip's own box — the target
+                        was quietly 36px, which is the exact failure the chips are shaped
+                        to avoid. overflow-y cannot be visible next to overflow-x: auto
+                        (it computes to auto and buys a vertical scrollbar), so the strip
+                        is made tall enough to hold the target instead: 28px chip + 8px
+                        top + 8px bottom = 44. */
+                     padding: 8px 0; }
+        .range-bar::-webkit-scrollbar { display: none; }
+        /* A chip cut in half at the edge is the only thing telling you the strip goes
+           on, so it is made to look deliberate rather than clipped: the last few
+           pixels fade out instead of ending mid-letter. Cosmetic only — a browser
+           without mask-image gets the hard edge, which is what this looked like
+           before and still works. */
+        @supports (mask-image: linear-gradient(#000, #000)) {
+            .range-bar { mask-image: linear-gradient(to right, transparent 0, #000 14px,
+                                     #000 calc(100% - 14px), transparent 100%); }
+        }
+        .range-chip { position: relative; flex: 0 0 auto; scroll-snap-align: center;
+                      background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.25);
+                      color: #fff; padding: 6px 11px; border-radius: 16px; font-size: 0.75rem;
+                      font-weight: 700; letter-spacing: 0.5px; cursor: pointer;
+                      font-family: inherit; white-space: nowrap; }
+        /* The target, not the chip. Height only: left/right are pinned to the chip so a
+           chip's target never covers its neighbour's centre. */
+        .range-chip::after { content: ''; position: absolute; left: 0; right: 0; top: 50%;
+                             height: 44px; transform: translateY(-50%); }
+        .range-chip.active { background: #fff; color: var(--brand-bg); border-color: #fff; }
+        .range-chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
         /* The unselected pill's own translucent white fill LIGHTENS the surface
            under its white label — 4.01:1, worse than the plain brown beside it.
            Darkening the fill instead of lightening it both separates the pill from
            the page and gives the label its contrast back. */
         .range-btn { background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 11px 15px; min-height: 44px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; cursor: pointer; font-family: inherit; }
         .range-btn.active { background: #fff; color: var(--brand-bg); }
-        .range-custom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); }
+        /* The heading and the answer on one line. The span wraps under the title on a
+           narrow screen rather than squeezing it, and it is allowed to be quieter than
+           the heading without being faint — it is still 4.5:1 on this background. */
+        /* This card's heading carries the answer as well as the question, so it does
+           not also need the rule under it and the 14px below that: the strip beneath
+           is plainly the thing the heading names. */
+        .h2-split { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px;
+                    border-bottom: none; padding-bottom: 0; margin-bottom: 6px; }
+        .h2-split #range-label { font-size: 0.78rem; letter-spacing: 0.5px; text-transform: none;
+                                 font-weight: 400; margin: 0; }
+
+        /* CUSTOM DATES, FOLDED AWAY
+           A <details> and not a scripted toggle: it opens without JavaScript, it is in
+           the tab order and operable from the keyboard for free, and find-in-page opens
+           it. The summary is a real 44px target — this is the one control here that a
+           thumb has to find, and the pills beside it are already held to 44 by
+           touch-targets-browser.test.js. */
+        .range-more { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .range-more > summary { position: relative; display: flex; align-items: center; gap: 8px;
+                                font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px;
+                                font-weight: 700; cursor: pointer; list-style: none; width: max-content;
+                                -webkit-tap-highlight-color: transparent; }
+        /* 44px of target, 0px of extra page — the same trade the chips above make. */
+        .range-more > summary::before { content: ''; position: absolute; left: 0; right: 0; top: 50%;
+                                        height: 44px; transform: translateY(-50%); }
+        .range-more > summary::-webkit-details-marker { display: none; }
+        /* The chevron is the only thing that says this opens, so it is drawn rather
+           than left to the browser's default triangle, which the rule above removes. */
+        .range-more > summary::after { content: '\25BE'; font-size: 0.8rem; transition: transform 0.15s ease; }
+        .range-more[open] > summary::after { transform: rotate(180deg); }
+        .range-more > summary:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 6px; }
+        .range-custom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-bottom: 4px; }
         /* THE LABELS ON THIS PAGE WERE THE WORST OF IT
              Every label here is uppercase, letter-spaced and small — three signals
              that it is a label and not a number. The opacity was a fourth, and the
              only one that cost legibility: 0.55 and 0.6 land at 2.57 and 2.77:1,
              which is under AA for large text as well as body. The typography that
-             was already doing the work keeps doing it. */
-        .rc-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+             was already doing the work keeps doing it — which is why the summary
+             above is styled the way .rc-label was, and carries no opacity either.
+             .rc-label itself is gone: the word "Custom" is the summary now. */
         .rc-to { font-size: 0.85rem; }
         .range-custom input { padding: 7px 9px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
-        #range-label { font-size: 0.8rem; margin-top: 10px; }
+
 
         /* KPI */
         .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -460,27 +537,45 @@
         </div>
 
         <div id="analytics-block">
+            <!-- Shown only if Chart.js never arrived. See drawChart below. -->
+            <div class="err-card warn" id="charts-offline" role="status">
+                Charts could not load — the charting library did not arrive. Every number,
+                table and export on this page is still correct and still live.
+            </div>
 
-        <!-- DATE RANGE -->
+        <!-- DATE RANGE
+             This card is the first thing on the page and it used to be 503px of it,
+             on a 412px-wide phone: nine pills over three rows, then a custom-date
+             block that wrapped its label, both pickers, the word "to" and Apply onto
+             five separate lines, then the chosen span on a line of its own. Revenue
+             — the number the page exists to show — started at y=822, below the fold
+             of every phone the cafe owns. The owner opened analytics and saw a date
+             picker.
+             Two changes, and neither removes a control. The chosen span moved up
+             beside the heading, which is where the question it answers already was.
+             And the custom range folded into a disclosure: it is the rarest thing
+             here by far — the nine presets cover almost every visit — and it was
+             costing more room than all nine of them together. -->
         <div class="card">
-            <h2>Date Range</h2>
-            <div class="range-bar">
-                <button class="range-btn" data-range="today">Today</button>
-                <button class="range-btn" data-range="yesterday">Yesterday</button>
-                <button class="range-btn" data-range="7d">7 Days</button>
-                <button class="range-btn active" data-range="30d">30 Days</button>
-                <button class="range-btn" data-range="90d">90 Days</button>
-                <button class="range-btn" data-range="thisMonth">This Month</button>
-                <button class="range-btn" data-range="lastMonth">Last Month</button>
-                <button class="range-btn" data-range="thisYear">This Year</button>
-                <button class="range-btn" data-range="all">All Time</button>
+            <h2 class="h2-split">Date Range <span id="range-label">&nbsp;</span></h2>
+            <div class="range-bar" id="range-bar" role="group" aria-label="Date range presets">
+                <button class="range-chip" data-range="today">Today</button>
+                <button class="range-chip" data-range="yesterday">Yesterday</button>
+                <button class="range-chip" data-range="7d">7 Days</button>
+                <button class="range-chip active" data-range="30d">30 Days</button>
+                <button class="range-chip" data-range="90d">90 Days</button>
+                <button class="range-chip" data-range="thisMonth">This Month</button>
+                <button class="range-chip" data-range="lastMonth">Last Month</button>
+                <button class="range-chip" data-range="thisYear">This Year</button>
+                <button class="range-chip" data-range="all">All Time</button>
             </div>
-            <div class="range-custom">
-                <span class="rc-label">Custom</span>
-                <input type="date" id="date-from" aria-label="From"><span class="rc-to">to</span><input type="date" id="date-to" aria-label="To">
-                <button class="lnk" onclick="window.applyCustom()">Apply</button>
-            </div>
-            <div id="range-label">&nbsp;</div>
+            <details class="range-more">
+                <summary>Custom dates</summary>
+                <div class="range-custom">
+                    <input type="date" id="date-from" aria-label="From"><span class="rc-to">to</span><input type="date" id="date-to" aria-label="To">
+                    <button class="lnk" onclick="window.applyCustom()">Apply</button>
+                </div>
+            </details>
         </div>
 
         <!-- KPIs -->
@@ -599,7 +694,16 @@
             </div>
         </div>
         </div><!-- /analytics-block -->
-        <div class="build-stamp" style="text-align:center; margin-top:8px;">layout build &middot; 2026-07-10 &middot; demand-merge h</div>
+        <!-- WRITTEN BY THE WATCHER, NOT BY HAND
+             This used to be a literal: "layout build · 2026-07-10 · demand-merge h",
+             typed once and then left behind by every deploy after it. It was the only
+             build stamp on the site that was not the build — so the one page an owner
+             opens to check what is running was the one page that could not tell them,
+             and it answered with July for two months.
+             Empty here on purpose. build-check.js reads its own data-build attribute
+             and this is filled from that, so the stamp cannot say anything the tag
+             does not, and `npm run bump` keeps the tag in step with build.json. -->
+        <div id="build-stamp" class="build-stamp" style="text-align:center; margin-top:8px;"></div>
     </div>
 
     <!-- Ours, in the order they ran in when they were in the head. Nothing here
@@ -609,6 +713,10 @@
     <!-- Keeps a signed-in device signed in, and stops the login form being
          shown to somebody who is already signed in. See the top of the file. -->
     <script src="/auth-gate.js"></script>
+    <!-- Not deferred, and not async: build-check.js reads document.currentScript to
+         find its own data-build, and that is null for both. It would run and never
+         fire. build-freshness.test.js holds this for every stamped page. -->
+    <script src="/build-check.js" data-build="2026-09-03.8"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -770,8 +878,23 @@
             requestAnimationFrame(() => { _renderQueued = false; render(); });
         }
 
+        // Filled here rather than in init(): init() only runs for a signed-in admin,
+        // and "which build is this?" is a question worth answering at the login box
+        // too — that is often exactly where somebody is standing when they ask it.
+        try { const _b = document.getElementById('build-stamp');
+              if (_b) _b.textContent = 'build ' + ILA_BUILD; } catch(e){}
+
         function init(){
-            document.querySelectorAll('.range-btn').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.range)));
+            // .range-chip, not .range-btn. .range-btn is the pill SHAPE, and three
+            // different groups wear it: this one, the Analytics/Demand Map switch, and
+            // the Chef/Barista toggle. Binding the shape bound all three, so every
+            // click on a view or a station also ran setPreset(undefined) — which falls
+            // through to the 30-day branch and silently threw away the range the owner
+            // had chosen — and then cleared .active from every button wearing the
+            // shape, including the two that say which view you are looking at. Picking
+            // "Today" left the view switch showing neither view; switching to Demand
+            // Map and back left the range reset with no preset lit at all.
+            document.querySelectorAll('.range-chip').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.range)));
             setPreset('30d');
             db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); scheduleRender(); });
             // Voids are rare — a few a week — so 2000 is years of them, and it stops
@@ -804,6 +927,18 @@
 
         // ---------- date range ----------
         function startOfDay(d){ const x=new Date(d); x.setHours(0,0,0,0); return x.getTime(); }
+        // A strip that scrolls sideways can put the chosen range off its own edge —
+        // on load "30 Days" is fourth of nine, and on a narrow phone that is past the
+        // right-hand edge. Scrolled by setting scrollLeft on the strip itself rather
+        // than scrollIntoView, which is free to scroll the PAGE as well and would
+        // yank an owner away from whatever they were reading.
+        function keepActiveChipInView(){
+            const bar = document.getElementById('range-bar'); if (!bar) return;
+            const chip = bar.querySelector('.range-chip.active'); if (!chip) return;
+            const want = chip.offsetLeft - (bar.clientWidth - chip.offsetWidth) / 2;
+            bar.scrollLeft = Math.max(0, want);
+        }
+
         function setPreset(key){
             const now = new Date(); const end = now.getTime(); let start, label;
             const DAY = 86400000;
@@ -818,14 +953,17 @@
             else if(key==='all'){ start = 0; }
             else { start = end - 30*DAY; }
             setRange(start, end, key, key==='all' ? 'All time' : fmtRange(start, end));
-            document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range===key));
+            document.querySelectorAll('.range-chip').forEach(b => b.classList.toggle('active', b.dataset.range===key));
+            keepActiveChipInView();
         }
         window.applyCustom = function(){
             const f = document.getElementById('date-from').value, t = document.getElementById('date-to').value;
             if(!f || !t){ ilaToast("Pick both a start and an end date"); return; }
             const start = startOfDay(new Date(f)); const end = startOfDay(new Date(t)) + 86400000; // inclusive end day
             if(end <= start){ ilaFieldError('range-to', "End date must be on or after the start date"); return; }
-            document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+            // .range-chip and not .range-btn, for the same reason the binding above
+            // uses it: this used to clear .active from the view switch too.
+            document.querySelectorAll('.range-chip').forEach(b => b.classList.remove('active'));
             setRange(start, end, 'custom', fmtRange(start, end-1));
         };
         // The page defaulted to a 30-day view while downloading every bill ever
@@ -986,9 +1124,33 @@
         }
 
         // ---------- charts ----------
+        // CHART.JS IS THE ONE THING ON THIS PAGE THAT COMES FROM SOMEBODY ELSE
+        //
+        // It is fetched from a CDN, and on cafe wifi a fetch that does not arrive is
+        // an ordinary Tuesday. `new Chart(...)` then throws a ReferenceError — and
+        // the first render() runs inside the try/catch around the sign-in check, so
+        // that error was caught there and reported as
+        //
+        //     "Could not verify access. Check connection and retry."
+        //
+        // which names the wrong thing entirely. Firebase was fine, the owner was
+        // signed in, and every number on the page had already been computed. What
+        // they got was a login box telling them to check a connection that worked.
+        //
+        // Charts are the decoration here, not the data: the KPIs, the tables, the
+        // search and both CSV exports need nothing from this library. So a missing
+        // Chart costs the pictures and nothing else, and the page says which it is
+        // rather than leaving six blank rectangles to be explained.
+        function chartsReady(){
+            if (typeof Chart === 'function') return true;
+            const n = document.getElementById('charts-offline');
+            if (n) n.style.display = 'block';
+            return false;
+        }
         function drawChart(id, type, labels, datasets, options){
             const el = document.getElementById(id); if(!el) return;
             if(charts[id]) charts[id].destroy();
+            if(!chartsReady()) return;
             charts[id] = new Chart(el.getContext('2d'), { type, data:{labels, datasets}, options });
         }
         function axisOpts(isCurrency, maxTicks){
@@ -1001,6 +1163,7 @@
             const el = document.getElementById(id); if(!el) return;
             if(charts[id]) charts[id].destroy();
             if(!data.length || data.every(v=>!v)){ const c=el.getContext('2d'); c.clearRect(0,0,el.width,el.height); charts[id]=null; return; }
+            if(!chartsReady()) return;
             charts[id] = new Chart(el.getContext('2d'), {
                 type:'doughnut',
                 data:{ labels, datasets:[{ data, backgroundColor: labels.map((_,i)=>PALETTE[i%PALETTE.length]), borderColor:'rgba(0,0,0,0.2)', borderWidth:1 }] },
@@ -1950,6 +2113,7 @@ if (typeof module !== "undefined") module.exports = {
                 ]
             };
             if (charts["chart-today"]) { charts["chart-today"].data = data; charts["chart-today"].update("none"); return; }
+            if (!chartsReady()) return;
             charts["chart-today"] = new Chart($("chart-today").getContext("2d"), {
                 type: "line",
                 data,
