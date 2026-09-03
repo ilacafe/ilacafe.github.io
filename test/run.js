@@ -38,6 +38,7 @@ const suites = [
   'build-freshness.test.js',
   'manifest.test.js',
   'shell-cache.test.js',
+  'menu-cache-shapes.test.js',
   'accessibility.test.js',
   'focus-and-motion.test.js',
   'probe-reachability.test.js',

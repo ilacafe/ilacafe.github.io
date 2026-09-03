@@ -700,7 +700,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-03.11"></script>
+    <script src="/build-check.js" data-build="2026-09-03.12"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1251,7 +1251,19 @@
         // Capped at a week. The live data always wins within a second, so the cap is
         // not about correctness — it is so that a phone which last opened this months
         // ago does not flash a menu of things the café has stopped making.
-        const MENU_CACHE_KEY = 'ila_cached_menu';
+        // NOT 'ila_cached_menu' — that key belongs to the till.
+        //
+        // Both pages cache a menu and both used that name, on the same origin, storing
+        // different things: pos.html writes the menu itself, this page writes a wrapper
+        // carrying the timestamp it ages its copy out by. A device that opened both
+        // handed the till a wrapper where it expected a menu, and the till drew the
+        // wrapper's own keys as categories — a menu of "menu" and "order", every row
+        // "undefined" and marked Out. Its offline branch would then have had nothing
+        // sellable on a screen whose whole job is to keep selling.
+        //
+        // A key of this page's own means the two can never disagree again. The till also
+        // validates the shape it reads, for the devices already holding the wrong one.
+        const MENU_CACHE_KEY = 'ila_cust_menu';
         const MENU_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
         function cacheMenu(){
             if (!currentMenuData || !Object.keys(currentMenuData).length) return;

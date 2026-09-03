@@ -1051,7 +1051,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-03.11"></script>
+    <script src="/build-check.js" data-build="2026-09-03.12"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -2936,14 +2936,50 @@
                 if (n) n.classList.remove('speak', 'flash');
             }
         }
+        // THE TILL AND THE ORDERING PAGE BOTH CACHE A MENU, AND BOTH USED THIS KEY
+        //
+        // They do not store the same thing. This page writes the menu itself; index.html
+        // writes {at, menu, order, items} so it can age its copy out after a week. Same
+        // origin, same key — so a device that has opened the customer page hands this one
+        // a wrapper where it expects a menu.
+        //
+        // Nothing validated it. Reproduced on the till: the wrapper's own keys were drawn
+        // as the categories, giving a menu of "menu" and "order" whose rows read
+        // "undefined", every one of them marked Out because a wrapper has no inStock.
+        // Provisional refuses taps so no money could move, but goOffline() takes the same
+        // value, calls buildMenuMaps on it and clears the flag — so a till that opens
+        // disconnected on such a device gets a menu it cannot sell a single item from,
+        // which is the one situation that branch exists for.
+        //
+        // index.html has a distinct key now, so the two cannot collide again. This stays
+        // for the devices that already hold the wrong shape: they recover on the next
+        // read rather than on the next online menu write.
+        //
+        // A positive test, not a list of things to reject: a menu is categories of items,
+        // so every value at the top has to be an object. The wrapper's `at` is a number
+        // and fails on that alone.
+        function menuFromStore(){
+            let raw;
+            try { raw = JSON.parse(localStorage.getItem('ila_cached_menu') || 'null'); }
+            catch(e){ return null; }
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+            const cats = Object.keys(raw);
+            if (!cats.length) return null;
+            for (const c of cats){
+                const v = raw[c];
+                if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+            }
+            return raw;
+        }
+
         function bootMenuFromCache(){
             let cached, order, items;
             try {
-                cached = JSON.parse(localStorage.getItem('ila_cached_menu') || 'null');
+                cached = menuFromStore();
                 order  = JSON.parse(localStorage.getItem('ila_cached_category_order') || 'null');
                 items  = JSON.parse(localStorage.getItem('ila_cached_item_order') || 'null');
             } catch(e){ return; }
-            if (!cached || !Object.keys(cached).length) return;
+            if (!cached) return;
             if (Object.keys(currentMenuData).length) return;      // the live one beat us here
             window.currentItemOrder = items || {};
             markMenuProvisional(true);
@@ -3045,7 +3081,7 @@
                     ind.textContent = 'OFFLINE';
                 }
             } catch(e){}
-            let cachedMenu = JSON.parse(localStorage.getItem('ila_cached_menu'));
+            let cachedMenu = menuFromStore();
             let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
             window.currentItemOrder = JSON.parse(localStorage.getItem('ila_cached_item_order')) || {};
             // A till with no connection works from this cached menu — that is the
