@@ -31,7 +31,26 @@ function pngSize(file) {
   for (const k of ['name', 'short_name', 'start_url', 'display', 'icons']) {
     check('the manifest declares ' + k, manifest[k] !== undefined);
   }
-  check('it opens standalone rather than in a browser tab', manifest.display === 'standalone');
+  // SEAMLESS, NOT MERELY CONSISTENT.
+  //
+  // On the iPhone this app already runs to the edges — that is
+  // apple-mobile-web-app-status-bar-style: black-translucent, which lets the page
+  // draw under the status bar, and iOS ignores this field entirely. Android never
+  // matched it. Standalone hands Android a system navigation bar the page cannot
+  // reach and the web platform cannot colour: there is no manifest member or meta
+  // for it, and Chrome paints it light or dark from the scheme. So the home bar was
+  // always going to be a strip of not-the-brand at the bottom of the till.
+  //
+  // Fullscreen is the one setting that removes it rather than recolouring it. The
+  // bars go, gesture navigation still works by swipe, and the brown runs to the
+  // bottom edge the way it does on the iPhone.
+  //
+  // The fallback is the spec's own: a browser that will not do fullscreen walks down
+  // to standalone, then minimal-ui, then browser — so nothing here regresses to a
+  // browser tab on a device that cannot manage it.
+  check('it opens without browser chrome', manifest.display === 'fullscreen',
+        'display is ' + manifest.display);
+  note('standalone still leaves Android a system bar; only fullscreen takes it away');
   check('and starts at the ordering page', manifest.start_url === '/');
 
   check('theme_color matches the meta tag the page already had',
