@@ -39,6 +39,7 @@ const suites = [
   'analytics-scale-browser.test.js',
   'analytics-shell-browser.test.js',
   'analytics-drill-browser.test.js',
+  'eod-summary-browser.test.js',
 ];
 
 let failed = [];

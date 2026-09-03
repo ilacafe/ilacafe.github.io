@@ -111,6 +111,16 @@ const KEY_FOR = {
 };
 
 const SAMPLES = {
+  // The five numbers the till writes beside the archive when it closes the day, so
+  // analytics can render a closing without downloading that day's whole bills and
+  // ledger. closedAt goes in as the server's own clock, the way the archive's does.
+  'pos/eodSummary/$key': {
+    cash: 8000, upi: 12000, bills: 42, closedBy: 'Tara', closedAt: { '.sv': 'timestamp' }
+  },
+  // Written once, by whichever analytics open rebuilt the summaries for closings made
+  // before they existed. Its presence is what stops that read repeating.
+  'pos/eodSummaryBackfill': { at: 1756200000000, days: 120 },
+
   // What the ordering page actually pushes for a takeaway. upiId and billedAt are in
   // here because they go in on CREATE: the customer's phone picks the VPA and stamps
   // the moment it drew the code, and under these rules an anonymous browser may
@@ -331,6 +341,8 @@ const SAMPLES = {
       'pos/ledgerEntries':   ['cashier', 'admin', 'robot'],
       'pos/unverified':      ['cashier', 'admin', 'robot'],   // the robot settles late credits into the archive
       'pos/eodArchive':      ['admin', 'robot'],
+      'pos/eodSummary':      ['admin', 'robot'],          // an index over the archive, same readers
+      'pos/eodSummaryBackfill': ['admin', 'robot'],
       'orders/history':      ['admin'],
       'orders/pendingWeb':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'payments':            ['cashier', 'barista', 'chef', 'inventory', 'admin'],

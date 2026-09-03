@@ -47,6 +47,7 @@ const server = http.createServer((req, res) => {
 });
 
 const ARCHIVE = 'pos/eodArchive';
+const SUMMARY = 'pos/eodSummary';
 const RESET = 'pos';        // the atomic multi-path reset is written at pos itself
 const HOLD_ARCHIVE = ARCHIVE + '/*';   // the key under it carries a timestamp
 
@@ -236,6 +237,25 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       await settle(seen);
       check('once the archive lands, the till is cleared', resets(seen).length === 1, trail(seen));
       check('and only then does the report go out', seen.handoffs.length === 1, trail(seen));
+
+      // THE INDEX BESIDE THE RECORD
+      // Analytics renders a closing from five numbers and was downloading the whole
+      // archive — every bill and every ledger row of every day — to get them. The
+      // count is the one that cannot be recovered later without that download, so it
+      // is written at the moment it is known. Derived data: it goes in AFTER the
+      // archive is safe and is not allowed to hold the close up or fail it.
+      const summary = seen.ops.find(o => o.path.indexOf(SUMMARY + '/') === 0);
+      check('and a summary of it is written beside it', !!summary, trail(seen));
+      check('carrying the same totals and the bill COUNT',
+            !!summary && summary.value.upi === 8400 && summary.value.cash === 3100 &&
+            summary.value.bills === 2 && summary.value.closedBy === 'Priya',
+            summary ? JSON.stringify(summary.value) : 'not written');
+      check('under the same key as the archive it summarises',
+            !!summary && !!archive &&
+            summary.path.slice(SUMMARY.length) === archive.path.slice(ARCHIVE.length),
+            (summary ? summary.path : '-') + ' vs ' + (archive ? archive.path : '-'));
+      note('the report is left in the archive and fetched only when one is opened');
+
       await ctx.close();
     }
 

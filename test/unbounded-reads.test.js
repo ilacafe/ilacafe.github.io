@@ -58,6 +58,11 @@ const BOUNDED = {
   'pos/bills':              'cleared at EOD',
   'pos/ledgerEntries':      'cleared at EOD',
   'pos/upiTotal':           'a number, reset at EOD',
+  'pos/eodSummaryBackfill': 'one object, {at, days}, written once and never appended to. ' +
+                            'Its whole job is to be small and to be there: analytics reads ' +
+                            'it to find out whether the closing summaries have already been ' +
+                            'rebuilt from the archive, which is the read that stops a 5MB ' +
+                            'one happening on every open.',
   'pos/cashDrawer':         'a number',
   'pos/lastSplitHeads':     'a number',
   'pos/tips/lastHeads':     'a number',
