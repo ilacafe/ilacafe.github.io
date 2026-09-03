@@ -625,7 +625,7 @@
         <div class="card">
             <h2>Item Drill-down</h2>
             <div class="controls">
-                <select id="drill-select" aria-label="Item" onchange="window.renderDrill()" style="min-width:220px;"><option value="">Select an item…</option></select>
+                <select id="drill-select" aria-label="Item" onchange="window.renderDrill()" style="min-width:220px;"><option value="">Loading…</option></select>
                 <div id="drill-stats" style="font-size:0.85rem; "></div>
             </div>
             <div class="chart-full" style="height:230px;"><canvas id="chart-drill"></canvas></div>
@@ -716,7 +716,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-03.8"></script>
+    <script src="/build-check.js" data-build="2026-09-03.9"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -895,6 +895,10 @@
             // "Today" left the view switch showing neither view; switching to Demand
             // Map and back left the range reset with no preset lit at all.
             document.querySelectorAll('.range-chip').forEach(b => b.addEventListener('click', () => setPreset(b.dataset.range)));
+            // Marks the drill-down as the owner's rather than the page's. On the real
+            // change event, so a value set in code cannot pin it by accident.
+            const ds = document.getElementById('drill-select');
+            if (ds) ds.addEventListener('change', () => { drillPinned = true; });
             setPreset('30d');
             db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); scheduleRender(); });
             // Voids are rare — a few a week — so 2000 is years of them, and it stops
@@ -1187,12 +1191,59 @@
         };
 
         // ---------- drill-down ----------
+        let drillPinned = false;    // true once the owner has picked an item themselves
+        // SOMETHING IS ALWAYS DRILLED INTO
+        //
+        // This opened on "Select an item…" — an empty stats line and no chart, every
+        // time, on a card whose whole job is to show one. Nobody wants the empty
+        // state: they want the thing they were last looking at, or failing that the
+        // item worth looking at first.
+        //
+        // The list is already sorted by revenue, so names[0] is the best seller in the
+        // chosen range, which is the answer to "what should I be looking at" for
+        // anyone who has not said otherwise. A choice already made survives a range
+        // change; it only falls back to the best seller when the chosen item has no
+        // sales in the new range, where the alternative is the blank card again.
+        //
+        // The placeholder is gone with it. Keeping it would leave the annoyance one
+        // tap away and mean handling a selected-nothing state that can no longer
+        // arise for any other reason.
         function refreshDrillOptions(){
             const sel = document.getElementById('drill-select'); if(!sel || !LAST) return;
             const cur = sel.value;
             const names = Object.keys(LAST.itemAgg).sort((a,b)=>LAST.itemAgg[b].rev-LAST.itemAgg[a].rev);
-            sel.innerHTML = '<option value="">Select an item…</option>' + names.map(n=>`<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join('');
-            if(cur && LAST.itemAgg[cur]) sel.value = cur;
+            if(!names.length){
+                // A range with no sales in it. Say that, rather than offering a menu of
+                // nothing — ilaChoose returns early on an empty option list, so a select
+                // with no options is a control that silently does nothing when tapped.
+                sel.innerHTML = '<option value="">No sales in this range</option>';
+                drillPinned = false;
+            } else {
+                sel.innerHTML = names.map(n=>`<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join('');
+                // WHOSE CHOICE IS ON SCREEN DECIDES WHETHER IT SURVIVES A RANGE CHANGE
+                //
+                // The default has to be the best seller IN THE CHOSEN RANGE — that is
+                // the whole point of it being a default, and the leader over ninety days
+                // is often not the leader over one. But once the page has auto-picked,
+                // that pick would look exactly like a choice on the next range change and
+                // would be preserved, so the card would go on showing the 30-day leader
+                // while the range said 7 days.
+                //
+                // So only an actual choice is kept, and only a real change event is one:
+                // dialogs.js fires one when somebody picks from the list, and setting
+                // .value in code — which is all this function does — fires nothing.
+                const keep = drillPinned && cur && LAST.itemAgg[cur];
+                sel.value = keep ? cur : names[0];
+                if(!keep) drillPinned = false;      // this pick is the page's, not theirs
+            }
+            // No __ilaSync call here, though the first version of this had one. dialogs.js
+            // replaces this select with a button that paints from the selected option,
+            // and its MutationObserver already re-syncs every faced control on any DOM
+            // change — "anything re-rendered under a face that still exists may hold a
+            // new value". Rewriting these options IS that change. Calling it again from
+            // here was belt-and-braces over a mechanism that already works, under a
+            // comment claiming a bug that does not exist. The suite still checks the
+            // button agrees with the selection, which holds whichever side provides it.
             renderDrill();
         }
         window.renderDrill = function(){
@@ -1208,7 +1259,10 @@
                 for(const nm in o.items){ if(String(nm).split(" (")[0]===name){ const qq=Number(o.items[nm].qty)||0, pp=Number(o.items[nm].price)||0; q+=qq; rv+=qq*pp; hit=true; const bk=bucketKey(ts,unit); if(trend[bk]!==undefined) trend[bk]+=qq; } }
                 if(hit) ords++;
             }
-            stats.innerHTML = `<strong>${escapeHTML(name)}</strong> &middot; ${q} sold &middot; ${rupee(rv)} &middot; ${ords} orders`;
+            // "1 orders" was always wrong and was rarely seen, because this line only
+            // appeared once somebody had chosen an item. It is on screen every time
+            // now, so it says it properly — the same way axisOpts already does.
+            stats.innerHTML = `<strong>${escapeHTML(name)}</strong> &middot; ${q} sold &middot; ${rupee(rv)} &middot; ${ords} ${ords===1?'order':'orders'}`;
             const labels = Object.keys(trend);
             drawChart('chart-drill','bar', labels, [{ data: labels.map(k=>trend[k]), backgroundColor:'#6cd07f', borderRadius:3 }],
                 { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y+' sold'}}},

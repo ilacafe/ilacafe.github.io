@@ -38,6 +38,7 @@ const suites = [
   'native-controls-browser.test.js',
   'analytics-scale-browser.test.js',
   'analytics-shell-browser.test.js',
+  'analytics-drill-browser.test.js',
 ];
 
 let failed = [];
