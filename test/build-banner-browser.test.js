@@ -157,6 +157,29 @@ async function poke(page) {
             await page.evaluate(() => !document.getElementById('ila-update-banner')));
 
       check(name + ' loaded without throwing', errors.length === 0, errors.join(' | '));
+
+      // The same stamp answers the question a screenshot cannot. "The home bar is
+      // white" was diagnosed three times off a colour and a phone model, because
+      // whether an installed app is REALLY running fullscreen is something only the
+      // device knows. Tapping the stamp prints it, inside the app, where there is no
+      // address bar to type a URL into.
+      const hiddenFirst = await page.evaluate(() => !document.getElementById('ila-device-report'));
+      await page.evaluate(() => { const s = document.getElementById('build-stamp'); if (s) s.click(); });
+      const report = await page.evaluate(() => {
+        const b = document.getElementById('ila-device-report');
+        return b ? b.textContent : null;
+      });
+      check(name + ' keeps the device report out of the way until it is asked for',
+            hiddenFirst, 'it was on screen before anyone tapped anything');
+      check(name + ' prints what only the device knows, display-mode first',
+            !!report && /display\s+\S/.test(report) && /insets\s+\S/.test(report) &&
+            /ua\s+\S/.test(report),
+            report ? report.split('\n')[1] : 'the stamp did nothing');
+
+      await page.evaluate(() => { const s = document.getElementById('build-stamp'); if (s) s.click(); });
+      const gone = await page.evaluate(() => !document.getElementById('ila-device-report'));
+      check(name + ' takes it away again on a second tap', gone,
+            'it covers the foot of the page until reload');
       await ctx.close();
     }
   } finally {
