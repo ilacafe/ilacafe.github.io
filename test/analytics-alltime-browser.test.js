@@ -43,6 +43,15 @@ function makeHistory() {
         const nm = ITEMS[(day + i + j) % ITEMS.length] + (j === 1 ? ' (Large)' : '');
         items[nm] = { qty: 1 + (j % 2), price: 100 + ((day + j) * 13) % 200 };
       }
+      // Every fifth bill orders two sizes of the SAME drink, which is what a table of
+      // two actually does. Without it no order has one base item on two lines, and
+      // "orders an item appeared in" and "lines it appeared on" are the same number —
+      // so a rollup that counted lines would pass every check below.
+      if (i % 5 === 0) {
+        const base = ITEMS[(day + i) % ITEMS.length];
+        items[base] = { qty: 1, price: 150 };
+        items[base + ' (Large)'] = { qty: 1, price: 190 };
+      }
       h[String(ts) + '-' + (n++).toString(36)] = {
         timestamp: '3 Sep 2026, 14:32', source: 'POS',
         orderType: TYPES[(day + i) % 3], tableOrAddress: 'Table ' + (i % 9), notes: '',
@@ -83,6 +92,7 @@ function makeRollups() {
     const o = HIST[id];
     const r = daily[dk] || (daily[dk] = { rev: 0, orders: 0, pay: {},
       type: { 'Dine-in': 0, Takeaway: 0, Delivery: 0 }, hour: new Array(24).fill(0), item: {} });
+    const seen = {};
     const amt = Number(o.payment.total) || 0;
     r.rev += amt; r.orders++;
     r.pay[o.payment.method] = (r.pay[o.payment.method] || 0) + amt;
@@ -93,13 +103,22 @@ function makeRollups() {
     r.hour[d.getHours()]++;
     for (const nm in o.items) {
       const base = String(nm).split(' (')[0];
-      const it = r.item[base] || (r.item[base] = { q: 0, r: 0 });
+      const it = r.item[base] || (r.item[base] = { q: 0, r: 0, o: 0 });
+      if (!seen[base]) { seen[base] = 1; it.o++; }
       it.q += o.items[nm].qty; it.r += o.items[nm].price * o.items[nm].qty;
     }
   }
   return daily;
 }
 const ROLLUPS = makeRollups();
+// The rollups exactly as they were written before per-item order counts existed —
+// which is what the café's database actually held when this was found. A page that
+// trusts these answers the drill-down with no order count at all.
+const OLD_ROLLUPS = (() => {
+  const c = JSON.parse(JSON.stringify(ROLLUPS));
+  for (const dk in c) for (const b in c[dk].item) delete c[dk].item[b].o;
+  return c;
+})();
 
 const TYPESMAP = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json',
                    '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
@@ -111,15 +130,15 @@ const server = http.createServer((req, res) => {
   res.end(fs.readFileSync(f));
 });
 
-const stub = (withRollups, denyDaily) => `
+const stub = (withRollups, denyDaily, oldShape) => `
 (() => {
   const noop=()=>{};
   const D = { 'orders/history': ${JSON.stringify(HIST)},
-              'orders/daily': ${withRollups ? JSON.stringify(ROLLUPS) : '{}'},
+              'orders/daily': ${withRollups ? JSON.stringify(oldShape ? OLD_ROLLUPS : ROLLUPS) : '{}'},
               menu: { Coffee:{ Latte:{price:150}, Cappuccino:{price:180}, 'Cold Brew':{price:200} },
                       Food:{ 'Pizza Margherita':{price:450}, Toastie:{price:180} } },
               'settings/categoryOrder': ['Coffee','Food'] };
-  window.__db = D; window.__stub = true; window.__reads = {};
+  window.__db = D; window.__stub = true; window.__reads = {}; window.__wrote = {};
   const byPath = p => { if (D[p] !== undefined) return D[p];
     const parts=String(p).split('/');
     for (let i=parts.length-1;i>0;i--){ const head=parts.slice(0,i).join('/');
@@ -154,7 +173,8 @@ const stub = (withRollups, denyDaily) => `
     orderByChild:()=>mk(p,{...q,orderByChild:true}), orderByKey:()=>mk(p,{...q,orderByKey:true}),
     startAt:v=>mk(p,{...q,startAt:v}), limitToLast:n=>mk(p,{...q,limitToLast:n}),
     push:()=>({key:'k'}), set:v=>{ setPath(p,v); return Promise.resolve(); },
-    update:v=>{ if(p==='') Object.keys(v).forEach(k=>setPath(k,v[k])); return Promise.resolve(); },
+    update:v=>{ if(p===''){ Object.keys(v).forEach(k=>{ window.__wrote[k]=1; setPath(k,v[k]); }); }
+                else window.__wrote[p]=1; return Promise.resolve(); },
     remove:()=>Promise.resolve(),
     transaction:(f,cb)=>{ if(cb) cb(null,false,snap(null)); return Promise.resolve({committed:false}); } });
   const db = { ref:p=>mk(String(p==null?'':p),{}), goOnline:noop, goOffline:noop };
@@ -178,9 +198,9 @@ const waitFor = async (tab, fn, ms) => {
   const PRE = '/opt/pw-browsers/chromium';
   const browser = await chromium.launch(fs.existsSync(PRE) ? { executablePath: PRE } : {});
 
-  const openAllTime = async (withRollups, denyDaily) => {
+  const openAllTime = async (withRollups, denyDaily, oldShape) => {
     const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
-    await ctx.addInitScript(stub(withRollups, denyDaily));
+    await ctx.addInitScript(stub(withRollups, denyDaily, oldShape));
     const tab = await ctx.newPage();
     const threw = [];
     tab.on('pageerror', e => threw.push(e.message));
@@ -198,13 +218,18 @@ const waitFor = async (tab, fn, ms) => {
       itm: (document.getElementById('k-itm') || {}).textContent,
       top: [...document.querySelectorAll('#top-body tr')].slice(0, 8)
              .map(r => r.textContent.replace(/\s+/g, ' ').trim()),
-      count: (document.getElementById('txn-count') || {}).textContent.replace(/\s+/g, ' ').trim()
+      count: (document.getElementById('txn-count') || {}).textContent.replace(/\s+/g, ' ').trim(),
+      drillItem: (document.getElementById('drill-select') || {}).value,
+      drill: (document.getElementById('drill-stats') || {}).textContent.replace(/\s+/g, ' ').trim()
     }));
     const reads = await tab.evaluate(() => window.__reads);
     // What it left behind. A café opening this for the first time has no rollups, so
     // the page reads the history once and writes them — if it does not, every open
     // pays full price forever and nothing above would notice.
-    const wrote = await tab.evaluate(() => Object.keys(window.__db['orders/daily'] || {}).length);
+    // What the page actually WROTE, not how big the node ended up: counting the node
+    // credited the page with rollups the stub had seeded for it.
+    const wrote = await tab.evaluate(() =>
+      Object.keys(window.__wrote || {}).filter(k => k.indexOf('orders/daily/') === 0).length);
     await ctx.close();
     return { shown, reads, threw, wrote };
   };
@@ -212,6 +237,7 @@ const waitFor = async (tab, fn, ms) => {
   const withRollups = await openAllTime(true);
   const without = await openAllTime(false);
   const denied = await openAllTime(false, true);
+  const oldShape = await openAllTime(true, false, true);
 
   check('both opens drew All time', !!withRollups.shown.ord && !!without.shown.ord,
         JSON.stringify({ a: withRollups.shown.ord, b: without.shown.ord }));
@@ -291,6 +317,93 @@ const waitFor = async (tab, fn, ms) => {
         without.wrote === Object.keys(ROLLUPS).length,
         without.wrote + ' written, ' + Object.keys(ROLLUPS).length + ' closed days in the fixture');
   note('a rollup written at noon would be wrong all afternoon and never corrected');
+
+  // ---- THE ITEM DRILL-DOWN, WHICH IS ALSO A SUM OVER ORDERS
+  //
+  // The dropdown is built from itemAgg, which the fold fills from the rollups, so it
+  // lists the right items in the right order. The card under it was computed from raw
+  // orders only — which on All time is TODAY — so it opened on the café's best seller
+  // and reported nothing sold.
+  {
+    const truthFor = (name) => {
+      let q = 0, rev = 0, orders = 0;
+      for (const id in HIST) {
+        const o = HIST[id]; let hit = false;
+        for (const nm in o.items) {
+          if (String(nm).split(' (')[0] !== name) continue;
+          q += Number(o.items[nm].qty) || 0;
+          rev += (Number(o.items[nm].qty) || 0) * (Number(o.items[nm].price) || 0);
+          hit = true;
+        }
+        if (hit) orders++;
+      }
+      return { q, rev, orders };
+    };
+    // Read the three figures out of their own positions. Asking only whether a number
+    // appears SOMEWHERE in the line lets a wrong order count pass whenever it happens
+    // to collide with the quantity or the rupees.
+    const fields = (line) => {
+      const q = /([\d,]+) sold/.exec(line);
+      const r = /₹([\d,]+)/.exec(line);
+      const o = /([\d,]+) orders?/.exec(line);
+      const n = (m) => m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
+      return { q: n(q), rev: n(r), orders: n(o) };
+    };
+
+    // BOTH opens, for the same reason the totals above are checked on both: the seeded
+    // open never runs rollupDay, so a rollup built wrongly — counting an item's LINES
+    // rather than the orders it was in — is invisible there. It only shows up on the
+    // open that builds them.
+    for (const [label, r] of [['with the rollups already there', withRollups],
+                              ['and on the open that builds them', without]]) {
+      const name = r.shown.drillItem;
+      const t = truthFor(name);
+      const f = fields(r.shown.drill);
+      check(label + ': the drill-down opens on an item that has sales',
+            !!name && t.q > 0, name + ' ' + JSON.stringify(t));
+      check(label + ': it reports the quantity for the whole range',
+            f.q === t.q, 'card ' + f.q + ', ' + name + ' sold ' + t.q);
+      check(label + ': and the revenue for the whole range',
+            f.rev === t.rev, 'card ' + f.rev + ', ' + name + ' made ' + t.rev);
+      check(label + ': and the orders it appeared in, not the lines',
+            f.orders === t.orders, 'card ' + f.orders + ', ' + name + ' was in ' +
+            t.orders + ' orders');
+    }
+    check('the drill-down agrees whichever way the range was served',
+          withRollups.shown.drill === without.shown.drill,
+          'with rollups ' + JSON.stringify(withRollups.shown.drill) +
+          ', reading the orders ' + JSON.stringify(without.shown.drill));
+    note('a card that opens on the best seller and says it sold nothing is worse');
+    note('than the empty state it replaced');
+  }
+
+  // ---- ROLLUPS OF THE OLDER SHAPE, WHICH IS WHAT IS IN THE DATABASE NOW
+  //
+  // Per-item order counts did not exist when the first rollups were written, so the
+  // café's orders/daily holds days that cannot answer the drill-down. They are not
+  // wrong, they are incomplete — and a page that trusted them would show a correct
+  // quantity beside "0 orders".
+  //
+  // The page detects the older shape from the data rather than from a stored version
+  // number, and rebuilds those days. This is the check that the rebuild happens and
+  // that the card is right afterwards.
+  {
+    check('an older rollup still gives the right quantity',
+          oldShape.shown.drill === withRollups.shown.drill,
+          'old shape ' + JSON.stringify(oldShape.shown.drill) +
+          ', current ' + JSON.stringify(withRollups.shown.drill));
+    check('and the totals above it are unchanged',
+          oldShape.shown.rev === withRollups.shown.rev &&
+          oldShape.shown.ord === withRollups.shown.ord,
+          JSON.stringify([oldShape.shown.rev, oldShape.shown.ord]) + ' against ' +
+          JSON.stringify([withRollups.shown.rev, withRollups.shown.ord]));
+    check('it rewrote the days it could not answer for',
+          oldShape.wrote > 1, oldShape.wrote + ' days rewritten');
+    check('and nothing threw while it did', oldShape.threw.length === 0,
+          (oldShape.threw[0] || '').slice(0, 140));
+    note('detected from the record itself — a stored shape number would be a second');
+    note('thing that can disagree with the record it describes');
+  }
 
   // ---- WHEN THE ROLLUPS CANNOT BE READ AT ALL
   //

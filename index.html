@@ -799,7 +799,7 @@
                     const m = s.val();
                     if (m && m.itemBase && typeof m === 'object') MODEL = Object.assign({}, ETA_DEF, m);
                     try { if (typeof window.refreshTakeawayETA==='function') window.refreshTakeawayETA(); } catch(e){}
-                });
+                }, window.ilaRefused.quiet("eta/model"));
             } catch(e){}
             let loadChef=0, loadBar=0, lastPizzaOut=0;
             // The POS publishes exactly the numbers this page needs to quote a wait, so
@@ -839,7 +839,7 @@
             // by the connection itself — no rule governs it, and it needs no auth — so the
             // offset costs nothing and removes the customer's clock from the question.
             let serverSkew = 0;
-            try { db.ref('.info/serverTimeOffset').on('value', s => { serverSkew = Number(s.val()) || 0; }); } catch(e){}
+            try { db.ref('.info/serverTimeOffset').on('value', s => { serverSkew = Number(s.val()) || 0; }, window.ilaRefused.quiet(".info/serverTimeOffset")); } catch(e){}
             const serverNow = () => Date.now() + serverSkew;
 
             try {
@@ -857,7 +857,7 @@
                     // deriving it from the ratios covers a POS running an older build.
                     if (typeof v.tempo === 'number' && v.tempo > 0) kitchenTempo = v.tempo;
                     else recomputeTempoFromPace(v.pace || []);
-                });
+                }, window.ilaRefused.quiet("eta/live"));
             } catch(e){}
 
             // ===== LIVE KITCHEN TEMPO (conservative, smoothed, NON-jumpy) =====
@@ -1062,7 +1062,7 @@
                         const note=document.getElementById('status-oven-note'); if(note) note.style.display='none';
                         if(etaTimer){clearInterval(etaTimer);etaTimer=null;}
                     }
-                });
+                }, window.ilaRefused("your order"));
             }
             window.watchOrderStatus=function(){
                 const trackId=localStorage.getItem('ila_track_id');
@@ -1293,12 +1293,12 @@
         });
         window.flatMenu = {}; 
 
-        db.ref('settings/storeStatus').on('value', snap => { window.storeStatus = snap.val() || { delivery: true, takeaway: true }; updateCheckoutOptions(); });
+        db.ref('settings/storeStatus').on('value', snap => { window.storeStatus = snap.val() || { delivery: true, takeaway: true }; updateCheckoutOptions(); }, window.ilaRefused("settings/storeStatus"));
         db.ref('settings/isOpen').on('value', snap => {
             const isOpen = snap.val(); const lockScreen = document.getElementById('closed-screen');
             if (isOpen === false) { lockScreen.style.display = "flex"; document.body.style.overflow = "hidden"; } 
             else { lockScreen.style.display = "none"; document.body.style.overflow = "auto"; }
-        });
+        }, window.ilaRefused("settings/isOpen"));
         // THREE LISTENERS, ONE MENU
         //
         // The menu is drawn from three nodes — the items, the order of the categories
@@ -1317,8 +1317,8 @@
             _menuRenderQueued = true;
             requestAnimationFrame(() => { _menuRenderQueued = false; renderCustomerMenu(); });
         }
-        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; cacheMenu(); scheduleCustomerMenu(); });
-        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; cacheMenu(); scheduleCustomerMenu(); });
+        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; cacheMenu(); scheduleCustomerMenu(); }, window.ilaRefused("settings/categoryOrder"));
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; cacheMenu(); scheduleCustomerMenu(); }, window.ilaRefused("settings/itemOrder"));
         // Which station makes an item is configured per item in admin. The POS reads that
         // map; this page used to guess from the name alone, so anything routed to the chef
         // that is not recognised as a pizza (garlic bread, hot food) landed on the barista
@@ -1352,7 +1352,7 @@
             }
             return null;
         }
-        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; buildCustRouting(); cacheMenu(); scheduleCustomerMenu(); });
+        db.ref('menu').on('value', snap => { currentMenuData = snap.val() || {}; buildCustRouting(); cacheMenu(); scheduleCustomerMenu(); }, window.ilaRefused("menu"));
 
         function updateCheckoutOptions() {
             const btnDel = document.getElementById('type-delivery'); const btnTak = document.getElementById('type-takeaway'); const btnDin = document.getElementById('type-dinein'); const scanMsg = document.getElementById('scan-instruction'); const payBtn = document.getElementById('btn-pay');
@@ -2101,7 +2101,7 @@
                     setStatus('👩‍🍳', 'In the kitchen', 'Our staff have started your order. We haven’t seen your payment reach us yet — if you’ve already paid it will confirm here on its own; if not, the code below is still live.');
                     window.refreshPayPrompt(trackId, true);
                 }
-            });
+            }, window.ilaRefused("your order"));
             // Safety timeout: at 120s unverified, say so and LEAVE THE CODE UP. Keep watching —
             // when the credit lands paymentVerified flips and the view updates to confirmed
             // (the loop closes; nothing dead-ends).

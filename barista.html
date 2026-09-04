@@ -437,9 +437,9 @@
         // ===== SMART overdue threshold — fires relative to THIS drink order's realistic prep time =====
         // Drinks have NO oven; uses the barista saturation curve. Alarm = expected prep + PER-CATEGORY margin.
         window.etaModel = null;
-        try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && m.itemBase) window.etaModel = m; }); } catch(e){}
+        try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && m.itemBase) window.etaModel = m; }, window.ilaRefused.quiet("eta/model")); } catch(e){}
         window.kdsLoadBarista = 0;
-        try { db.ref('orders/active/barista').on('value', s => { window.kdsLoadBarista = s.numChildren(); }); } catch(e){}
+        try { db.ref('orders/active/barista').on('value', s => { window.kdsLoadBarista = s.numChildren(); }, window.ilaRefused("orders/active/barista")); } catch(e){}
         const KDS_ETA_DEF = {
             itemBase:{"espresso":3.6,"cortado":3.8,"americano":4.0,"iced americano":4.5,"cappuccino (large)":6.3,"cappuccino":5.3,"iced latte (large)":6.3,"iced latte":5.2,"latte":5.8,"flat white":6.5,"matcha":8.0,"iced matcha":8.5,"tea pot":4.4,"iced tea":5.2,"cold brew":4.0,"carrot cake":3.0,"banana bread":2.8,"rose cake":2.9},
             fallback:{pizza:7.5,hotfood:8.0,drink:5.5,baked:3.1},
@@ -661,7 +661,7 @@
                 window.kdsTickets = tickets;
                 for (const aid in window.kdsAlarmed) { if (!(aid in window.kdsTickets)) delete window.kdsAlarmed[aid]; }
                 kdsCheckOverdue();
-            });
+            }, window.ilaRefused("orders/active/barista"));
         }
 
         // One DONE tap, however many times the button is pressed.

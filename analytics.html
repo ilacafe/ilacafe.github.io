@@ -907,19 +907,19 @@
             const ds = document.getElementById('drill-select');
             if (ds) ds.addEventListener('change', () => { drillPinned = true; });
             setPreset('30d');
-            db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); scheduleRender(); });
+            db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); scheduleRender(); }, window.ilaRefused("menu"));
             // Voids are rare — a few a week — so 2000 is years of them, and it stops
             // this being the next node that grows without limit.
-            db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; scheduleRender(); });
+            db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; scheduleRender(); }, window.ilaRefused("security/voids"));
             // Bounded like the voids beside it: append-only, and a café that ran for
             // years would otherwise pull every walkout it ever had into a phone.
-            db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; scheduleRender(); });
+            db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; scheduleRender(); }, window.ilaRefused("security/unpaid"));
             // Small fixed-size nodes — the refit's record and the cron failure record.
             // Neither grows, so neither needs a cap.
-            db.ref('eta/recalMeta').on('value', s => { RECAL = s.val()||null; renderWorkerHealth(); });
-            db.ref('eta/model').on('value', s => { MODEL = s.val()||null; renderWorkerHealth(); });
-            db.ref('eta/modelPrevious').on('value', s => { MODELPREV = s.val()||null; renderWorkerHealth(); });
-            db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); });
+            db.ref('eta/recalMeta').on('value', s => { RECAL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/recalMeta"));
+            db.ref('eta/model').on('value', s => { MODEL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/model"));
+            db.ref('eta/modelPrevious').on('value', s => { MODELPREV = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/modelPrevious"));
+            db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused("ops/cronFailure"));
             // FIVE NUMBERS A DAY, NOT A DAY'S WHOLE LEDGER
             //
             // This read used to be pos/eodArchive. Each archive carries that day's entire
@@ -1017,14 +1017,31 @@
         //
         // Today is never rolled up: the day is not over, and a rollup written at noon
         // would be wrong all afternoon and never corrected.
+        // A rollup written before per-item order counts existed cannot answer the
+        // drill-down, so it is rebuilt rather than trusted. Detected from the data
+        // itself rather than from a version field: a stored number that says what
+        // shape the record is, is a second thing that can disagree with the record.
+        //
+        // A day that sold nothing has no items to be missing one, so it is current.
+        function rollupIsCurrent(r){
+            if(!r) return false;
+            for(const b in (r.item||{})) return typeof r.item[b].o === 'number';
+            return true;
+        }
+
         async function ensureRollups(){
             const snap = await db.ref('orders/daily').once('value');
             ROLLUPS = snap.val() || {};
             const today = startOfToday();
             const keys = Object.keys(ROLLUPS).sort();
             const newest = keys.length ? dayStartMs(keys[keys.length - 1]) : null;
-            // Where to resume: the day after the newest rollup, or the beginning.
-            const from = newest == null ? 0 : newest + 86400000;
+            // Where to resume: normally the day after the newest rollup. But a rollup
+            // of an older shape has to be rebuilt, so if any is stale the read starts
+            // at the earliest one instead. Days in between that are already current
+            // are simply recomputed to the same numbers.
+            const stale = keys.filter(k => !rollupIsCurrent(ROLLUPS[k]));
+            const from = stale.length ? dayStartMs(stale[0])
+                       : (newest == null ? 0 : newest + 86400000);
             if (from >= today) return;                       // nothing closed since last time
             const q = from > 0
                 ? db.ref('orders/history').orderByKey().startAt(String(from))
@@ -1063,7 +1080,7 @@
             txnWindowed = false; ROLLUPS = {}; TXNWIN = {};
             if (historyQuery){ try { historyQuery.off(); } catch(e){} }
             historyQuery = db.ref('orders/history');
-            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); }, window.ilaRefused("orders/history"));
         }
 
         function ensureHistory(start){
@@ -1091,7 +1108,7 @@
                 ensureRollups().then(scheduleRender).catch(fallBackToWholeHistory);
                 // today only — the part no rollup covers
                 historyQuery = db.ref('orders/history').orderByKey().startAt(String(startOfToday()));
-                historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+                historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); }, window.ilaRefused("orders/history"));
                 // and the table's own window, which never feeds the totals
                 db.ref('orders/history').limitToLast(TXN_WINDOW).once('value')
                   .then(s => { TXNWIN = s.val()||{}; scheduleRender(); }).catch(()=>{});
@@ -1099,7 +1116,7 @@
             }
             txnWindowed = false; ROLLUPS = {}; TXNWIN = {};
             historyQuery = db.ref('orders/history').orderByKey().startAt(String(Math.floor(start)));
-            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); }, window.ilaRefused("orders/history"));
         }
 
         function setRange(start, end, key, label){ RANGE = {start, end, key, label}; const el=document.getElementById('range-label'); if(el) el.textContent = label; ensureHistory(start); }
@@ -1238,13 +1255,18 @@
                 else if(/Takeaway/i.test(t)) r.type['Takeaway']++;
                 else r.type['Dine-in']++;
                 r.hour[new Date(ts).getHours()]++;
+                const seen = {};       // base names in THIS order, for the order count
                 if(o.items) for(const nm in o.items){
                     const q=Number(o.items[nm].qty)||0, p=Number(o.items[nm].price)||0;
                     // The base name, the same split itemAgg uses. catOf splits again on
                     // its own, so a category derived from the base is the category the
                     // full name would have given.
                     const base=String(nm).split(" (")[0];
-                    if(!r.item[base]) r.item[base]={q:0,r:0};
+                    if(!r.item[base]) r.item[base]={q:0,r:0,o:0};
+                    // o is ORDERS THIS ITEM APPEARED IN, not lines: a bill with a Latte
+                    // and a Latte (Large) is one order for Latte, which is what the raw
+                    // path counts and therefore what this has to count.
+                    if(!seen[base]){ seen[base]=1; r.item[base].o++; }
                     r.item[base].q+=q; r.item[base].r+=p*q;
                 }
             }
@@ -1492,6 +1514,25 @@
             const {start, end} = RANGE; const unit = bucketUnit(end-start);
             const trend = {}; genBuckets(start,end,unit).forEach(k=>trend[k]=0);
             let q=0, rv=0, ords=0;
+            // THE CLOSED DAYS COME OFF THE ROLLUPS, THE SAME AS EVERY OTHER FIGURE HERE
+            //
+            // This card was the one thing on the page still computed from raw orders
+            // alone, and on a range served by rollups that is TODAY. So it opened on
+            // the café's best seller and reported it had sold three — today's — of the
+            // 259 it sold over the range, under a heading saying "All time". The
+            // dropdown was right, because itemAgg is folded; only the card was not.
+            //
+            // Quantity, revenue and the count of orders an item appeared in are all
+            // sums, so they compose over days exactly as the totals above do. The
+            // trend does too, at a day's resolution — and every range wide enough to
+            // be served by rollups buckets by day or coarser, so nothing is lost.
+            if(txnWindowed) for(const dk in ROLLUPS){
+                const d = ROLLUPS[dk]; if(!d || !d.item) continue;
+                const ts = dayStartMs(dk); if(isNaN(ts) || ts<start || ts>=end) continue;
+                const it = d.item[name]; if(!it) continue;
+                q += it.q||0; rv += it.r||0; ords += it.o||0;
+                const bk = bucketKey(ts, unit); if(trend[bk]!==undefined) trend[bk] += it.q||0;
+            }
             for(const id in DATA){ const o=DATA[id]; const ts=parseInt(id); if(isNaN(ts)||ts<start||ts>=end||!o.items) continue;
                 let hit=false;
                 for(const nm in o.items){ if(String(nm).split(" (")[0]===name){ const qq=Number(o.items[nm].qty)||0, pp=Number(o.items[nm].price)||0; q+=qq; rv+=qq*pp; hit=true; const bk=bucketKey(ts,unit); if(trend[bk]!==undefined) trend[bk]+=qq; } }

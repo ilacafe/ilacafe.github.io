@@ -1,0 +1,43 @@
+name: analytics health
+
+# Does analytics have what it needs, in the live database?
+#
+# rules-drift.yml answers a different question: whether the rules being enforced are
+# the rules in git. Both have to be true and neither implies the other — the rules
+# for orders/daily can be live and correct while the node itself is empty, or holds
+# days of an older shape that cannot answer the item drill-down. Both have happened.
+#
+# Read-only. It writes nothing, cannot deploy, and every count it takes is a shallow
+# read, because counting the café's order history by downloading it would be the
+# 13MB read the rollups exist to avoid.
+#
+# Run this after deploying rules that add a node analytics reads. A red run usually
+# means nobody has opened analytics since — the PAGE is what builds the rollups and
+# the cash-up index — which is a thing to go and do, not a fault in the deploy.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Once a day, an hour after the drift check, so a morning of stale rollups is
+    # noticed by somebody other than the owner opening the page and wondering.
+    - cron: '17 5 * * *'
+
+jobs:
+  health:
+    name: what analytics will find
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: read the live database, shallowly
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FIREBASE_SERVICE_ACCOUNT:-}" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT is not set, so nothing can be checked"
+            exit 1
+          fi
+          node tools/verify-analytics.js
