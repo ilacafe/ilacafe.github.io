@@ -1507,8 +1507,8 @@
             cnt.innerHTML = escapeHTML(rows.length +
                 (rows.length===LAST.txns.length ? '' : ' of ' + LAST.txns.length) +
                 ' transactions' + (rows.length>500 ? ' (showing first 500)' : '')) +
-                (txnWindowed ? ' &middot; <span style="opacity:0.85;">the most recent ' +
-                    LAST.txns.length + ' of this range</span> <button class="lnk" ' +
+                (txnWindowed ? ' &middot; the most recent ' +
+                    LAST.txns.length + ' of this range <button class="lnk" ' +
                     'style="padding:2px 8px; font-size:0.7rem;" onclick="window.loadAllTxns()">' +
                     'Load them all</button>' : '');
             if(!rows.length){ body.innerHTML = '<tr><td colspan="6" class="muted">No transactions.</td></tr>'; return; }
