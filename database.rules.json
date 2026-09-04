@@ -264,6 +264,24 @@
           ".read": true
         }
       },
+      "daily": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        "$day": {
+          ".validate": "newData.hasChildren(['rev','orders'])",
+          "rev":    { ".validate": "newData.isNumber()" },
+          "orders": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "pay":    { "$method": { ".validate": "newData.isNumber()" } },
+          "type":   { "$kind":   { ".validate": "newData.isNumber() && newData.val() >= 0" } },
+          "hour":   { "$h":      { ".validate": "newData.isNumber() && newData.val() >= 0" } },
+          "item":   { "$name": {
+            ".validate": "newData.hasChildren(['q','r'])",
+            "q": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "r": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false } } },
+          "$other": { ".validate": false }
+        }
+      },
       "history": {
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
         ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists()",

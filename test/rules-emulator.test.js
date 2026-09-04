@@ -111,6 +111,16 @@ const KEY_FOR = {
 };
 
 const SAMPLES = {
+  // A closed day's takings, summed once and kept, so a long range no longer means
+  // downloading every order behind it. Written by analytics; read by nobody else.
+  'orders/daily/$key': {
+    rev: 21400, orders: 63,
+    pay: { Cash: 8200, UPI: 13200 },
+    type: { 'Dine-in': 40, Takeaway: 18, Delivery: 5 },
+    hour: { 9: 4, 13: 20, 19: 22 },
+    item: { Latte: { q: 31, r: 4650 }, Toastie: { q: 12, r: 2160 } }
+  },
+
   // The five numbers the till writes beside the archive when it closes the day, so
   // analytics can render a closing without downloading that day's whole bills and
   // ledger. closedAt goes in as the server's own clock, the way the archive's does.
@@ -344,6 +354,7 @@ const SAMPLES = {
       'pos/eodSummary':      ['admin', 'robot'],          // an index over the archive, same readers
       'pos/eodSummaryBackfill': ['admin', 'robot'],
       'orders/history':      ['admin'],
+      'orders/daily':        ['admin'],          // the index over it, same reader
       'orders/pendingWeb':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'payments':            ['cashier', 'barista', 'chef', 'inventory', 'admin'],
       'payments/incoming':   ['cashier', 'barista', 'chef', 'inventory', 'admin'],

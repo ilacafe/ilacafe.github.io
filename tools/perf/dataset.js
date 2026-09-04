@@ -20,7 +20,23 @@ const BILLS_DAY = Number(process.env.BILLS_DAY || 100);
 const CUSTOMERS = Number(process.env.CUSTOMERS || 4000);
 const EOD_DAYS  = 120;                                       // what analytics and admin ask for
 
-const ITEMS = ['Latte', 'Cappuccino', 'Pizza Margherita', 'Toastie', 'Cold Brew', 'Brownie'];
+// A REAL MENU'S WORTH, BECAUSE THE ROLLUP'S SIZE DEPENDS ON IT
+//
+// A day's rollup carries one entry per distinct item sold that day, so a fixture with
+// six items makes orders/daily look far smaller than it is. Six reported it 69× smaller
+// than the history; a menu-sized list is the honest comparison. The café's menu below
+// is 112 items and a day sells a good spread of them.
+const ITEMS = (() => {
+  const names = ['Latte', 'Cappuccino', 'Flat White', 'Americano', 'Espresso', 'Mocha',
+                 'Masala Chai', 'Green Tea', 'Lemon Iced Tea', 'Cold Brew', 'Frappe',
+                 'Pizza Margherita', 'Pizza Pepperoni', 'Garlic Bread', 'Toastie',
+                 'Club Sandwich', 'Pasta Alfredo', 'Pasta Arrabiata', 'Caesar Salad',
+                 'Greek Salad', 'Brownie', 'Cheesecake', 'Banana Bread', 'Croissant',
+                 'Muffin', 'Cookie', 'Chocolate Shake', 'Vanilla Shake', 'Oreo Shake',
+                 'Mango Smoothie', 'Fries', 'Wedges', 'Nachos', 'Soup of the Day',
+                 'Quiche', 'Bagel', 'Focaccia', 'Tiramisu', 'Affogato', 'Hot Chocolate'];
+  return names;
+})();
 const CATS  = ['Coffee', 'Tea', 'Food', 'Bakery', 'Cold', 'Shakes', 'Desserts', 'Extras'];
 const now = Date.now(), DAY = 86400000;
 
@@ -29,7 +45,7 @@ const now = Date.now(), DAY = 86400000;
 const itemsBlock = (n, i) => {
   const o = {};
   for (let k = 0; k < n; k++) {
-    const nm = ITEMS[(i + k) % ITEMS.length];
+    const nm = ITEMS[(i * 7 + k * 13) % ITEMS.length];
     o[nm] = { qty: 1 + (k % 2), price: 100 + (k * 17) % 150, base: 100, mods: [] };
   }
   return o;
@@ -66,6 +82,38 @@ function build() {
     history[ts + '-' + i.toString(36)] = historyRow(i);
   }
   db['orders/history'] = history;
+
+  // orders/daily — the per-day sums analytics draws a long range from, built here the
+  // way the page builds them, so `payload` measures the read that actually happens.
+  // ROLLUPS=0 leaves them out, which is what a café looks like the first time it opens
+  // analytics after this shipped.
+  if (process.env.ROLLUPS !== '0') {
+    const daily = {};
+    for (const id in history) {
+      const ts = parseInt(id, 10);
+      const d = new Date(ts);
+      const dk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                 String(d.getDate()).padStart(2, '0');
+      const o = history[id];
+      const r = daily[dk] || (daily[dk] = { rev: 0, orders: 0, pay: {},
+                                            type: { 'Dine-in': 0, Takeaway: 0, Delivery: 0 },
+                                            hour: new Array(24).fill(0), item: {} });
+      const amt = Number(o.payment.total) || 0;
+      r.rev += amt; r.orders++;
+      r.pay[o.payment.method] = (r.pay[o.payment.method] || 0) + amt;
+      const t = o.orderType || '';
+      if (/Delivery|Web/i.test(t)) r.type.Delivery++;
+      else if (/Takeaway/i.test(t)) r.type.Takeaway++;
+      else r.type['Dine-in']++;
+      r.hour[d.getHours()]++;
+      for (const nm in o.items) {
+        const base = String(nm).split(' (')[0];
+        const it = r.item[base] || (r.item[base] = { q: 0, r: 0 });
+        it.q += o.items[nm].qty; it.r += o.items[nm].price * o.items[nm].qty;
+      }
+    }
+    db['orders/daily'] = daily;
+  }
 
   // pos/eodArchive — one per trading day, each carrying that day's whole bills and
   // ledger. pos/eodSummary is the index analytics reads instead; both are built so a

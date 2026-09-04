@@ -49,9 +49,24 @@ const ago = d => now - d * DAY;
   check('a bounded range is asked for by key, which needs no index',
         /orderByKey\(\)\.startAt\(String\(Math\.floor\(start\)\)\)/.test(src), src.slice(0, 200));
 
-  check('All time drops the filter rather than starting at zero',
-        /start > 0[\s\S]*?db\.ref\('orders\/history'\)\.orderByKey[\s\S]*?:\s*db\.ref\('orders\/history'\)/.test(src),
-        'a startAt("0") would exclude any legacy key that is not timestamp-shaped');
+  // A READ THAT MEANS "EVERYTHING" MUST NOT BE FILTERED
+  //
+  // A key that is not timestamp-shaped sorts before every digit, so startAt("0") would
+  // silently drop it from the one read that promises everything. ensureHistory used to
+  // be where that mattered; the whole-history reads now live in ensureRollups (the
+  // first-ever backfill) and loadAllTxns (the range, on request), so the rule is checked
+  // where they are. What ensureHistory still owns is the bounded case, checked above.
+  {
+    const whole = idx.slice(idx.indexOf('async function ensureRollups'), idx.indexOf('function ensureHistory')) +
+                  idx.slice(idx.indexOf('window.loadAllTxns'), idx.indexOf('function downloadCSV'));
+    check('a read that means everything is unfiltered',
+          /from > 0[\s\S]*?startAt\(String\(from\)\)[\s\S]*?:\s*db\.ref\('orders\/history'\)/.test(whole) &&
+          /loadAllTxns[\s\S]*?db\.ref\('orders\/history'\)\.once/.test(whole),
+          'a startAt("0") would exclude any legacy key that is not timestamp-shaped');
+    check('and no read starts at a literal zero',
+          !/startAt\(\s*['"]0['"]\s*\)/.test(idx) && !/startAt\(\s*String\(\s*0\s*\)\s*\)/.test(idx),
+          'a startAt at zero is in the page');
+  }
 
   check('the previous listener is detached before a new one is attached',
         /historyQuery\.off\(\)/.test(src),
@@ -80,6 +95,11 @@ const ago = d => now - d * DAY;
     // keeps the 5MB archive read from happening on every open. Reading it whole IS the
     // bounded thing to do; it is named here so it is a decision rather than an omission.
     if (path === 'pos/eodSummaryBackfill') continue;
+    // orders/daily is the index that STOPPED this page reading orders/history whole —
+    // one small record per closed day, a few hundred bytes each, read once to serve a
+    // range that used to cost 13.3MB. It grows with days traded, not with orders, and
+    // it is classified alongside the rest in unbounded-reads.test.js.
+    if (path === 'orders/daily') continue;
     if (!/once|on/.test(chain)) continue;                     // not a read
     unbounded.push(path + chain);
   }
