@@ -61,7 +61,11 @@ const ago = d => now - d * DAY;
                   idx.slice(idx.indexOf('window.loadAllTxns'), idx.indexOf('function downloadCSV'));
     check('a read that means everything is unfiltered',
           /from > 0[\s\S]*?startAt\(String\(from\)\)[\s\S]*?:\s*db\.ref\('orders\/history'\)/.test(whole) &&
-          /loadAllTxns[\s\S]*?db\.ref\('orders\/history'\)\.once/.test(whole),
+          // .once or a kept listener — what the rule is about is that the read which
+          // means "everything" carries no startAt, not how it is spelled. loadAllTxns
+          // keeps its listener now, because leaving the today-only one attached let
+          // the next order taken replace the range it had just loaded.
+          /loadAllTxns[\s\S]*?db\.ref\('orders\/history'\)\s*;?[\s\S]{0,200}?\.(once|on)\(/.test(whole),
           'a startAt("0") would exclude any legacy key that is not timestamp-shaped');
     check('and no read starts at a literal zero',
           !/startAt\(\s*['"]0['"]\s*\)/.test(idx) && !/startAt\(\s*String\(\s*0\s*\)\s*\)/.test(idx),

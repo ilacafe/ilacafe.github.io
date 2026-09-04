@@ -1610,12 +1610,29 @@
             const cnt = document.getElementById('txn-count');
             if (cnt) cnt.textContent = 'Loading every order in this range…';
             try {
-                const snap = await db.ref('orders/history').once('value');
-                TXNWIN = snap.val() || {};
+                // TAKE THE RANGE OVER COMPLETELY, LISTENER AND ALL
+                //
+                // The live listener is still on TODAY only — that is all All time
+                // needs, because the rollups carry the rest. Loading the full range
+                // into DATA and leaving that listener attached meant the next order
+                // taken would fire it and set DATA back to today alone, with ROLLUPS
+                // now cleared and nothing left to make up the difference: the totals
+                // would collapse to today's takings while the heading said All time.
+                //
+                // So the listener moves to the whole range too. Its first callback is
+                // the read, which is why there is no separate once() here.
+                if (historyQuery){ try { historyQuery.off(); } catch(e){} }
                 txnWindowed = false;          // the window IS the range now
-                DATA = TXNWIN;                // and the totals can come from it directly
                 ROLLUPS = {};
-                scheduleRender();
+                await new Promise((resolve, reject) => {
+                    historyQuery = db.ref('orders/history');
+                    historyQuery.on('value', s => {
+                        DATA = s.val() || {};
+                        TXNWIN = DATA;        // the table reads the range itself now
+                        scheduleRender();
+                        resolve();
+                    }, reject);
+                });
             } catch(e){
                 if (cnt) cnt.textContent = 'Could not load the full range.';
             }
@@ -1638,7 +1655,12 @@
             const out = [['Date/Time','Type','Table/Address','Item','Qty','Unit Price','Line Total','Payment']];
             // build per-item lines within the filtered set
             const keep = new Set(rows.map(r=>r.ts));
-            for(const id in DATA){ const o=DATA[id]; const ts=parseInt(id); if(!keep.has(ts) || !o.items) continue;
+            // The rows came from whatever fed the table, and on a rollup-served range
+            // that is the window rather than DATA — which there holds only today. Read
+            // the lines back out of the same place, or this exports today and calls it
+            // the range.
+            const src = txnWindowed ? TXNWIN : DATA;
+            for(const id in src){ const o=src[id]; const ts=parseInt(id); if(!keep.has(ts) || !o.items) continue;
                 const dt = o.timestamp || new Date(ts).toLocaleString('en-GB');
                 for(const nm in o.items){ const q=Number(o.items[nm].qty)||0, p=Number(o.items[nm].price)||0;
                     out.push([dt, o.orderType||'-', o.tableOrAddress||'-', nm, q, p, q*p, (o.payment&&o.payment.method)||'-']); }
