@@ -33,8 +33,25 @@ const src = readPage('pos.html');
         !!listener && /window\.ledgerDenied = false;/.test(listener[0]),
         'otherwise a cashier who reconnects keeps the refusal message forever');
   note('the same gate covers pos/unverified, which nothing renders directly');
-  check('pos/unverified treats a refusal as nothing to carry',
-        /db\.ref\('pos\/unverified'\)\.on\([\s\S]{0,400}?\}, \(\) => \{ window\._carryUnverified = \{\}; \}\)/.test(src));
+  const carry = /db\.ref\('pos\/unverified'\)\.on\(([\s\S]{0,600}?)\}\);/.exec(src);
+  check('pos/unverified passes a cancel callback too', !!carry);
+  check('and treats a refusal as nothing to carry',
+        !!carry && /\}, \(\) => \{ window\._carryUnverified = \{\};/.test(carry[1]));
+
+  // A REFUSAL IS STILL AN ANSWER, AND THE RECONCILER WAITS FOR ONE.
+  //
+  // reconcileLedgerVerification refuses to run until pos/unverified has answered,
+  // because an empty carry map that has not been read is not an empty one — a credit
+  // a parked row already owns would read as free and settle a second sale. So the
+  // refusal path has to set the same flag the success path does. If it does not, a
+  // cashier whose read of this node is refused gets a reconciler that never runs
+  // again, and the failure is the quiet kind: unverified lines simply stop verifying.
+  check('and a refusal still counts as having answered',
+        !!carry && /\}, \(\) => \{ window\._carryUnverified = \{\}; window\._carryKnown = true;/.test(carry[1]),
+        'a refused read that never sets _carryKnown stalls the reconciler for good');
+  check('as does a read that comes back',
+        !!carry && /window\._carryKnown = true;[\s\S]{0,120}reconcileLedgerVerification/.test(carry[1]),
+        'the flag has to be set before the pass it gates');
 }
 
 // ------------------------------------------------------------- and it says which

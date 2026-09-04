@@ -606,7 +606,7 @@
                 
                 <div id="dynamic-fields" style="margin-top: 15px;">
                     <div id="field-delivery" style="display: none;">
-                        <textarea id="delivery-address" aria-label="Delivery address" maxlength="300" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
+                        <textarea id="delivery-address" aria-label="Delivery address" maxlength="200" class="remark-input" placeholder="Address..." style="height: 60px; resize: none; margin-top: 0;"></textarea>
                     </div>
                     <div id="field-dinein" style="display: none;">
                         <div id="manual-table-selector">
@@ -700,7 +700,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-04.3"></script>
+    <script src="/build-check.js" data-build="2026-09-04.4"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1738,7 +1738,15 @@
 
         window.proceedToPayment = function() {
             const type = window.currentOrderType; let details = ""; const notes = document.getElementById('cart-notes').value.trim().slice(0, 200);
-            if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim(); if (details.length < 5) { ilaFieldError('delivery-address', "Address required"); return; } } 
+            // 200, because that is what the DATABASE accepts. tableOrAddress carries a
+            // .validate of length <= 200, and a longer one is not trimmed on the way in — the
+            // whole order write is REFUSED. This field said maxlength="300", and an Indian
+            // delivery address with a building, a landmark and a pincode reaches 300 easily,
+            // so the one customer who typed a full address got a payment code for an order
+            // that had never been written. The field is 200 now and this is the second half
+            // of the same guard: a paste can exceed maxlength, and nothing here may hand the
+            // database a value it has already been told it will not take.
+            if (type === 'Delivery') { details = document.getElementById('delivery-address').value.trim().slice(0, 200); if (details.length < 5) { ilaFieldError('delivery-address', "Address required"); return; } } 
             else if (type === 'Dine-in') { 
                 if(urlTable) details = "Table " + urlTable; else if (window.currentDineInTable) details = "Table " + window.currentDineInTable; else { ilaFieldError('customer-table-grid', "Please select a table number"); return; }
             } 
@@ -1846,7 +1854,25 @@
             ensureAuth().then(() => {
                 const orderRecord = { orderType: info.type, tableOrAddress: info.details, notes: info.notes || "", items: window.cart, total: window.totalAmount, paymentMethod: "UPI", upiId: payVPA, phone: info.phone || null, gated: !!info.gated, trackId: trackId, createdAt: firebase.database.ServerValue.TIMESTAMP };
                 if (payVPA) orderRecord.billedAt = firebase.database.ServerValue.TIMESTAMP;
-                db.ref('orders/pendingWeb').push(orderRecord);
+                // THE CODE MAY NOT GO UP BEFORE THE ORDER IS REALLY THERE.
+                //
+                // This was `push(orderRecord);` on its own line, and a ThenableReference's
+                // rejection does not travel into the .catch() below — nothing was chained to
+                // it. So a refused write was completely silent: orders/pendingWeb carries a
+                // shape (every field named, typed and bounded) and the one path that fails it
+                // is the one a customer can make long, the delivery address. The order was
+                // refused, orders/track still succeeded because its public label is the word
+                // "Order", and the customer was shown a QR code, paid it, and stood waiting
+                // for food nobody at the counter had any record of.
+                //
+                // The write is waited for now, and everything downstream of it — the public
+                // track record, the payment code, and CLEARING THE CART, which
+                // watchPaymentStatus does — hangs off it landing. A refusal falls through to
+                // the catch, which puts the customer back on a screen with their cart intact.
+                // Promise.resolve, because push() returns a ThenableReference rather than a
+                // plain promise — this is the ordinary way to wait on one, and it is also
+                // what keeps a caller that hands back a bare reference from throwing here.
+                const placed = Promise.resolve(db.ref('orders/pendingWeb').push(orderRecord));
                 // Seed a status record the POS will advance as the order progresses.
                 // NO PHONE NUMBER HERE. orders/track is world-readable (the rules need it:
                 // a customer who scans a table QR queries this node by `table`, and it is
@@ -1887,17 +1913,45 @@
                         return { quotedLow: e.low, quotedHigh: e.high, quotedLive: !!window.etaLiveFresh };
                     } catch (err) { return {}; }
                 })();
-                db.ref('orders/track/' + trackId).set(Object.assign({ status: 'received', items: orderItemsSnapshot, table: _label, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP }, _q));
-                // A table's orders, as trackIds and nothing else — see tryTableScan below.
-                if (_label !== 'Order') db.ref('orders/tableIndex/' + _label + '/' + trackId).set(firebase.database.ServerValue.TIMESTAMP);
-                if (window.watchOrderStatus) window.watchOrderStatus();
-                window.watchPaymentStatus(trackId, info);
-            }).catch(() => ilaTell("Order not placed", "Check your connection and try again."));
+                return placed.then(function(){
+                    db.ref('orders/track/' + trackId).set(Object.assign({ status: 'received', items: orderItemsSnapshot, table: _label, gated: !!info.gated, createdAt: firebase.database.ServerValue.TIMESTAMP }, _q));
+                    // A table's orders, as trackIds and nothing else — see tryTableScan below.
+                    if (_label !== 'Order') db.ref('orders/tableIndex/' + _label + '/' + trackId).set(firebase.database.ServerValue.TIMESTAMP);
+                    if (window.watchOrderStatus) window.watchOrderStatus();
+                    window.watchPaymentStatus(trackId, info);
+                });
+            }).catch(function(){
+                // Said on the screen as well as in the dialog. The status step stays up and
+                // carries the failure rather than being hidden — a customer who taps the
+                // dialog away must not be left looking at an empty payment sheet wondering
+                // which of the two things happened. The basket is untouched: only
+                // watchPaymentStatus clears it, and the failed write never reached it.
+                window._orderPlaced = false;
+                try { window.hidePayStep(); } catch(e){}
+                const _fi = document.getElementById('status-icon');
+                const _ft = document.getElementById('status-title');
+                const _fd = document.getElementById('status-detail');
+                if (_fi) _fi.innerText = '\u26a0\ufe0f';
+                if (_ft) _ft.innerText = 'Order not placed';
+                if (_fd) _fd.innerText = 'Nothing was sent and nothing has been charged. Your basket is still here \u2014 close this and try again.';
+                ilaTell("Order not placed", "Nothing was sent and nothing has been charged. Your basket is still here \u2014 check your connection and try again.");
+            });
 
             // Show the live status step (do NOT clear the cart until payment is seen or the
             // customer closes — so nothing is lost if they need to retry payment).
+            //
+            // It says "Sending your order" until the write above comes back, because until it
+            // does that is all that is true. watchPaymentStatus rewrites all three lines the
+            // moment the order is really recorded, and the catch takes this step back down if
+            // it never is.
             document.getElementById('pay-step-phone').style.display = 'none';
             document.getElementById('pay-step-status').style.display = 'block';
+            const _si = document.getElementById('status-icon');
+            const _st = document.getElementById('status-title');
+            const _sd = document.getElementById('status-detail');
+            if (_si) _si.innerText = '\u23f3';
+            if (_st) _st.innerText = 'Sending your order';
+            if (_sd) _sd.innerText = 'One moment\u2026';
             window._orderPlaced = true;
         };
 

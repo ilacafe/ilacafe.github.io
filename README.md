@@ -490,6 +490,53 @@ costs money:
   malformed routing entry can never end up inside the payment string, and that the
   code goes the moment the money is seen — one still on screen is an invitation to
   pay twice.
+  The last thing it asks is what happens when the database says no. `orders/pendingWeb`
+  carries a shape — every field named, typed and bounded — and the one field a customer
+  can make long is the delivery address, capped at 200 by the rules while the field on
+  the page said `maxlength="300"`. An Indian address with a building, a landmark and a
+  pincode reaches 300 easily. That write was refused, and nothing noticed: `push()`
+  hands back a ThenableReference and its rejection was attached to nothing, so the
+  customer was shown a payment code for an order that had never been written, paid it,
+  and waited for food the counter had no record of. `orders/track` succeeded alongside
+  it, because the label it publishes for a delivery is the word "Order" — so the
+  customer's tracking screen worked perfectly for an order that did not exist. The
+  field is 200 now, the page trims to 200 as well because a paste clears `maxlength`,
+  and everything downstream of that write — the public track record, the code, and
+  CLEARING THE CART — waits for it to land. A refusal puts the basket back and says so.
+- **the credit a web order already claimed** — the matched credit is claimed before it
+  is booked, and web orders claim under a token derived from the order rather than a
+  random one. `claimPayment` says why: "If the tab dies between winning the claim and
+  writing the booking, the retry recognises its own claim instead of treating the
+  credit as taken by someone else and losing the money." It did not. The transaction
+  was `curr === null ? token : undefined`, which aborts on any value already there —
+  its own included — so the retry the comment describes was refused by its own claim.
+  `wvFindMatch` goes on offering that credit to the same order for as long as it is in
+  the window, so the order retried on every sweep and was told no every time: the
+  customer had paid, the money was in the account, and the order sat "unpaid" on the
+  till for good, waiting for somebody to confirm by hand a payment the system had
+  already matched. Fixing it opens the more expensive question immediately, and the
+  suite holds both halves. `addLedgerEntry` increments `pos/upiTotal`, so booking twice
+  adds the payment to the day's takings twice; the only thing stopping a second pass is
+  the `o.payment.ref` test at the top of the sweep, and the order does not carry that
+  field until the write comes back. Driven with that write held away, the sweep books
+  once; without the guard it books over and over, because the claim it re-commits is a
+  change to `payments/claims`, and that is one of the things that wakes the sweep.
+- **a credit is spent once** — the ledger reconciler works out which credits are
+  already spoken for before it verifies anything, from the live ledger and from the
+  rows EOD parks in `pos/unverified`. Two things were wrong with the parked half.
+  The `usedRefs` add sat below the `state === 'verified'` skip, so the one kind of
+  parked row that definitely owns a credit was the one kind whose ref never got
+  recorded — and a verified parked row does not vanish when it verifies: the Worker
+  clears it only once the correction is demonstrably in the day's archive, which takes
+  two hourly runs. Until then it sits there owning a credit the reconciler reads as
+  free, and any live entry of the same amount and bank finds exactly one candidate,
+  the counts line up at one and one, and one bank credit settles two different sales.
+  The second was the same mistake one level up: `_carryUnverified` starts as `{}` and
+  both listeners are opened in the same breath, so on a till whose credits feed
+  answered first the whole first pass ran against a carry map nothing had filled in
+  yet. An empty map that has not been read is not an empty one — nothing verifies now
+  until `pos/unverified` has answered, and a refusal counts as an answer, because a
+  gate that never opens is the same bug wearing the other hat.
 - **web-order payments** — the till knows which bank credits are already spoken
   for. `payments/claims` is keyed by the bank's own reference, which is not a
   clock, so a `limitToLast` on it is a limit on keys: after a few hundred credits
@@ -583,6 +630,51 @@ costs money:
   it. The reset is one atomic update rather than four writes, because a till that
   comes back half-reset carries yesterday's UPI total into today's takings. A write
   that never answers ends the cash-up with a message rather than a frozen screen.
+- **nothing the Worker reads whole grows** — the whole-node sweep looked at seven
+  pages and not at the one component that is not a page, which is the worst place for
+  this to go unlooked at. A browser reading a node whole is one device, once, with a
+  person watching it; the Worker does it on a schedule, with nobody watching, inside a
+  runtime with a hard ceiling on memory and time — and every one of its reads fails
+  silently, which is why the rules suite checks the robot's access separately in the
+  first place. Adding it found two. The weekly digest read `pos/eodArchive` whole —
+  every trading day the café has ever had, each carrying that day's entire bills and
+  ledger — to pick seven days out of it, thirty lines below the function that goes out
+  of its way to read the same node shallow for exactly this reason. And the monthly ETA
+  refit read `orders/completed` whole, the largest node here and the one nothing ever
+  removes from, to derive a 75-day window. Neither gets slower in a way anyone can see;
+  they stop, and a report that stops arriving looks like a quiet week. Both take the
+  recent end by key now, which needs no index, and the refit reports a window its cap
+  cut short rather than absorbing it — a sample silently smaller than the window is the
+  one thing the volume gates cannot tell from a quiet quarter.
+- **a bank credit that never landed** — the email route has no caller. An alert
+  arrives, the Worker runs, and whatever it does or fails to do is the end of it:
+  there is no response for anyone to read and no screen it appears on. So a refused
+  write to `payments/incoming` was a payment that ceased to exist — the customer had
+  paid, the till never saw a credit, the order never auto-verified, and the only trace
+  was a console line in a runtime nobody watches. It is indistinguishable from a bank
+  that stopped mailing. It goes through `reportIfItThrows` now, the same machinery the
+  scheduled jobs use: recorded under `ops/cronFailure`, which the Worker-health panel
+  on `analytics.html` renders by name, pushed to the owner at most once in the throttle
+  window, and — the half that matters as much — cleared when a write succeeds, so a
+  bank that recovers stops looking broken. The write also retries once on a rejected
+  token, and only on that: the robot's token is cached for the life of a warm isolate,
+  so without dropping it the first 401 poisons every write that isolate makes
+  afterwards, while retrying a write the database has judged invalid just does it twice.
+- **the request that never answers** — two screens hand work to the Worker rather than
+  writing it themselves: the till, for cash leaving the drawer, and the stock tablet,
+  for a delivery or a prep. Both were written as though a `fetch` either succeeds or
+  rejects. It does neither when the connection is MADE and then goes nowhere, which is
+  the shape of nearly every café outage and the exact case `connection.js` exists for:
+  the tablet is on the wifi, the router answers, the uplink is dead. A browser applies
+  no timeout of its own to that, so the await never settles — and both pages disable
+  the button before the call and re-enable it after, the stock tablet in a `finally`
+  that is therefore never reached. The control stays dead and the screen says
+  "Recording…" until somebody reloads a device they are in the middle of taking money
+  on. Fifteen seconds now, and the message says what is and is not known: the Worker
+  may have received it, so the answer is to CHECK the cash-up rather than to enter the
+  withdrawal again. The suite drives both real pages against a request that connects
+  and then says nothing, and asks the only question that matters — does the button come
+  back — because a timeout is visible in the source without saying anything about that.
 - **write-only paths** — across the pages and the Worker, every database path
   something writes is read back somewhere, and every path something reads is
   written by something. A screen that will always be empty is harder to spot than

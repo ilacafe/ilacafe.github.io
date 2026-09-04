@@ -185,6 +185,13 @@ function parsePayment(source, text){
 
 // ---- Robot sign-in: short-lived token so the Worker can write payments ------
 let _robotTok=null, _robotExp=0;
+// Drop the cached token. An isolate stays warm for a long time, and a token that has
+// stopped being accepted — the account's password rotated, the session revoked, this
+// isolate's clock out far enough that a valid token reads as expired — is otherwise
+// reused until it would have expired anyway, with every write in between refused. The
+// one thing that knows a token is bad is the response that rejected it, so that is
+// where this is called from.
+function forgetRobotToken(){ _robotTok=null; _robotExp=0; }
 async function getRobotToken(){
   if(_robotTok && Date.now() < _robotExp-60000) return _robotTok;   // reuse on warm isolate
   // The Firebase Web API key is HTTP-referrer restricted (that's why browsers work but a
@@ -197,6 +204,25 @@ async function getRobotToken(){
   if(!j.idToken) throw new Error('robot sign-in failed: '+((j.error&&j.error.message)||'unknown'));
   _robotTok=j.idToken; _robotExp=Date.now()+(parseInt(j.expiresIn||'3600',10)*1000);
   return _robotTok;
+}
+
+// One authenticated write, and one retry on the only failure a retry can fix.
+//
+// A 401 or 403 from the database means the token was not accepted, and the token is
+// cached for the life of the isolate — so without this the first rejection poisons
+// every write that isolate makes afterwards. Anything else (a validation failure, a
+// network error) is not a credentials problem and is handed back as it is.
+async function dbPut(pathWithoutJson, body){
+  let token = await getRobotToken();
+  const go = (t) => fetch(DB_URL + pathWithoutJson + '.json?auth=' + t, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  let res = await go(token);
+  if(res.status === 401 || res.status === 403){
+    forgetRobotToken();
+    token = await getRobotToken();
+    res = await go(token);
+  }
+  return res;
 }
 
 // ---- Ingest: parse one alert, write payments/incoming/{ref} -----------------
@@ -213,9 +239,9 @@ async function handleIngest(data){
   const _now = Date.now();
   const payment = { amount:p.amount, payer:p.payer||null, ref:String(p.ref), source:p.source,
     acct:p.acct||null, bankTime: parseBankTime(data.text||'', _now), at: _now };
-  let token; try{ token=await getRobotToken(); }catch(e){ return { status:502, body:{ error:String(e.message||e) } }; }
-  const url = DB_URL + '/payments/incoming/' + encodeURIComponent(p.ref) + '.json?auth=' + token;
-  const res = await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payment) });
+  let res;
+  try { res = await dbPut('/payments/incoming/' + encodeURIComponent(p.ref), payment); }
+  catch(e){ return { status:502, body:{ error:String(e.message||e) } }; }
   if(!res.ok) return { status:502, body:{ error:'db write failed', code:res.status, detail:(await res.text()).slice(0,200) } };
   return { status:200, body:{ ok:true, payment } };
 }
@@ -405,15 +431,43 @@ function rcCountFresh(orders, since){
 
 // ---- read all completed orders in the lookback window, both stations ----
 // Returns array of { start, done, dur(min), items, station }
+//
+// A WINDOW, NOT THE WHOLE HISTORY.
+//
+// orders/completed/{station} is the largest node in this database and nothing ever
+// removes from it: one record per ticket, with its items, for as long as the café has
+// been open. This read had no limit on it — every ticket ever cooked, pulled into a
+// Worker, so that the 75 days below could be picked out of it in the loop. It is a
+// monthly job, so nothing about it looks slow until the day it simply cannot finish,
+// and a refit that stops running does not break anything anyone can see: the model
+// freezes and the estimates drift.
+//
+// Keys are push keys, so key order is creation order and the newest tickets are the
+// last ones — limitToLast on $key gives the recent end and needs no index. The cap is
+// set well above what the window can hold rather than near it (RECAL_LOOKBACK_DAYS at
+// the café's own rate is a few thousand a station), and truncation is reported rather
+// than absorbed: `truncated` says the oldest ticket returned is still INSIDE the
+// window, which means the window was cut short and the refit is working from less
+// evidence than it believes.
+const RECAL_MAX_RECORDS = 20000;
 async function rcLoadCompleted(token){
   const since = Date.now() - RECAL_LOOKBACK_DAYS*86400*1000;
   const out=[];
+  out.truncated = false;
   for(const station of ['chef','barista']){
-    const url = DB_URL + '/orders/completed/' + station + '.json?auth=' + token;
+    const url = DB_URL + '/orders/completed/' + station + '.json?orderBy=%22%24key%22&limitToLast=' +
+                RECAL_MAX_RECORDS + '&auth=' + token;
     const res = await fetch(url);
     if(!res.ok) continue;
     const data = await res.json();
     if(!data) continue;
+    // The cap was reached AND the oldest thing it returned is still in the window, so
+    // there were tickets inside the window that this read did not see.
+    if(Object.keys(data).length >= RECAL_MAX_RECORDS){
+      let oldest = Infinity;
+      for(const id in data){ const c = data[id] && data[id].completedAt; if(c && c < oldest) oldest = c; }
+      if(oldest > since) out.truncated = true;
+    }
     for(const id in data){
       const o=data[id]; if(!o) continue;
       const start = o.createdAt, done = o.completedAt;
@@ -818,6 +872,11 @@ async function runRecalibration(dryRun){
     freshOrders: fresh,
     lastRunAt: meta.lastRunAt || null,
     cleanOrders: counts.totalClean,
+    // true = the lookback window was cut short by RECAL_MAX_RECORDS, so this refit saw
+    // less of it than it asked for. Surfaced rather than absorbed: the gates below judge
+    // sample sizes, and a sample silently smaller than the window is the one thing they
+    // cannot tell from a quiet quarter.
+    windowTruncated: !!orders.truncated,
     pizzaBase: derived.pizzaBase,
     cushionDrink: derived.cushionDrinkByLoad,
     cushionPizza: derived.cushionPizzaByOven,
@@ -847,7 +906,8 @@ async function runRecalibration(dryRun){
   });
   await rcNotifyOwner(token, '✅ ETA model updated (v'+merged.version+')',
     'pizza '+(current.fallback&&current.fallback.pizza)+'→'+derived.pizzaBase+
-    ' · '+counts.totalClean+' orders · '+counts.items+' items refit');
+    ' · '+counts.totalClean+' orders · '+counts.items+' items refit' +
+    (orders.truncated ? ' · read capped at ' + RECAL_MAX_RECORDS + ' a station — raise it' : ''));
   return summary;
 }
 
@@ -1276,8 +1336,30 @@ async function runVerificationMonitor(nowMs, isWeekly){
 }
 
 // Weekly digest from the EOD archive: how much verified vs manual vs ignored last 7 days.
+//
+// THE LAST SEVEN DAYS, NOT EVERY DAY THE CAFE HAS EVER BEEN OPEN.
+//
+// This read had no limit on it, and pos/eodArchive is the one node here that only ever
+// grows: one entry per closing, each carrying that day's whole bills array and whole
+// ledger. Seven days were then picked out of it in a loop. Every browser that touches
+// this node already limits (limitToLast(120), in admin and analytics), and
+// settleLateVerifications thirty lines up goes out of its way to read it shallow for
+// exactly this reason — the Worker was the one reader still pulling it whole, weekly,
+// forever. Nothing announces that failure either: it gets slower every week, and the
+// day it finally exceeds what a Worker can hold or how long it may run, the digest
+// simply stops arriving.
+//
+// Archive keys are `YYYY-MM-DD-<epoch ms>`, so key order IS date order and the newest
+// entries are the last ones. limitToLast on $key needs no index. 30 covers a week with
+// room for days closed more than once and for the café closing on a Monday.
+const DIGEST_ARCHIVE_KEYS = 30;
 async function runWeeklyDigest(token, nowMs){
-  const arch = await monLoad(token, '/pos/eodArchive') || {};
+  let arch = {};
+  try {
+    const r = await fetch(DB_URL + '/pos/eodArchive.json?orderBy=%22%24key%22&limitToLast=' +
+                          DIGEST_ARCHIVE_KEYS + '&auth=' + token);
+    if (r.ok) arch = (await r.json()) || {};
+  } catch (e) { return; }
   const weekAgo = nowMs - 7*24*60*60000;
   let verified=0, unverified=0, ignored=0, vAmt=0, uAmt=0, days=0;
   for (const key in arch){
@@ -1709,18 +1791,37 @@ export default {
       const text = emailExtractText(raw);
       const p = parseBankEmail(hit.bank, text);
       if (!p || !p.amount || !p.ref){ console.log('upi-email: not a parseable credit (' + hit.bank + ') textLen=' + text.length + ' head=' + text.slice(0, 140)); return; }
-      stage = 'token';
-      const token = await getRobotToken();
       stage = 'write';
       // One clock reading for both: `at` is when this alert was ingested, bankTime is
       // when the bank says the money moved (null when the alert does not say, or
       // does not say it in a shape this is sure of — see parseBankTime).
       const nowMs = Date.now();
       const payment = { amount: p.amount, payer: p.payer || null, ref: String(p.ref), source: hit.bank + '-email', bank: hit.bank, acct: p.acct || null, bankTime: parseBankTime(text, nowMs), at: nowMs };
-      const res = await fetch(DB_URL + '/payments/incoming/' + encodeURIComponent(String(p.ref)) + '.json?auth=' + token, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payment) });
-      console.log('upi-email: OK ' + hit.bank + ' ' + p.amount + ' ref ' + p.ref + ' acct ' + (p.acct || '-')
-                  + ' bankTime ' + (payment.bankTime ? new Date(payment.bankTime).toISOString() : 'none')
-                  + ' -> ' + res.status);
+      // A CREDIT THIS CANNOT RECORD IS A PAYMENT NOBODY WILL EVER MATCH.
+      //
+      // This was a bare fetch whose status was printed into a log line and otherwise
+      // dropped. Nothing here has a caller: an email arrives, this runs, and if the
+      // write is refused the alert is gone — the customer has paid, the till never
+      // sees a credit for it, the order never auto-verifies, and the only trace is a
+      // console line in a runtime nobody is watching. It reads exactly like a bank
+      // that has stopped mailing.
+      //
+      // reportIfItThrows is the machinery the scheduled jobs already use for this,
+      // and it fits without changing: it records the failure under ops/cronFailure
+      // (which the Worker-health panel on analytics.html renders by name), pushes to
+      // the owner at most once in the throttle window, and — the half that matters as
+      // much — CLEARS the record when a write succeeds, so a bank that recovers stops
+      // looking broken and the next failure after it pushes immediately.
+      await reportIfItThrows('bank-credit-ingest', (async () => {
+        const res = await dbPut('/payments/incoming/' + encodeURIComponent(String(p.ref)), payment);
+        if (!res.ok) throw new Error(hit.bank + ' credit ' + p.amount + ' ref ' + p.ref +
+                                     ' was not recorded (' + res.status + ' ' +
+                                     (await res.text()).slice(0, 120) + ')');
+        console.log('upi-email: OK ' + hit.bank + ' ' + p.amount + ' ref ' + p.ref + ' acct ' + (p.acct || '-')
+                    + ' bankTime ' + (payment.bankTime ? new Date(payment.bankTime).toISOString() : 'none')
+                    + ' -> ' + res.status);
+        return true;
+      })());
     } catch(e){ console.log('upi-email error at stage=' + stage + ':', e && (e.stack || e.message)); }
   }
 };
