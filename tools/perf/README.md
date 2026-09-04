@@ -60,10 +60,21 @@ café wifi all day. Analytics was 5.90 MB before `pos/eodSummary` existed.
 |---|---|
 | before `orders/daily` existed | 14.35 MB |
 | the first open after it shipped | 14.35 MB — the history is read once, to build the rollups |
-| every open after that | **1.70 MB** |
+| every open after that | **1.83 MB** |
 
-`orders/daily` is 721 KB for 550 trading days against the 13.35 MB of orders behind it
-— 19×. It holds one small record per closed day: the sums every figure on the page
+`orders/daily` is 850 KB for 550 trading days against the 13.35 MB of orders behind it
+— 16×.
+
+The rollups carry a per-item order count as well now, which the item drill-down reads,
+so a day's record is a little larger than the 721 KB and 19× first recorded here.
+
+WHAT THIS FIXTURE HAS TO KEEP UP WITH. A rollup missing a field the page expects is one
+the page REBUILDS, and a fixture whose rollups are of an older shape therefore measures
+that rebuild rather than the steady state. This one did, for exactly one change: it
+reported All Time at 15.05 MB with the whole order history read four times, which reads
+as the optimisation having been undone. It had not — the fixture had gone stale. If a
+run here suddenly shows `orders/history` being read whole, suspect this file before the
+page. It holds one small record per closed day: the sums every figure on the page
 except the transactions table is made of. Today has no rollup, because the day is not
 over, so it is read raw and added to them.
 

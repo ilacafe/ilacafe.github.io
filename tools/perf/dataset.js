@@ -106,9 +106,16 @@ function build() {
       else if (/Takeaway/i.test(t)) r.type.Takeaway++;
       else r.type['Dine-in']++;
       r.hour[d.getHours()]++;
+      // o is orders-an-item-appeared-in, which the item drill-down reads. A rollup
+      // without it is one the page treats as an older shape and REBUILDS — so a
+      // fixture missing it makes every payload run measure the rebuild rather than
+      // the steady state, and reports the whole order history being read on an open
+      // that should not touch it.
+      const seen = {};
       for (const nm in o.items) {
         const base = String(nm).split(' (')[0];
-        const it = r.item[base] || (r.item[base] = { q: 0, r: 0 });
+        const it = r.item[base] || (r.item[base] = { q: 0, r: 0, o: 0 });
+        if (!seen[base]) { seen[base] = 1; it.o++; }
         it.q += o.items[nm].qty; it.r += o.items[nm].price * o.items[nm].qty;
       }
     }
