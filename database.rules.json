@@ -278,6 +278,7 @@
             ".validate": "newData.hasChildren(['q','r'])",
             "q": { ".validate": "newData.isNumber() && newData.val() >= 0" },
             "r": { ".validate": "newData.isNumber()" },
+            "o": { ".validate": "newData.isNumber() && newData.val() >= 0" },
             "$other": { ".validate": false } } },
           "$other": { ".validate": false }
         }
