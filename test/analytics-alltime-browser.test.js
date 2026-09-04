@@ -377,6 +377,81 @@ const waitFor = async (tab, fn, ms) => {
     note('than the empty state it replaced');
   }
 
+  // ---- A RANGE MEANS THE SAME THING WHATEVER YOU LOOKED AT BEFORE IT
+  //
+  // Reported from the café: tap All time, tap 30 days, and the 30-day figures are
+  // lower than they were a moment ago. ₹1,15,839 became ₹1,10,793 for the same
+  // thirty days, and the drill-down went blank.
+  //
+  // historyNeedsRefetch asked one question — is the range we hold wide enough? — and
+  // read historyFrom as saying what DATA holds. All time sets historyFrom to 0 and
+  // DATA to TODAY, so narrowing out of it looked like narrowing out of a full
+  // history and skipped the refetch. The range was then served from rollups, which
+  // the fold filters by a day's MIDNIGHT while the raw path filters by each order's
+  // own timestamp, so the day the range starts on fell out of it.
+  //
+  // EACH RANGE GETS A PAGE OF ITS OWN. The first version of this looped over the
+  // ranges in one page and compared each to itself — but by the second range the
+  // previous one's detour through All time had already left historyFrom at 0, so the
+  // "before" reading was contaminated too. Both readings were then equally wrong and
+  // the check passed: against the broken build it reported ₹1,10,793 twice and saw
+  // no drift. A reading taken after the bug has already happened is not a baseline.
+  {
+    const openFresh = async () => {
+      const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
+      await ctx.addInitScript(stub(true, false, false));
+      const tab = await ctx.newPage();
+      const threw = [];
+      tab.on('pageerror', e => threw.push(e.message));
+      tab.on('dialog', d => d.dismiss().catch(() => {}));
+      await tab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+      await tab.goto(base + '/analytics.html', { waitUntil: 'commit' });
+      await waitFor(tab, () => { const e = document.getElementById('k-ord');
+        return e && e.textContent && e.textContent !== '0'; }, 20000);
+      return { ctx, tab, threw };
+    };
+    const read = async (tab) => { await tab.waitForTimeout(1500); return tab.evaluate(() => ({
+      rev: (document.getElementById('k-rev') || {}).textContent,
+      ord: (document.getElementById('k-ord') || {}).textContent,
+      itm: (document.getElementById('k-itm') || {}).textContent,
+      drill: (document.getElementById('drill-stats') || {}).textContent.replace(/\s+/g, ' ').trim(),
+      opts: document.querySelectorAll('#drill-select option').length })); };
+    const tap = async (tab, k) => { await tab.evaluate((k) => {
+      const b = document.querySelector('[data-range="' + k + '"]'); if (b) b.click(); }, k); };
+
+    const probe = await openFresh();
+    const RANGES = await probe.tab.evaluate(() => [...document.querySelectorAll('[data-range]')]
+      .map(b => b.getAttribute('data-range')).filter(k => k !== 'all'));
+    await probe.ctx.close();
+
+    const drifted = [], blanked = [], broke = [];
+    for (const k of RANGES) {
+      const { ctx, tab, threw } = await openFresh();
+      await tap(tab, k);     const before = await read(tab);   // never seen All time
+      await tap(tab, 'all'); await read(tab);
+      await tap(tab, k);     const after = await read(tab);
+      if (before.rev !== after.rev || before.ord !== after.ord || before.itm !== after.itm) {
+        drifted.push(k + ': ' + before.rev + '/' + before.ord + '/' + before.itm +
+                     ' then ' + after.rev + '/' + after.ord + '/' + after.itm);
+      }
+      if (before.drill !== after.drill || after.opts === 0) {
+        blanked.push(k + ': ' + JSON.stringify(before.drill) + ' then ' +
+                     JSON.stringify(after.drill) + ' (' + after.opts + ' options)');
+      }
+      if (threw.length) broke.push(k + ': ' + threw[0].slice(0, 80));
+      await ctx.close();
+    }
+
+    check('every range reports the same money after a detour through All time',
+          drifted.length === 0, drifted.join(' | '));
+    check('and the drill-down still has the same answer, not a blank card',
+          blanked.length === 0, blanked.join(' | '));
+    check('nothing threw while the ranges were tapped', broke.length === 0, broke.join(' | '));
+    note(RANGES.length + ' ranges, each on a page that had never seen All time');
+    note('a rollup-served range covers nothing but itself: its DATA is only today,');
+    note('however far back its historyFrom looks');
+  }
+
   // ---- ROLLUPS OF THE OLDER SHAPE, WHICH IS WHAT IS IN THE DATABASE NOW
   //
   // Per-item order counts did not exist when the first rollups were written, so the

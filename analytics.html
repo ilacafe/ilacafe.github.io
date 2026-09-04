@@ -716,7 +716,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-04.1"></script>
+    <script src="/build-check.js" data-build="2026-09-04.2"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1002,7 +1002,31 @@
         // already here. Getting that comparison backwards would either refetch on
         // every click or quietly show a window with nothing in it, so it is a named
         // function with a test rather than an inline `<=`.
-        function historyNeedsRefetch(have, want){ return have === null || have > want; }
+        // WHAT "WE ALREADY HAVE THIS" MEANS DEPENDS ON HOW THE RANGE WAS SERVED
+        //
+        // This used to be one comparison: a fetch from further back covers any range
+        // that starts later, so widening refetches and narrowing does not. That rested
+        // on historyFrom saying what DATA holds, and it stopped being true when All
+        // time stopped downloading all time — there historyFrom is 0 and DATA holds
+        // only TODAY, with the closed days coming off the rollups instead.
+        //
+        // So narrowing from All time looked like narrowing from a full history and
+        // skipped the refetch. The 30-day view was then served from rollups, which the
+        // fold filters by a day's MIDNIGHT while the raw path filters by each order's
+        // own timestamp — so the day the range starts on fell out of it entirely, and
+        // the same 30 days reported less money after a visit to All time than before:
+        //
+        //     30 days           ₹1,15,839   361 orders
+        //     30 days after All ₹1,10,793   349 orders
+        //
+        // A range served by rollups therefore covers nothing but itself. Anything else
+        // has to be fetched, and then the rollups only ever serve All time, where the
+        // range starts at 0 and there is no part-day to lose.
+        function historyNeedsRefetch(have, want, rollupServed){
+            if (have === null) return true;
+            if (rollupServed) return want !== 0;
+            return have > want;
+        }
 
         // ---------- keeping orders/daily up to date ----------
         //
@@ -1084,7 +1108,9 @@
         }
 
         function ensureHistory(start){
-            if(!historyNeedsRefetch(historyFrom, start)){ scheduleRender(); return; }
+            // txnWindowed is the flag for "this range is served by rollups" — it is set
+            // in the All time branch below and cleared in the other.
+            if(!historyNeedsRefetch(historyFrom, start, txnWindowed)){ scheduleRender(); return; }
             if(historyQuery){ try { historyQuery.off(); } catch(e){} }
             historyFrom = start;
             // Paint the new range immediately with whatever is already held, the way
