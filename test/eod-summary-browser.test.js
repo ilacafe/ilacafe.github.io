@@ -60,7 +60,7 @@ const server = http.createServer((req,res)=>{
 
 // Records every read and write by path, so the suite can assert on what the page
 // ASKED FOR rather than on what it happened to display.
-const stub = (withSummary, withMarker) => `
+const stub = (withSummary, withMarker, denySummary) => `
 (() => {
  const noop=()=>{};
  const ARCH = ${JSON.stringify(ARCH)};
@@ -96,12 +96,19 @@ const stub = (withSummary, withMarker) => `
    if(q.startAt!=null) keys=keys.filter(k=>String(k)>=String(q.startAt));
    if(q.limitToLast!=null) keys=keys.slice(-q.limitToLast);
    const o={}; keys.forEach(k=>o[k]=val[k]); return o; };
+ // A refusal is what live rules do to a node they have never heard of: the read is
+ // rejected, not answered with an empty node. pos/eodSummary is new in this change
+ // and the rules for it deploy by hand, so this is the state the café was in.
+ const PD = () => { const e = new Error("PERMISSION_DENIED: Client doesn't have permission to access the desired data."); e.code='PERMISSION_DENIED'; return e; };
+ const DENY = p => ${denySummary ? "(p==='pos/eodSummary'||p==='pos/eodSummaryBackfill')" : "false"};
  const mk=(p,q)=>({
-   on:(e,cb)=>{ if(e!=='value') return cb;
+   on:(e,cb,cancel)=>{ if(e!=='value') return cb;
      if(p==='.info/connected'){ setTimeout(()=>{try{cb(snap(true))}catch(x){}},20); return cb; }
+     if(DENY(p)){ setTimeout(()=>{try{ cancel&&cancel(PD()) }catch(x){}},30); return cb; }
      const v=applyQ(byPath(p),q); note(window.__reads,p,sizeOf(v));
      setTimeout(()=>{try{cb(snap(v))}catch(x){}},30); return cb; },
    once:()=>{ if(p.indexOf('users/')===0) return Promise.resolve(snap({role:'admin',name:'A'}));
+     if(DENY(p)) return Promise.reject(PD());
      const v=applyQ(byPath(p),q); note(window.__reads,p,sizeOf(v));
      return Promise.resolve(snap(v)); },
    off:noop, child:k=>mk(p+'/'+k,q),
@@ -136,9 +143,9 @@ const waitFor = async (tab, fn, ms) => {
   const PRE = '/opt/pw-browsers/chromium';
   const browser = await chromium.launch(fs.existsSync(PRE)?{executablePath:PRE}:{});
 
-  const open = async (withSummary, withMarker) => {
+  const open = async (withSummary, withMarker, denySummary) => {
     const ctx = await browser.newContext({ serviceWorkers:'block', viewport:{width:1280,height:900} });
-    await ctx.addInitScript(stub(withSummary, withMarker));
+    await ctx.addInitScript(stub(withSummary, withMarker, denySummary));
     const tab = await ctx.newPage();
     const threw = [];
     tab.on('pageerror', e => threw.push(e.message));
@@ -227,6 +234,44 @@ const waitFor = async (tab, fn, ms) => {
     check('nothing threw during the rebuild', threw.length === 0, threw.slice(0,2).join(' | '));
     await ctx.close();
   }
+
+  // ---------------------------------------- the index refused, which is what shipped
+  //
+  // pos/eodSummary is a new node and this repo deploys its rules by hand, so live the
+  // node did not exist and the read was REFUSED. on('value') takes a cancel callback
+  // and this read had none, so the refusal went nowhere: EOD stayed empty and the
+  // cash-up list rendered as though the café had never closed a day.
+  //
+  // Every open above stubs a node that reads fine and is merely empty, which the page
+  // fixes by rebuilding. None of them could see this, because an empty answer and a
+  // refused one are not the same event.
+  {
+    const { ctx, tab, threw } = await open(false, false, true);
+    const io = await tab.evaluate(() => ({ reads: window.__reads, writes: window.__writes }));
+    const rows = await tab.evaluate(() => [...document.querySelectorAll('#eod-container > div')]
+      .map(d => d.textContent.replace(/\s+/g,' ').trim()));
+
+    check('refused the index, the closings are still listed', rows.length === DAYS,
+          rows.length + ' rows for ' + DAYS + ' closings');
+    check('and it fell back to the archive to list them', !!io.reads['pos/eodArchive'],
+          Object.keys(io.reads).join(', '));
+    const billsIn = r => { const m = /(\d+) bill\(s\)/.exec(r); return m ? parseInt(m[1],10) : -1; };
+    check('with the bill counts intact, counted off the archive\'s own bills',
+          rows.length && rows.every(r => billsIn(r) === BILLS),
+          rows.map(billsIn).join(',') + ' against ' + BILLS + ' per day');
+    check('and the takings, off the archive rather than the index',
+          rows.some(r => /2,?00\d/.test(r)), rows[0] || 'no rows');
+    check('it writes nothing it could not first read',
+          !io.writes['pos/eodSummaryBackfill'],
+          'wrote ' + Object.keys(io.writes || {}).join(', '));
+    note('a page that cannot read the index has no business writing one');
+    check('and the refusal did not throw at the page', threw.length === 0,
+          (threw[0] || '').slice(0,140));
+    await ctx.close();
+  }
+  note('slower and right beats faster and wrong: the index is an optimisation,');
+  note('and an optimisation that cannot run must not empty the list');
+
 
   await browser.close();
   server.close();

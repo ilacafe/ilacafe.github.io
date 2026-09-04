@@ -930,7 +930,8 @@
             // The archive is untouched and still the record: admin's UPI history reads its
             // ledger, and the Worker writes late bank verifications into it. This is an
             // index over it, written by the till at close.
-            db.ref('pos/eodSummary').limitToLast(120).on('value', s => { EOD = s.val()||{}; renderEod(); });
+            db.ref('pos/eodSummary').limitToLast(120).on('value',
+                s => { EOD = s.val()||{}; renderEod(); }, fallBackToEodArchive);
             // Closings that predate the index have no entry in it, and would simply vanish
             // from the list. So the first analytics open after this shipped rebuilds them
             // from the archive — the old 5.2MB read, once, ever — and writes a marker so
@@ -1044,6 +1045,27 @@
             if (Object.keys(updates).length) await db.ref().update(updates);
         }
 
+        // WHEN THE ROLLUPS CANNOT BE READ, READ THE ORDERS INSTEAD
+        //
+        // ensureRollups can fail for reasons that have nothing to do with this page:
+        // the rules for orders/daily not deployed yet, a permission change, a dropped
+        // connection mid-read. The rollups carry every CLOSED day, so without them
+        // DATA is TODAY ALONE — and the page would draw today's takings, or nothing at
+        // all before the first sale, under a heading that says "All time". Nothing on
+        // screen would look wrong.
+        //
+        // This is the café's money on a screen people make decisions from, so a failure
+        // here falls back to the whole-history read this change exists to avoid. Slower
+        // and right, which is the correct way round: a page that is fast and reports
+        // ₹0 for eighteen months of trading is worse than one that takes a minute.
+        function fallBackToWholeHistory(){
+            if (historyFrom !== 0) return;      // the range moved on while we waited
+            txnWindowed = false; ROLLUPS = {}; TXNWIN = {};
+            if (historyQuery){ try { historyQuery.off(); } catch(e){} }
+            historyQuery = db.ref('orders/history');
+            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+        }
+
         function ensureHistory(start){
             if(!historyNeedsRefetch(historyFrom, start)){ scheduleRender(); return; }
             if(historyQuery){ try { historyQuery.off(); } catch(e){} }
@@ -1066,7 +1088,7 @@
             // the transactions table, which a rollup cannot answer for.
             if (start === 0){
                 txnWindowed = true;
-                ensureRollups().then(scheduleRender).catch(()=>{});
+                ensureRollups().then(scheduleRender).catch(fallBackToWholeHistory);
                 // today only — the part no rollup covers
                 historyQuery = db.ref('orders/history').orderByKey().startAt(String(startOfToday()));
                 historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
@@ -1869,6 +1891,42 @@
             downloadCSV(out, 'ila-walkouts-' + stamp() + '.csv');
         };
 
+        // The five fields renderEod actually shows, taken out of a full archive. The
+        // backfill writes these into pos/eodSummary; the fallback below reads them
+        // straight through without writing anything. One definition, because two
+        // copies of this arithmetic would eventually disagree about a day's takings.
+        function summaryOf(d){
+            d = d || {};
+            const bills = d.bills ? (Array.isArray(d.bills) ? d.bills.filter(Boolean).length
+                                                            : Object.keys(d.bills).length) : 0;
+            return { cash: Number(d.cash) || 0, upi: Number(d.upi) || 0, bills: bills,
+                     closedBy: d.closedBy ? String(d.closedBy) : '',
+                     closedAt: Number(d.closedAt) || 0 };
+        }
+
+        // WHEN THE INDEX CANNOT BE READ, READ THE ARCHIVE
+        //
+        // pos/eodSummary is an index over pos/eodArchive, and a page that cannot read
+        // the index must not conclude the café has never closed a day. on('value')
+        // takes a cancel callback and this read had none, so a refusal — the rules for
+        // a new node not deployed yet, a role change — was dropped on the floor and the
+        // cash-up list stayed empty with nothing said.
+        //
+        // The archive is the record and is still readable, so the list comes back off
+        // it: the 5.2MB read that the index exists to avoid, paid only when the index
+        // is unavailable. It writes nothing, because a page that could not read the
+        // index has no business writing one.
+        let eodFellBack = false;
+        function fallBackToEodArchive(){
+            if (eodFellBack) return;                   // one fallback, not one per retry
+            eodFellBack = true;
+            db.ref('pos/eodArchive').limitToLast(120).on('value', s => {
+                const days = s.val() || {}; const out = {};
+                for (const k in days) out[k] = summaryOf(days[k]);
+                EOD = out; renderEod();
+            }, () => {});                              // archive refused too: nothing left to try
+        }
+
         // Rebuilds pos/eodSummary from pos/eodArchive, at most once for this café.
         //
         // Guarded by a marker rather than by counting: analytics cannot tell whether the
@@ -1891,16 +1949,7 @@
                     return;
                 }
                 const updates = {};
-                keys.forEach(k => {
-                    const d = days[k] || {};
-                    const bills = d.bills ? (Array.isArray(d.bills) ? d.bills.filter(Boolean).length
-                                                                   : Object.keys(d.bills).length) : 0;
-                    updates['pos/eodSummary/' + k] = {
-                        cash: Number(d.cash) || 0, upi: Number(d.upi) || 0, bills: bills,
-                        closedBy: d.closedBy ? String(d.closedBy) : '',
-                        closedAt: Number(d.closedAt) || 0
-                    };
-                });
+                keys.forEach(k => { updates['pos/eodSummary/' + k] = summaryOf(days[k]); });
                 await db.ref().update(updates);
                 await db.ref('pos/eodSummaryBackfill').set({ at: Date.now(), days: keys.length });
             } catch(e){ /* next open tries again; the list is simply shorter until then */ }
