@@ -137,6 +137,72 @@ for (const [page, station] of [['chef.html', 'chef'], ['barista.html', 'barista'
   note('the lock is per station, so it cannot swallow the other one');
 }
 
+// ---------------------------------------------------------- a claim nobody finished
+//
+// From the café: one ticket on the barista board where DONE simply did nothing. It
+// had gone red, because it had been sitting there ageing while every tap was
+// silently refused.
+//
+// doneAt is stamped to CLAIM the ticket, and everything that clears it — the bell,
+// the completed record, the removal 200ms later — happens after. If any of that does
+// not run, and the reasons are ordinary (the screen is closed, the connection drops
+// mid-service, a write is refused), the ticket stays on the board with doneAt set.
+// Every later tap then aborted on that stamp. The claim had no expiry, so the ticket
+// was stuck for good and the only way out was the console.
+//
+// The lock still has to do its real job — two taps seconds apart must still be one
+// ticket — so both halves are checked here.
+{
+  const settleAll = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+  for (const [page, station] of [['chef.html', 'chef'], ['barista.html', 'barista']]) {
+    const ACT = 'orders/active/' + station + '/o9';
+
+    // A ticket claimed a while ago by a tap that never finished: still on the board,
+    // still carrying doneAt.
+    const state = {}, log = [];
+    state[ACT] = { destination: 'Table 9', time: '14:02', source: 'POS',
+                   items: { Latte: { qty: 1 } }, stations: 1, trackId: 't9',
+                   doneAt: Date.now() - 10 * 60000 };
+    state['orders/track/t9'] = { status: 'preparing', stations: 1, stationsDone: 0 };
+    const timers = [];
+    const api = buildModule([extractAssignedFunction(readPage(page), 'markOrderDone')], {
+      db: makeDb(state, log), document: { getElementById: () => null },
+      setTimeout: (fn) => { timers.push(fn); }, Date, JSON, Object, console, Promise,
+    }, ['markOrderDone']);
+    api.markOrderDone('o9'); await settleAll();
+    timers.forEach(fn => fn()); await settleAll();
+
+    check(page + ' — a ticket stuck under an old claim can still be cleared',
+          log.some(l => l.op === 'remove'),
+          'DONE did nothing; the ticket stays on the board');
+    check(page + ' — and the customer is told it is ready',
+          state['orders/track/t9'].status === 'ready',
+          'track says ' + state['orders/track/t9'].status);
+
+    // The other half: the lock still holds for a real race. Two taps, seconds apart.
+    const s2 = {}, l2 = [], t2 = [];
+    s2['orders/active/' + station + '/o8'] = { destination: 'T8', time: '14:05',
+      source: 'POS', items: { Bun: { qty: 1 } }, stations: 2, trackId: 't8' };
+    s2['orders/track/t8'] = { status: 'preparing', stations: 2, stationsDone: 0 };
+    const api2 = buildModule([extractAssignedFunction(readPage(page), 'markOrderDone')], {
+      db: makeDb(s2, l2), document: { getElementById: () => null },
+      setTimeout: (fn) => { t2.push(fn); }, Date, JSON, Object, console, Promise,
+    }, ['markOrderDone']);
+    api2.markOrderDone('o8'); await settleAll();
+    api2.markOrderDone('o8'); await settleAll();   // the second tap, moments later
+    t2.forEach(fn => fn()); await settleAll();
+
+    check(page + ' — two taps moments apart are still one ticket',
+          l2.filter(l => l.op === 'push').length === 1,
+          l2.filter(l => l.op === 'push').length + ' bells rang');
+    check(page + ' — and still count this station once',
+          s2['orders/track/t8'].stationsDone === 1,
+          'stationsDone ' + s2['orders/track/t8'].stationsDone);
+  }
+  note('a claim seconds old is a race and holds; one minutes old is a claim nobody');
+  note('finished, and the ticket has to come back');
+}
+
 done();
 
 })();

@@ -319,7 +319,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-04.2"></script>
+    <script src="/build-check.js" data-build="2026-09-04.3"></script>
     <!-- Says so when this screen stops talking to the database. Every device here is
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
@@ -680,7 +680,23 @@
         window.markOrderDone = function(id) {
             db.ref('orders/active/barista/' + id).transaction(function(cur){
                 if (!cur) return cur;              // already cleared by the tap that won
-                if (cur.doneAt) return;            // abort: another tap owns this ticket
+                // A CLAIM THAT NEVER COMPLETED MUST NOT HOLD THE TICKET FOREVER
+                //
+                // doneAt is stamped to claim the ticket; the bell, the completed
+                // record and the removal 200ms later all happen AFTER it. If any of
+                // that does not run — the screen is closed, the network drops, a
+                // write is refused — the ticket stays in active with doneAt set, and
+                // every later tap aborts on this line. It can never be cleared: it
+                // ages on the board, turns red, and the only way out was the console.
+                //
+                // A real second tap lands within seconds of the first, usually from
+                // another device. A claim older than that is not a race, it is one
+                // nobody finished, and the ticket has to be reclaimable. A claim
+                // stamped in the FUTURE is reclaimable too — that is a device with a
+                // wrong clock, and it must not be able to freeze a ticket until real
+                // time catches up.
+                var claimAge = Date.now() - cur.doneAt;
+                if (cur.doneAt && claimAge >= 0 && claimAge < 60000) return;
                 cur.doneAt = Date.now();
                 return cur;
             }, function(err, committed, snapshot){
