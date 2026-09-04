@@ -25,6 +25,7 @@ const suites = [
   'analytics-range.test.js',
   'repeat-customers.test.js',
   'unbounded-reads.test.js',
+  'refused-reads.test.js',
   'eta-freshness.test.js',
   'ledger-denied.test.js',
   'late-verification.test.js',

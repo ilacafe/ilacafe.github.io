@@ -1,0 +1,62 @@
+name: rules drift
+
+# The rules in git and the rules being enforced are two different things, and
+# nothing could see the gap between them.
+#
+# database.rules.json deploys by hand, deliberately — a bad commit deploying
+# itself could lock the till out of the database, or open it, with nobody in the
+# loop. The cost of that choice is drift, and drift is invisible: the file in the
+# repo is correct, CI is green, and the live database is simply behind.
+#
+# That gap took the café's analytics down twice. Two changes added three nodes —
+# orders/daily, pos/eodSummary, pos/eodSummaryBackfill — and merged without a
+# deploy, so every read of them was refused. The pages showed ₹0 and an empty
+# cash-up list rather than an error, because a node nobody has heard of and a
+# node nobody is allowed to read are indistinguishable from the browser.
+#
+# So this asks the question nothing was asking: are the rules in main the rules
+# in force? It cannot deploy and holds no write path — it reads the live rules
+# back and compares. A red run here means "somebody needs to run the deploy",
+# which is a decision for a person, exactly as before.
+
+on:
+  push:
+    branches: [main]
+    paths: ['database.rules.json']
+  schedule:
+    # Drift does not only appear at merge time: rules can be changed in the
+    # Firebase console, and a deploy can be rolled back. Once a day, on the
+    # whole file rather than on a diff.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+# No secret reaches a fork, so this deliberately does not run on pull_request:
+# a job that cannot answer the question should not report on it.
+jobs:
+  drift:
+    name: are the live rules the rules in main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: read the live rules back and compare
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FIREBASE_SERVICE_ACCOUNT:-}" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT is not set, so drift cannot be checked"
+            exit 1
+          fi
+          node tools/verify-rules.js
+
+      - name: say what to do about it
+        if: failure()
+        run: |
+          echo "::error::database.rules.json in main is NOT what the database is enforcing."
+          echo "::error::Run the 'deploy database rules' workflow (confirm: DEPLOY) to close the gap."
+          echo "::error::Until then, any page reading a node that only exists in git is refused,"
+          echo "::error::and a refused read is not an empty one — check the page says so."
