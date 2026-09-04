@@ -716,7 +716,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-03.12"></script>
+    <script src="/build-check.js" data-build="2026-09-04.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -831,6 +831,13 @@
 
         // ---------- data ----------
         let DATA = {};       // orders/history — only the span the chosen range needs
+        // The transactions table draws at most 500 rows, so 500 is what it fetches for
+        // a range served by rollups. Search and export then cover those 500 rather than
+        // the whole range, which the card says out loud and offers to change.
+        const TXN_WINDOW = 500;
+        let ROLLUPS = {};    // orders/daily — one small record per closed day
+        let TXNWIN = {};     // the most recent orders, for the transactions table alone
+        let txnWindowed = false;   // true when the table is showing a window, not the range
         let historyQuery = null, historyFrom = null;
         let CATMAP = {};     // menu item name -> category
         let VOIDS = {};      // security/voids
@@ -996,6 +1003,47 @@
         // function with a test rather than an inline `<=`.
         function historyNeedsRefetch(have, want){ return have === null || have > want; }
 
+        // ---------- keeping orders/daily up to date ----------
+        //
+        // One routine does the backfill and the daily top-up, because they are the same
+        // job: roll up every CLOSED day that has no rollup yet. The first time that is
+        // the whole history — the 13.3MB read this exists to stop, paid once, ever. On
+        // every later open it is the days since the last one, which is usually one and
+        // often none.
+        //
+        // The newest rollup key IS the marker. A separate "we did the backfill" record
+        // would be a second thing that can disagree with the first.
+        //
+        // Today is never rolled up: the day is not over, and a rollup written at noon
+        // would be wrong all afternoon and never corrected.
+        async function ensureRollups(){
+            const snap = await db.ref('orders/daily').once('value');
+            ROLLUPS = snap.val() || {};
+            const today = startOfToday();
+            const keys = Object.keys(ROLLUPS).sort();
+            const newest = keys.length ? dayStartMs(keys[keys.length - 1]) : null;
+            // Where to resume: the day after the newest rollup, or the beginning.
+            const from = newest == null ? 0 : newest + 86400000;
+            if (from >= today) return;                       // nothing closed since last time
+            const q = from > 0
+                ? db.ref('orders/history').orderByKey().startAt(String(from))
+                : db.ref('orders/history');
+            const raw = (await q.once('value')).val() || {};
+            const byDay = {};
+            for (const id in raw){
+                const ts = parseInt(id); if (isNaN(ts) || ts >= today) continue;   // not today
+                const dk = dayKeyOf(ts);
+                (byDay[dk] = byDay[dk] || {})[id] = raw[id];
+            }
+            const updates = {};
+            for (const dk in byDay){
+                const r = rollupDay(byDay[dk]);
+                ROLLUPS[dk] = r;
+                updates['orders/daily/' + dk] = r;
+            }
+            if (Object.keys(updates).length) await db.ref().update(updates);
+        }
+
         function ensureHistory(start){
             if(!historyNeedsRefetch(historyFrom, start)){ scheduleRender(); return; }
             if(historyQuery){ try { historyQuery.off(); } catch(e){} }
@@ -1004,12 +1052,31 @@
             // setRange used to before the fetch moved in here. Waiting for the round
             // trip would blank the page on every widening instead of just redrawing it.
             scheduleRender();
-            // 'All time' deliberately drops the key filter rather than starting at 0:
-            // any legacy key not of the timestamp form sorts before every digit, and a
-            // startAt would silently exclude it from the one view that promises everything.
-            historyQuery = start > 0
-                ? db.ref('orders/history').orderByKey().startAt(String(Math.floor(start)))
-                : db.ref('orders/history');
+            // ALL TIME DOES NOT DOWNLOAD ALL TIME ANY MORE
+            //
+            // It used to drop the key filter and pull every order the café had ever
+            // taken: 13.3MB at 41,000 orders, roughly a minute on café wifi, to draw
+            // totals. Every figure on this page except the transactions table is a sum
+            // over orders, and orders/daily holds those sums per closed day — a few
+            // hundred bytes each instead of a few hundred orders each.
+            //
+            // So the range is served by three cheap reads rather than one enormous one:
+            // the rollups for every closed day, the raw orders for TODAY (which has no
+            // rollup, because the day is not over), and a window of recent orders for
+            // the transactions table, which a rollup cannot answer for.
+            if (start === 0){
+                txnWindowed = true;
+                ensureRollups().then(scheduleRender).catch(()=>{});
+                // today only — the part no rollup covers
+                historyQuery = db.ref('orders/history').orderByKey().startAt(String(startOfToday()));
+                historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+                // and the table's own window, which never feeds the totals
+                db.ref('orders/history').limitToLast(TXN_WINDOW).once('value')
+                  .then(s => { TXNWIN = s.val()||{}; scheduleRender(); }).catch(()=>{});
+                return;
+            }
+            txnWindowed = false; ROLLUPS = {}; TXNWIN = {};
+            historyQuery = db.ref('orders/history').orderByKey().startAt(String(Math.floor(start)));
             historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
         }
 
@@ -1054,6 +1121,146 @@
             return keys.length ? keys : [bucketKey(start, unit)]; }
 
         // ---------- main compute + render ----------
+        // WHAT A RANGE ADDS UP TO, SEPARATED FROM DRAWING IT
+        //
+        // This used to be the first half of render(). It is its own function now for one
+        // reason: there are two ways to reach these numbers. Walking every order is one.
+        // Folding a per-day rollup is the other, and it exists because "All time" meant
+        // downloading every order the café has ever taken — 13.3MB at 41,000 orders,
+        // about a minute on café wifi, to draw totals.
+        //
+        // Every figure below is a SUM over orders, and sums compose: a day rolled up and
+        // then added to another day gives the same answer as adding the orders. So the
+        // second path is exact, not an approximation — and analytics-agree.test.js holds
+        // both to the same fixture and refuses any difference at all, because a faster
+        // page that reports different money is not a faster page.
+        function aggregate(data, ctx){
+            const { start, end, prevStart, prevEnd, unit, bucketStart } = ctx;
+            const out = {
+                rev:0, orders:0, items:0, prevRev:0, prevOrders:0, prevItems:0,
+                catRev:{}, payRev:{}, typeCnt:{'Dine-in':0,'Takeaway':0,'Delivery':0},
+                hourCnt:new Array(24).fill(0), wdayCnt:new Array(7).fill(0),
+                itemAgg:{}, txns:[], trend:{}
+            };
+            genBuckets(bucketStart, end, unit).forEach(k => out.trend[k]=0);
+
+            for(const id in data){
+                const o = data[id]; const ts = parseInt(id);
+                if(isNaN(ts)) continue;
+                const amt = (o.payment && o.payment.total!=null) ? (Number(o.payment.total)||0) : 0;
+                if(prevStart!=null && ts>=prevStart && ts<prevEnd){
+                    out.prevRev+=amt; out.prevOrders++;
+                    if(o.items){ for(const nm in o.items) out.prevItems += Number(o.items[nm].qty)||0; }
+                }
+                if(ts>=start && ts<end){
+                    out.rev+=amt; out.orders++;
+                    const method = (o.payment && o.payment.method) ? String(o.payment.method) : 'Other';
+                    out.payRev[method] = (out.payRev[method]||0) + amt;
+                    const t = o.orderType || '';
+                    if(/Delivery|Web/i.test(t)) out.typeCnt['Delivery']++;
+                    else if(/Takeaway/i.test(t)) out.typeCnt['Takeaway']++;
+                    else out.typeCnt['Dine-in']++;
+                    const d = new Date(ts); out.hourCnt[d.getHours()]++; out.wdayCnt[d.getDay()]++;
+                    const bk = bucketKey(ts, unit); if(out.trend[bk]!==undefined) out.trend[bk]+=amt;
+                    const parts=[];
+                    if(o.items){ for(const nm in o.items){
+                        const q=Number(o.items[nm].qty)||0, p=Number(o.items[nm].price)||0;
+                        out.items+=q;
+                        const base=String(nm).split(" (")[0];
+                        if(!out.itemAgg[base]) out.itemAgg[base]={qty:0, rev:0, cat:catOf(nm)};
+                        out.itemAgg[base].qty+=q; out.itemAgg[base].rev+=p*q;
+                        out.catRev[catOf(nm)] = (out.catRev[catOf(nm)]||0) + p*q;
+                        parts.push(q + '\u00D7 ' + nm); } }
+                    out.txns.push({ ts, dt: (o.timestamp || new Date(ts).toLocaleString('en-GB')),
+                                    type: (o.orderType||'-'), where: (o.tableOrAddress||'-'),
+                                    method, total: amt, items: parts.join(', '), notes: (o.notes||'') });
+                }
+            }
+            return out;
+        }
+
+        // ---------- a day, reduced to what a range needs from it ----------
+        //
+        // "All time" dropped the key filter and pulled every order the café had ever
+        // taken: 13.3MB at 41,000 orders, about a minute on café wifi, to draw totals.
+        // Everything on this page except the transactions table is a SUM over orders,
+        // and sums compose — so a day added up once and stored is the same answer as
+        // adding its orders every time somebody asks.
+        //
+        // Keyed by LOCAL date, because everything it feeds is local: bucketKey formats
+        // in local time and the hour histogram is getHours(). One café, one timezone.
+        //
+        // What is NOT here is the order rows themselves. A rollup cannot answer "find
+        // the order with this note in it", so the transactions table keeps its own raw
+        // fetch — see loadTxnWindow.
+        const dayKeyOf = ts => { const d = new Date(ts);
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' +
+                   String(d.getDate()).padStart(2,'0'); };
+        const dayStartMs = key => { const [y,m,d] = String(key).split('-').map(Number);
+            return new Date(y, m-1, d, 0, 0, 0, 0).getTime(); };
+        const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
+
+        function rollupDay(orders){
+            const r = { rev:0, orders:0, pay:{},
+                        type:{'Dine-in':0,'Takeaway':0,'Delivery':0},
+                        hour:new Array(24).fill(0), item:{} };
+            for(const id in orders){
+                const o = orders[id]; const ts = parseInt(id);
+                if(isNaN(ts)) continue;
+                const amt = (o.payment && o.payment.total!=null) ? (Number(o.payment.total)||0) : 0;
+                r.rev += amt; r.orders++;
+                const method = (o.payment && o.payment.method) ? String(o.payment.method) : 'Other';
+                r.pay[method] = (r.pay[method]||0) + amt;
+                const t = o.orderType || '';
+                if(/Delivery|Web/i.test(t)) r.type['Delivery']++;
+                else if(/Takeaway/i.test(t)) r.type['Takeaway']++;
+                else r.type['Dine-in']++;
+                r.hour[new Date(ts).getHours()]++;
+                if(o.items) for(const nm in o.items){
+                    const q=Number(o.items[nm].qty)||0, p=Number(o.items[nm].price)||0;
+                    // The base name, the same split itemAgg uses. catOf splits again on
+                    // its own, so a category derived from the base is the category the
+                    // full name would have given.
+                    const base=String(nm).split(" (")[0];
+                    if(!r.item[base]) r.item[base]={q:0,r:0};
+                    r.item[base].q+=q; r.item[base].r+=p*q;
+                }
+            }
+            return r;
+        }
+
+        // Adds whole days into an accumulator aggregate() has already started, so the
+        // partial day at the edge of a range stays exact: raw orders for the hours the
+        // rollups do not cover, rollups for every whole day before them.
+        function foldDailyInto(acc, days, ctx){
+            const { start, end, prevStart, prevEnd, unit } = ctx;
+            for(const dk in days){
+                const d = days[dk]; if(!d) continue;
+                const ts = dayStartMs(dk); if(isNaN(ts)) continue;
+                if(prevStart!=null && ts>=prevStart && ts<prevEnd){
+                    acc.prevRev += d.rev||0; acc.prevOrders += d.orders||0;
+                    for(const b in (d.item||{})) acc.prevItems += d.item[b].q||0;
+                }
+                if(ts>=start && ts<end){
+                    acc.rev += d.rev||0; acc.orders += d.orders||0;
+                    for(const m in (d.pay||{})) acc.payRev[m] = (acc.payRev[m]||0) + d.pay[m];
+                    for(const k in (d.type||{})) if(acc.typeCnt[k]!==undefined) acc.typeCnt[k] += d.type[k];
+                    for(let h=0; h<24; h++) acc.hourCnt[h] += (d.hour && d.hour[h]) || 0;
+                    // A weekday count is orders, not days — the raw path increments it
+                    // once per order, so a whole day contributes all of its orders.
+                    acc.wdayCnt[new Date(ts).getDay()] += d.orders||0;
+                    const bk = bucketKey(ts, unit); if(acc.trend[bk]!==undefined) acc.trend[bk] += d.rev||0;
+                    for(const b in (d.item||{})){
+                        const it = d.item[b]; acc.items += it.q||0;
+                        if(!acc.itemAgg[b]) acc.itemAgg[b] = {qty:0, rev:0, cat:catOf(b)};
+                        acc.itemAgg[b].qty += it.q||0; acc.itemAgg[b].rev += it.r||0;
+                        acc.catRev[catOf(b)] = (acc.catRev[catOf(b)]||0) + (it.r||0);
+                    }
+                }
+            }
+            return acc;
+        }
+
         function render(){
             if(!RANGE) return;
             const {start, end, key} = RANGE;
@@ -1061,38 +1268,32 @@
             const prevStart = (key==='all' || start===0) ? null : start - span;
             const prevEnd = start;
 
-            let rev=0, orders=0, items=0, prevRev=0, prevOrders=0, prevItems=0;
-            const catRev={}, payRev={}, typeCnt={'Dine-in':0,'Takeaway':0,'Delivery':0};
-            const hourCnt=new Array(24).fill(0), wdayCnt=new Array(7).fill(0);
-            const itemAgg={}, txns=[];
+            // Where the trend starts. On 'all' that is the café's first order, which now
+            // usually lives in the rollups rather than in DATA — DATA holds today.
             let bucketStart = start;
-            if(key==='all'){ let mn=Infinity; for(const id in DATA){ const t=parseInt(id); if(!isNaN(t)&&t<mn) mn=t; } if(mn!==Infinity) bucketStart=mn; }
-            const unit = bucketUnit(end - bucketStart);
-            const trend = {}; genBuckets(bucketStart, end, unit).forEach(k => trend[k]=0);
-
-            for(const id in DATA){
-                const o = DATA[id]; const ts = parseInt(id);
-                if(isNaN(ts)) continue;
-                const amt = (o.payment && o.payment.total!=null) ? (Number(o.payment.total)||0) : 0;
-                if(prevStart!=null && ts>=prevStart && ts<prevEnd){ prevRev+=amt; prevOrders++; if(o.items){ for(const nm in o.items) prevItems += Number(o.items[nm].qty)||0; } }
-                if(ts>=start && ts<end){
-                    rev+=amt; orders++;
-                    const method = (o.payment && o.payment.method) ? String(o.payment.method) : 'Other';
-                    payRev[method] = (payRev[method]||0) + amt;
-                    const t = o.orderType || '';
-                    if(/Delivery|Web/i.test(t)) typeCnt['Delivery']++; else if(/Takeaway/i.test(t)) typeCnt['Takeaway']++; else typeCnt['Dine-in']++;
-                    const d = new Date(ts); hourCnt[d.getHours()]++; wdayCnt[d.getDay()]++;
-                    const bk = bucketKey(ts, unit); if(trend[bk]!==undefined) trend[bk]+=amt;
-                    const parts=[];
-                    if(o.items){ for(const nm in o.items){ const q=Number(o.items[nm].qty)||0, p=Number(o.items[nm].price)||0; items+=q;
-                        const base=String(nm).split(" (")[0];
-                        if(!itemAgg[base]) itemAgg[base]={qty:0, rev:0, cat:catOf(nm)};
-                        itemAgg[base].qty+=q; itemAgg[base].rev+=p*q;
-                        catRev[catOf(nm)] = (catRev[catOf(nm)]||0) + p*q;
-                        parts.push(q + '\u00D7 ' + nm); } }
-                    txns.push({ ts, dt: (o.timestamp || new Date(ts).toLocaleString('en-GB')), type: (o.orderType||'-'), where: (o.tableOrAddress||'-'), method, total: amt, items: parts.join(', '), notes: (o.notes||'') });
-                }
+            if(key==='all'){
+                let mn=Infinity;
+                for(const dk in ROLLUPS){ const t=dayStartMs(dk); if(!isNaN(t)&&t<mn) mn=t; }
+                for(const id in DATA){ const t=parseInt(id); if(!isNaN(t)&&t<mn) mn=t; }
+                if(mn!==Infinity) bucketStart=mn;
             }
+            const unit = bucketUnit(end - bucketStart);
+            const ctx = { start, end, prevStart, prevEnd, unit, bucketStart };
+
+            // DATA is the whole range on a normal open, and only today when rollups are
+            // carrying the rest. Either way it goes in raw, and the rollups are added on
+            // top — every one of them a day that ended before today began, so nothing is
+            // counted twice.
+            const A = aggregate(DATA, ctx);
+            if (txnWindowed){
+                foldDailyInto(A, ROLLUPS, ctx);
+                // The table's rows come from its own window and never from the totals,
+                // so a row appearing in both cannot double-count anything.
+                A.txns = aggregate(TXNWIN, ctx).txns;
+            }
+            let { rev, orders, items, prevRev, prevOrders, prevItems,
+                  catRev, payRev, typeCnt, hourCnt, wdayCnt, itemAgg, txns, trend } = A;
+
             txns.sort((a,b) => b.ts - a.ts);
             const aov = orders ? rev/orders : 0;
             const prevAov = prevOrders ? prevRev/prevOrders : 0;
@@ -1295,10 +1496,42 @@
             const body = document.getElementById('txn-body'); const cnt = document.getElementById('txn-count');
             if(!LAST){ return; }
             const rows = filteredTxns();
-            cnt.textContent = rows.length + (rows.length===LAST.txns.length ? '' : ' of ' + LAST.txns.length) + ' transactions' + (rows.length>500 ? ' (showing first 500)' : '');
+            // SAY WHAT THE SEARCH AND THE EXPORT ACTUALLY COVER
+            //
+            // On a range served by rollups the totals above are for the whole range, but
+            // these rows are the most recent TXN_WINDOW of it — a rollup cannot answer
+            // "find the order with this note in it". Searching or exporting then covers
+            // the window, not the range, and saying so is the difference between a limit
+            // and a wrong answer. The button fetches the range in full for anyone who
+            // needs it, which is the read this page otherwise no longer does.
+            cnt.innerHTML = escapeHTML(rows.length +
+                (rows.length===LAST.txns.length ? '' : ' of ' + LAST.txns.length) +
+                ' transactions' + (rows.length>500 ? ' (showing first 500)' : '')) +
+                (txnWindowed ? ' &middot; <span style="opacity:0.85;">the most recent ' +
+                    LAST.txns.length + ' of this range</span> <button class="lnk" ' +
+                    'style="padding:2px 8px; font-size:0.7rem;" onclick="window.loadAllTxns()">' +
+                    'Load them all</button>' : '');
             if(!rows.length){ body.innerHTML = '<tr><td colspan="6" class="muted">No transactions.</td></tr>'; return; }
             body.innerHTML = rows.slice(0,500).map(t => `<tr><td style="white-space:nowrap;">${escapeHTML(t.dt)}</td><td>${escapeHTML(t.type)}</td><td>${escapeHTML(t.where)}</td><td style="max-width:300px;">${escapeHTML(t.items)}</td><td>${escapeHTML(t.method)}</td><td class="num">${rupee(t.total)}</td></tr>`).join('');
         };
+        // The full-range read, on request. This is the 13.3MB that used to happen on
+        // every "All time" tap; now it happens when somebody actually needs to search or
+        // export beyond the window, and it says how long it may take before starting.
+        window.loadAllTxns = async function(){
+            const cnt = document.getElementById('txn-count');
+            if (cnt) cnt.textContent = 'Loading every order in this range…';
+            try {
+                const snap = await db.ref('orders/history').once('value');
+                TXNWIN = snap.val() || {};
+                txnWindowed = false;          // the window IS the range now
+                DATA = TXNWIN;                // and the totals can come from it directly
+                ROLLUPS = {};
+                scheduleRender();
+            } catch(e){
+                if (cnt) cnt.textContent = 'Could not load the full range.';
+            }
+        };
+
         function downloadCSV(rows, filename){
             const csv = rows.map(r => r.map(f => '"' + String(f==null?'':f).replace(/"/g,'""') + '"').join(',')).join('\r\n');
             const blob = new Blob(["\uFEFF"+csv], {type:'text/csv;charset=utf-8;'});

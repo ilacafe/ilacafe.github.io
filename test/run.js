@@ -39,6 +39,7 @@ const suites = [
   'manifest.test.js',
   'shell-cache.test.js',
   'menu-cache-shapes.test.js',
+  'analytics-agree.test.js',
   'accessibility.test.js',
   'focus-and-motion.test.js',
   'probe-reachability.test.js',

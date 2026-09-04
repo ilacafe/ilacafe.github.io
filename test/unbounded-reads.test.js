@@ -102,6 +102,22 @@ const GROWS = {
   'upiRouting/totals':
     'one key per month. Twelve a year, and the per-account totals a tax question ' +
     'would start from.',
+
+  'orders/daily':
+    'one small record per CLOSED day — the sums analytics draws a long range from. ' +
+    'This is the node that stopped the page reading orders/history whole: every ' +
+    'figure on it except the transactions table is a sum over orders, and sums ' +
+    'compose, so a day added up once answers as well as its orders do. It grows with ' +
+    'days traded rather than with orders — a few hundred bytes a day against the ' +
+    'hundred kilobytes of orders behind them, and a decade of trading is a few ' +
+    'megabytes. Reading it whole IS the bounded thing to do here.',
+
+  'orders/history':
+    'the café’s whole order history, and the one read on this page that is NOT made ' +
+    'on a page load. It happens when somebody presses "Load them all" on the ' +
+    'transactions card, because a rollup cannot answer "find the order with this ' +
+    'note in it" and search and export have to be able to. Everything else that used ' +
+    'to need it now comes from orders/daily. See loadAllTxns in analytics.html.',
 };
 
 

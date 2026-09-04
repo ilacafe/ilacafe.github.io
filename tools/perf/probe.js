@@ -56,12 +56,20 @@ const metrics = async (cdp) => {
 
 // ---------------------------------------------------------------- payload
 async function payload(browser, base, db) {
-  console.log('\nWhat each page pulls from the database on one cold open');
+  console.log('\nWhat each page pulls from the database on one cold open' +
+              (process.env.RANGE === 'all' ? ', then All time on analytics' : ''));
   console.log(dataset.describe() + '\n');
   const rows = [];
   for (const p of pagesArg()) {
     const { ctx, tab, errs } = await openPage(browser, base, db, { count: true }, p);
     await tab.waitForTimeout(3500);
+    // RANGE=all measures the preset that used to pull the whole order history.
+    if (process.env.RANGE === 'all' && p === 'analytics.html') {
+      await tab.evaluate(() => {
+        const b = document.querySelector('[data-range="all"]'); if (b) b.click();
+      });
+      await tab.waitForTimeout(5000);
+    }
     const pull = await tab.evaluate(() => window.__reads || {});
     const total = Object.values(pull).reduce((s, e) => s + e.bytes, 0);
     rows.push({ p, total, pull, errs });

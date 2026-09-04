@@ -54,10 +54,23 @@ Taken on `2026-09-03.12`, at `CPU=4`, `DAYS_OPEN=550 BILLS_DAY=100 CUSTOMERS=400
 The till at 80 KB and the kitchen at 10 KB are the ones to watch: those devices open on
 café wifi all day. Analytics was 5.90 MB before `pos/eodSummary` existed.
 
-**Known and accepted:** "All Time" on analytics drops the range filter and pulls the
-whole of `orders/history` — 13.3 MB at 41,000 orders. The transactions table and both
-CSV exports need the raw rows, so there is no bounded query that answers it. It is the
-last thing in the app that grows without limit.
+**All Time**, measured with `RANGE=all npm run perf payload`:
+
+| | cold open then All Time |
+|---|---|
+| before `orders/daily` existed | 14.35 MB |
+| the first open after it shipped | 14.35 MB — the history is read once, to build the rollups |
+| every open after that | **1.70 MB** |
+
+`orders/daily` is 721 KB for 550 trading days against the 13.35 MB of orders behind it
+— 19×. It holds one small record per closed day: the sums every figure on the page
+except the transactions table is made of. Today has no rollup, because the day is not
+over, so it is read raw and added to them.
+
+The transactions table is the part a rollup cannot answer — "find the order with this
+note in it" needs the orders. It shows the most recent 500 of the range, says so, and
+offers to fetch the range in full for anyone who needs to search or export beyond it.
+That deliberate read is the only thing left that pulls `orders/history` whole.
 
 ### boot — the page's own cost to first paint
 
