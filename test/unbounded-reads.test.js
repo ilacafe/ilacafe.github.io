@@ -134,6 +134,29 @@ for (const page of PAGES) {
     if (!found.has(path)) found.set(path, new Set());
     found.get(path).add(page);
   }
+
+  // A READ THROUGH A VARIABLE IS STILL A READ
+  //
+  // The sweep above only sees db.ref(P).on(...) written as one expression. A page
+  // that keeps the ref so it can detach it later — which every long-lived listener
+  // here does — writes `q = db.ref(P); ... q.on(...)`, and that was invisible: the
+  // chain captured is empty, so it did not look like a read at all.
+  //
+  // loadAllTxns fell into exactly that hole. It changed from a once() to a kept
+  // listener, for a reason that had nothing to do with this file, and orders/history
+  // silently stopped being a whole-node read as far as this guard was concerned.
+  for (const m of src.matchAll(/(\w+)\s*=\s*db\.ref\((['"][^'"]*['"])\)((?:\s*\.\w+\([^)]*\))*)\s*;/g)) {
+    const name = m[1];
+    const path = m[2].replace(/['"]/g, '');
+    const chain = (m[3] || '').replace(/\s+/g, '');
+    if (/limitTo|orderBy|startAt|endAt|equalTo/.test(chain)) continue;   // bounded at the query
+    if (!path || path.startsWith('.info')) continue;
+    // Is it ever read through that name?
+    const used = new RegExp('\\b' + name + '\\s*\\.(once|on)\\(').test(src);
+    if (!used) continue;
+    if (!found.has(path)) found.set(path, new Set());
+    found.get(path).add(page);
+  }
 }
 
 check('the sweep found the whole-node reads', found.size > 20, found.size + ' found');

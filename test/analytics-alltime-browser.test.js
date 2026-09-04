@@ -160,16 +160,27 @@ const stub = (withRollups, denyDaily, oldShape) => `
     if(q.startAt!=null) keys=keys.filter(k=>String(k)>=String(q.startAt));
     if(q.limitToLast!=null) keys=keys.slice(-q.limitToLast);
     const o={}; keys.forEach(k=>o[k]=val[k]); return o; };
+  // Listeners are kept so a write can re-fire them, the way the real SDK does. Without
+  // that, every listener here is a one-shot read and "what happens when the next order
+  // lands" cannot be asked at all.
+  window.__live = [];
+  window.__fire = (prefix) => { window.__live.forEach(L => {
+    if (String(L.p).indexOf(prefix) !== 0) return;
+    const v = applyQ(byPath(L.p), L.q); tally(L.p, v);
+    try { L.cb(snap(v)); } catch(x){}
+  }); };
   const mk = (p,q) => ({
-    on:(e,cb)=>{ if(e!=='value') return cb;
+    on:(e,cb,cancel)=>{ if(e!=='value') return cb;
       if(p==='.info/connected'){ setTimeout(()=>{try{cb(snap(true))}catch(x){}},10); return cb; }
       const v=applyQ(byPath(p),q); tally(p,v);
+      window.__live.push({p,q,cb});
       setTimeout(()=>{try{cb(snap(v))}catch(x){}},25); return cb; },
     once:()=>{ if(p.indexOf('users/')===0) return Promise.resolve(snap({role:'admin',name:'A'}));
       if(${denyDaily ? 'true' : 'false'} && p==='orders/daily')
         return Promise.reject(new Error("PERMISSION_DENIED: Client doesn't have permission to access the desired data."));
       const v=applyQ(byPath(p),q); tally(p,v); return Promise.resolve(snap(v)); },
-    off:noop, child:k=>mk(p+'/'+k,q),
+    off:()=>{ window.__live = window.__live.filter(L => L.p !== p); },
+    child:k=>mk(p+'/'+k,q),
     orderByChild:()=>mk(p,{...q,orderByChild:true}), orderByKey:()=>mk(p,{...q,orderByKey:true}),
     startAt:v=>mk(p,{...q,startAt:v}), limitToLast:n=>mk(p,{...q,limitToLast:n}),
     push:()=>({key:'k'}), set:v=>{ setPath(p,v); return Promise.resolve(); },
@@ -375,6 +386,186 @@ const waitFor = async (tab, fn, ms) => {
           ', reading the orders ' + JSON.stringify(without.shown.drill));
     note('a card that opens on the best seller and says it sold nothing is worse');
     note('than the empty state it replaced');
+  }
+
+  // ---- A RANGE MEANS THE SAME THING WHATEVER YOU LOOKED AT BEFORE IT
+  //
+  // Reported from the café: tap All time, tap 30 days, and the 30-day figures are
+  // lower than they were a moment ago. ₹1,15,839 became ₹1,10,793 for the same
+  // thirty days, and the drill-down went blank.
+  //
+  // historyNeedsRefetch asked one question — is the range we hold wide enough? — and
+  // read historyFrom as saying what DATA holds. All time sets historyFrom to 0 and
+  // DATA to TODAY, so narrowing out of it looked like narrowing out of a full
+  // history and skipped the refetch. The range was then served from rollups, which
+  // the fold filters by a day's MIDNIGHT while the raw path filters by each order's
+  // own timestamp, so the day the range starts on fell out of it.
+  //
+  // EACH RANGE GETS A PAGE OF ITS OWN. The first version of this looped over the
+  // ranges in one page and compared each to itself — but by the second range the
+  // previous one's detour through All time had already left historyFrom at 0, so the
+  // "before" reading was contaminated too. Both readings were then equally wrong and
+  // the check passed: against the broken build it reported ₹1,10,793 twice and saw
+  // no drift. A reading taken after the bug has already happened is not a baseline.
+  {
+    const openFresh = async () => {
+      const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
+      await ctx.addInitScript(stub(true, false, false));
+      const tab = await ctx.newPage();
+      const threw = [];
+      tab.on('pageerror', e => threw.push(e.message));
+      tab.on('dialog', d => d.dismiss().catch(() => {}));
+      await tab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+      await tab.goto(base + '/analytics.html', { waitUntil: 'commit' });
+      await waitFor(tab, () => { const e = document.getElementById('k-ord');
+        return e && e.textContent && e.textContent !== '0'; }, 20000);
+      return { ctx, tab, threw };
+    };
+    const read = async (tab) => { await tab.waitForTimeout(1500); return tab.evaluate(() => ({
+      rev: (document.getElementById('k-rev') || {}).textContent,
+      ord: (document.getElementById('k-ord') || {}).textContent,
+      itm: (document.getElementById('k-itm') || {}).textContent,
+      drill: (document.getElementById('drill-stats') || {}).textContent.replace(/\s+/g, ' ').trim(),
+      opts: document.querySelectorAll('#drill-select option').length })); };
+    const tap = async (tab, k) => { await tab.evaluate((k) => {
+      const b = document.querySelector('[data-range="' + k + '"]'); if (b) b.click(); }, k); };
+
+    const probe = await openFresh();
+    const RANGES = await probe.tab.evaluate(() => [...document.querySelectorAll('[data-range]')]
+      .map(b => b.getAttribute('data-range')).filter(k => k !== 'all'));
+    await probe.ctx.close();
+
+    const drifted = [], blanked = [], broke = [];
+    for (const k of RANGES) {
+      const { ctx, tab, threw } = await openFresh();
+      await tap(tab, k);     const before = await read(tab);   // never seen All time
+      await tap(tab, 'all'); await read(tab);
+      await tap(tab, k);     const after = await read(tab);
+      if (before.rev !== after.rev || before.ord !== after.ord || before.itm !== after.itm) {
+        drifted.push(k + ': ' + before.rev + '/' + before.ord + '/' + before.itm +
+                     ' then ' + after.rev + '/' + after.ord + '/' + after.itm);
+      }
+      if (before.drill !== after.drill || after.opts === 0) {
+        blanked.push(k + ': ' + JSON.stringify(before.drill) + ' then ' +
+                     JSON.stringify(after.drill) + ' (' + after.opts + ' options)');
+      }
+      if (threw.length) broke.push(k + ': ' + threw[0].slice(0, 80));
+      await ctx.close();
+    }
+
+    check('every range reports the same money after a detour through All time',
+          drifted.length === 0, drifted.join(' | '));
+    check('and the drill-down still has the same answer, not a blank card',
+          blanked.length === 0, blanked.join(' | '));
+    check('nothing threw while the ranges were tapped', broke.length === 0, broke.join(' | '));
+    note(RANGES.length + ' ranges, each on a page that had never seen All time');
+    note('a rollup-served range covers nothing but itself: its DATA is only today,');
+    note('however far back its historyFrom looks');
+  }
+
+  // ---- "LOAD THEM ALL", AND WHAT HAPPENS WHEN THE NEXT ORDER LANDS
+  //
+  // The button loads the whole range so somebody can search or export past the
+  // window. It set DATA to that range and cleared the rollups — but left the live
+  // listener on TODAY, which is all All time otherwise needs. So the next order
+  // taken fired that listener, set DATA back to today alone, and with the rollups
+  // gone there was nothing left to make up the difference: the totals collapsed to
+  // today's takings under a heading saying All time.
+  //
+  // A till takes an order every few minutes, so this is not an edge case; it is what
+  // happens next.
+  {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
+    await ctx.addInitScript(stub(true, false, false));
+    const tab = await ctx.newPage();
+    const threw = [];
+    tab.on('pageerror', e => threw.push(e.message));
+    tab.on('dialog', d => d.dismiss().catch(() => {}));
+    await tab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await tab.goto(base + '/analytics.html', { waitUntil: 'commit' });
+    await waitFor(tab, () => { const e = document.getElementById('k-ord');
+      return e && e.textContent && e.textContent !== '0'; }, 20000);
+    const read = async () => { await tab.waitForTimeout(1500); return tab.evaluate(() => ({
+      rev: (document.getElementById('k-rev') || {}).textContent,
+      ord: (document.getElementById('k-ord') || {}).textContent })); };
+
+    await tab.evaluate(() => document.querySelector('[data-range="all"]').click());
+    const onAll = await read();
+    await tab.evaluate(() => window.loadAllTxns());
+    const loaded = await read();
+
+    check('loading the full range does not change the money',
+          loaded.rev === onAll.rev && loaded.ord === onAll.ord,
+          'all time ' + onAll.rev + '/' + onAll.ord + ', loaded ' + loaded.rev + '/' + loaded.ord);
+
+    // A new order, exactly as the till writes one: pushed into today and the live
+    // listener re-fired. This is the moment the totals used to collapse.
+    await tab.evaluate(() => {
+      const ts = Date.now() - 1000;
+      window.__db['orders/history'][String(ts) + '-new'] = {
+        timestamp: 'now', source: 'POS', orderType: 'Dine-in', tableOrAddress: 'T4', notes: '',
+        payment: { method: 'Cash', total: 250, verified: true },
+        items: { 'Latte': { qty: 1, price: 250 } } };
+      window.__fire && window.__fire('orders/history');
+    });
+    const afterOrder = await read();
+    const n = (v) => parseInt(String(v || '').replace(/[^0-9]/g, ''), 10);
+
+    check('and a new order after that adds to the range rather than replacing it',
+          n(afterOrder.ord) >= n(loaded.ord),
+          'was ' + loaded.ord + ' orders, after one more it says ' + afterOrder.ord);
+    check('the money did not fall back to today alone',
+          n(afterOrder.rev) >= n(loaded.rev),
+          'was ' + loaded.rev + ', after one more order ' + afterOrder.rev);
+    check('nothing threw through any of that', threw.length === 0,
+          (threw[0] || '').slice(0, 140));
+    note('the till takes an order every few minutes — this is what happens next,');
+    note('not an edge case');
+    await ctx.close();
+  }
+
+  // ---- THE ITEM-LINES EXPORT, WHICH READ FROM THE WRONG PLACE
+  //
+  // Both exports work off the rows in the transactions table. The transactions one
+  // writes those rows out directly and was fine. The item-lines one has to go back to
+  // the orders to get each line, and it went to DATA — which on a rollup-served range
+  // holds only TODAY. So it silently wrote out today's lines and named the file after
+  // the range, with no row count to compare against and nothing to notice.
+  {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
+    await ctx.addInitScript(stub(true, false, false));
+    const tab = await ctx.newPage();
+    const threw = [];
+    tab.on('pageerror', e => threw.push(e.message));
+    tab.on('dialog', d => d.dismiss().catch(() => {}));
+    await tab.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+    await tab.goto(base + '/analytics.html', { waitUntil: 'commit' });
+    await waitFor(tab, () => { const e = document.getElementById('k-ord');
+      return e && e.textContent && e.textContent !== '0'; }, 20000);
+
+    const out = await tab.evaluate(async () => {
+      document.querySelector('[data-range="all"]').click();
+      await new Promise(r => setTimeout(r, 2000));
+      // Catch what each export would have written, rather than downloading it.
+      const caught = {};
+      const real = window.downloadCSV;
+      window.downloadCSV = (rows, name) => { caught[name.split('-')[1]] = rows.length - 1; };
+      window.exportTxns();
+      window.exportItemLines();
+      window.downloadCSV = real;
+      return caught;
+    });
+
+    check('the item-lines export covers the same orders the table does',
+          out.item > 0 && out.item >= out.transactions,
+          out.item + ' item lines from ' + out.transactions + ' transactions');
+    check('and not just today, which is all DATA holds on this range',
+          out.item > 20, out.item + ' lines — today alone would be a handful');
+    check('nothing threw while exporting', threw.length === 0,
+          (threw[0] || '').slice(0, 140));
+    note('an export that quietly covers less than it is named for is worse than one');
+    note('that refuses');
+    await ctx.close();
   }
 
   // ---- ROLLUPS OF THE OLDER SHAPE, WHICH IS WHAT IS IN THE DATABASE NOW
