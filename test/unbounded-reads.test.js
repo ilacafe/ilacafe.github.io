@@ -14,8 +14,26 @@
 // The rule is not "never read a node whole". Most of these should be read whole and
 // always will be. The rule is that every one of them has been looked at, and a new
 // one has to be looked at too, rather than arriving unremarked.
+//
+// THE WORKER WAS NOT IN THE SWEEP, AND IT IS THE WORST PLACE FOR THIS.
+//
+// Seven pages were swept and the one component that is not a page was not. A browser
+// reading a node whole is one device, once, with a person watching it; the Worker does
+// it on a schedule, with nobody watching, inside a runtime with a hard ceiling on
+// memory and time — and every one of its reads fails silently, which is the whole
+// reason the rules suite checks the robot's own access separately.
+//
+// Two were found by adding it. The weekly digest read pos/eodArchive whole — every
+// trading day the café has ever had, each carrying that day's entire bills and ledger
+// — to pick seven days out of it, thirty lines below the function that goes out of its
+// way to read the same node shallow for exactly this reason. And the monthly ETA refit
+// read orders/completed whole, the largest node in the database and the one nothing
+// removes from, to derive a 75-day window. Neither gets slower in a way anyone can
+// see. They stop, and a report that stops arriving looks like a quiet week.
 
-const { readPage, suite } = require('./helpers');
+const fs = require('fs');
+const path = require('path');
+const { ROOT, readPage, suite } = require('./helpers');   // ROOT: the Worker is not a page
 
 const { check, note, done } = suite('Whole-node reads — every one of them accounted for');
 
@@ -120,6 +138,89 @@ const GROWS = {
     'to need it now comes from orders/daily. See loadAllTxns in analytics.html.',
 };
 
+
+// ---------------------------------------------------------------- the Worker
+// Its reads are plain fetches of the REST API rather than db.ref(), so they are
+// swept separately — but against the same two tables above plus these, which are
+// nodes only the robot ever reads.
+const WORKER_BOUNDED = {
+  'monitor':      'the monitor’s own memory: which payIds it has already alerted on, ' +
+                  'which banks are alarming, which cash-outs it has reported. Every one ' +
+                  'of those maps is pruned in the same run that writes it — a key whose ' +
+                  'ledger entry is gone is deleted — so it is as long as the day is.',
+  'orders/tableIndex': 'the public table lookup. This is the node the prune job exists ' +
+                  'for: it is read whole so that entries older than six hours can be ' +
+                  'removed, which is what keeps it short. Reading it whole IS the ' +
+                  'bounded thing to do, and it is bounded BY this read.',
+};
+
+// Nothing the Worker reads whole grows without limit, which is the point of the list
+// above having only two entries in it. orders/completed — the largest node here, one
+// record per ticket, and the only evidence the ETA model is refit from — is the node
+// that would have belonged here, and does not, because the refit takes the recent end
+// of it by key rather than the node itself.
+
+{
+  const src = fs.readFileSync(path.join(ROOT, 'worker', 'worker.js'), 'utf8');
+  const wfound = new Map();
+
+  // fetch(DB_URL + '/some/path.json?...') — a read unless it carries a method, which
+  // is on the options object rather than in the URL, so the whole call is examined.
+  //
+  // A path assembled from a literal head and a variable is SKIPPED, and that is not an
+  // oversight: almost all of them are one record addressed by its id — a user's role, a
+  // recipe, one cron-failure record — which is bounded by construction, and sweeping
+  // them in would bury the question this file asks under two dozen answers of "yes,
+  // obviously". Nothing generic can tell those from the one case where the variable
+  // names a NODE rather than a record, which is orders/completed/{station}: two
+  // stations, each a node of every ticket ever cooked. So that one is held by name
+  // below rather than by the sweep, because the sweep cannot see it.
+  for (const m of src.matchAll(/fetch\(\s*DB_URL\s*\+\s*'([^']+)'([\s\S]{0,220})/g)) {
+    const raw = m[1], tail = m[2];
+    const q = raw.indexOf('.json');
+    if (q < 0) continue;                                   // a path built from a variable
+    const query = raw.slice(q);
+    const p2 = raw.slice(0, q).replace(/^\/+|\/+$/g, '');
+    if (!p2) continue;                                     // the root, which is only ever PATCHed
+    if (/method\s*:\s*'(PUT|PATCH|POST|DELETE)'/.test(tail.split(');')[0] || '')) continue;
+    if (/shallow=true|limitTo|orderBy|startAt|endAt|equalTo/.test(query)) continue;   // bounded
+    if (!wfound.has(p2)) wfound.set(p2, true);
+  }
+  // monLoad(token, '/path') is the same read with the .json bolted on inside it.
+  for (const m of src.matchAll(/monLoad\(\s*token\s*,\s*'([^']+)'/g)) {
+    const p2 = m[1].replace(/^\/+|\/+$/g, '');
+    if (p2) wfound.set(p2, true);
+  }
+
+  check('the sweep found the Worker’s whole-node reads', wfound.size >= 4,
+        wfound.size + ' found: ' + [...wfound.keys()].join(', '));
+
+  const known = Object.assign({}, BOUNDED, GROWS, WORKER_BOUNDED);
+  // A path with a {id} in it is one record, not a node — those are written as
+  // concatenations and never match the literal sweep above, so anything that DOES
+  // match is a node read whole.
+  const unclassified = [...wfound.keys()].filter(p2 => !(p2 in known));
+  check('every node the Worker reads whole is one somebody has thought about',
+        unclassified.length === 0, unclassified.join('; '));
+  unclassified.forEach(p2 => note('classify ' + p2 + ': is it bounded, or does it grow?'));
+
+  // The two that were found by adding this sweep, held by name: a limit removed from
+  // either is not a performance regression, it is a job that eventually stops.
+  check('the weekly digest does not read every day the café has ever traded',
+        !wfound.has('pos/eodArchive'),
+        'pos/eodArchive is read whole by the Worker');
+  note('it wants seven days, and the archive carries every bill of every one of them');
+  check('and the ETA refit does not read every ticket ever cooked',
+        /orders\/completed\/'\s*\+\s*station\s*\+\s*'\.json\?orderBy/.test(src) ||
+        /limitToLast/.test(src.slice(src.indexOf('async function rcLoadCompleted'),
+                                    src.indexOf('async function rcLoadCompleted') + 1400)),
+        'rcLoadCompleted reads orders/completed with no limit');
+  note('one record per ticket, kept forever, for a window 75 days wide');
+
+  const stale = Object.keys(WORKER_BOUNDED).filter(p2 => !wfound.has(p2));
+  check('and nothing is listed for the Worker that it no longer reads',
+        stale.length === 0, stale.join(', ') + ' — drop it from this file');
+}
 
 // ---------------------------------------------------------------- the sweep
 const found = new Map();

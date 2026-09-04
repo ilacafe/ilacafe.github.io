@@ -711,19 +711,43 @@
         // being told it — a client that computes its own deductions can under-report what a
         // batch consumed — and writes the stock movement and its log line as one write.
         const INV_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';
+        // A REQUEST THAT NEVER ANSWERS IS NOT AN ERROR, AND THAT IS THE PROBLEM.
+        //
+        // fetch() rejects when a connection fails. It does not reject when one is made and
+        // then goes nowhere, which is the shape of a café outage: the tablet is on the
+        // wifi, the router answers, the uplink is dead. There is no browser-side timeout
+        // to fall back on, so `await fetch(...)` never settles — and confirmAction disables
+        // the button before calling this and only re-enables it in a `finally` that is
+        // therefore never reached. The stock tablet sits on "Processing…" for good, and the
+        // only way out is a reload.
+        //
+        // 15 seconds, and the message says what is and is not known: the Worker may have
+        // received it, so the answer is to check the log rather than log it again.
+        const WORKER_TIMEOUT_MS = 15000;
+        function invWorkerFetch(url, body){
+            const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch(e){} }, WORKER_TIMEOUT_MS);
+            const opts = { method:'POST', headers:{ 'Content-Type':'text/plain' }, body: body };
+            if (ctrl) opts.signal = ctrl.signal;
+            return fetch(url, opts).then(
+                r => { clearTimeout(timer); return r; },
+                e => { clearTimeout(timer); throw e; }
+            );
+        }
         async function invLogToWorker(kind, item, qty, pin){
             let token = null;
             try { const u = auth.currentUser; token = u ? await u.getIdToken() : null; } catch(e){}
             if (!token) return { ok:false, why:'You are signed out. Sign in and try again.' };
             let res;
             try {
-                res = await fetch(INV_WORKER_URL, {
-                    method:'POST', headers:{ 'Content-Type':'text/plain' },
-                    body: JSON.stringify({ action:'inventory-log', token: token, pin: pin,
-                                           kind: kind, item: item, qty: qty })
-                });
+                res = await invWorkerFetch(INV_WORKER_URL,
+                    JSON.stringify({ action:'inventory-log', token: token, pin: pin,
+                                     kind: kind, item: item, qty: qty }));
             } catch(e){
-                return { ok:false, why:'Could not reach the stock service. Nothing was logged \u2014 check the connection and try again.' };
+                const timedOut = e && e.name === 'AbortError';
+                return { ok:false, why: timedOut
+                    ? 'The stock service did not answer. It may or may not have recorded this \u2014 check the log below before entering it again.'
+                    : 'Could not reach the stock service. Nothing was logged \u2014 check the connection and try again.' };
             }
             let body = null; try { body = await res.json(); } catch(e){}
             if (res.ok && body && body.ok) return { ok:true, staff: body.staff };

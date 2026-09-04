@@ -1051,7 +1051,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-04.3"></script>
+    <script src="/build-check.js" data-build="2026-09-04.4"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1948,8 +1948,23 @@
                 const amount = parseFloat(m.p.amount) || parseFloat(order.total) || 0;
                 // persist onto the ORDER: survives a reload and the claim, and is what the badge
                 // reads. Without this the paid state lives only in memory and reverts on refresh.
+                //
+                // THE IN-FLIGHT FLAG HAS TO OUTLIVE THIS WRITE, and it used to be dropped the
+                // moment this function returned. What re-entry costs here is not a wasted pass:
+                // addLedgerEntry increments pos/upiTotal, so booking twice adds the payment to
+                // the day's takings twice. The only thing that stops a second pass is the
+                // `o.payment.ref` test at the top of sweepWebPayments, and that reads the ORDER
+                // — which does not carry the field until this write comes back. Every sweep in
+                // between saw an unbooked order, and now that claimPayment honours its own token
+                // (it did not, which is the bug above) it would also win the claim and book
+                // again. The flag is released only if the marker did NOT land, so a real failure
+                // still gets another go and a success is booked exactly once.
                 db.ref('orders/pendingWeb/' + id + '/payment').set({
                     ref: m.ref, amount: amount, at: m.p.at || Date.now(), payId: payId, bankTag: bankTag || null
+                }).then(function(){
+                    // landed: the order says booked now, and the sweep skips it on that.
+                }).catch(function(){
+                    delete window._wvBooking[id];
                 });
                 addLedgerEntry('upi_income', amount, 'Web: ' + (order.tableOrAddress || 'order'), {
                     payId: payId, state: 'verified', ref: m.ref, bankTag: bankTag
@@ -1957,8 +1972,7 @@
                 if (order.upiId) { try { window.upiRecordPayment(order.upiId, amount); } catch(e){} }
                 if (order.trackId) { try { db.ref('orders/track/' + order.trackId + '/paymentVerified').set(true); } catch(e){} }
                 window._wvMatch[id] = m.ref;
-            } catch(e){ console.error('bookWebPayment', e); }
-            delete window._wvBooking[id];
+            } catch(e){ console.error('bookWebPayment', e); delete window._wvBooking[id]; }
         }
         // pure matcher: newest unclaimed credit fitting amount + VPA bank/acct + time window
         window.wvFindMatch = function(order, credits, claims, nowMs){
@@ -4385,9 +4399,23 @@
             // fixedToken: a stable, order-derived token (web orders). If the tab dies between
             // winning the claim and writing the booking, the retry recognises its own claim
             // instead of treating the credit as taken by someone else and losing the money.
+            //
+            // That is what this says and it is not what it did. `curr === null ? token :
+            // undefined` aborts on ANY value already there, its own included, so the retry the
+            // comment describes was refused by its own claim: cb(false), and sweepWebPayments
+            // gave up on a credit it had already won. wvFindMatch goes on offering that credit
+            // to the same order for as long as it is in the window — see the myTok test there —
+            // so the order retried every sweep and was told no every time. The customer had
+            // paid, the money was in the account, and the order sat "unpaid" on the till
+            // permanently, waiting for somebody to confirm by hand a payment the system had
+            // matched by itself.
+            //
+            // A claim held by this same token is this order's claim. Re-committing it is a
+            // no-op on the value and returns committed, which is what lets the booking finish.
+            // Anyone else's token still aborts, which is the whole job of the node.
             const token = fixedToken || ('pos-' + (window.checkoutTableID||'?') + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,6));
             db.ref('payments/claims/' + ref).transaction(
-                curr => (curr === null ? token : undefined),   // claim only if unclaimed, else abort
+                curr => ((curr === null || curr === token) ? token : undefined),   // unclaimed, or already ours
                 (err, committed, snap) => { cb(!err && committed && snap && snap.val() === token); }
             );
         }
@@ -4562,7 +4590,14 @@
         // too, on a much longer window, every time the POS is opened.
         // GUARD: only auto-verifies when the match is UNAMBIGUOUS (exactly one unverified
         // entry fits that amount+bank); ambiguous cases wait for admin, never guess.
-        window._reconCredits = {}; window._reconFeed = false; window._carryUnverified = {};
+        // _carryKnown: has pos/unverified ANSWERED yet — with rows, with nothing, or with a
+        // refusal. Until it has, `{}` is not "no parked payments", it is "not asked yet", and
+        // the two mean opposite things to usedRefs below: a credit a parked row already owns
+        // reads as free, and the first live entry of the same amount takes it. Both listeners
+        // are opened in the same breath and Firebase answers them in whatever order it likes,
+        // so on a till that opens with the incoming feed first the reconciler ran its whole
+        // first pass against a carry map nothing had filled in yet.
+        window._reconCredits = {}; window._reconFeed = false; window._carryUnverified = {}; window._carryKnown = false;
         function startVerificationReconciler(){
             if (window._reconFeed) return; window._reconFeed = true;
             try { db.ref('upiRouting/config').once('value', s => { window._upiCfgCache = s.val() || {}; }); } catch(e){}
@@ -4591,14 +4626,18 @@
             try {
                 db.ref('pos/unverified').on('value', s => {
                     window._carryUnverified = s.val() || {};
+                    window._carryKnown = true;
                     try { reconcileLedgerVerification(); } catch(e){}
-                }, () => { window._carryUnverified = {}; });   // same gate as the ledger; nothing to carry
+                }, () => { window._carryUnverified = {}; window._carryKnown = true; });   // same gate as the ledger; a refusal is still an answer
             } catch(e){}
         }
         function reconcileLedgerVerification(){
             const ledger = window.salesLedgerMap || {};
             const credits = window._reconCredits || {};
             if (!Object.keys(ledger).length || !Object.keys(credits).length) return;
+            // Nothing may be verified against a credit until it is known which credits are
+            // already spent. An empty carry map that has not been read is not an empty one.
+            if (!window._carryKnown) return;
             const now = serverNow();
             // TWO SEPARATE THINGS. Conflating them is what stopped the last bills of a session
             // from ever verifying: the POS is closed when the email lands, so nothing runs until
@@ -4627,9 +4666,19 @@
             // parked at EOD — these outlive the ledger they came from
             const carry = window._carryUnverified || {};
             for (const pid in carry){
-                const c = carry[pid]; if (!c || c.state === 'verified') continue;
-                if (c.ts && c.ts < now - CARRY_AGE) continue;
+                const c = carry[pid]; if (!c) continue;
+                // A CREDIT SPENT ON A PARKED ROW IS SPENT, whether or not that row is still
+                // waiting. This add sat BELOW the `state === 'verified'` skip, so the one kind
+                // of carry row that definitely owns a credit — the verified one — was the one
+                // kind whose ref never reached usedRefs. A parked row does not disappear when
+                // it verifies: the Worker only clears it once the correction is demonstrably in
+                // the archive, which takes two hourly runs, so it sits there owning a credit
+                // that this function reads as free for hours. Any live entry of the same amount
+                // and bank then finds exactly one candidate — that same credit — the counts line
+                // up at one and one, and one bank credit verifies two different sales.
                 if (c.ref) usedRefs.add(String(c.ref));
+                if (c.state === 'verified') continue;
+                if (c.ts && c.ts < now - CARRY_AGE) continue;
                 pending.push({ key: pid, ts: c.ts || 0, src: 'carry', win: PROXIMITY,
                                e: { type: 'upi_income', state: 'unverified', amount: c.amount, bankTag: c.bankTag || null } });
             }
@@ -4927,6 +4976,29 @@
             if (!token) return null;
             return JSON.stringify({ token: token, notification: notification });
         }
+        // A REQUEST THAT NEVER ANSWERS IS NOT AN ERROR, AND THAT IS THE PROBLEM.
+        //
+        // fetch() rejects when a connection fails. It does not reject when one is made and
+        // then goes nowhere, which is the shape of a café outage: the tablet is on the
+        // wifi, the router answers, the uplink is dead. There is no browser-side timeout
+        // to fall back on, so `await fetch(...)` simply never settles — and the caller
+        // disabled the Confirm button before it, so the till sits on "Processing…" with
+        // the drawer open and no way forward, mid-service.
+        //
+        // 15 seconds, and the message says what is and is not known: the request may have
+        // been received, so the answer is to CHECK rather than to do it again. Doing it
+        // again is how one withdrawal becomes two.
+        const WORKER_TIMEOUT_MS = 15000;
+        function ilaWorkerFetch(url, body){
+            const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch(e){} }, WORKER_TIMEOUT_MS);
+            const opts = { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: body };
+            if (ctrl) opts.signal = ctrl.signal;
+            return fetch(url, opts).then(
+                r => { clearTimeout(timer); return r; },
+                e => { clearTimeout(timer); throw e; }
+            );
+        }
         // Cash leaving the drawer goes through the Worker, not straight into the ledger.
         //
         // The PIN prompt in front of these three was advice: pos is writable by any
@@ -4945,13 +5017,14 @@
             if (!token) return { ok:false, why:'You are signed out. Sign in and try again.' };
             let res;
             try {
-                res = await fetch(ALERT_WORKER_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify({ action:'cashout', token: token, pin: pin,
-                                           type: type, amount: amount, reason: reason })
-                });
+                res = await ilaWorkerFetch(ALERT_WORKER_URL,
+                    JSON.stringify({ action:'cashout', token: token, pin: pin,
+                                     type: type, amount: amount, reason: reason }));
             } catch(e){
-                return { ok:false, why:'Could not reach the till service. Nothing was recorded \u2014 check the connection and try again.' };
+                const timedOut = e && e.name === 'AbortError';
+                return { ok:false, why: timedOut
+                    ? 'The till service did not answer. It may or may not have recorded this \u2014 check the cash-up before trying again, so one withdrawal does not become two.'
+                    : 'Could not reach the till service. Nothing was recorded \u2014 check the connection and try again.' };
             }
             let body = null; try { body = await res.json(); } catch(e){}
             if (res.ok && body && body.ok) return { ok:true, by: body.by };

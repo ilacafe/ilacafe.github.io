@@ -678,5 +678,39 @@ async function main() {
   note('the refit runs once a month — a tick that silently does nothing costs a month');
 }
 
+// ------------------------------------------------- a bank credit that never landed
+// The email route has no caller. An alert arrives, this runs, and whatever it does
+// or fails to do is the end of it — there is no response for anyone to read and no
+// screen it appears on. So a refused write to payments/incoming used to be a payment
+// that simply ceased to exist: the customer had paid, the till never saw a credit for
+// it, the order never auto-verified, and the only trace was a console line in a
+// runtime nobody watches. It is indistinguishable from a bank that stopped mailing.
+{
+  const email = src.slice(src.indexOf('async email(message'));
+  check('the email route exists and writes the credit', /payments\/incoming/.test(email));
+  check('and a credit it could not record is reported rather than logged and dropped',
+        /reportIfItThrows\(/.test(email),
+        'a bare fetch here loses the payment silently — nothing reads the return');
+  check('and the write is what decides that, not the parse',
+        /res\.ok/.test(email) && /throw new Error/.test(email),
+        'a 401 or a validation failure has to be the thing that raises');
+  note('reportIfItThrows also CLEARS the record on a success, so a bank that recovers');
+  note('stops looking broken and the next failure after it pushes immediately');
+
+  // A rejected token is the one failure a retry can fix, and the token is cached for
+  // the life of the isolate — so without dropping it the first rejection poisons every
+  // write that isolate makes afterwards, for as long as it stays warm.
+  const put = extractFunction(src, 'dbPut');
+  check('an authenticated write retries once on a rejected token',
+        /401/.test(put) && /403/.test(put) && /forgetRobotToken\(\)/.test(put),
+        'a cached token that has stopped being accepted is reused until it expires');
+  check('and only on that — a refused validation is not a credentials problem',
+        !/res\.ok/.test(put.replace(/status === 40[13]/g, '')),
+        'retrying a write the database has judged invalid just does it twice');
+  check('and the retry is the last word, not a loop',
+        (put.match(/await go\(/g) || []).length === 2,
+        'a token the sign-in keeps handing back would spin forever');
+}
+
 done();
 }

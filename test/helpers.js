@@ -468,6 +468,19 @@ function deriveWorkerPaths() {
   // monLoad only ever reads.
   for (const m of src.matchAll(/monLoad\([^,]+,\s*'([^']+)'\)/g)) touch(m[1], 'read');
 
+  // dbPut only ever writes, and it builds its own URL — so the path is in the CALL
+  // rather than next to a DB_URL, and the sweep above cannot see it. A write the
+  // deriver cannot see is a write the rules suite never checks the robot's access
+  // for, and the robot's writes fail silently: the whole reason this file exists.
+  // One pass, the same rule the root-PATCH sweep below uses: a literal followed by
+  // + has a dynamic tail and resolves as far as its head. Two passes would report
+  // both `payments/incoming/` and `payments/incoming/$key`, and the first is not a path.
+  for (const m of src.matchAll(/dbPut\(\s*'([^']*)'(\s*\+)?/g)) {
+    const head = m[1];
+    if (!m[2]) { touch(head, 'write'); continue; }
+    touch(head.endsWith('/') ? head + '$key' : head, 'write');
+  }
+
   // The multi-path writes, which go out as one PATCH at the root and so carry their
   // paths in the object keys rather than in the URL. This used to be a hardcoded
   // `monitor` — true when the monitor was the only handler that wrote that way, and

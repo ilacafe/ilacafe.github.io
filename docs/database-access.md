@@ -332,6 +332,19 @@ Two consequences worth keeping in mind when reading the rules:
   role. The parent `users` node stays admin-only, so that grants a lookup by uid,
   never a listing.
 
+**A grant is not a licence to read the node whole.** The robot's reads are the only
+ones in this project made on a schedule with nobody watching, inside a runtime with a
+hard ceiling on memory and time — and they fail silently, which is the reason for the
+paragraph above. Two of them used to take a node entire so that a window could be
+picked out of it afterwards: the weekly digest read `pos/eodArchive`, one entry per
+trading day carrying that day's whole bills and ledger, to summarise seven days; and
+the monthly refit read `orders/completed`, one record per ticket ever cooked, to
+derive seventy-five days. Both take the recent end by key now
+(`orderBy="$key"&limitToLast=…`, which needs no `.indexOn`), and the refit reports a
+window its cap cut short rather than quietly refitting on less evidence than it thinks
+it has. `test/unbounded-reads.test.js` sweeps the Worker alongside the seven pages and
+fails on a whole-node read nobody has classified.
+
 ## The staff PIN, and what it now authorises
 
 `staff` maps `SHA-256(fixed salt + PIN) → name`, the salt is a literal in the page

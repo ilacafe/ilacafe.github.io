@@ -57,6 +57,7 @@ const STUB = `
   window.__DATA = DATA;
   window.__writes = [];
   window.__handlers = {};
+  window.__refuse = {};              // path -> true: make writes to it fail, as the rules do
   const snap = (o) => ({ val: () => (o === undefined ? null : o), exists: () => o != null,
                          numChildren: () => 0, forEach: () => {}, key: null });
   window.__emit = (p) => (window.__handlers[p] || []).forEach(cb => { try { cb(snap(DATA[p])); } catch (e) {} });
@@ -68,7 +69,21 @@ const STUB = `
                       try { if (cb) cb(snap(DATA[p])); } catch (e) {} return cb; },
     off: () => {},
     once: (_e, cb) => { const x = snap(DATA[p]); if (cb) cb(x); return Promise.resolve(x); },
-    push: (v) => { if (v !== undefined) window.__writes.push({ op: 'push', path: p, value: v }); return mk(p + '/-new'); },
+    push: (v) => { if (v !== undefined) window.__writes.push({ op: 'push', path: p, value: v });
+                   // Firebase's push() hands back a ThenableReference — a Reference that is
+                   // ALSO the promise for the write, and the page waits on it before putting
+                   // a payment code on screen. A stub returning a bare reference would let
+                   // that gate pass without ever being tested. It resolves with nothing
+                   // rather than with itself, the way the real one resolves with a plain
+                   // Reference: a promise that fulfils with a thenable is adopted forever.
+                   const ref = mk(p + '/-new');
+                   const settled = (window.__refuse && window.__refuse[p])
+                     ? Promise.reject(new Error('PERMISSION_DENIED: ' + p))
+                     : Promise.resolve();
+                   settled.catch(() => {});          // the page attaches its own handler
+                   ref.then = (a, b) => settled.then(a, b);
+                   ref.catch = (b) => settled.then(undefined, b);
+                   return ref; },
     set: (v) => { window.__writes.push({ op: 'set', path: p, value: v }); return Promise.resolve(); },
     update: (v) => { window.__writes.push({ op: 'update', path: p, value: v }); return Promise.resolve(); },
     remove: () => Promise.resolve(),
@@ -185,6 +200,71 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     check('no code is shown for it', r.payStep === 'none', 'display: ' + r.payStep);
     check('and it says to pay at the table', /at your table/i.test(r.detail), r.detail);
     check('nothing is remembered to bring a code back to', r.stored === null, String(r.stored));
+  }
+
+  // ------------------------------------------- the write the database would not take
+  //
+  // orders/pendingWeb carries a shape: every field named, typed and bounded. The one
+  // field a customer can make long is the delivery address, and tableOrAddress is
+  // capped at 200 by the rules while the field on this page said maxlength="300" — an
+  // Indian address with a building, a landmark and a pincode reaches 300 easily. That
+  // write was refused, and nothing here noticed: push() hands back a ThenableReference
+  // and its rejection was attached to nothing. The customer was shown a payment code
+  // for an order that had never been written, paid it, and waited for food the counter
+  // had no record of.
+  //
+  // Two things are asked. The address the page sends is one the rules will take. And,
+  // whatever the reason, a REFUSED order write puts no code on screen — because the
+  // whole point of a code is that there is an order behind it.
+  {
+    await fresh();
+    const long = await pg.evaluate(async () => {
+      const f = document.getElementById('delivery-address');
+      f.value = 'Flat 402, Sai Krupa Residency, 3rd Cross, ' + 'x'.repeat(400);
+      window.cart = { 'Flat White': { price: 180, qty: 2 } };
+      window.totalAmount = 360; window.totalItems = 2;
+      window.currentOrderType = 'Delivery';
+      window.proceedToPayment();
+      return { field: f.getAttribute('maxlength'),
+               sent: (window.currentOrderInfo || {}).details || '' };
+    });
+    check('the address field cannot hold more than the database accepts',
+          long.field === '200', 'maxlength=' + long.field);
+    check('and what is sent is inside that bound however it got into the field',
+          long.sent.length > 0 && long.sent.length <= 200, long.sent.length + ' chars');
+    note('a paste clears maxlength; the rules do not clear anything');
+
+    await fresh();
+    const refused = await pg.evaluate(async () => {
+      window.__refuse['orders/pendingWeb'] = true;
+      window.__writes.length = 0;
+      window.cart = { 'Flat White': { price: 180, qty: 2 } };
+      window.totalAmount = 360; window.totalItems = 2;
+      window.currentOrderType = 'Takeaway';
+      window.proceedToPayment();
+      document.getElementById('cust-phone').value = '9990001111';
+      window.startPayment();
+      await new Promise(r => setTimeout(r, 250));
+      return {
+        payStep: document.getElementById('pay-step-pay').style.display,
+        stored: localStorage.getItem('ila_pay'),
+        cart: Object.keys(window.cart || {}).length,
+        title: (document.getElementById('status-title') || {}).textContent || '',
+        detail: (document.getElementById('status-detail') || {}).textContent || '',
+        body: document.body.innerText
+      };
+    });
+    check('a refused order write shows no payment code',
+          refused.payStep === 'none', 'display: ' + refused.payStep);
+    check('and remembers no code to bring back later',
+          refused.stored === null, String(refused.stored));
+    check('and leaves the basket alone', refused.cart === 1, refused.cart + ' line(s) left');
+    check('and says the order was not placed',
+          /not placed/i.test(refused.body) && /still here/i.test(refused.body),
+          refused.body.slice(0, 200));
+    check('and says it on the screen, not only in a dialog that can be tapped away',
+          /not placed/i.test(refused.title), JSON.stringify({ title: refused.title, detail: refused.detail }));
+    note('the cart is only cleared by watchPaymentStatus, which a failed write never reaches');
   }
 
   // ------------------------------------------- a routing list that cannot be used
