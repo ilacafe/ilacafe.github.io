@@ -1051,7 +1051,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-04.4"></script>
+    <script src="/build-check.js" data-build="2026-09-04.5"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -3933,37 +3933,95 @@
             renderSplit();
         };
 
+        // What a chip puts in the box. One definition, because three places have to agree
+        // about it or a chip says something the box does not: renderSplit lights a chip by
+        // comparing against this, chipSplit writes it, and syncSplitChips re-lights it after
+        // the figure has been typed over.
+        function splitChipValue(it, kind){
+            const left = lineLeft(it), unit = parseFloat(it.price) || 0;
+            if (kind === 'all') return left;
+            if (kind === 'unit') return Math.min(unit, left);
+            return Math.min(Math.round(unit / parseInt(kind)), left);
+        }
         // A chip just fills the rupee box. Fraction of ONE unit, because the shared thing is
         // usually a single pizza; "All" takes whatever is left on the line.
         window.chipSplit = function(safeName, kind){
             const t = window.activeTables[window.checkoutTableID]; if (!t) return;
             const nm = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
             const it = t.items[nm]; if (!it) return;
-            const left = lineLeft(it), unit = parseFloat(it.price) || 0;
-            let v;
-            if (kind === 'all') v = left;
-            else if (kind === 'unit') v = Math.min(unit, left);
-            else v = Math.min(Math.round(unit / parseInt(kind)), left);
+            let v = splitChipValue(it, kind);
             const cur = parseFloat(window.splitSel[nm]) || 0;
             if (Math.abs(cur - v) < 0.5) v = 0;      // tapping the same chip clears it
             setLineAmount(nm, v);
         };
-        window.editLineAmount = function(safeName, raw){
-            const nm = safeName.replace(/&quot;/g, '"').replace(/\\'/g, "'");
-            setLineAmount(nm, parseFloat(raw));
+
+        // TYPING IS NOT A RE-RENDER.
+        //
+        // This ran setLineAmount, and setLineAmount ended in renderSplit(), and renderSplit
+        // rebuilds the whole item list by assigning to innerHTML. The <input> the cashier is
+        // typing into is one of the nodes that assignment replaces — so on the FIRST keystroke
+        // the element under the cursor was destroyed and a fresh one put in its place. Focus
+        // went with it. One digit, and the caret is somewhere else: a share of \u20b9150 could
+        // not be entered at all, on the screen where a table of five is settled one person at
+        // a time.
+        //
+        // The box below the list already knew half of this. setSplitOther passes
+        // skipOtherField so that renderSplit does not rewrite the value under the cursor —
+        // the same bug, caught once, on the one field where the fix was a flag. The lines
+        // needed the stronger form, because they are not merely rewritten: they are replaced.
+        //
+        // So a keystroke now touches nothing in the list except the chips on its own line: the
+        // allocation, that line's chips, and the footer. Every other path into setLineAmount —
+        // a chip, the stepper, an even split — still re-renders in full, because none of them
+        // is somebody typing.
+        window.editLineAmount = function(idx, el){
+            const nm = (window._splitLines || [])[idx];
+            if (nm == null || !el) return;
+            const clamped = setLineAmount(nm, parseFloat(el.value), true);
+            // A line cannot take more than it has left, and the box has to SAY the figure that
+            // will actually be charged rather than a larger one the clamp quietly discarded.
+            // Writing it back is safe here for the same reason the fix works at all: the
+            // element is still the one being typed into.
+            if (clamped != null && String(clamped) !== String(el.value)) el.value = clamped;
+            syncSplitChips(idx);
+            renderSplitFooter(true);
         };
-        function setLineAmount(nm, v){
+
+        // The chips on ONE line, brought into step without rebuilding it. A chip is lit when
+        // the box holds the amount that chip would put there, so typing that amount by hand
+        // has to light it — and typing away from it has to put it out, or a lit \u00bd sits
+        // above a box that no longer says half.
+        function syncSplitChips(idx){
             const t = window.activeTables[window.checkoutTableID]; if (!t) return;
+            const nm = (window._splitLines || [])[idx]; if (nm == null) return;
             const it = t.items[nm]; if (!it) return;
+            const row = document.getElementById('split-line-' + idx); if (!row) return;
+            const sel = parseFloat(window.splitSel[nm]) || 0;
+            row.querySelectorAll('.split-chip').forEach(function(b){
+                const v = splitChipValue(it, b.getAttribute('data-chip'));
+                b.classList.toggle('selected', sel > 0 && Math.abs(sel - v) < 0.5);
+            });
+        }
+
+        // Returns the figure actually allocated, or null when the line was cleared, so a caller
+        // that is mid-keystroke can put the clamped value back in the box. `quiet` skips the
+        // full re-render for exactly that caller.
+        function setLineAmount(nm, v, quiet){
+            const t = window.activeTables[window.checkoutTableID]; if (!t) return null;
+            const it = t.items[nm]; if (!it) return null;
             const left = lineLeft(it);
+            let out = null;
             if (isNaN(v) || v <= 0) delete window.splitSel[nm];
-            else window.splitSel[nm] = Math.min(Math.round(v * 100) / 100, left);
-            renderSplit();
+            else { out = Math.min(Math.round(v * 100) / 100, left); window.splitSel[nm] = out; }
+            if (!quiet) renderSplit();
+            return out;
         }
         window.setSplitOther = function(raw){
             const v = parseFloat(raw);
             window.splitOther = (isNaN(v) || v <= 0) ? 0 : Math.round(v * 100) / 100;
-            renderSplit(true);
+            // Nothing in the item list is derived from this figure, so rebuilding it on every
+            // keystroke was only ever throwing the lines away and drawing them again.
+            renderSplitFooter(true);
         };
 
         // Even splits allocate ACROSS the lines rather than as untied money, so an evenly split
@@ -4014,6 +4072,10 @@
                 prog.style.color = (done >= heads && due > 0) ? '#ffd54f' : '';
             } else { prog.innerText = done > 0 ? (done + ' paid so far') : 'set the headcount'; prog.style.color = ''; }
 
+            // The lines that carry a box, in the order they are drawn. A keystroke identifies
+            // its line by position rather than by name: an item name goes into an id and into
+            // a querySelector, and a café sells things with quotes and brackets in the name.
+            window._splitLines = [];
             let html = '';
             for (const nm in t.items){
                 const it = t.items[nm];
@@ -4023,23 +4085,32 @@
                     html += '<div class="split-row split-paid"><div class="nm">' + escapeHTML(nm) + '<div class="sub">paid</div></div><div>\u2713</div></div>';
                     continue;
                 }
+                const idx = window._splitLines.length;
+                window._splitLines.push(nm);
                 const sel = parseFloat(window.splitSel[nm]) || 0;
                 const chip = (k, label) => {
-                    const v = k === 'all' ? left : (k === 'unit' ? Math.min(unit, left) : Math.min(Math.round(unit / parseInt(k)), left));
+                    const v = splitChipValue(it, k);
                     const on = sel > 0 && Math.abs(sel - v) < 0.5;
-                    return '<button class="split-chip' + (on ? ' selected' : '') + '" onclick="window.chipSplit(\'' + safe + '\', \'' + k + '\')">' + label + '</button>';
+                    return '<button class="split-chip' + (on ? ' selected' : '') + '" data-chip="' + k + '" onclick="window.chipSplit(\'' + safe + '\', \'' + k + '\')">' + label + '</button>';
                 };
-                html += '<div class="split-line">'
+                html += '<div class="split-line" id="split-line-' + idx + '">'
                      +   '<div class="split-line-head"><span class="nm">' + escapeHTML(nm) + '</span><span class="sub">\u20b9' + Math.round(left) + ' left'
                      +      (qty > 1 ? (' \u00b7 ' + qty + ' \u00d7 \u20b9' + Math.round(unit)) : '') + '</span></div>'
                      +   '<div class="split-line-ctrl">'
                      +     '<div class="split-chips">' + chip('all','All') + (qty > 1 ? chip('unit','1\u00d7') : '') + chip('2','\u00bd') + chip('3','\u2153') + chip('4','\u00bc') + '</div>'
-                     +     '<input type="number" class="split-amt" inputmode="decimal" value="' + (sel || '') + '" placeholder="\u20b90" oninput="window.editLineAmount(\'' + safe + '\', this.value)">'
+                     +     '<input type="number" class="split-amt" inputmode="decimal" value="' + (sel || '') + '" placeholder="\u20b90" oninput="window.editLineAmount(' + idx + ', this)">'
                      +   '</div>'
                      + '</div>';
             }
             document.getElementById('split-item-list').innerHTML = html || "<p style=' font-size:0.9rem; text-align:center;'>Everything on this table is paid for.</p>";
 
+            renderSplitFooter(skipOtherField);
+        }
+
+        // Everything below the item list: the Other box, the running share total, the two pay
+        // buttons and the "Covers:" line. Split out of renderSplit because these are what a
+        // keystroke has to move, and the list above them is what it must not touch.
+        function renderSplitFooter(skipOtherField){
             if (!skipOtherField) document.getElementById('split-other').value = window.splitOther || '';
             const share = Math.round((splitSelTotal() + (parseFloat(window.splitOther) || 0)) * 100) / 100;
             document.getElementById('split-share-total').innerText = Math.round(share);

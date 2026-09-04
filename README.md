@@ -468,6 +468,29 @@ costs money:
   long as it was late, which on a bad Sunday is every card on the board in the eye line
   of whoever is cooking. Honoured by shortening the motion rather than deleting it, so
   a zero-length transition still fires and still ends.
+- **typing a share into a split line** — reported from the counter: on the split screen,
+  click into an item's amount box, type one digit, and the cursor is gone. Every keystroke
+  went through `setLineAmount`, which ended in `renderSplit()`, and `renderSplit` rebuilds
+  the whole item list by assigning to `innerHTML`. The `<input>` being typed into is one of
+  the nodes that assignment replaces, so the first keystroke destroyed the element under
+  the cursor and put a fresh one in its place; focus went with it, to `<body>`. A share of
+  ₹150 could not be entered at all — you got the 1, and the rest of the keystrokes went
+  nowhere. Left there, the till takes ₹1 for what the cashier meant as ₹150, and the line
+  it was meant to settle stays owing. The box BELOW the list already knew half of this:
+  `setSplitOther` passes `skipOtherField` so `renderSplit` does not rewrite the value under
+  the cursor — the same bug, caught once, on the one field where a flag was enough. The
+  lines needed the stronger form, because they are not merely rewritten, they are replaced.
+  A keystroke now moves the allocation, that line's chips and the footer, and touches
+  nothing else; a chip, the stepper and an even split still redraw in full, because none of
+  them is somebody typing. Two things are held alongside it. The box may not hold more than
+  the line has left, and when a figure is clamped the box has to SAY the figure that will be
+  charged rather than a larger one — which is only writable because the element is still
+  there. And a chip is lit when the box holds what that chip would put there, so typing that
+  amount by hand lights it and editing away from it puts it out: a lit ½ over a box that no
+  longer says half is the screen lying about what is being taken. The suite types key by key
+  through the page's own handlers, because what broke is `document.activeElement` and a
+  source scan can see `renderSplit` split in two without ever finding out whether a second
+  keystroke lands.
 - **the one control a customer cannot undo** — Empty sat in the same row as Pay, the
   same size, and deleted the whole cart on the first tap. It now takes a second tap
   inside five seconds, and forgets if the dialog is closed — an armed button left armed
