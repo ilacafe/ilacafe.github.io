@@ -822,7 +822,7 @@
                     rows += `<div class="list-item"><div><strong>${escapeHTML(name)}</strong> <span style=" margin-left: 10px; font-size: 0.85rem;">PIN set</span></div><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeStaff('${key}', '${jsAttr(name)}')">✖</button></div>`;
                 }
                 container.innerHTML = rows;
-            });
+            }, window.ilaRefused("staff"));
 
             db.ref('users').on('value', snap => {
                 const users = snap.val() || {};
@@ -837,7 +837,7 @@
                     rows += `<div class="list-item"><div><strong>${escapeHTML(u.name || u.email || uid)}</strong> <span style=" margin-left:8px; font-size:0.85rem;">${escapeHTML(u.email || "")}</span></div><div style="display:flex; align-items:center; gap:8px;"><select aria-label="Role" onchange="changeRole('${uid}', this.value)" ${isSelf ? 'disabled' : ''} style="padding:6px; border-radius:6px; background:rgba(255,255,255,0.95); color:#333; border:none;"><option value="cashier" ${u.role==='cashier'?'selected':''}>Cashier</option><option value="barista" ${u.role==='barista'?'selected':''}>Barista</option><option value="chef" ${u.role==='chef'?'selected':''}>Chef</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select>${isSelf ? '<span style=" font-size:0.8rem;">you</span>' : `<button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeAccess('${uid}', '${safeName}')">✖</button>`}</div></div>`;
                 });
                 container.innerHTML = rows;
-            });
+            }, window.ilaRefused("users"));
 
         db.ref('inventory/config/items').once('value', snap => {
             if (!snap.exists()) {
@@ -871,7 +871,7 @@
             masterInventoryConfig = snap.val() || { bar:{raw:[], prepped:[]}, creamery:{raw:[], prepped:[]}, kitchen:{raw:[], prepped:[]}, bakery:{raw:[], prepped:[]}, packaging:{raw:[], prepped:[]} };
             renderInventoryManager();
             populateRecipeDropdowns();
-        });
+        }, window.ilaRefused("inventory/config/items"));
         loadUPIRouting();
         loadUPIVerification();
         loadWebPayments();
@@ -888,20 +888,20 @@
             const btn = document.getElementById('master-status-btn');
             if(isCafeOpen) { btn.innerText = "CAFE OPEN"; btn.className = "btn status-open"; } 
             else { btn.innerText = "CAFE CLOSED"; btn.className = "btn status-closed"; }
-        });
+        }, window.ilaRefused("settings/isOpen"));
         window.toggleCafeStatus = function() { db.ref('settings/isOpen').set(!isCafeOpen); };
 
         db.ref('settings/storeStatus').on('value', snap => {
             const status = snap.val() || { delivery: true, takeaway: true };
             document.getElementById('toggle-delivery').checked = status.delivery;
             document.getElementById('toggle-takeaway').checked = status.takeaway;
-        });
+        }, window.ilaRefused("settings/storeStatus"));
         window.updateStoreStatus = function() {
             db.ref('settings/storeStatus').set({ delivery: document.getElementById('toggle-delivery').checked, takeaway: document.getElementById('toggle-takeaway').checked });
         };
 
-        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderAllViews(); });
-        db.ref('settings/itemOrder').on('value', snap => { currentItemOrder = snap.val() || {}; renderAllViews(); });
+        db.ref('settings/categoryOrder').on('value', snap => { currentCategoryOrder = snap.val() || []; renderAllViews(); }, window.ilaRefused("settings/categoryOrder"));
+        db.ref('settings/itemOrder').on('value', snap => { currentItemOrder = snap.val() || {}; renderAllViews(); }, window.ilaRefused("settings/itemOrder"));
 
         db.ref('menu').on('value', (snapshot) => {
             currentMenuData = snapshot.val() || {};
@@ -920,7 +920,7 @@
             if (requiresCategorySave) db.ref('settings/categoryOrder').set(currentCategoryOrder);
             if (requiresItemSave) db.ref('settings/itemOrder').set(currentItemOrder);
             renderAllViews();
-        });
+        }, window.ilaRefused("menu"));
 
         function getSortedCategories() { return currentCategoryOrder.filter(cat => Object.keys(currentMenuData).includes(cat)); }
 
@@ -1108,12 +1108,12 @@
         // ledger entry itself, so the live cash-up record and its own reconciler are untouched.
         let uvLedger = {}, uvReview = {}, uvCarry = {}, uvTab = 'review';
         function loadUPIVerification(){
-            db.ref('pos/ledgerEntries').on('value', s => { uvLedger = s.val() || {}; renderUPIVerification(); });
-            db.ref('upiReview').on('value', s => { uvReview = s.val() || {}; renderUPIVerification(); });
+            db.ref('pos/ledgerEntries').on('value', s => { uvLedger = s.val() || {}; renderUPIVerification(); }, window.ilaRefused("pos/ledgerEntries"));
+            db.ref('upiReview').on('value', s => { uvReview = s.val() || {}; renderUPIVerification(); }, window.ilaRefused("upiReview"));
             // Payments parked at EOD while still unverified. Without this they disappear from
             // review the moment the day closes — which is exactly when the last bills of the
             // night are still waiting on a bank email.
-            db.ref('pos/unverified').on('value', s => { uvCarry = s.val() || {}; renderUPIVerification(); });
+            db.ref('pos/unverified').on('value', s => { uvCarry = s.val() || {}; renderUPIVerification(); }, window.ilaRefused("pos/unverified"));
         }
         window.uvSetTab = function(t){ uvTab = t; renderUPIVerification(); };
         function uvClassify(){
@@ -1226,7 +1226,7 @@
         // cart line. Kept out of the menu so it stays short.
         let addonCfg = {};
         function loadAddons(){
-            db.ref('settings/addons').on('value', s => { addonCfg = s.val() || {}; renderAddonCfg(); });
+            db.ref('settings/addons').on('value', s => { addonCfg = s.val() || {}; renderAddonCfg(); }, window.ilaRefused("settings/addons"));
             db.ref('orders/history').limitToLast(300).once('value', s => renderAddonCounts(s.val() || {}));
         }
         function renderAddonCfg(){
@@ -1302,9 +1302,9 @@
                         etaDone[o.trackId] = { completedAt: completedAt, createdAt: starts.length ? Math.min.apply(null, starts) : 0 };
                     });
                     recomputeETAAccuracy();
-                });
+                }, window.ilaRefused("orders/completed"));
             });
-            db.ref('orders/track').limitToLast(400).on('value', s => { etaTracks = s.val() || {}; recomputeETAAccuracy(); });
+            db.ref('orders/track').limitToLast(400).on('value', s => { etaTracks = s.val() || {}; recomputeETAAccuracy(); }, window.ilaRefused("orders/track"));
         }
         function recomputeETAAccuracy(){
             const rows = [];
@@ -1383,7 +1383,7 @@
         // ===== REPEAT CUSTOMERS =====
         // customers/<phone> is incremented by the POS when a web order is accepted.
         function loadRepeatCustomers(){
-            db.ref('customers').on('value', s => renderRepeat(s.val() || {}));
+            db.ref('customers').on('value', s => renderRepeat(s.val() || {}), window.ilaRefused("customers"));
         }
         function renderRepeat(map){
             const k = document.getElementById('repeat-kpis'), box = document.getElementById('repeat-list');
@@ -1438,7 +1438,7 @@
         // attaches the real credit if it turns up.
         let webPayCache = {};
         function loadWebPayments(){
-            db.ref('orders/pendingWeb').on('value', s => { webPayCache = s.val() || {}; renderWebPayments(); });
+            db.ref('orders/pendingWeb').on('value', s => { webPayCache = s.val() || {}; renderWebPayments(); }, window.ilaRefused("orders/pendingWeb"));
             // The only thing that changes between database events is how long these have
             // been waiting, and that is the number the whole card is about.
             setInterval(renderWebPayments, 30000);
@@ -1531,7 +1531,7 @@
         // shape as a bill void, so addLedgerEntry's cash-drawer branch is never involved.
         let refundsCache = {};
         function loadRefunds(){
-            db.ref('orders/refundsDue').on('value', s => { refundsCache = s.val() || {}; renderRefunds(); });
+            db.ref('orders/refundsDue').on('value', s => { refundsCache = s.val() || {}; renderRefunds(); }, window.ilaRefused("orders/refundsDue"));
         }
         function renderRefunds(){
             const card = document.getElementById('refunds-card');
@@ -1820,9 +1820,9 @@
                     return;
                 }
                 renderUPIRouting(); renderUPIHistory(); syncPublicUPIList();
-            });
-            db.ref('upiRouting/totals/' + mk).on('value', snap => { upiTot = snap.val() || {}; renderUPIRouting(); syncPublicUPIList(); });
-            db.ref('upiRouting/totals').on('value', snap => { upiAllTot = snap.val() || {}; renderUPIHistory(); });
+            }, window.ilaRefused("upiRouting/config"));
+            db.ref('upiRouting/totals/' + mk).on('value', snap => { upiTot = snap.val() || {}; renderUPIRouting(); syncPublicUPIList(); }, window.ilaRefused("upiRouting/totals"));
+            db.ref('upiRouting/totals').on('value', snap => { upiAllTot = snap.val() || {}; renderUPIHistory(); }, window.ilaRefused("upiRouting/totals"));
         }
         function syncPublicUPIList(){
             if (!Object.keys(upiCfg).length) return;

@@ -439,16 +439,16 @@
         // Alarm = expected prep (point estimate, NOT the customer cushion) + PER-CATEGORY margin (below).
         // So a coffee flags late quickly; a cold-oven/rush pizza gets proportionally more grace.
         window.etaModel = null;
-        try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && m.itemBase) window.etaModel = m; }); } catch(e){}
+        try { db.ref('eta/model').on('value', s => { const m=s.val(); if(m && m.itemBase) window.etaModel = m; }, window.ilaRefused.quiet("eta/model")); } catch(e){}
         // live signals this station needs
         window.kdsLoadChef = 0;
         window.kdsLastPizzaOutMs = 0;
         try {
-            db.ref('orders/active/chef').on('value', s => { window.kdsLoadChef = s.numChildren(); });
+            db.ref('orders/active/chef').on('value', s => { window.kdsLoadChef = s.numChildren(); }, window.ilaRefused("orders/active/chef"));
             db.ref('orders/ready').limitToLast(40).on('value', s => {
                 let last=0; s.forEach(ch=>{ const v=ch.val()||{}; if(v.items && v.timestamp && v.timestamp>last && etaIsPizza(v.items)) last=v.timestamp; });
                 if(last) window.kdsLastPizzaOutMs = last;
-            });
+            }, window.ilaRefused("orders/ready"));
         } catch(e){}
         // defaults mirror the POS engine (used until eta/model loads)
         const KDS_ETA_DEF = {
@@ -688,7 +688,7 @@
                 window.kdsTickets = tickets;
                 for (const aid in window.kdsAlarmed) { if (!(aid in window.kdsTickets)) delete window.kdsAlarmed[aid]; }
                 kdsCheckOverdue();
-            });
+            }, window.ilaRefused("orders/active/chef"));
         }
 
         // One DONE tap, however many times the button is pressed.

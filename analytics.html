@@ -907,19 +907,19 @@
             const ds = document.getElementById('drill-select');
             if (ds) ds.addEventListener('change', () => { drillPinned = true; });
             setPreset('30d');
-            db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); scheduleRender(); });
+            db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); scheduleRender(); }, window.ilaRefused("menu"));
             // Voids are rare — a few a week — so 2000 is years of them, and it stops
             // this being the next node that grows without limit.
-            db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; scheduleRender(); });
+            db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; scheduleRender(); }, window.ilaRefused("security/voids"));
             // Bounded like the voids beside it: append-only, and a café that ran for
             // years would otherwise pull every walkout it ever had into a phone.
-            db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; scheduleRender(); });
+            db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; scheduleRender(); }, window.ilaRefused("security/unpaid"));
             // Small fixed-size nodes — the refit's record and the cron failure record.
             // Neither grows, so neither needs a cap.
-            db.ref('eta/recalMeta').on('value', s => { RECAL = s.val()||null; renderWorkerHealth(); });
-            db.ref('eta/model').on('value', s => { MODEL = s.val()||null; renderWorkerHealth(); });
-            db.ref('eta/modelPrevious').on('value', s => { MODELPREV = s.val()||null; renderWorkerHealth(); });
-            db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); });
+            db.ref('eta/recalMeta').on('value', s => { RECAL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/recalMeta"));
+            db.ref('eta/model').on('value', s => { MODEL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/model"));
+            db.ref('eta/modelPrevious').on('value', s => { MODELPREV = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/modelPrevious"));
+            db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused("ops/cronFailure"));
             // FIVE NUMBERS A DAY, NOT A DAY'S WHOLE LEDGER
             //
             // This read used to be pos/eodArchive. Each archive carries that day's entire
@@ -1080,7 +1080,7 @@
             txnWindowed = false; ROLLUPS = {}; TXNWIN = {};
             if (historyQuery){ try { historyQuery.off(); } catch(e){} }
             historyQuery = db.ref('orders/history');
-            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); }, window.ilaRefused("orders/history"));
         }
 
         function ensureHistory(start){
@@ -1108,7 +1108,7 @@
                 ensureRollups().then(scheduleRender).catch(fallBackToWholeHistory);
                 // today only — the part no rollup covers
                 historyQuery = db.ref('orders/history').orderByKey().startAt(String(startOfToday()));
-                historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+                historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); }, window.ilaRefused("orders/history"));
                 // and the table's own window, which never feeds the totals
                 db.ref('orders/history').limitToLast(TXN_WINDOW).once('value')
                   .then(s => { TXNWIN = s.val()||{}; scheduleRender(); }).catch(()=>{});
@@ -1116,7 +1116,7 @@
             }
             txnWindowed = false; ROLLUPS = {}; TXNWIN = {};
             historyQuery = db.ref('orders/history').orderByKey().startAt(String(Math.floor(start)));
-            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); }, window.ilaRefused("orders/history"));
         }
 
         function setRange(start, end, key, label){ RANGE = {start, end, key, label}; const el=document.getElementById('range-label'); if(el) el.textContent = label; ensureHistory(start); }

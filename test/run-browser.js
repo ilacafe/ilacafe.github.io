@@ -8,6 +8,7 @@ const path = require('path');
 
 const suites = [
   'qr-browser.test.js',
+  'refused-bar-browser.test.js',
   'build-banner-browser.test.js',
   'inventory-browser.test.js',
   'walkouts-browser.test.js',

@@ -104,6 +104,108 @@
         return BLIND_MS;
     }
 
+    // ---------------------------------------------------------------- refused reads
+    //
+    // A REFUSED READ IS NOT AN EMPTY ONE, AND NOTHING WAS SAYING SO
+    //
+    // db.ref(p).on('value', cb) takes a third argument, the cancel callback, and it is
+    // the only way a page hears that a read was refused. Without one the callback
+    // simply never fires: the variable it would have filled keeps whatever it was
+    // initialised to — {} or 0 — and the page renders that, with nothing on screen to
+    // suggest anything went wrong.
+    //
+    // That is not hypothetical. Three nodes were added to the rules and merged without
+    // deploying them, so every read of them was refused, and analytics showed ₹0 for
+    // eighteen months of trading and a cash-up list with no closings in it. From a
+    // browser, a node nobody has heard of, a node nobody is allowed to read, and a
+    // node that is legitimately empty are the same event.
+    //
+    // So every listener now passes one of these two, and which one is a judgement
+    // about the read rather than a default:
+    //
+    //     ilaRefused('menu')        the screen is about this — say so on screen
+    //     ilaRefused.quiet('eta/model')   enrichment with a working default — log only
+    //
+    // The bar is deliberately not the offline bar's words or its urgency. An outage
+    // fixes itself and this does not: it means a rule is wrong or missing, it will
+    // still be true in an hour, and somebody has to go and look.
+    var refused = {}, refusedQuiet = {}, refusedBar = null;
+
+    function refusedShow() {
+        var names = Object.keys(refused);
+        if (!names.length) return;
+        if (!refusedBar) {
+            refusedBar = document.createElement('div');
+            refusedBar.id = 'ila-refused-bar';
+            refusedBar.setAttribute('role', 'status');
+            refusedBar.style.cssText = [
+                'position:fixed',
+                // Below the offline bar rather than on top of it: both can be true at
+                // once, and the connection is the one to read first.
+                'left:0', 'right:0',
+                'z-index:' + (Z - 1),
+                'background:var(--brand-text,#ffffff)',
+                'color:var(--brand-bg,#8D6E52)',
+                'font-family:Quicksand,sans-serif',
+                'font-size:0.8rem',
+                'font-weight:700',
+                'text-transform:uppercase',
+                'letter-spacing:1px',
+                'text-align:center',
+                'padding:10px 12px',
+                'pointer-events:none'
+            ].join(';');
+            (document.body || document.documentElement).appendChild(refusedBar);
+        }
+        // Recomputed every time rather than fixed when the bar was built: the offline
+        // bar can arrive after this one, and a stale offset would stack them.
+        var above = document.getElementById('ila-offline-bar');
+        refusedBar.style.top = 'calc(env(safe-area-inset-top) + ' +
+            (above ? above.offsetHeight + 'px' : '0px') + ')';
+        // Named, because "something failed" sends somebody hunting and a path does not.
+        refusedBar.textContent = names.length === 1
+            ? 'Could not load ' + names[0] + ' — this screen is incomplete'
+            : 'Could not load ' + names.length + ' things — this screen is incomplete';
+        refusedBar.title = names.join(', ');
+    }
+
+    function record(label, err, loud) {
+        var name = String(label || '');
+        if (!name) {
+            // Firebase names the path in its own message; use it when there is no
+            // label rather than saying nothing useful.
+            var m = /permission_denied at (\S+?):/i.exec(String((err && err.message) || ''));
+            name = m ? m[1].replace(/^\//, '') : 'part of this screen';
+        }
+        try {
+            console.error('[ila] read refused: ' + name + ' — ' +
+                          String((err && err.message) || err || ''));
+        } catch (e) {}
+        if (!loud) { refusedQuiet[name] = 1; return; }
+        refused[name] = 1;
+        if (document.body) refusedShow();
+        else document.addEventListener('DOMContentLoaded', refusedShow);
+    }
+
+    // Returns a cancel callback, so a call site reads
+    //     db.ref('menu').on('value', cb, ilaRefused('menu'))
+    window.ilaRefused = function (label) {
+        return function (err) { record(label, err, true); };
+    };
+    // Enrichment the page has a working default for. Recorded and logged, no bar:
+    // a wait-time estimate that falls back to its default is not worth alarming a
+    // cashier mid-service over, and a bar nobody needs is a bar everybody learns
+    // to ignore.
+    window.ilaRefused.quiet = function (label) {
+        return function (err) { record(label, err, false); };
+    };
+    // For tests and for anyone debugging a screen that says it is incomplete.
+    window.ilaRefused.seen = function () { return Object.keys(refused); };
+    // The quiet ones are recorded too. Not showing a bar is a decision about what is
+    // worth interrupting somebody for, not a reason to lose the fact — and "no bar"
+    // and "the callback never fired" are otherwise the same thing to look at.
+    window.ilaRefused.seenQuiet = function () { return Object.keys(refusedQuiet); };
+
     var bar = null, timer = null, downSince = 0;
 
     function show() {

@@ -486,16 +486,16 @@
             }
         });
         function startInventory() {
-            db.ref('inventory/stock').on('value', snap => { currentStock = snap.val() || {}; renderUI(); });
+            db.ref('inventory/stock').on('value', snap => { currentStock = snap.val() || {}; renderUI(); }, window.ilaRefused("inventory/stock"));
             // No recipes and no staff map any more. The Worker reads the recipe when it
             // logs a batch — a client that computes its own deductions can under-report
             // what one consumed — and it checks the PIN against staff itself. This tablet
             // used to hold every PIN hash in the café, with the salt in its own source, to
             // answer a question it was never the right place to answer.
-            db.ref('inventory/config/items').on('value', snap => { dynamicInventoryMap = snap.val() || {}; renderUI(); });
+            db.ref('inventory/config/items').on('value', snap => { dynamicInventoryMap = snap.val() || {}; renderUI(); }, window.ilaRefused("inventory/config/items"));
             // Bounded: this node only grows, and the tab is for "what happened
             // recently", not for the whole history of the café.
-            db.ref('inventory/logs').limitToLast(80).on('value', snap => renderLog(snap));
+            db.ref('inventory/logs').limitToLast(80).on('value', snap => renderLog(snap), window.ilaRefused("inventory/logs"));
         }
 
         let currentStock = {};

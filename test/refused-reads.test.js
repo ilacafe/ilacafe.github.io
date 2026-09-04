@@ -79,23 +79,25 @@ function listeners(src) {
   return found;
 }
 
-// Reviewed, and answering a refusal on purpose. These are the ones where an empty
-// render would be a lie about money or about what the café has done.
-const HANDLED_ON_PURPOSE = {
-  'analytics.html': "the cash-up list falls back to pos/eodArchive rather than showing no closings",
-};
-
-// Pinned, NOT cleared: no cancel callback, and not yet reviewed one by one. A refusal
-// on any of these renders whatever the variable was initialised to. Counted per page
-// so a new one is a failure and a fixed one is a visible decrease.
+// Every listener now passes a cancel callback, so this is a floor rather than a
+// ledger: no page may have any that swallows a refusal.
+//
+// Which of the two it passes is a judgement about the read, not a default:
+//
+//   window.ilaRefused(label)         the screen is about this — say so on screen
+//   window.ilaRefused.quiet(label)   enrichment with a working default — log only
+//
+// The quiet ones are the wait-time model, the live ETA and the two .info/* clocks:
+// every one has a documented default the page already falls back to, and a bar
+// nobody needs is a bar everybody learns to ignore.
 const UNREVIEWED = {
-  'index.html': 10,
-  'pos.html': 26,
-  'admin.html': 20,
-  'analytics.html': 10,
-  'chef.html': 4,
-  'barista.html': 3,
-  'inventory.html': 3,
+  'index.html': 0,
+  'pos.html': 0,
+  'admin.html': 0,
+  'analytics.html': 0,
+  'chef.html': 0,
+  'barista.html': 0,
+  'inventory.html': 0,
 };
 
 let total = 0, unhandled = 0;
@@ -114,7 +116,7 @@ for (const page of PAGES) {
     grew.push(page + ': ' + bad.length + ' unhandled, ' + pinned + ' pinned. All ' +
               'unhandled here: ' + bad.map(b => b.path).join(', '));
   }
-  check(page + ' adds no listener that swallows a refusal',
+  check(page + ' has no listener that swallows a refusal',
         bad.length <= pinned,
         grew[grew.length - 1] || '');
 }
@@ -124,16 +126,15 @@ note('a listener with no cancel callback cannot report a refusal — it just nev
 // The count only ever going down is the point of pinning it. A page that fixes one and
 // adds one nets to zero above, so the totals are checked too.
 const pinnedTotal = Object.values(UNREVIEWED).reduce((a, b) => a + b, 0);
-check('the number of listeners that swallow a refusal has not grown',
-      unhandled <= pinnedTotal,
-      unhandled + ' unhandled against ' + pinnedTotal + ' pinned');
+check('no listener anywhere swallows a refusal',
+      unhandled === 0, unhandled + ' still do');
 check('and every page is still accounted for',
       PAGES.every(p => p in UNREVIEWED),
       PAGES.filter(p => !(p in UNREVIEWED)).join(', '));
 
-note(unhandled + ' of ' + total + ' listeners still swallow a refusal — pinned, not fixed');
-note('lower a number in UNREVIEWED when you fix one; this fails if any page grows');
-note(Object.keys(HANDLED_ON_PURPOSE).length + ' page(s) answer a refusal deliberately:');
-for (const p in HANDLED_ON_PURPOSE) note('  ' + p + ' — ' + HANDLED_ON_PURPOSE[p]);
+note(total + ' listeners, every one of them answering a refusal');
+note('a new listener must pass ilaRefused or ilaRefused.quiet, and say which and why');
+note('analytics also falls back rather than only reporting: the rollups to the');
+note('order history, and the cash-up index to the archive it is an index over');
 
 done();

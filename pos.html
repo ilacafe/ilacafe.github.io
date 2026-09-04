@@ -1188,7 +1188,7 @@
               const m = s.val();
               if (m && m.itemBase) window.etaModel = m;       // use live config when present
               else db.ref('eta/model').set(ETA_DEFAULTS);     // seed it once if empty
-            });
+            }, window.ilaRefused.quiet("eta/model"));
           } catch(e){ /* offline: defaults stand */ }
         
           // ---- 3. HELPERS ----
@@ -1223,8 +1223,8 @@
           window.etaLoad = { chef: 0, barista: 0 };
           window.etaLastPizzaOutMs = 0;
           try {
-            db.ref('orders/active/chef').on('value', s => { window.etaLoad.chef = s.numChildren(); publishEtaLive(); });
-            db.ref('orders/active/barista').on('value', s => { window.etaLoad.barista = s.numChildren(); publishEtaLive(); });
+            db.ref('orders/active/chef').on('value', s => { window.etaLoad.chef = s.numChildren(); publishEtaLive(); }, window.ilaRefused("orders/active/chef"));
+            db.ref('orders/active/barista').on('value', s => { window.etaLoad.barista = s.numChildren(); publishEtaLive(); }, window.ilaRefused("orders/active/barista"));
             // most recent pizza completion -> for oven idle. orders/ready carries items + timestamp.
             db.ref('orders/ready').limitToLast(40).on('value', s => {
               let last = 0;
@@ -1233,9 +1233,9 @@
                 if (v.items && isPizza(v.items) && v.timestamp && v.timestamp>last) last = v.timestamp;
               });
               if (last) { window.etaLastPizzaOutMs = last; publishEtaLive(); }
-            });
-            db.ref('orders/completed/chef').limitToLast(30).on('value', s => { window.etaPace.chef = etaPaceFrom(s); recomputeEtaTempo(); publishEtaLive(); });
-            db.ref('orders/completed/barista').limitToLast(30).on('value', s => { window.etaPace.barista = etaPaceFrom(s); recomputeEtaTempo(); publishEtaLive(); });
+            }, window.ilaRefused("orders/ready"));
+            db.ref('orders/completed/chef').limitToLast(30).on('value', s => { window.etaPace.chef = etaPaceFrom(s); recomputeEtaTempo(); publishEtaLive(); }, window.ilaRefused("orders/completed/chef"));
+            db.ref('orders/completed/barista').limitToLast(30).on('value', s => { window.etaPace.barista = etaPaceFrom(s); recomputeEtaTempo(); publishEtaLive(); }, window.ilaRefused("orders/completed/barista"));
           } catch(e){}
 
           // ---- 4b. THE PUBLIC SUMMARY (eta/live) ----
@@ -1453,7 +1453,7 @@
         // Device clocks drift. This is the server's clock minus this device's, in ms.
         // We add it whenever we need "true" now() — notably the UPI match window.
         window.serverTimeOffset = 0;
-        db.ref('.info/serverTimeOffset').on('value', s => { window.serverTimeOffset = s.val() || 0; });
+        db.ref('.info/serverTimeOffset').on('value', s => { window.serverTimeOffset = s.val() || 0; }, window.ilaRefused.quiet(".info/serverTimeOffset"));
         function serverNow(){ return Date.now() + (window.serverTimeOffset || 0); }
         window.currentStaff = { uid: null, name: null, role: null };
         // These delegate to auth-gate.js so that six pages cannot disagree about what a
@@ -1538,12 +1538,12 @@
                 window.tablesFromCacheAt = 0;
                 try { localStorage.setItem(TABLE_CACHE_KEY, packTables(window.activeTables, Date.now())); } catch(e){}
                 updateDashboards(); refreshActiveModals(); try { renderSideRail(); } catch(e){}
-            });
-            db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); });
-            db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); });
-            db.ref('upiReview').on('value', snap => { window.upiReviewMap = snap.val() || {}; renderLedger(); });
-            db.ref('pos/lastSplitHeads').on('value', s => { window.lastSplitHeads = parseInt(s.val()) || 0; });
-            db.ref('pos/tips/lastHeads').on('value', s => { window.lastTipHeads = parseInt(s.val()) || 0; renderTipPool(); });
+            }, window.ilaRefused("pos/activeTables"));
+            db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); }, window.ilaRefused("pos/cashDrawer"));
+            db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); }, window.ilaRefused("pos/upiTotal"));
+            db.ref('upiReview').on('value', snap => { window.upiReviewMap = snap.val() || {}; renderLedger(); }, window.ilaRefused("upiReview"));
+            db.ref('pos/lastSplitHeads').on('value', s => { window.lastSplitHeads = parseInt(s.val()) || 0; }, window.ilaRefused("pos/lastSplitHeads"));
+            db.ref('pos/tips/lastHeads').on('value', s => { window.lastTipHeads = parseInt(s.val()) || 0; renderTipPool(); }, window.ilaRefused("pos/tips/lastHeads"));
             startTipFeed();
             startVerificationReconciler();
             db.ref('pos/ledgerEntries').on('value', snap => {
@@ -1567,7 +1567,7 @@
                 const data = snap.val() || {};
                 window.pastBills = Object.values(data).sort((a, b) => (b.id || 0) - (a.id || 0));
                 calculateDailyCups();
-            });
+            }, window.ilaRefused("pos/bills"));
 
             let previousWebOrderCount = 0;
             let isInitialWebOrderLoad = true;
@@ -1586,9 +1586,9 @@
                 if(document.getElementById('web-orders-modal').classList.contains('active')) { window.openWebOrders(); }
                 // matching runs from login, not from the modal — see sweepWebPayments()
                 try { ensureWebVerifyFeeds(); sweepWebPayments(); } catch(e){}
-            });
+            }, window.ilaRefused("orders/pendingWeb"));
 
-            db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }});
+            db.ref('staff').on('value', snap => { if(snap.val()) { window.staffPins = snap.val(); localStorage.setItem('ila_cached_staff', JSON.stringify(window.staffPins)); }}, window.ilaRefused("staff"));
 
             // ===== A PREPAID WEB ORDER THAT IS NOT PAID =====
             // Takeaway and delivery are prepaid, and there are two ways one sits unpaid. Both
@@ -1693,7 +1693,7 @@
         window.activeUPIs = [CAFE_UPI_ID]; 
         db.ref('settings/upiList').on('value', snap => {
             if (snap.exists() && snap.val().length > 0) { window.activeUPIs = snap.val(); }
-        });
+        }, window.ilaRefused("settings/upiList"));
         window.getRandomUPI = function() {
             return window.activeUPIs[Math.floor(Math.random() * window.activeUPIs.length)];
         };
@@ -1890,7 +1890,7 @@
                         if (v == null) delete window._wvClaims[ref]; else window._wvClaims[ref] = v;
                         try { sweepWebPayments(); } catch(e){}
                     };
-                    r.on('value', handler);
+                    r.on('value', handler, window.ilaRefused("a web order’s payment claim"));
                     window._wvClaimWatch[ref] = { ref: r, handler: handler };
                 } catch(e){}
             }
@@ -2219,7 +2219,7 @@
         window.itemCategoryMap = {};     // item -> category, so a cart line knows which add-ons apply
         window.coffeeItemsMap = {};
         window.addonsByCategory = {};    // settings/addons/<category> = [{name, price}]
-        try { db.ref('settings/addons').on('value', s => { window.addonsByCategory = s.val() || {}; }); } catch(e){}
+        try { db.ref('settings/addons').on('value', s => { window.addonsByCategory = s.val() || {}; }, window.ilaRefused("settings/addons")); } catch(e){}
 
         db.ref('orders/ready').limitToLast(1).on('child_added', snap => {
             const data = snap.val();
@@ -3056,7 +3056,7 @@
                 return;
             }
             goOffline();
-        });
+        }, window.ilaRefused.quiet(".info/connected"));
 
         if (window.ilaNet && window.ilaNet.onVerdict) {
             window.ilaNet.onVerdict(function(){
@@ -3116,8 +3116,8 @@
                 if (a) renderPOSMenu(a[0], a[1]);
             });
         }
-        db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) scheduleMenuRender(currentMenuData, liveCategoryOrder); });
-        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) scheduleMenuRender(currentMenuData, liveCategoryOrder); });
+        db.ref('settings/categoryOrder').on('value', snap => { liveCategoryOrder = snap.val() || []; localStorage.setItem('ila_cached_category_order', JSON.stringify(liveCategoryOrder)); if(Object.keys(currentMenuData).length > 0) scheduleMenuRender(currentMenuData, liveCategoryOrder); }, window.ilaRefused("settings/categoryOrder"));
+        db.ref('settings/itemOrder').on('value', snap => { window.currentItemOrder = snap.val() || {}; localStorage.setItem('ila_cached_item_order', JSON.stringify(window.currentItemOrder)); if(Object.keys(currentMenuData).length > 0) scheduleMenuRender(currentMenuData, liveCategoryOrder); }, window.ilaRefused("settings/itemOrder"));
         
         // Flattens the menu into the lookup maps the rest of the POS works from. itemPriceMap
         // is flattened exactly the way the customer app flattens it to build cart keys, so a
@@ -3167,7 +3167,7 @@
             buildMenuMaps(currentMenuData);
             scheduleMenuRender(currentMenuData, liveCategoryOrder);
             calculateDailyCups(); 
-        });
+        }, window.ilaRefused("menu"));
 
         function renderPOSMenu(menuData, categoryOrder) {
             const container = document.getElementById('live-menu-container');
@@ -4378,7 +4378,7 @@
                 };
                 tryNext(0);
             };
-            q.on('value', handler);
+            q.on('value', handler, window.ilaRefused("incoming UPI credits"));
             window.upiWatchRef = { q, handler };
         }
         function claimPayment(ref, p, cb, fixedToken){
@@ -4586,7 +4586,7 @@
                     try { watchClaimsFor(newest); } catch(e){}
                     try { sweepWebPayments(); } catch(e){}
                     try { reconcileLedgerVerification(); } catch(e){}
-                });
+                }, window.ilaRefused("payments/incoming"));
             } catch(e){}
             try {
                 db.ref('pos/unverified').on('value', s => {
@@ -4832,7 +4832,7 @@
                     const v = s.val() || {};
                     window.tipPool = { accrued: parseFloat(v.accrued) || 0, paidOut: parseFloat(v.paidOut) || 0 };
                     renderTipPool();
-                });
+                }, window.ilaRefused("pos/tips"));
             } catch(e){}
         }
         function renderTipPool(){
