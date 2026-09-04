@@ -111,7 +111,7 @@ const server = http.createServer((req, res) => {
   res.end(fs.readFileSync(f));
 });
 
-const stub = (withRollups) => `
+const stub = (withRollups, denyDaily) => `
 (() => {
   const noop=()=>{};
   const D = { 'orders/history': ${JSON.stringify(HIST)},
@@ -147,6 +147,8 @@ const stub = (withRollups) => `
       const v=applyQ(byPath(p),q); tally(p,v);
       setTimeout(()=>{try{cb(snap(v))}catch(x){}},25); return cb; },
     once:()=>{ if(p.indexOf('users/')===0) return Promise.resolve(snap({role:'admin',name:'A'}));
+      if(${denyDaily ? 'true' : 'false'} && p==='orders/daily')
+        return Promise.reject(new Error("PERMISSION_DENIED: Client doesn't have permission to access the desired data."));
       const v=applyQ(byPath(p),q); tally(p,v); return Promise.resolve(snap(v)); },
     off:noop, child:k=>mk(p+'/'+k,q),
     orderByChild:()=>mk(p,{...q,orderByChild:true}), orderByKey:()=>mk(p,{...q,orderByKey:true}),
@@ -176,9 +178,9 @@ const waitFor = async (tab, fn, ms) => {
   const PRE = '/opt/pw-browsers/chromium';
   const browser = await chromium.launch(fs.existsSync(PRE) ? { executablePath: PRE } : {});
 
-  const openAllTime = async (withRollups) => {
+  const openAllTime = async (withRollups, denyDaily) => {
     const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 } });
-    await ctx.addInitScript(stub(withRollups));
+    await ctx.addInitScript(stub(withRollups, denyDaily));
     const tab = await ctx.newPage();
     const threw = [];
     tab.on('pageerror', e => threw.push(e.message));
@@ -209,6 +211,7 @@ const waitFor = async (tab, fn, ms) => {
 
   const withRollups = await openAllTime(true);
   const without = await openAllTime(false);
+  const denied = await openAllTime(false, true);
 
   check('both opens drew All time', !!withRollups.shown.ord && !!without.shown.ord,
         JSON.stringify({ a: withRollups.shown.ord, b: without.shown.ord }));
@@ -288,6 +291,40 @@ const waitFor = async (tab, fn, ms) => {
         without.wrote === Object.keys(ROLLUPS).length,
         without.wrote + ' written, ' + Object.keys(ROLLUPS).length + ' closed days in the fixture');
   note('a rollup written at noon would be wrong all afternoon and never corrected');
+
+  // ---- WHEN THE ROLLUPS CANNOT BE READ AT ALL
+  //
+  // This is the case that took the page down in production, and the reason it is here
+  // rather than in the two opens above: those both stub a node that READS FINE and is
+  // merely empty, which the page handles by backfilling it. Live, orders/daily did not
+  // exist in the deployed rules, so the read was refused — a rejected promise, not an
+  // empty one — and the swallow behind it meant DATA stayed as TODAY ALONE while the
+  // heading still said "All time".
+  //
+  // The café saw ₹0 for eighteen months of trading and nothing on the page looked
+  // broken. Wrong money that looks fine is the worst thing this page can do, so the
+  // refusal must produce the real figures by the slow road, not a confident zero.
+  for (const [label, k] of [['revenue', 'rev'], ['the order count', 'ord'],
+                            ['the average order', 'aov'], ['the items sold', 'itm']]) {
+    check('refused the rollups, it still reports ' + label,
+          denied.shown[k] === without.shown[k],
+          'denied ' + JSON.stringify(denied.shown[k]) +
+          ', expected ' + JSON.stringify(without.shown[k]));
+  }
+  check('refused the rollups, revenue is still every order, worked out here',
+        digits(denied.shown.rev) === truth.rev,
+        'page ' + digits(denied.shown.rev) + ', expected ' + truth.rev);
+  check('and it did not just draw today under an All time heading',
+        digits(denied.shown.ord) === truth.orders,
+        'page ' + digits(denied.shown.ord) + ' orders, expected ' + truth.orders);
+  check('it fell back to reading the orders, which is how it got them',
+        (denied.reads['orders/history'] || { bytes: 0 }).bytes >= hist(without.reads),
+        'denied read ' + (denied.reads['orders/history'] || { bytes: 0 }).bytes +
+        ' bytes of history, the backfilling open read ' + hist(without.reads));
+  check('and the refusal did not throw at the page',
+        denied.threw.length === 0, (denied.threw[0] || '').slice(0, 140));
+  note('slower and right beats faster and wrong — the rollups are an optimisation,');
+  note('and an optimisation that cannot run must not change the answer');
 
   // ---- and the one thing that IS different, said out loud
   check('the transactions card says its rows are a window of the range',

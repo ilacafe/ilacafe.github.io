@@ -1044,6 +1044,27 @@
             if (Object.keys(updates).length) await db.ref().update(updates);
         }
 
+        // WHEN THE ROLLUPS CANNOT BE READ, READ THE ORDERS INSTEAD
+        //
+        // ensureRollups can fail for reasons that have nothing to do with this page:
+        // the rules for orders/daily not deployed yet, a permission change, a dropped
+        // connection mid-read. The rollups carry every CLOSED day, so without them
+        // DATA is TODAY ALONE — and the page would draw today's takings, or nothing at
+        // all before the first sale, under a heading that says "All time". Nothing on
+        // screen would look wrong.
+        //
+        // This is the café's money on a screen people make decisions from, so a failure
+        // here falls back to the whole-history read this change exists to avoid. Slower
+        // and right, which is the correct way round: a page that is fast and reports
+        // ₹0 for eighteen months of trading is worse than one that takes a minute.
+        function fallBackToWholeHistory(){
+            if (historyFrom !== 0) return;      // the range moved on while we waited
+            txnWindowed = false; ROLLUPS = {}; TXNWIN = {};
+            if (historyQuery){ try { historyQuery.off(); } catch(e){} }
+            historyQuery = db.ref('orders/history');
+            historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
+        }
+
         function ensureHistory(start){
             if(!historyNeedsRefetch(historyFrom, start)){ scheduleRender(); return; }
             if(historyQuery){ try { historyQuery.off(); } catch(e){} }
@@ -1066,7 +1087,7 @@
             // the transactions table, which a rollup cannot answer for.
             if (start === 0){
                 txnWindowed = true;
-                ensureRollups().then(scheduleRender).catch(()=>{});
+                ensureRollups().then(scheduleRender).catch(fallBackToWholeHistory);
                 // today only — the part no rollup covers
                 historyQuery = db.ref('orders/history').orderByKey().startAt(String(startOfToday()));
                 historyQuery.on('value', s => { DATA = s.val()||{}; scheduleRender(); });
