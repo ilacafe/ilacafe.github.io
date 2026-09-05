@@ -1,0 +1,51 @@
+name: cron heartbeat
+
+# Are the Worker's scheduled jobs still running at all?
+#
+# reportIfItThrows catches a cron that THROWS. Nothing caught one that stops
+# FIRING — and `wrangler deploy` makes the cron list in wrangler.toml
+# authoritative, so a schedule missing from that file is silently removed. A
+# suspended, over-quota or badly-deployed Worker runs nothing either.
+#
+# In all of those, ops/cronFailure stays empty, no push goes out, and the
+# Worker-health panel is clean while the hourly monitor — which is what notices
+# unpaid web orders and raises the per-bank alarm — has stopped. It looks exactly
+# like a quiet week.
+#
+# Nothing inside the Worker can raise an alarm about its own silence, so the
+# reader lives here. The Worker records ops/cronHeartbeat/{job} at the end of
+# every run that finished; this asks how long ago that was.
+#
+# Sibling of analytics-health.yml and rules-drift.yml, and a different question
+# from both: those ask whether the data and the rules are right, this asks whether
+# the thing that maintains them is running.
+#
+# Read-only. It writes nothing and cannot deploy.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every four hours. The monitor's window is three, so a stopped hourly cron is
+    # found within about seven — soon enough to matter for unverified payments,
+    # rare enough that a red run means something.
+    - cron: '43 */4 * * *'
+
+jobs:
+  heartbeat:
+    name: have the scheduled jobs run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: read the last finish of each scheduled job
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FIREBASE_SERVICE_ACCOUNT:-}" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT is not set, so nothing can be checked"
+            exit 1
+          fi
+          node tools/check-cron-heartbeat.js

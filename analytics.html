@@ -716,7 +716,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-04.5"></script>
+    <script src="/build-check.js" data-build="2026-09-05.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -845,6 +845,7 @@
         let MODELPREV = null;// eta/modelPrevious — the one the last accepted refit replaced
         let RECAL = null;    // eta/recalMeta — what the last monthly refit did
         let CRONFAIL = null; // ops/cronFailure — scheduled jobs that are failing now
+        let CRONBEAT = null; // ops/cronHeartbeat — when each scheduled job last finished
         let UNPAID = {};     // security/unpaid — bills written off unpaid at cash-up
         let UNPAID_ROWS = [];
         let RANGE = null;    // {start, end, key, label}
@@ -920,6 +921,7 @@
             db.ref('eta/model').on('value', s => { MODEL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/model"));
             db.ref('eta/modelPrevious').on('value', s => { MODELPREV = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/modelPrevious"));
             db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused("ops/cronFailure"));
+            db.ref('ops/cronHeartbeat').on('value', s => { CRONBEAT = s.val()||null; renderWorkerHealth(); }, window.ilaRefused("ops/cronHeartbeat"));
             // FIVE NUMBERS A DAY, NOT A DAY'S WHOLE LEDGER
             //
             // This read used to be pos/eodArchive. Each archive carries that day's entire
@@ -1879,10 +1881,39 @@
             return parts.join('');
         }
 
+        // How long each scheduled job may go between finishes before its silence is
+        // the finding. Generous: the point is to catch a cron that has STOPPED, not
+        // to complain about one that ran late.
+        const CRON_STALE_MS = { monitor: 3 * 3600 * 1000, recalibration: 35 * 24 * 3600 * 1000 };
+
+        function cronBeatRows(){
+            const b = CRONBEAT;
+            const rows = [];
+            for (const job in CRON_STALE_MS) {
+                const at = Number(b && b[job] && b[job].at) || 0;
+                // Never seen is not the same as gone quiet. A job that has not run
+                // since this shipped has nothing to report yet, and calling that a
+                // failure would cry wolf on the first deploy — the monthly refit
+                // would look broken for a month.
+                if (!at) {
+                    rows.push('<div style="font-size:0.85rem; margin-top:4px;"><strong>' + escapeHTML(job) +
+                              '</strong> has not reported a finish yet.</div>');
+                    continue;
+                }
+                const late = (Date.now() - at) > CRON_STALE_MS[job];
+                rows.push('<div style="font-size:0.85rem; margin-top:4px;' + (late ? ' color:#ff9d9d;' : '') + '"><strong>' +
+                          escapeHTML(job) + '</strong> ' + (late ? 'last finished ' : 'finished ') +
+                          escapeHTML(agoText(at)) + (late ? ' — overdue' : '') + '</div>');
+            }
+            return rows.join('');
+        }
+
         function cronLine(){
             const f = CRONFAIL;
+            const beats = cronBeatRows();
+            const head = '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; ">Scheduled jobs</div>';
             if (!f || typeof f !== 'object') {
-                return '<div style=" font-size:0.85rem;">Scheduled jobs: nothing failing.</div>';
+                return head + '<div style=" font-size:0.85rem;">Nothing failing.</div>' + beats;
             }
             const rows = [];
             for (const job in f) {
@@ -1895,9 +1926,8 @@
                     (v.lastError ? '<div style=" font-size:0.82rem;">' + escapeHTML(v.lastError) + '</div>' : '') +
                     '</div>');
             }
-            if (!rows.length) return '<div style=" font-size:0.85rem;">Scheduled jobs: nothing failing.</div>';
-            return '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px; ">Scheduled jobs</div>' +
-                   rows.join('');
+            if (!rows.length) return head + '<div style=" font-size:0.85rem;">Nothing failing.</div>' + beats;
+            return head + rows.join('') + beats;
         }
 
         // ---------- security / walkouts written off ----------

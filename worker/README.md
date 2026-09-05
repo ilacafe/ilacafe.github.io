@@ -110,11 +110,41 @@ nothing wrong, and the hourly verification monitor — the thing that notices un
 web orders and raises the per-bank alarm — has simply stopped. It looks exactly
 like a quiet week.
 
-Nothing inside this Worker can detect its own absence. So each finished run pings
-a URL and something outside alerts when a ping fails to arrive on time.
+Nothing inside this Worker can detect its own absence, so the reader has to be
+somewhere else. There are two, and **the one that matters needs no setup at all.**
 
-Set it up with any of Healthchecks.io, Cronitor or Better Stack — all three have a
-free tier that covers two checks:
+### The one that already works
+
+Every run that finishes writes `ops/cronHeartbeat/{job}` with the time it
+finished — the robot already holds the credential and already writes
+`ops/cronFailure`, so this is the same node family and the same rule shape. Two
+things read it:
+
+- **`.github/workflows/cron-heartbeat.yml`**, every four hours, via
+  `tools/check-cron-heartbeat.js`. It goes red when `monitor` has not finished in
+  three hours or `recalibration` in 35 days, and the failure names the Triggers
+  tab as the first place to look. It authenticates with the
+  `FIREBASE_SERVICE_ACCOUNT` secret that `analytics-health.yml` already uses, so
+  there was nothing to configure.
+- **The Worker-health panel on `analytics.html`**, which now shows when each job
+  last finished and marks an overdue one, beside the failures it already listed.
+
+A job that has *never* reported is not treated as a failure by either. Never
+having run and having stopped are different states, and conflating them would
+mean the monthly refit looked broken for a month after this shipped.
+
+The windows live in two places on purpose — `WINDOW_MS` in the tool and
+`CRON_STALE_MS` in the page. If one moves, move both.
+
+### The optional one, for a phone
+
+The workflow goes red in the Actions tab, which is not a place anybody is
+looking at 3am. `HEARTBEAT_URL` adds an external dead man's switch that can page
+somebody. It is genuinely optional — unset, the Worker behaves exactly as it did
+before it existed, and the database heartbeat above still works.
+
+Any of Healthchecks.io, Cronitor or Better Stack; all three have a free tier that
+covers two checks:
 
 1. Create **two** checks, because the crons have very different periods:
    - `monitor` — expects a ping hourly (grace ~20 min)

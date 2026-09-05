@@ -144,6 +144,91 @@ function build(url, mode){
   note('this call sits inside waitUntil — unbounded, it would hold open the invocation it reports on');
 }
 
+// ---------------------------------------------------------------- the record that needs no setup
+//
+// The external ping is optional and does nothing until somebody configures it.
+// This one is what makes the switch work out of the box: the robot already holds
+// a credential and already writes ops/cronFailure, so a finished run records
+// itself in the same place, and a workflow and a panel read it from outside.
+{
+  function recorder(mode){
+    const calls = [];
+    const fetchStub = (url, opts) => {
+      calls.push({ url: String(url), method: opts && opts.method, body: opts && opts.body });
+      if (mode === 'throw') return Promise.reject(new Error('database unreachable'));
+      return Promise.resolve({ ok: true, status: 200 });
+    };
+    const api = buildModule(
+      ["let DB_URL = 'https://db.example';",
+       'async function getRobotToken(){ ' +
+         (mode === 'notoken' ? "throw new Error('no token'); " : "return 'tok'; ") + '}',
+       extractFunction(src, 'heartbeatRecord')],
+      { fetch: fetchStub, console, String, JSON, Date, encodeURIComponent },
+      ['heartbeatRecord']
+    );
+    return { api, calls };
+  }
+
+  const ok = recorder();
+  await ok.api.heartbeatRecord('monitor');
+  check('a finished job records itself under its own name',
+        ok.calls.length === 1 && ok.calls[0].url.startsWith('https://db.example/ops/cronHeartbeat/monitor.json'),
+        ok.calls[0] && ok.calls[0].url);
+  check('as a PUT, so it overwrites rather than accumulating',
+        ok.calls[0].method === 'PUT',
+        'a push() here would grow without bound and unbounded-reads would be right to object');
+
+  let parsed = null;
+  try { parsed = JSON.parse(ok.calls[0].body); } catch(e) {}
+  check('carrying when it finished', !!parsed && typeof parsed.at === 'number' && parsed.at > 0,
+        ok.calls[0].body);
+  check('and nothing else — a heartbeat is a timestamp, not a report',
+        !!parsed && Object.keys(parsed).length === 1, ok.calls[0].body);
+
+  // Same rule as the external ping: the monitor must never be what breaks the
+  // thing it monitors. A run that finished but could not say so looks stale to
+  // the workflow, which is the safe direction to be wrong in.
+  for (const [label, mode] of [['the database refuses it', 'throw'], ['the token cannot be got', 'notoken']]) {
+    const bad = recorder(mode);
+    let threw = null;
+    try { await bad.api.heartbeatRecord('monitor'); } catch(e){ threw = e; }
+    check('a run still succeeds when ' + label, threw === null, threw && threw.message);
+  }
+  note('a record that could not be written reads as overdue, never as a failed run');
+}
+
+// ---------------------------------------------------------------- the two readers agree on "overdue"
+//
+// The windows live in the tool and in the page. Two readers of one record
+// disagreeing about what counts as late would be its own small bug — the panel
+// calling a job healthy while the workflow pages somebody, or the reverse.
+{
+  const tool = readPage('tools/check-cron-heartbeat.js');
+  const page = readPage('analytics.html');
+
+  const winOf = (text, name) => {
+    const block = text.match(new RegExp(name + '\\s*=\\s*\\{([^}]*)\\}'));
+    if (!block) return null;
+    const out = {};
+    for (const m of block[1].matchAll(/(\w+)\s*:\s*([0-9*\s.]+?)\s*(?:,|$)/g)) {
+      try { out[m[1]] = Function('return (' + m[2] + ')')(); } catch(e) {}
+    }
+    return out;
+  };
+  const a = winOf(tool, 'WINDOW_MS');
+  const b = winOf(page, 'CRON_STALE_MS');
+
+  check('both readers declare a window for each job', !!a && !!b &&
+        Object.keys(a).sort().join(',') === Object.keys(b).sort().join(','),
+        JSON.stringify(a) + ' vs ' + JSON.stringify(b));
+  check('and the windows are the same', !!a && !!b &&
+        Object.keys(a).every(k => a[k] === b[k]),
+        JSON.stringify(a) + ' vs ' + JSON.stringify(b));
+  check('and they cover exactly the two scheduled jobs', !!a &&
+        Object.keys(a).sort().join(',') === 'monitor,recalibration', JSON.stringify(a));
+  note('the panel and the workflow read one record; they must not disagree about it');
+}
+
 // ---------------------------------------------------------------- it fires only after a run that finished
 //
 // The source half, because the placement is the whole design and no stub can see
@@ -161,6 +246,7 @@ function build(url, mode){
     const returnResultAt = text.lastIndexOf('return result;');
 
     check('the ping is in reportIfItThrows at all', pingAt > -1);
+    check('and so is the database record', /await\s+heartbeatRecord\(job\)/.test(text));
     check('and it is not inside the failure path', pingAt > text.indexOf('return { ran:false, threw:true'),
           'a ping from the catch reports a dead cron as healthy');
     check('and it is the last thing before the successful return',

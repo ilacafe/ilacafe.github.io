@@ -30,7 +30,16 @@
       }
     },
     "ops": {
-      "cronFailure": {
+      // Written by the robot at the end of every scheduled run that FINISHED, and
+    // read by .github/workflows/cron-heartbeat.yml and the Worker-health panel.
+    // cronFailure says which job is failing; this says which job has stopped
+    // running at all, which nothing could see before — a cron that never fires
+    // writes no failure, pushes nothing, and looks exactly like a quiet week.
+    "cronHeartbeat": {
+      ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+      ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+    },
+    "cronFailure": {
         ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
       },

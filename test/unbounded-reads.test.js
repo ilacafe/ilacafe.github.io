@@ -56,6 +56,7 @@ const BOUNDED = {
   'eta/modelPrevious':      'the model before the last refit — one object',
   'eta/recalMeta':          'the refit’s own record — one object',
   'ops/cronFailure':        'one key per scheduled job, overwritten in place',
+  'ops/cronHeartbeat':      'one key per scheduled job, overwritten in place',
   'ops/pushHealth':         'one object, overwritten in place',
   'inventory/config/items': 'the item catalogue',
   'inventory/stock':        'one key per catalogue item',

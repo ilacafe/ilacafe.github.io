@@ -825,11 +825,33 @@ const CRON_REPORT_GAP_MS = 20 * 3600 * 1000;
 // hourly and monthly, with very different periods — are two separate checks.
 const HEARTBEAT_TIMEOUT_MS = 5000;
 
+// The heartbeat that needs nothing set up: the robot already holds a credential
+// and already writes ops/cronFailure, so a finished run can record itself in the
+// same place. That record is what .github/workflows/cron-heartbeat.yml reads on a
+// schedule, and what the Worker-health panel on analytics.html shows.
+//
+// A row here is not proof the Worker is alive — it is a timestamp, and the whole
+// point is that it STOPS being written. Nothing in this Worker can raise an alarm
+// about its own silence; the reader has to be somewhere else, which is why there
+// is a workflow as well as a panel.
+async function heartbeatRecord(job){
+  try {
+    const token = await getRobotToken();
+    await fetch(DB_URL + '/ops/cronHeartbeat/' + encodeURIComponent(job) + '.json?auth=' + token,
+                { method:'PUT', body: JSON.stringify({ at: Date.now() }) });
+  } catch(e){
+    // A run that finished but could not say so is not a failed run. It will look
+    // stale to the workflow, which is the safe direction to be wrong in.
+    console.log('heartbeat ' + job + ': could not record the run: ' + ((e && e.message) || e));
+  }
+}
+
 async function heartbeat(job){
-  // An unset binding means no monitor is attached, and that must run exactly as
-  // this Worker ran before. Deliberately NOT the authOk treatment: a missing
-  // secret there would open a route, where a missing URL here only declines to
-  // send a ping nobody is listening for.
+  // An unset binding means no external monitor is attached, and that must run
+  // exactly as this Worker ran before. Deliberately NOT the authOk treatment: a
+  // missing secret there would open a route, where a missing URL here only
+  // declines to send a ping nobody is listening for. The database record above
+  // happens either way, so the switch works with nothing configured at all.
   if (typeof HEARTBEAT_URL !== 'string' || !HEARTBEAT_URL) return;
 
   let url;
@@ -911,10 +933,11 @@ async function reportIfItThrows(job, promise){
                 { method:'DELETE' });
   } catch(inner){ /* a clean run that could not clear its flag is not worth failing over */ }
 
-  // Only on the way out of a run that finished. A ping sent before the work, or
-  // sent from the catch above, would report that the Worker is alive while saying
-  // nothing about whether the job did anything — which is the failure this is
-  // supposed to catch, wearing a green tick.
+  // Only on the way out of a run that finished. A record written before the work,
+  // or from the catch above, would say the Worker is alive while saying nothing
+  // about whether the job did anything — which is the failure this is supposed to
+  // catch, wearing a green tick.
+  await heartbeatRecord(job);
   await heartbeat(job);
   return result;
 }
