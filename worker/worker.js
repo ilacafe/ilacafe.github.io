@@ -393,11 +393,43 @@ const RECAL_BOUNDS = {
   ovenMax: [0, 35], satMax: [0, 40], cushion: [0, 15], margin: [0, 15]
 };
 
-// pizza/baked keyword sets (mirror the app engine)
-const RC_PIZZA = ["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"];
+// What counts as a pizza. The live answer is eta/model.pizzaKeys — the same list
+// pos.html and index.html classify by — and this literal is now only what is used
+// when that read gives nothing usable.
+//
+// It was a second, independent list, and the two had to agree with nothing checking
+// that they did. The Worker's copy is the one that fails silently. Put a pizza on
+// the menu whose name matches neither list — Diavola, Truffle & Honey — and the till
+// quotes the wrong prep time, which somebody notices; here the order simply stops
+// contributing to pizzaBase and stops counting toward RECAL_MIN_N.pizzaBaseAll, so a
+// refit declines for want of volume that is sitting in the data. Nothing throws and
+// the health panel says nothing: it looks like a quiet quarter.
+//
+// Keeping the literal as a fallback rather than deleting it is deliberate. A refit
+// that cannot read the model must not silently classify nothing as a pizza — that is
+// the same silent failure with the numbers moved.
+const RC_PIZZA_FALLBACK = ["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"];
 const RC_BAKED = ["cake","bread","banana"];
 
-function rcIsPizza(name){ const n=(name||'').toLowerCase(); return RC_PIZZA.some(k=>n.includes(k)); }
+// Set once per refit, by rcDerive, before it reads anything. Module state because
+// rcIsPizza is reached from four functions inside one derivation and threading a
+// parameter through each buys nothing: rcDerive is the only entry point. The same
+// shape as the robot token and JWKS caches above, and safe for the same reason —
+// a warm isolate carrying the previous run's value is overwritten before use.
+let _rcPizzaKeys = RC_PIZZA_FALLBACK;
+
+// Returns which list it settled on, so the caller can report it rather than absorb
+// it. A refit running on the fallback is not an error, but it is a fact about how
+// the numbers below were derived, and it is invisible everywhere else.
+function rcUsePizzaKeys(keys){
+  const clean = Array.isArray(keys)
+    ? keys.filter(k => typeof k === 'string' && k.trim()).map(k => k.trim().toLowerCase())
+    : [];
+  _rcPizzaKeys = clean.length ? clean : RC_PIZZA_FALLBACK;
+  return clean.length ? 'model' : 'fallback';
+}
+
+function rcIsPizza(name){ const n=(name||'').toLowerCase(); return _rcPizzaKeys.some(k=>n.includes(k)); }
 function rcIsBaked(name){ const n=(name||'').toLowerCase(); return RC_BAKED.some(k=>n.includes(k)); }
 function rcQty(it){ const q=parseInt(it&&it.qty); return isNaN(q)?1:q; }
 
@@ -521,7 +553,10 @@ function rcIsDessertAfterFood(o, orders){
 }
 
 // ---- the full derivation: returns a proposed model (same shape as eta/model) ----
-function rcDerive(orders){
+function rcDerive(orders, pizzaKeys){
+  // Before anything is classified: the whole derivation below asks "is this a pizza"
+  // through rcIsPizza, so the list has to be settled first.
+  const pizzaKeySource = rcUsePizzaKeys(pizzaKeys);
   rcAttachLoad(orders);
   rcAttachOvenIdle(orders);
   const idleOf = new Map(orders.map(o=>[o, o.idle]));
@@ -701,6 +736,7 @@ function rcDerive(orders){
       pizzaHot: pizzaHotClean.length,
       items: Object.keys(itemBase).length
     },
+    pizzaKeySource,
     notes
   };
 }
@@ -862,7 +898,9 @@ async function runRecalibration(dryRun){
   const current = curRes.ok ? (await curRes.json()) : null;
   if(!current){ return { ran:false, reason:'no current eta/model to compare against' }; }
 
-  const { derived, counts, notes } = rcDerive(orders);
+  // Classify by the list the pages classify by. `current` is the live eta/model,
+  // fetched above, and pizzaKeys is the field pos.html and index.html read.
+  const { derived, counts, pizzaKeySource } = rcDerive(orders, current.pizzaKeys);
   const gate = rcCheckGates(current, derived, counts);
 
   const summary = {
@@ -877,6 +915,10 @@ async function runRecalibration(dryRun){
     // sample sizes, and a sample silently smaller than the window is the one thing they
     // cannot tell from a quiet quarter.
     windowTruncated: !!orders.truncated,
+    // 'model' = classified by eta/model.pizzaKeys, the same list the till uses.
+    // 'fallback' = that field was missing or unusable and this ran on the literal in
+    // this file, which is a thing to know before trusting pizzaBase below.
+    pizzaKeySource,
     pizzaBase: derived.pizzaBase,
     cushionDrink: derived.cushionDrinkByLoad,
     cushionPizza: derived.cushionPizzaByOven,
