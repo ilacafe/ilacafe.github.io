@@ -20,6 +20,7 @@
 let VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, FIREBASE_PROJECT;
 let INGEST_SECRET, RECAL_SECRET;
 let ROBOT_EMAIL, ROBOT_PASSWORD, FIREBASE_API_KEY, DB_URL, EMAIL_FORWARD_TO;
+let HEARTBEAT_URL;
 
 function loadConfig(env){
   env = env || {};
@@ -37,6 +38,9 @@ function loadConfig(env){
   VAPID_SUBJECT    = env.VAPID_SUBJECT;
   ROBOT_EMAIL      = env.ROBOT_EMAIL;
   EMAIL_FORWARD_TO = env.EMAIL_FORWARD_TO;
+  // Where a finished cron says so. Optional: unset means nothing is watching,
+  // which is the state this Worker ran in until it was added.
+  HEARTBEAT_URL    = env.HEARTBEAT_URL;
 }
 
 // Fail closed on a missing binding. Without this an unset secret makes the
@@ -802,6 +806,59 @@ function rcCheckGates(current, derived, counts){
 // quiet.
 const CRON_REPORT_GAP_MS = 20 * 3600 * 1000;
 
+// ---- the dead man's switch -------------------------------------------------
+// reportIfItThrows catches a cron that THROWS. Nothing caught a cron that stops
+// FIRING, and there are several ways for that to happen. `wrangler deploy` makes
+// the cron list in wrangler.toml authoritative, so a schedule missing from that
+// file is silently removed — the file says so itself. A Worker that is suspended,
+// over quota or replaced by a bad deploy runs nothing at all.
+//
+// In every one of those cases ops/cronFailure stays empty, no push goes out, the
+// Worker-health panel on analytics.html reports nothing wrong, and the hourly
+// monitor — the thing that notices unpaid web orders and raises the per-bank
+// alarm — has simply stopped. It is indistinguishable from a quiet week, which is
+// the most expensive kind of silence in this project.
+//
+// Nothing here can detect its own absence. Only something that is not here can:
+// each finished run pings a URL, and the service on the other end alerts when a
+// ping does not arrive on time. The job name is appended, so the two crons —
+// hourly and monthly, with very different periods — are two separate checks.
+const HEARTBEAT_TIMEOUT_MS = 5000;
+
+async function heartbeat(job){
+  // An unset binding means no monitor is attached, and that must run exactly as
+  // this Worker ran before. Deliberately NOT the authOk treatment: a missing
+  // secret there would open a route, where a missing URL here only declines to
+  // send a ping nobody is listening for.
+  if (typeof HEARTBEAT_URL !== 'string' || !HEARTBEAT_URL) return;
+
+  let url;
+  try {
+    url = new URL(HEARTBEAT_URL.replace(/\/+$/, '') + '/' + encodeURIComponent(job));
+  } catch(e){
+    console.log('heartbeat: HEARTBEAT_URL is not a URL, no ping sent');
+    return;
+  }
+  // The binding is set by hand and this Worker will POST to whatever it says, so
+  // it does not get to be http, and it does not get to be a path on the database.
+  if (url.protocol !== 'https:'){
+    console.log('heartbeat: refusing a non-https HEARTBEAT_URL');
+    return;
+  }
+
+  try {
+    // Bounded on purpose. A connection that is made and then goes nowhere is the
+    // failure this codebase knows best, and this call sits inside waitUntil — an
+    // unbounded fetch would hold open the very invocation it exists to report on.
+    await fetch(url.toString(), { method: 'POST', signal: AbortSignal.timeout(HEARTBEAT_TIMEOUT_MS) });
+  } catch(e){
+    // There is nothing to escalate. A ping that did not arrive is precisely what
+    // the monitor on the other end is for, and this must never turn a job that
+    // succeeded into one that reports a failure.
+    console.log('heartbeat ' + job + ' did not send: ' + ((e && e.message) || e));
+  }
+}
+
 async function reportIfItThrows(job, promise){
   let result;
   try {
@@ -853,6 +910,12 @@ async function reportIfItThrows(job, promise){
     await fetch(DB_URL + '/ops/cronFailure/' + encodeURIComponent(job) + '.json?auth=' + token,
                 { method:'DELETE' });
   } catch(inner){ /* a clean run that could not clear its flag is not worth failing over */ }
+
+  // Only on the way out of a run that finished. A ping sent before the work, or
+  // sent from the catch above, would report that the Worker is alive while saying
+  // nothing about whether the job did anything — which is the failure this is
+  // supposed to catch, wearing a green tick.
+  await heartbeat(job);
   return result;
 }
 

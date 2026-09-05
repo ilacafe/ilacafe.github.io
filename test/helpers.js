@@ -193,6 +193,18 @@ function stripComments(text) {
 function suite(title) {
   let pass = 0, fail = 0;
   console.log('\n\x1b[1m' + title + '\x1b[0m\n');
+  // Failing until proven otherwise. run.js judges a suite by its exit status and
+  // nothing else, and done() is what sets that — so a suite that ENDS EARLY was
+  // counted as a pass. Node exits 0 when the event loop drains, which it does the
+  // moment a suite awaits something that will never settle: an unref'd timer, an
+  // AbortSignal.timeout with nothing holding the loop open, a promise from a stub
+  // that forgot to resolve. The output simply stops, mid-list, and the runner
+  // prints "all suites passed".
+  //
+  // Found by writing exactly that: test/heartbeat.test.js awaited a hung fetch
+  // whose only wake-up was AbortSignal.timeout(), which does not hold the loop
+  // open. Half the checks never ran and the suite reported success.
+  process.exitCode = 1;
   return {
     check(name, ok, detail) {
       if (ok) { pass++; console.log('  \x1b[32mPASS\x1b[0m ' + name); }

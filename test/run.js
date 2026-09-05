@@ -21,6 +21,7 @@ const suites = [
   'rules.test.js',
   'worker.test.js',
   'pizza-keys.test.js',
+  'heartbeat.test.js',
   'cashout.test.js',
   'table-index-prune.test.js',
   'analytics-range.test.js',

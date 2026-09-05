@@ -92,9 +92,57 @@ Set each of these once, with `npx wrangler secret put <NAME>`:
 | `ROBOT_EMAIL` | `robot@cafeila.app` — the account `database.rules.json` grants write access. |
 | `VAPID_SUBJECT` | `mailto:` contact for VAPID. |
 | `EMAIL_FORWARD_TO` | A verified Email Routing destination; every bank email is forwarded there after processing. |
+| `HEARTBEAT_URL` | **Optional.** Base URL of a dead man's switch. Each finished cron POSTs to `<base>/<job>`. Unset means nothing is watching. |
 
 The last three are addresses rather than secrets, but they are personal, so they
 stay out of the repo on the same principle.
+
+## The dead man's switch
+
+`reportIfItThrows` catches a cron that **throws**. Nothing caught a cron that
+stops **firing**, and that is the more expensive failure.
+
+A schedule missing from `wrangler.toml` is removed on the next deploy — this file
+warns about it two sections up. A Worker that is suspended, over quota, or
+replaced by a bad deploy runs nothing at all. In each case `ops/cronFailure` stays
+empty, no push goes out, the Worker-health panel on `analytics.html` reports
+nothing wrong, and the hourly verification monitor — the thing that notices unpaid
+web orders and raises the per-bank alarm — has simply stopped. It looks exactly
+like a quiet week.
+
+Nothing inside this Worker can detect its own absence. So each finished run pings
+a URL and something outside alerts when a ping fails to arrive on time.
+
+Set it up with any of Healthchecks.io, Cronitor or Better Stack — all three have a
+free tier that covers two checks:
+
+1. Create **two** checks, because the crons have very different periods:
+   - `monitor` — expects a ping hourly (grace ~20 min)
+   - `recalibration` — expects a ping monthly (grace a day or so)
+
+   The job name is appended to the base URL as a path segment, so the check slugs
+   must be exactly `monitor` and `recalibration` — those are the strings
+   `scheduled()` passes to `reportIfItThrows`.
+
+2. `npx wrangler secret put HEARTBEAT_URL` with the base, no trailing job name.
+   On Healthchecks.io that is your ping key URL, e.g. `https://hc-ping.com/<ping-key>`,
+   which makes the two pings `.../monitor` and `.../recalibration`.
+
+**It cannot fail a job.** The ping is sent after the work finishes, is bounded at
+five seconds, and every error it can raise is swallowed and logged. A ping that
+does not arrive is what the monitor is for; it is not something this Worker
+escalates.
+
+**It only fires on success**, deliberately. A ping sent before the work — or from
+the failure path — would report that the Worker is alive while saying nothing
+about whether the job did anything, which is the failure being watched for wearing
+a green tick.
+
+The binding is optional and unset is not an error: the Worker runs exactly as it
+did before this existed. That is the opposite of `authOk`'s treatment of a missing
+secret, and for the opposite reason — a missing secret there would open a route,
+where a missing URL here only declines to send a ping nobody is listening for.
+Non-`https` is refused, since this POSTs to whatever the binding says.
 
 `SHARED_SECRET` is **retired**. It authorised the push relay and was a literal in
 four public pages, so anyone who viewed source could send any notification they
