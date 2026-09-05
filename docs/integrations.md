@@ -456,11 +456,30 @@ importantly — it is *auditable*: when the quoted wait moves from 25 minutes to
 `rcCheckGates` catches for one whose failures are a plausible number on a
 customer's phone.
 
-**Improve it with data instead.** The Worker's refit does not use the weather at
-all. The rain signal exists only client-side, in `analytics.html`'s demand map,
-where `learnWeather` fits a per-station multiplier that nothing else ever sees.
-Folding it into `rcDerive` is a real accuracy gain, costs nothing per month, and
-is ordinary code.
+**On improving it with weather — a correction.** An earlier draft of this file
+said the refit should fold in the rain signal, and called it a real accuracy
+gain. That was wrong twice over, and the mistake is instructive enough to keep
+rather than quietly delete.
+
+`learnWeather` fits a **demand** multiplier: orders per day against what the
+demand model predicted. `rcDerive` fits **wait times**. Rain changing how many
+orders arrive is not rain changing how long a pizza takes, and the saturation
+curve already carries "a busy kitchen is slower". So the gain was asserted, not
+reasoned.
+
+The second error was in the mechanics. The demand model is not stored anywhere —
+`fitModel` runs in the browser on every analytics page load — so moving
+`learnWeather` server-side means porting `fitModel`, `predictDay` and
+`dailyTotals` too, and standing up a second demand model in the Worker that has
+to agree with the page's. That is the same defect as the pizza list below, built
+deliberately.
+
+What is true is narrower: a multiplier fitted over months lives for one page
+load in one browser, and nothing else can use it. That is worth fixing **when
+something wants to read it** — the daily digest is the likely first customer —
+and the shape should be decided by what that reader needs. Building the
+publisher first fails `test/write-only.test.js`, which exists to catch exactly
+this, and inventing a reader to get past that test is the tell.
 
 **Anything in the money path.** Matching a credit to a bill, deciding whether an
 order is paid, releasing food to be cooked. The design is *"nothing is made
@@ -473,43 +492,45 @@ than speech in a room with a grinder in it.
 
 ### The AI-shaped problem whose answer is a data field
 
-Worth its own section, because it is the clearest example of the trap.
+Worth its own section, because it is the clearest example of the trap. **Half of
+this has since been fixed** — the description is kept because the reasoning is
+the point, and the remaining half is still worth doing.
 
-`worker.js` decides what counts as a pizza by substring:
+`worker.js` decided what counts as a pizza by substring, against a literal of
+its own, in **eight places** across the refit: the oven-idle attach, the
+`pizzaBase` coefficient, and the `pizzaBaseAll: 120` volume gate that decides
+whether a refit is attempted at all. Meanwhile `pos.html` and `index.html` asked
+the same question of `eta/model.pizzaKeys` — a list in the database, editable
+from `admin.html`, which the Worker neither read nor wrote.
 
-```js
-const RC_PIZZA = ["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"];
-function rcIsPizza(name){ return RC_PIZZA.some(k => (name||'').toLowerCase().includes(k)); }
-```
-
-That function is used in **eight places** across the refit. It drives the
-oven-idle attach, the `pizzaBase` coefficient, and the `pizzaBaseAll: 120`
-volume gate that decides whether a refit is attempted at all.
-
-Meanwhile `pos.html` and `index.html` ask the same question a different way:
-
-```js
-function isPizza(name){ return window.etaModel.pizzaKeys.some(k => lc(name).includes(k)); }
-```
-
-`pizzaKeys` lives in `eta/model` — in the database, editable — and the Worker
-neither reads nor writes it. So there are **two pizza definitions that have to
-agree and nothing checks that they do**, and the Worker's is a literal in the
-component that produces the model the pages read.
+Two pizza definitions that had to agree, with nothing checking that they did, and
+the authoritative one was a literal inside the component that produces the model
+the pages read.
 
 Put a new pizza on the menu — *Diavola*, *Truffle & Honey* — and neither list
-matches it. The till's failure is visible: it quotes the wrong prep time and
-somebody notices. The refit's failure is not: that order stops contributing to
-`pizzaBase`, stops counting toward the 120-order minimum, and a refit declines
-for want of volume that is sitting in the data. Nothing throws. The
-Worker-health panel says nothing. It looks like a quiet quarter.
+matched it. The till's failure was visible: it quoted the wrong prep time and
+somebody noticed. The refit's failure was not — that order stopped contributing
+to `pizzaBase`, stopped counting toward the 120-order minimum, and a refit
+declined for want of volume that was sitting in the data. Nothing threw. The
+Worker-health panel said nothing. It looked like a quiet quarter.
 
-The temptation is to classify with a model. **The right answer is a field.** The
-menu item already carries `routing` (chef or barista), set in `admin.html` and
-stored. Add `prepClass` beside it, have the Worker read the menu instead of
-guessing from the name, and delete both keyword lists. As an interim fix, a test
-that `RC_PIZZA` and `eta/model.pizzaKeys` agree costs ten minutes and turns a
-silent divergence into a failing build.
+**What shipped.** `rcDerive` now takes the list and settles it before the
+derivation asks anything, and the one call site passes `current.pizzaKeys` — the
+live model, which was already being fetched a few lines above. The literal
+survives as a fallback rather than being deleted, because a refit that cannot
+read the model must not classify *nothing* as a pizza: that is the same silent
+failure with the numbers moved. Which list was used is reported in the refit
+summary, so `recalibrate-dryrun` says whether it read the model or the file.
+`test/pizza-keys.test.js` drives the classifier and then checks the wiring,
+because both ways of undoing it — dropping the argument, or pointing `rcIsPizza`
+back at the literal — are silent.
+
+**What has not shipped, and is still the better end state.** One list is not the
+same as one source of truth. `pizzaKeys` is a keyword list, and a keyword list
+is still a guess about a name. The menu item already carries `routing` (chef or
+barista), set in `admin.html` and stored; `prepClass` belongs beside it, read
+from the menu rather than inferred, with both keyword lists then deleted. The
+temptation is to classify with a model. **The right answer is a field.**
 
 Where a model genuinely helps: a **one-off** pass proposing `prepClass` for
 every existing item, presented in `admin.html` for the owner to correct before
