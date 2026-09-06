@@ -345,6 +345,37 @@ window its cap cut short rather than quietly refitting on less evidence than it 
 it has. `test/unbounded-reads.test.js` sweeps the Worker alongside the seven pages and
 fails on a whole-node read nobody has classified.
 
+## The one ops node a browser writes
+
+`ops/cronFailure`, `ops/pushHealth` and `ops/cronHeartbeat` are the robot's, and the
+rules name that address explicitly on each. `ops/clientErrors` is the exception and is
+worth reading the rule for, because it is the only place a till writes into `ops` at
+all: `connection.js` puts an uncaught fault there so that the pages stop failing
+silently, and a page's write is authorised by having a staff role rather than by
+holding the robot credential.
+
+Two things bound what that opens up.
+
+**An anonymous session cannot write it.** The ordering page runs the same reporter and
+skips a customer on its own, but the rule says so as well — `root.child('users')` has
+no entry for an anonymous uid, so the write is refused whatever the page does. That
+makes the customer page a real gap in the reporting, and it is the deliberate half of
+the trade: collecting from a stranger's browser would mean a node the world can write
+to on the database that holds the café's takings. The Worker is the way to close it if
+that is ever wanted.
+
+**The shape is fixed and every string is bounded**, so a staff account cannot use it as
+free storage: `$other` is refused, `message` caps at 300 characters, and the key is a
+signature rather than a push id, so a fault that happens a thousand times is one row
+with a count on it. The Worker prunes anything not seen for a fortnight
+(`pruneClientErrors`), on the same argument as the table index — these are diagnostics
+rather than records, and a fault still occurring rewrites its row and comes back.
+
+`test/rules-emulator.test.js` asserts all of this by hand rather than deriving it. The
+access map reads the seven pages, and this write lives in a shared script, so nothing
+derived would notice a rule that refused it — and a reporter whose write is denied
+reports nothing and looks exactly like a fortnight with no faults.
+
 ## The staff PIN, and what it now authorises
 
 `staff` maps `SHA-256(fixed salt + PIN) → name`, the salt is a literal in the page

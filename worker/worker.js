@@ -881,7 +881,10 @@ async function heartbeat(job){
   }
 }
 
-async function reportIfItThrows(job, promise){
+// `isScheduled` says whether this job is one of the crons. It is the caller's to
+// declare rather than something guessed from the name, because a name is not a
+// schedule and the next non-cron caller would inherit the wrong answer silently.
+async function reportIfItThrows(job, promise, isScheduled){
   let result;
   try {
     result = await promise;
@@ -937,8 +940,20 @@ async function reportIfItThrows(job, promise){
   // or from the catch above, would say the Worker is alive while saying nothing
   // about whether the job did anything — which is the failure this is supposed to
   // catch, wearing a green tick.
-  await heartbeatRecord(job);
-  await heartbeat(job);
+  //
+  // ONLY FOR A SCHEDULED JOB, THOUGH. A heartbeat answers "did the thing that runs
+  // on a timer run?", and that question is meaningless for work that happens when
+  // something arrives. The bank-credit ingest reports failures through here too, and
+  // it is triggered by an email: it was writing a heartbeat row and pinging the
+  // external monitor with a job name that is not on any schedule, on every credit.
+  // Nothing broke — check-cron-heartbeat.js reads a fixed list of jobs, so it could
+  // not false-alarm — but it put two more sequential round trips on the path a
+  // payment arrives down, and sent an unasked-for check name to whatever service is
+  // on the other end of HEARTBEAT_URL.
+  if (isScheduled){
+    await heartbeatRecord(job);
+    await heartbeat(job);
+  }
   return result;
 }
 
@@ -1372,6 +1387,10 @@ async function runVerificationMonitor(nowMs, isWeekly){
   // couple of hours, and one that accumulates hands out every trackId in the café
   // eventually. Its own try/catch, because nothing below should fail for it.
   try { await pruneTableIndex(token); } catch (e) { console.error('prune tableIndex', e); }
+  // Same argument, different node: the tills' fault reports are diagnostics, not
+  // records, and a fault nobody has seen for a fortnight is not what anybody opens
+  // that panel to read.
+  try { await pruneClientErrors(token); } catch (e) { console.error('prune clientErrors', e); }
   // Also housekeeping, also on its own: this one moves an audit record, so a failure
   // here must never take the payment alerts below down with it.
   try { await settleLateVerifications(token); } catch (e) { console.error('late verifications', e); }
@@ -1764,6 +1783,56 @@ async function pruneTableIndex(token){
   return { pruned: pruned };
 }
 
+// ============================================================================
+//  THE TILLS' FAULT REPORTS, KEPT SHORT
+// ============================================================================
+// connection.js writes ops/clientErrors when a page throws something nobody caught.
+// The key is a signature — page, message, where it came from — so a fault that
+// happens a thousand times is one row with a count on it, and the node is as long as
+// the number of DISTINCT things going wrong.
+//
+// That is nearly bounded and not quite: a message can carry variable text in it (a
+// database refusal names its own path, and a path can hold an id), and every variant
+// is its own signature. Left alone that accumulates, slowly, forever — which is the
+// shape this project has been caught by twice.
+//
+// So it is pruned rather than argued about. These are diagnostics, not records:
+// nothing downstream reads them, an old one has already been fixed or is no longer
+// happening, and losing it costs a line on a panel nobody was looking at. A fault
+// still occurring rewrites its own row on the next occurrence and comes straight
+// back, which is the property that makes this safe to delete from at all.
+const CLIENT_ERR_KEEP_MS = 14 * 24 * 60 * 60000;
+
+async function pruneClientErrors(token){
+  let all;
+  try {
+    const res = await fetch(DB_URL + '/ops/clientErrors.json?auth=' + token);
+    if (!res.ok) return { pruned: 0 };
+    all = await res.json();
+  } catch (e) { return { pruned: 0 }; }
+  if (!all || typeof all !== 'object') return { pruned: 0 };
+
+  const cutoff = Date.now() - CLIENT_ERR_KEEP_MS;
+  const updates = {};
+  let pruned = 0;
+  for (const sig in all) {
+    const row = all[sig];
+    const at = Number(row && row.lastAt);
+    // A row with no readable timestamp is left alone rather than guessed at — the
+    // same rule the table index prune follows, for the same reason.
+    if (!isFinite(at) || at <= 0 || at >= cutoff) continue;
+    updates['ops/clientErrors/' + sig] = null;
+    pruned++;
+  }
+  if (!pruned) return { pruned: 0 };
+  try {
+    await fetch(DB_URL + '/.json?auth=' + token, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates)
+    });
+  } catch (e) { return { pruned: 0 }; }
+  return { pruned: pruned };
+}
+
 export default {
   async fetch(request, env){
     loadConfig(env);
@@ -1887,11 +1956,11 @@ export default {
     const cron = event && event.cron ? event.cron : '';
     const now = Date.now();
     if (cron === '0 20 1 * *'){
-      ctx.waitUntil(reportIfItThrows('recalibration', runRecalibration(false)));
+      ctx.waitUntil(reportIfItThrows('recalibration', runRecalibration(false), true));
     } else {
       const isMonday = new Date(now).getUTCDay() === 1;   // digest once a week on Monday ticks
       const isWeeklySlot = isMonday && new Date(now).getUTCHours() === 4;   // ~one tick/week (04:00 UTC Mon)
-      ctx.waitUntil(reportIfItThrows('monitor', runVerificationMonitor(now, isWeeklySlot)));
+      ctx.waitUntil(reportIfItThrows('monitor', runVerificationMonitor(now, isWeeklySlot), true));
     }
   },
 

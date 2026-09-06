@@ -480,6 +480,11 @@
                 <div class="sub">Refitted from what the kitchen actually did, on the 1st of each month.</div>
                 <div id="recal-summary" style="margin-top:10px; font-size:0.95rem;">Loading…</div>
                 <div id="cron-health" style="margin-top:12px;"></div>
+                <!-- The tills' own faults. The Worker has had somewhere to report a
+                     throw for a long time; the seven pages had nowhere at all, and
+                     every one of them runs on a device with no console open. See
+                     connection.js. -->
+                <div id="client-errors" style="margin-top:12px;"></div>
                 <!-- The refit snapshots the outgoing model to eta/modelPrevious before
                      it writes a new one. Putting it back was a documented trip to the
                      Firebase console; this is that, with the two numbers that differ
@@ -716,7 +721,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-05.1"></script>
+    <script src="/build-check.js" data-build="2026-09-06.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -757,6 +762,12 @@
             appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
         };
         firebase.initializeApp(firebaseConfig);
+        // The shared service worker: push, and the cache that makes an open instant.
+        // This page went without one for as long as it existed, so every open fetched it
+        // whole from the network. GitHub Pages sends a ten-minute HTTP cache (see sw.js),
+        // which is exactly why reopening straight away felt quick and reopening later did
+        // not — inside ten minutes the browser answered, and after it nothing did.
+        if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.js').catch(function(){}); } catch(e){} }
         const db = firebase.database();
         const auth = firebase.auth();
 
@@ -846,6 +857,7 @@
         let RECAL = null;    // eta/recalMeta — what the last monthly refit did
         let CRONFAIL = null; // ops/cronFailure — scheduled jobs that are failing now
         let CRONBEAT = null; // ops/cronHeartbeat — when each scheduled job last finished
+        let CLIENTERR = null; // ops/clientErrors — uncaught faults on the pages themselves
         let UNPAID = {};     // security/unpaid — bills written off unpaid at cash-up
         let UNPAID_ROWS = [];
         let RANGE = null;    // {start, end, key, label}
@@ -922,6 +934,7 @@
             db.ref('eta/modelPrevious').on('value', s => { MODELPREV = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/modelPrevious"));
             db.ref('ops/cronFailure').on('value', s => { CRONFAIL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused("ops/cronFailure"));
             db.ref('ops/cronHeartbeat').on('value', s => { CRONBEAT = s.val()||null; renderWorkerHealth(); }, window.ilaRefused("ops/cronHeartbeat"));
+            db.ref('ops/clientErrors').on('value', s => { CLIENTERR = s.val()||null; renderWorkerHealth(); }, window.ilaRefused("ops/clientErrors"));
             // FIVE NUMBERS A DAY, NOT A DAY'S WHOLE LEDGER
             //
             // This read used to be pos/eodArchive. Each archive carries that day's entire
@@ -1737,11 +1750,54 @@
             return Math.round(hrs / 24) + ' days ago';
         }
 
+        // WHAT WENT WRONG ON A TILL, WHICH USED TO GO NOWHERE.
+        //
+        // connection.js writes ops/clientErrors when a page throws something nobody
+        // caught, or rejects a promise nobody was holding. The node is keyed by a
+        // signature rather than appended to, so its length is the number of DISTINCT
+        // faults rather than how many times they have happened — which is why it can be
+        // read whole and why a count beside each line is the useful number.
+        //
+        // Newest first, and capped at what a person will actually read. The count and
+        // the build are both here on purpose: "83 times, on the build from Tuesday" is a
+        // different thing to go and look at than "once, on today's".
+        const CLIENT_ERR_SHOWN = 8;
+        function clientErrorLine(){
+            const e = CLIENTERR;
+            if (!e || typeof e !== 'object'){
+                return '<div style="font-size:0.85rem;">Tills: nothing has reported a fault.</div>';
+            }
+            const rows = Object.keys(e).map(k => e[k]).filter(Boolean)
+                .sort((a, b) => (Number(b.lastAt) || 0) - (Number(a.lastAt) || 0));
+            if (!rows.length){
+                return '<div style="font-size:0.85rem;">Tills: nothing has reported a fault.</div>';
+            }
+            const out = rows.slice(0, CLIENT_ERR_SHOWN).map(r => {
+                const n = Number(r.count) || 1;
+                const when = Number(r.lastAt) ? agoText(Number(r.lastAt)) : 'at some point';
+                return '<div style="color:#ff9d9d; font-size:0.9rem; margin-top:4px;">'
+                     + '<strong>' + escapeHTML(String(r.page || 'a page')) + '</strong> '
+                     + escapeHTML(String(r.message || '')) 
+                     + '<div style="font-size:0.82rem;">'
+                     + escapeHTML(n) + (n === 1 ? ' time, ' : ' times, ') + escapeHTML(when)
+                     + (r.build ? ' \u00b7 build ' + escapeHTML(String(r.build)) : '')
+                     + (r.source ? ' \u00b7 ' + escapeHTML(String(r.source)) : '')
+                     + '</div></div>';
+            }).join('');
+            const more = rows.length > CLIENT_ERR_SHOWN
+                ? '<div style="font-size:0.8rem; margin-top:4px;">and ' + (rows.length - CLIENT_ERR_SHOWN) + ' more</div>'
+                : '';
+            return '<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:1px;">Faults on the tills</div>'
+                 + out + more;
+        }
+
         function renderWorkerHealth(){
             const el = document.getElementById('recal-summary');
             if (el) el.innerHTML = recalLine();
             const ch = document.getElementById('cron-health');
             if (ch) ch.innerHTML = cronLine();
+            const ce = document.getElementById('client-errors');
+            if (ce) ce.innerHTML = clientErrorLine();
             const mr = document.getElementById('model-restore');
             if (mr) renderRestore(mr);
         }

@@ -111,6 +111,15 @@ const KEY_FOR = {
 };
 
 const SAMPLES = {
+  // A fault on a till, as connection.js reports one. The node carries a shape, so the
+  // derived Worker check needs a body that satisfies it — the robot's real traffic
+  // here is a DELETE (pruneClientErrors), and a delete skips validation entirely.
+  'ops/clientErrors/$key': {
+    page: 'pos_html', kind: 'error', message: 'x is not a function',
+    source: 'pos.html:4102', build: '2026-09-05.1', count: 3,
+    firstAt: 1756200000000, lastAt: 1756200600000
+  },
+
   // A closed day's takings, summed once and kept, so a long range no longer means
   // downloading every order behind it. Written by analytics; read by nobody else.
   'orders/daily/$key': {
@@ -371,6 +380,7 @@ const SAMPLES = {
       'pushSubscriptions':   ['admin', 'robot'],
       'ops/cronFailure':     ['admin', 'robot'],
       'ops/pushHealth':      ['admin', 'robot'],
+      'ops/clientErrors':    ['admin', 'robot'],
       'eta/recalMeta':       ['admin', 'robot'],
       'eta/modelPrevious':   ['admin', 'robot'],
     };
@@ -550,6 +560,7 @@ const SAMPLES = {
     // What admin.html and analytics.html show, and nobody else needs.
     const OWNERS_ALONE = ['pos/eodArchive', 'orders/history', 'security/voids', 'security/unpaid',
                           'reconciliation', 'monitor', 'ops/cronFailure', 'ops/pushHealth',
+                          'ops/clientErrors',
                           'eta/recalMeta', 'eta/modelPrevious', 'pushSubscriptions',
                           'upiRouting/totals', 'users'];
     const reachable = [];
@@ -608,6 +619,26 @@ const SAMPLES = {
           (await canWrite('ops/cronFailure/monitor', 'robot')) &&
           !(await canWrite('ops/cronFailure/other', 'admin')));
     note('no browser holds that credential, and nothing in a page can obtain it');
+
+    // ops/clientErrors is the one ops node a BROWSER writes — connection.js puts an
+    // uncaught fault there so the tills stop failing silently. It is asserted here by
+    // hand because the access map cannot see it: derivePaths reads the seven pages and
+    // this write lives in a shared script, so nothing else in this suite would notice
+    // a rule that refuses it. A reporter whose write is denied is a reporter that
+    // reports nothing, and it would look exactly like a fortnight with no faults.
+    const ERR = { page: 'pos_html', kind: 'error', message: 'x is not a function' };
+    check('a till can report a fault it could not otherwise tell anyone about',
+          (await canWrite('ops/clientErrors/pos_html-a1', 'cashier', ERR)) &&
+          (await canWrite('ops/clientErrors/chef_html-b2', 'chef', ERR)));
+    check('and the robot can prune one that has not been seen for a fortnight',
+          await canWrite('ops/clientErrors/pos_html-a1', 'robot', ERR));
+    // The customer page runs the same reporter, and connection.js skips an anonymous
+    // session on purpose: collecting from a stranger's browser would mean a node the
+    // world can write to, on the database that holds the café's takings. The rules say
+    // the same thing rather than trusting that guard.
+    check('a customer cannot write to it, so it is not a public write surface',
+          !(await canWrite('ops/clientErrors/index_html-c3', 'customer', ERR)));
+    note('that is a real gap in the reporting, and the trade is deliberate');
 
     // A trackId is the only thing between one customer's order and another's.
     await call('PUT', 'orders/track/someoneElse', OWNER, SAMPLES['orders/track/$key']);

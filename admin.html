@@ -676,7 +676,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-05.1"></script>
+    <script src="/build-check.js" data-build="2026-09-06.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -717,6 +717,13 @@
             appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
         };
         firebase.initializeApp(firebaseConfig);
+        // The shared service worker: push, and the cache that makes an open instant.
+        // This was registered only inside notifInit(), which returns early on any device
+        // that cannot take web push — so on those devices admin had no shell cache at all,
+        // and whether an open was fast depended on whether the browser did notifications.
+        // The two have nothing to do with each other. notifInit still registers it and
+        // still keeps the registration it needs for a push subscription.
+        if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.js').catch(function(){}); } catch(e){} }
         const db = firebase.database();
         // ILA_BUILD, the build.json poll and the update banner now live in
         // /build-check.js, loaded from the <head> with this page's build on it.
@@ -1876,7 +1883,20 @@
                     + barHTML
                     + '</div>';
             });
-            box.innerHTML = html;
+            // A REBUILD MUST NOT REACH UNDER SOMEBODY'S CURSOR.
+            //
+            // Every field on these rows is `onchange`, so committing one writes to the
+            // database, the upiRouting/config listener fires, and this runs. onchange fires
+            // on the way OUT of a field — which is to say, on the way INTO the next one. So
+            // tabbing from a row's monthly cap to its bank tag replaced the box that had
+            // just been tabbed into, and the cursor went with it, along with anything
+            // already typed there.
+            //
+            // Milder than the same fault on the till's split screen — this is the owner,
+            // occasionally, and the value being left behind was already committed — but it
+            // is the same mechanism and the same answer: if the markup has not changed,
+            // do not swap it in. The rows are rebuilt only when they are actually different.
+            if (box.innerHTML !== html) box.innerHTML = html;
         }
         function renderUPIHistory(){
             const box = document.getElementById('upi-history'); if (!box) return;

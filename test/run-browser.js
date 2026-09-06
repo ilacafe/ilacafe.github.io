@@ -37,6 +37,7 @@ const suites = [
   'reflow-browser.test.js',
   'state-visible-browser.test.js',
   'connection-browser.test.js',
+  'client-errors-browser.test.js',
   'dialogs-browser.test.js',
   'till-dialogs-browser.test.js',
   'split-typing-browser.test.js',

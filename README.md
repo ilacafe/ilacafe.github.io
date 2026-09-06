@@ -698,6 +698,55 @@ costs money:
   withdrawal again. The suite drives both real pages against a request that connects
   and then says nothing, and asks the only question that matters — does the button come
   back — because a timeout is visible in the source without saying anything about that.
+- **the fault that went nowhere** — the Worker is the component nobody watches, so it
+  is the one that is watched: `ops/cronFailure` for a throw, `ops/pushHealth` for
+  whether a notification landed, `ops/cronHeartbeat` for whether a scheduled job ran at
+  all, and a workflow reading the last of those from outside. The tills had none of it,
+  and they are where the money is: 113 `catch (e) {}` and a score of `console.error`
+  across the seven pages, on devices with no console open, in a café. Every fault found
+  in this project so far was found by somebody noticing something odd at the counter,
+  or by reading the source afterwards. The sharpest case is the one that cost money —
+  the ordering page wrote an order, the database refused it for being one field too
+  long, and the rejection was attached to nothing. That is an `unhandledrejection`: the
+  browser knew, and nothing was listening. `connection.js` listens now, and writes
+  `ops/clientErrors`, which the Worker-health panel renders beside the Worker's own.
+  It is not a log and must not become one: the key is a signature — page, message,
+  where it came from — so the hundredth occurrence of one fault overwrites the first
+  and bumps a count, and the node's length is the number of DISTINCT things going
+  wrong. A message can still carry variable text, so the Worker prunes anything not
+  seen for a fortnight, on the same argument as the table index: these are diagnostics
+  rather than records, and a fault still happening rewrites its row and comes straight
+  back. Two caps hold a page that is coming apart from also filling the node it reports
+  into — eight faults per load, and the same signature at most once a minute — and the
+  reporter refuses to report itself, because an error reporter that can raise an error
+  is a loop. **The customer page is the deliberate gap.** It runs the same code and
+  skips an anonymous session, because collecting from a stranger's browser would mean a
+  node the world can write to on the database that holds the café's takings; the rules
+  say the same thing rather than trusting the guard, and the emulator suite checks both
+  halves. The Worker is the way to close that gap if the café ever wants it.
+- **every page carries every shared mechanism** — the offline bar, the update banner,
+  the shell cache and the app's own dialogs are cross-cutting by design, and each was
+  wired into the pages one at a time, by hand. A page gets missed, and nothing says so,
+  because a page missing one of these is not broken — it is slower, or quieter, or a
+  little further behind. Three mechanisms covered three different subsets of the seven:
+  `inventory.html` loaded no `build-check.js`, so the stock tablet was never offered a
+  new build and could sit weeks behind with nothing on screen to say so and nothing to
+  tap; and `analytics.html` and `inventory.html` registered no service worker at all,
+  so neither had a shell cache and every open fetched the page whole — 177KB, in
+  analytics' case. **That last one was reported from the floor**, not found by reading:
+  reopening the app straight after closing it was fast, and reopening it later was much
+  slower. That is exactly what a page with no shell cache does. GitHub Pages sends a
+  ten-minute HTTP cache (which is why `sw.js` revalidates with `no-cache`), so inside
+  ten minutes the browser's own cache answered and the open was instant; after ten
+  minutes there was nothing between the page and the network. The pages the service
+  worker holds are served from Cache Storage either way, which is why the till and the
+  ordering page never showed it. `admin.html` was a fourth case and the most fragile:
+  it registered the worker only inside `notifInit()`, which returns early on any device
+  that cannot take web push, so whether admin opened quickly depended on whether the
+  browser did notifications. The suite holds all seven pages to each mechanism, and to
+  the one that is correctly NOT universal — `dialogs.js` is required of a page that
+  calls a dialog and of no other, because the kitchen boards ask nothing of anybody and
+  a blanket rule there would have been a wrong rule that looked like coverage.
 - **write-only paths** — across the pages and the Worker, every database path
   something writes is read back somewhere, and every path something reads is
   written by something. A screen that will always be empty is harder to spot than
