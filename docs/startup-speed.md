@@ -75,7 +75,7 @@ so a genuine replacement still reloads.
 
 ---
 
-## 2. admin reads every customer it has ever had, to draw two numbers and ten rows
+## 2. admin read every customer it has ever had, to draw two numbers and ten rows — FIXED
 
 `admin.html:1393`:
 
@@ -101,18 +101,39 @@ customer list for as long as the café keeps trading.
 
 This is the same shape as the finding that `payload` was built for — the 5.2MB of
 cash-ups read to render a list made of about 10KB of them — and it has the same fix,
-which this codebase has already built once. `orders/daily` holds one small rollup per
-closed day and turned a 14.35MB read into 1.83MB. A `customers/stats` record maintained
-on the write side, holding the two counts and the current top ten, takes this read from
-254 KB to well under a kilobyte and stops it growing.
+which this codebase had already built once. `orders/daily` holds one small rollup per
+closed day and turned a 14.35MB read into 1.83MB.
 
-If a rollup is more than is wanted for now, `limitToLast` cannot help here — the top ten
-is by order count, not by key — but moving the listener behind the panel (see the next
-item) at least stops every admin open paying for it.
+`customers/_stats` now holds the two counts and the current top ten — about a kilobyte,
+whatever the café's history. The underscore is load-bearing: it lives *inside*
+`customers/` so it inherits that node's rules rather than needing its own, and a key
+that is not ten digits can never collide with a phone number. Everything that walks the
+node steps over it on exactly that test.
+
+Two pieces of code now produce that record, which is the risk in it:
+
+- `rollupCustomers()` in `admin.html` builds one from the whole node. That read still
+  exists, but it happens **once ever** — the first admin open that finds no rollup
+  publishes one, the `pos/eodSummaryBackfill` arrangement. Bumping `CUST_STATS_V` asks
+  for it again.
+- `bumpCustomerStats()` in `pos.html` folds one accepted order into the rollup that is
+  already there, inside a transaction. It reads the customer back rather than assuming,
+  because `increment()` is a sentinel the server resolves and the count *after* the
+  write is the only thing that says whether this phone is new (`total` goes up) or has
+  just come back (`repeat` goes up). With no rollup present it **aborts** rather than
+  writing a partial one — admin trusts any record carrying the current version, so a
+  half-built one written by the till would never be rebuilt and the panel would count
+  from the wrong place for ever.
+
+They are in different files and neither says the other exists, so
+`test/customer-rollup.test.js` replays orders through the till's updater and checks the
+result against a rebuild from the node those same orders produced. Verified by mutation:
+dropping the new-customer count, appending to the top ten instead of updating the row,
+and letting the till start its own rollup each make it fail.
 
 ---
 
-## 3. admin loads 900 records for a card nobody has scrolled to
+## 3. admin loaded 900 records for a card nobody has scrolled to — FIXED
 
 `loadETAAccuracy()` runs from `init()` and opens three reads: `orders/track`
 limited to 400, and `orders/completed/chef` and `.../barista` limited to 250 each. They
@@ -135,6 +156,11 @@ Worth saying plainly: this does **not** make the page paint faster. `npm run per
 puts `admin.html` at ~180ms script and ~225ms layout either way — first paint happens
 before any listener has answered, which is the point the boot probe makes. What it saves
 is bytes on café wifi, which is what the admin tablet is on.
+
+Done by moving the card's body behind a `<details>`, the same fold the two archive
+panels above it already use, loading on first open with a guard — these are value
+listeners, `toggle` fires on close as well as open, and a second call would attach a
+second set and double-count every ticket.
 
 ---
 
@@ -346,13 +372,15 @@ aborting them, so that "what does a stranger's first visit cost" has an answer a
 
 ## Done
 
-These three were what the floor was complaining about, and they are in.
+The first three were what the floor was complaining about. Items 2 and 3 followed.
 
 | | change | measured effect |
 |---|---|---|
 | 7 | precache the shared shell on install, and cache the installing client's own page | second open of every app: full download → **0 bytes** |
 | 7b | key navigations on the path, not the query string | a new table QR: 158 KB → **0** |
 | 1 | guard the `controllerchange` reload in `index.html` | a customer's first visit: 2 page loads → **1** |
+| 2 | roll up `customers` into `customers/_stats` | admin cold open 0.45 MB → 0.20 MB, and it no longer grows |
+| 3 | defer Kitchen Accuracy behind its card | admin cold open → **0.13 MB** with #2, a 71% cut |
 
 `test/second-open-browser.test.js` guards all three, and was checked against the old code
 first: it fails six ways there, naming the exact byte count each page pulled on its
@@ -364,14 +392,33 @@ starts seeing requests.
 
 | | change | measured effect |
 |---|---|---|
-| 2 | roll up `customers` for `admin.html` | admin cold open 0.45 MB → 0.20 MB, and stops it growing |
-| 3 | defer Kitchen Accuracy behind its card | admin cold open → 0.13 MB with #2 |
 | 4 | defer `demandBoot()` to the Demand Map tab | 4 round trips off the analytics open |
 | 5 | build `todayRecs` from `records` in memory | 2 round trips off the analytics open |
 | 6 | `defer` the auth SDK on `index.html`, and narrow the test | not measured — see item 8 |
 | 8 | let the `wifi` probe see the service worker; count navigations | would have caught #1 |
 
-#2 and #3 are the ones a person would still feel: admin holds a ~1.2 second gap between
-the shell painting and the numbers appearing, on every open, *even fully cached* — that
-gap is the 0.45 MB, and it is the only white-screen complaint the three fixes above do
-not answer.
+### A correction, since it was written down here
+
+An earlier version of this file said admin's ~1.2 second gap between the shell painting
+and the numbers appearing "is the 0.45 MB". That was wrong, and wrong in a way worth
+keeping rather than quietly deleting, because the measurement that produced it is one
+this file recommends taking.
+
+The gap was measured on `dataset.lite()`, and **`lite()` drops the `customers` node
+altogether** — so the number could never have contained the read it was being blamed on.
+What it actually measures is two round trips in series: `users/<uid>` for the role, then
+the listeners behind it, at 600ms each. Payload was not in it at all, before or after,
+and fixing item 2 did not move it: 1199/1303/1158ms before, 1199/1303/1158ms after.
+
+Isolating the read properly needs a fixture that *has* customers in it. The page picks
+its path on one difference — a rollup at `customers/_stats` or none — so the same build
+measures both:
+
+| `customers/_stats` | what it reads | panel fills | off the wire |
+|---|---|---|---|
+| absent (the old path) | the whole node | 3259ms | 254 KB |
+| present | `customers/_stats` | **2585ms** | **1 KB** |
+
+At 12,000 customers the old path is 762 KB and 3330ms; the rollup is still 1 KB and
+2587ms. **That flatness is the point** — more than the 670ms, which is what today's
+four thousand customers happen to cost.

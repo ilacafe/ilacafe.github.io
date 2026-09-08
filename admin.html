@@ -446,8 +446,18 @@
 <div class="admin-card">
             <h2>Kitchen Accuracy</h2>
             <p class="rec-note">Every order records the time it was quoted and the time it was actually finished. This compares the two. If on-time is drifting, the numbers in <code>eta/model</code> need nudging &mdash; this tells you which direction, instead of guessing.</p>
-            <div id="eta-acc-kpis" class="rec-kpis" style="margin-bottom:14px;"></div>
-            <div id="eta-acc-detail"></div>
+            <!-- Behind a fold, like the two archives above it, and for the same reason.
+                 Answering this needs 900 records — 400 of orders/track and 250 of each
+                 station's completed orders — and it used to fetch all of them from
+                 init(), on every open, for a card most of the way down the page. It is
+                 the thing you look at when the quotes feel wrong, which is not every
+                 morning. 71% of what this screen pulled on open was this and the
+                 repeat-customer read together. -->
+            <details id="eta-acc-details">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; padding:8px 0;">How close the quotes have been</summary>
+                <div id="eta-acc-kpis" class="rec-kpis" style="margin:14px 0;"></div>
+                <div id="eta-acc-detail"><p style="font-size:0.8rem; letter-spacing:2px; text-transform:uppercase;">Open to load&hellip;</p></div>
+            </details>
         </div>
 
 <div class="admin-card">
@@ -883,7 +893,6 @@
         loadUPIVerification();
         loadWebPayments();
         loadRefunds();
-        loadETAAccuracy();
         loadRepeatCustomers();
         loadAddons();
         }
@@ -1298,7 +1307,13 @@
             return false;
         }
         let etaDone = {}, etaTracks = {};
+        let etaAccLoaded = false;
         function loadETAAccuracy(){
+            // These are value listeners, so a second call would attach a second set and
+            // double-count every ticket into etaDone. toggle fires on close as well as
+            // on open, and the card can be folded and unfolded all day.
+            if (etaAccLoaded) return;
+            etaAccLoaded = true;
             ['chef','barista'].forEach(st => {
                 db.ref('orders/completed/' + st).limitToLast(250).on('value', s => {
                     s.forEach(ch => {
@@ -1389,29 +1404,86 @@
 
         // ===== REPEAT CUSTOMERS =====
         // customers/<phone> is incremented by the POS when a web order is accepted.
-        function loadRepeatCustomers(){
-            db.ref('customers').on('value', s => renderRepeat(s.val() || {}), window.ilaRefused("customers"));
-        }
-        function renderRepeat(map){
-            const k = document.getElementById('repeat-kpis'), box = document.getElementById('repeat-list');
-            if (!k || !box) return;
+        //
+        // THIS PANEL USED TO READ EVERY CUSTOMER THE CAFÉ HAS EVER HAD
+        //
+        // It draws two numbers and ten rows, and it was fetching the whole node to do
+        // it: 254KB at four thousand customers, on every open, and — because it was a
+        // value listener — re-delivered in full on every order the till accepted while
+        // the screen was up. The node gains a key per new phone number and loses none,
+        // so both costs grow for as long as the café keeps trading.
+        //
+        // It is the same shape as the 5.2MB of cash-ups this page used to read to draw
+        // five numbers a day, and it has the same answer, which is already built once
+        // in this codebase: a rollup. orders/daily holds one small record per closed
+        // day and turned a 14.35MB read into 1.83MB. customers/_stats holds the two
+        // counts and the current top ten — a few hundred bytes, whatever the café's
+        // history — and the till keeps it up to date as it accepts orders.
+        //
+        // The underscore matters. _stats lives INSIDE customers/ so that it inherits
+        // the node's rules rather than needing its own, and a key that is not ten
+        // digits can never collide with a phone number. Everything that walks the node
+        // skips it on exactly that test.
+        const CUST_STATS_V = 1;
+
+        // The whole node reduced to what the panel draws. Pure, and the only place the
+        // shape of a rollup is decided — the till updates one incrementally and this
+        // builds one from scratch, and the two have to agree.
+        function rollupCustomers(map){
             const rows = [];
-            for (const ph in map){ const c = map[ph] || {}; rows.push({ ph: ph, n: parseInt(c.orders) || 0, lastAt: c.lastAt || 0 }); }
-            if (!rows.length){
-                k.innerHTML = '<div class="rec-kpi"><div class="lbl">Identified customers</div><div class="val">0</div><div class="sub">builds as takeaway orders are accepted</div></div>';
-                box.innerHTML = '';
-                return;
+            for (const ph in map){
+                if (!/^\d{10}$/.test(ph)) continue;          // _stats is in here too
+                const c = map[ph] || {};
+                rows.push({ ph: ph, n: parseInt(c.orders) || 0, lastAt: c.lastAt || 0 });
             }
-            const repeat = rows.filter(r => r.n > 1);
-            const pct = Math.round(100 * repeat.length / rows.length);
-            k.innerHTML = '<div class="rec-kpi"><div class="lbl">Identified customers</div><div class="val">' + rows.length + '</div><div class="sub">with a phone number</div></div>'
-                        + '<div class="rec-kpi ' + (pct >= 30 ? 'good' : '') + '"><div class="lbl">Ordered more than once</div><div class="val">' + pct + '%</div><div class="sub">' + repeat.length + ' of ' + rows.length + '</div></div>';
             // Sort the array the ten are taken FROM. filter() returns a new array, so
             // sorting rows left repeat in the order Firebase handed the node over — by
             // phone number — and the panel showed ten arbitrary repeat customers while
             // the most frequent ones were missing from it entirely.
+            const repeat = rows.filter(r => r.n > 1);
             repeat.sort((a,b) => b.n - a.n || b.lastAt - a.lastAt);
-            const top = repeat.slice(0, 10);
+            return { v: CUST_STATS_V, total: rows.length, repeat: repeat.length,
+                     top: repeat.slice(0, 10), at: Date.now() };
+        }
+
+        let custRebuilding = false;
+        function loadRepeatCustomers(){
+            db.ref('customers/_stats').on('value', s => {
+                const st = s.val();
+                // A rollup of the version this page understands is the whole read.
+                if (st && st.v === CUST_STATS_V && typeof st.total === 'number'){ renderRepeatStats(st); return; }
+                // Missing, or written by an older build. Read the node once — the last
+                // time this page ever does — build the rollup and publish it. Every
+                // open after this one, here and on every other admin screen, gets the
+                // small record. Bumping CUST_STATS_V is how you ask for that again.
+                if (custRebuilding) return;
+                custRebuilding = true;
+                db.ref('customers').once('value').then(snap => {
+                    db.ref('customers/_stats').set(renderRepeat(snap.val() || {})).catch(function(){});
+                }).catch(function(){ custRebuilding = false; });
+            }, window.ilaRefused("customers/_stats"));
+        }
+
+        // The rebuild path, whole node in: rolls it up, draws it, and hands the rollup
+        // back so the caller can publish the same object it just drew. One renderer for
+        // both paths, so the once-ever rebuild and the everyday read cannot disagree
+        // about what the panel says.
+        function renderRepeat(map){ const st = rollupCustomers(map); renderRepeatStats(st); return st; }
+
+        function renderRepeatStats(st){
+            const k = document.getElementById('repeat-kpis'), box = document.getElementById('repeat-list');
+            if (!k || !box) return;
+            const total = (st && st.total) || 0;
+            if (!total){
+                k.innerHTML = '<div class="rec-kpi"><div class="lbl">Identified customers</div><div class="val">0</div><div class="sub">builds as takeaway orders are accepted</div></div>';
+                box.innerHTML = '';
+                return;
+            }
+            const nRepeat = (st && st.repeat) || 0;
+            const pct = Math.round(100 * nRepeat / total);
+            k.innerHTML = '<div class="rec-kpi"><div class="lbl">Identified customers</div><div class="val">' + total + '</div><div class="sub">with a phone number</div></div>'
+                        + '<div class="rec-kpi ' + (pct >= 30 ? 'good' : '') + '"><div class="lbl">Ordered more than once</div><div class="val">' + pct + '%</div><div class="sub">' + nRepeat + ' of ' + total + '</div></div>';
+            const top = (st && st.top) || [];
             if (!top.length){ box.innerHTML = "<p style=' font-size:0.9rem;'>No repeat orders yet.</p>"; return; }
             const fmt = ts => { try { return new Date(ts).toLocaleDateString('en-IN',{day:'numeric',month:'short'}); } catch(e){ return ''; } };
             let t = '<table class="rec-table"><tbody>';
@@ -1807,6 +1879,9 @@
             // void bills: load on expand
             const vd = document.getElementById('void-bill-details');
             if (vd) vd.addEventListener('toggle', function(){ if (vd.open) loadVoidBills(); });
+            // kitchen accuracy: 900 records, so also on expand
+            const ea = document.getElementById('eta-acc-details');
+            if (ea) ea.addEventListener('toggle', function(){ if (ea.open) loadETAAccuracy(); });
         });
 
         let upiCfg = {}, upiTot = {}, upiAllTot = {}, upiMigrated = false;

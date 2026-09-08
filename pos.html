@@ -2579,12 +2579,64 @@
             // Repeat-customer counter. The phone is the only identifier this café has ever had,
             // and until now it was captured and never used. Incremented on accept so the count
             // reflects orders actually served, not orders placed.
+            // One accepted order folded into the owner's rollup. Named, and out here,
+            // because it is half of a number the panel shows and the other half is
+            // rollupCustomers() in admin.html — one builds a rollup from the whole node
+            // and this one keeps it true afterwards, and the panel is only as right as
+            // the two agree. A transaction body written inline is a thing no test can
+            // reach.
+            //
+            // cur is the rollup as the server currently has it; the return value
+            // replaces it, and returning undefined ABORTS the write.
+            function bumpCustomerStats(cur, cp, n, at){
+                // No rollup yet: abort rather than write half of one. admin builds the
+                // first from the node and publishes it, and a partial record written
+                // here would be trusted over that and never rebuilt.
+                if (!cur) return;
+                if (n === 1) cur.total  = (cur.total  || 0) + 1;   // a phone seen for the first time
+                if (n === 2) cur.repeat = (cur.repeat || 0) + 1;   // and now it has come back
+                if (n > 1){                                        // the panel lists repeats only
+                    const top = Array.isArray(cur.top) ? cur.top.slice() : [];
+                    const i = top.findIndex(e => e && e.ph === cp);
+                    if (i >= 0) top[i] = { ph: cp, n: n, lastAt: at };
+                    else top.push({ ph: cp, n: n, lastAt: at });
+                    top.sort((a,b) => b.n - a.n || b.lastAt - a.lastAt);
+                    cur.top = top.slice(0, 10);                    // in, or past the tenth and dropped
+                }
+                cur.at = at;
+                return cur;
+            }
+
             try {
                 const cp = String(order.phone || '').replace(/\D/g, '').slice(-10);
                 if (cp.length === 10){
-                    db.ref('customers/' + cp + '/orders').set(firebase.database.ServerValue.increment(1));
-                    db.ref('customers/' + cp + '/lastAt').set(firebase.database.ServerValue.TIMESTAMP);
-                    db.ref('customers/' + cp + '/lastSpend').set(parseFloat(order.total) || 0);
+                    const cref = db.ref('customers/' + cp);
+                    cref.update({
+                        orders:    firebase.database.ServerValue.increment(1),
+                        lastAt:    firebase.database.ServerValue.TIMESTAMP,
+                        lastSpend: parseFloat(order.total) || 0
+                    })
+                    // AND THE ROLLUP THE OWNER'S PANEL READS INSTEAD OF THE NODE.
+                    //
+                    // admin used to fetch every customer the café has ever had to draw
+                    // two numbers and ten rows. It reads customers/_stats now — a few
+                    // hundred bytes however long the café has been open — and this is
+                    // what keeps it true. See the note beside loadRepeatCustomers.
+                    //
+                    // Read back rather than assumed: increment() is a sentinel the
+                    // server resolves, so the count AFTER it is the only thing that
+                    // says whether this phone has just been seen for the first time
+                    // (total goes up) or has just come back (repeat goes up). Guessing
+                    // from the value before the write would be wrong for both.
+                    .then(() => cref.once('value')).then(snap => {
+                        const c = snap.val() || {};
+                        const n = parseInt(c.orders) || 0;
+                        const at = c.lastAt || Date.now();
+                        if (!n) return;
+                        return db.ref('customers/_stats').transaction(function(cur){
+                            return bumpCustomerStats(cur, cp, n, at);
+                        });
+                    }).catch(function(){});
                 }
             } catch(e){}
 

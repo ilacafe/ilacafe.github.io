@@ -64,6 +64,14 @@ const BOUNDED = {
   'users':                  'one key per staff account',
   'upiRouting/config':      'one key per bank account',
   'pushSubscriptions':      'one key per device that accepted notifications',
+  'customers/_stats':       'the repeat-customer panel\u2019s rollup: two counts and the ' +
+                            'current top ten, so a few hundred bytes whatever the caf\u00e9\u2019s ' +
+                            'history. It is the read that replaced the whole-node one ' +
+                            'described under customers below, and it lives INSIDE ' +
+                            'customers/ so that it inherits that node\u2019s rules rather ' +
+                            'than needing its own \u2014 a key that is not ten digits can ' +
+                            'never collide with a phone number, and everything that ' +
+                            'walks the node skips it on that test.',
 
   // Work queues: something puts a row in, something else takes it out again. They
   // are only ever as long as the work outstanding.
@@ -120,9 +128,15 @@ const GROWS = {
   // with its traffic, and slowly.
 
   'customers':
-    'one key per phone number. This is the repeat-customer record — the thing the ' +
-    'panel exists to show — so it is kept, and the panel needs a count of ALL of ' +
-    'them, which no bounded query answers. A busy decade is a few thousand keys.',
+    'one key per phone number, kept because it is the repeat-customer record itself. ' +
+    'It used to be read whole on EVERY admin open — 254KB at four thousand customers, ' +
+    'and re-delivered in full on every order the till accepted while the screen was ' +
+    'up — to draw two numbers and ten rows. It is now read whole exactly once ever: ' +
+    'the first admin open that finds no customers/_stats builds the rollup from it ' +
+    'and publishes it, and the till keeps that up to date from then on. So this read ' +
+    'still exists and still has to be listed, but it is the orders/daily arrangement ' +
+    'rather than a per-open cost — bump CUST_STATS_V in admin.html to ask for it ' +
+    'again. A busy decade is a few thousand keys.',
 
   'upiReview':
     'one key per admin verify-or-ignore, with who decided and why. EOD folds each ' +

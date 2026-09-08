@@ -144,7 +144,20 @@ function build() {
   for (let i = 0; i < CUSTOMERS; i++)
     cust['9' + String(100000000 + i)] =
       { orders: 1 + (i % 9), lastAt: now - i * 3600000, lastSpend: 200 + i % 700 };
+  // The repeat-customer rollup, in the shape a café that has been trading has it: the
+  // till maintains it order by order, and admin reads it INSTEAD of the node. Without
+  // it here the probe measures the once-ever rebuild — the first open that finds no
+  // rollup reads every customer to build one — and reports the 254KB read that this
+  // exists to have stopped. Same trap as pos/eodSummaryBackfill above, and the same
+  // rule: a fixture whose rollups are missing or of an older shape measures the
+  // REBUILD rather than the steady state. See the note in tools/perf/README.md.
+  const crepeat = [];
+  for (const ph in cust) if (cust[ph].orders > 1) crepeat.push({ ph: ph, n: cust[ph].orders, lastAt: cust[ph].lastAt });
+  crepeat.sort((a, b) => b.n - a.n || b.lastAt - a.lastAt);
+  cust['_stats'] = { v: 1, total: CUSTOMERS, repeat: crepeat.length,
+                     top: crepeat.slice(0, 10), at: now };
   db['customers'] = cust;
+  db['customers/_stats'] = cust['_stats'];
 
   // the day in progress
   const bills = {}, led = {};
