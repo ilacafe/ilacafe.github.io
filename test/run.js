@@ -26,6 +26,7 @@ const suites = [
   'table-index-prune.test.js',
   'analytics-range.test.js',
   'repeat-customers.test.js',
+  'customer-rollup.test.js',
   'unbounded-reads.test.js',
   'refused-reads.test.js',
   'shared-mechanisms.test.js',

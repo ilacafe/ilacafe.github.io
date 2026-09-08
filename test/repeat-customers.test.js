@@ -22,10 +22,15 @@ const document = {
   getElementById: (id) => (boxes[id] = boxes[id] || { innerHTML: '' }),
 };
 
+// renderRepeat is a thin thing now — it rolls the node up and hands the rollup to the
+// renderer — so all three come in together. The assertions below are unchanged and
+// still go through renderRepeat, because what the panel DRAWS is what they are about.
 const api = buildModule(
-  [extractFunction(src, 'escapeHTML'), extractFunction(src, 'renderRepeat')],
-  { document, Date, Math, parseInt, String, Object },
-  ['renderRepeat']);
+  [extractFunction(src, 'escapeHTML'), extractFunction(src, 'rollupCustomers'),
+   extractFunction(src, 'renderRepeatStats'), extractFunction(src, 'renderRepeat'),
+   'const CUST_STATS_V = ' + (/const CUST_STATS_V = (\d+)/.exec(src) || [,'1'])[1] + ';'],
+  { document, Date, Math, parseInt, String, Object, Array, RegExp },
+  ['renderRepeat', 'rollupCustomers', 'renderRepeatStats']);
 
 // Phone keys deliberately ascending, so insertion order and order-count order
 // disagree — which is the only arrangement in which the bug is visible.
@@ -69,6 +74,57 @@ const listed = [...boxes['repeat-list'].innerHTML.matchAll(/>(\d+) orders</g)].m
         /No repeat orders yet/.test(boxes['repeat-list'].innerHTML));
   api.renderRepeat({});
   check('and an empty node is not an error', /Identified customers/.test(boxes['repeat-kpis'].innerHTML));
+}
+
+// ------------------------------------------------------------------- the rollup
+// The panel does not read the customers node any more. It reads customers/_stats, a
+// few hundred bytes the till keeps up to date, and the node itself is read once ever
+// to build the first one. So there are two things that produce a rollup — this
+// function and the transaction in pos.html — and the panel is only as right as they
+// agree. This half is the one that can be checked here.
+{
+  const built = api.rollupCustomers(customers);
+  check('the rollup counts everyone with a phone number', built.total === 16, String(built.total));
+  check('and how many of them came back', built.repeat === 14, String(built.repeat));
+  check('and carries ten rows, not the node', built.top.length === 10, String(built.top.length));
+  check('which are the ten who came back most',
+        built.top.map(r => r.n).join(',') === [15,14,13,12,11,10,9,8,7,6].join(','),
+        built.top.map(r => r.n).join(', '));
+
+  // _stats lives inside customers/, so anything walking the node has to step over it.
+  // Counted as a customer it would inflate the total by one for ever, and the rebuild
+  // that publishes it would then be the thing that corrupts it.
+  const withStats = Object.assign({}, customers, {
+    _stats: { v: 1, total: 999, repeat: 999, top: [], at: now } });
+  const again = api.rollupCustomers(withStats);
+  check('and the rollup itself is not counted as a customer', again.total === 16, String(again.total));
+  check('nor listed among the ten',
+        !JSON.stringify(again.top).includes('_stats'), JSON.stringify(again.top));
+
+  // Anything that is not a ten-digit phone gets the same treatment, so a stray key
+  // cannot quietly become a customer.
+  const junk = api.rollupCustomers({ 'notaphone': { orders: 40 }, '12345': { orders: 40 } });
+  check('and neither is any other key that is not a phone number', junk.total === 0, String(junk.total));
+}
+
+// ------------------------------------------------- what the panel draws from a rollup
+// The live path never calls renderRepeat at all: it gets the small record off the
+// database and draws that. Same numbers, or the rollup is not doing its job.
+{
+  api.renderRepeatStats(api.rollupCustomers(customers));
+  check('drawing from the rollup gives the same count',
+        /<div class="val">16<\/div>/.test(boxes['repeat-kpis'].innerHTML));
+  check('and the same share', /<div class="val">88%<\/div>/.test(boxes['repeat-kpis'].innerHTML));
+  const fromStats = [...boxes['repeat-list'].innerHTML.matchAll(/>(\d+) orders</g)].map(m => Number(m[1]));
+  check('and the same ten', fromStats.join(',') === [15,14,13,12,11,10,9,8,7,6].join(','),
+        fromStats.join(', '));
+
+  api.renderRepeatStats({ v: 1, total: 3, repeat: 0, top: [], at: now });
+  check('a rollup with no repeats says so rather than showing an empty table',
+        /No repeat orders yet/.test(boxes['repeat-list'].innerHTML));
+  api.renderRepeatStats(null);
+  check('and a missing rollup is not an error',
+        /Identified customers/.test(boxes['repeat-kpis'].innerHTML));
 }
 
 done();
