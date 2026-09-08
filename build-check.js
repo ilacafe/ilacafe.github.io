@@ -112,4 +112,36 @@
     document.addEventListener('visibilitychange', function () {
         if (!document.hidden) checkForNewBuild();
     });
+
+    // ---------------------------------------------------------------- warming the shell
+    //
+    // TELLING THE WORKER THE PAGE HAS FINISHED
+    //
+    // sw.js holds the Firebase SDK for us — three bundles, the better part of 400KB,
+    // on every page, and the thing every page's own script sits below and waits for.
+    // Left to the fetch handler it is not cached until the SECOND open, so the second
+    // open pays for all of it again with nothing on screen; and the worker cannot
+    // simply fetch it during install, because install runs while THIS open is still
+    // downloading the same three files and would be racing the very download it is
+    // trying to save.
+    //
+    // So it waits to be told, and this is the telling. On load, when the page's own
+    // copies are in the browser's HTTP cache — gstatic marks them immutable for a
+    // year — so the worker's fetch costs nothing and the next open has them.
+    //
+    // Here rather than in seven copies at the foot of seven pages, for the reason
+    // auth-gate.js gives about itself: six copies of a rule is six chances to get
+    // one of them wrong. This file is already the one that reasons about the shell
+    // cache, and it is already on every page.
+    function warmShell() {
+        if (!('serviceWorker' in navigator)) return;
+        try {
+            navigator.serviceWorker.ready.then(function (reg) {
+                var w = reg && reg.active;
+                if (w) w.postMessage({ type: 'PRECACHE_SDK' });
+            }).catch(function () {});
+        } catch (e) {}
+    }
+    if (document.readyState === 'complete') warmShell();
+    else window.addEventListener('load', warmShell);
 })();

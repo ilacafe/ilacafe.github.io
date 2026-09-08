@@ -103,4 +103,47 @@ const immutable = (u) => api.isImmutable(new URL(u));
         'no integrity attribute on the jsdelivr tag');
 }
 
+// ------------------------------------------------- the precache list is not orphaned
+// The worker warms the three SDK bundles into the cache when a page says it has
+// finished loading, so that the SECOND open does not download 400KB again with nothing
+// on screen. To do that it names the URLs, which means it carries a copy of the version
+// the pages are pinned to.
+//
+// A version bumped in seven HTML files and not here is the failure this exists for: it
+// breaks nothing, throws nothing, and reads as fixed. The worker would quietly warm
+// three files no page ever asks for, every page would go back to being slow on its
+// second open, and there is nothing on screen connecting the two.
+{
+  const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
+                 'chef.html', 'barista.html', 'inventory.html'];
+  const wanted = new Set();
+  for (const p of PAGES) {
+    const src = readPage(p).replace(/<!--[\s\S]*?-->/g, '');
+    for (const m of src.matchAll(/<script\b[^>]*\bsrc="(https:\/\/www\.gstatic\.com\/firebasejs\/[^"]+)"/g))
+      wanted.add(m[1]);
+  }
+  check('the pages load the SDK from pinned urls', wanted.size >= 3,
+        wanted.size + ' found: ' + [...wanted].join(', '));
+
+  const base = (/const SDK_BASE = '([^']+)'/.exec(sw) || [])[1];
+  const held = new Set([...(sw.match(/SDK_BASE \+ '([^']+)'/g) || [])]
+    .map(m => base + /SDK_BASE \+ '([^']+)'/.exec(m)[1]));
+  check('the worker names some to warm', held.size > 0, [...held].join(', '));
+
+  const missing = [...wanted].filter(u => !held.has(u));
+  check('and every one the pages load is one it warms', missing.length === 0,
+        missing.join(', ') + ' — the worker\u2019s SDK_BASE has drifted from the pages');
+
+  const orphans = [...held].filter(u => !wanted.has(u));
+  check('with none left over that no page asks for', orphans.length === 0,
+        orphans.join(', ') + ' — warmed by the worker, loaded by nobody');
+  note('a version bumped in the pages and not in sw.js warms three files nobody wants');
+
+  // And they have to be on the terms the rest of this file is about, or warming them
+  // is storing something that can never be served back.
+  const notImmutable = [...held].filter(u => !immutable(u));
+  check('and the worker may hold them forever, which is why warming them is worth it',
+        notImmutable.length === 0, notImmutable.join(', '));
+}
+
 done();

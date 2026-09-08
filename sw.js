@@ -46,6 +46,77 @@ const CACHE = 'ila-shell-v2';
 const PRECACHE = ['/auth-gate.js', '/pin-mask.js', '/build-check.js',
                   '/dialogs.js', '/connection.js', '/qr.js', '/logo.png'];
 
+// AND THE SDK, WHICH IS THE BIGGEST THING ANY OF THESE PAGES DOWNLOADS
+//
+// Three bundles, the better part of 400KB, on every page. They were left out of the
+// list above when it was written because that list is about OUR files, and off-origin
+// felt like somebody else's problem. It is not: on café wifi at 1.6Mbps this is about
+// two seconds, and every page's own script is BELOW these tags and cannot run until
+// all three have arrived and been compiled. So for those two seconds the app is not
+// slow, it is absent — an empty shell with nothing on it.
+//
+// Left out, they took the same three opens the HTML used to: not seen on open 1
+// (nothing is controlling the page), a full miss and a full download on open 2, and
+// only cached in time for open 3. Fixing that for our own files and not for the four
+// hundred kilobytes next to them fixed the smaller half of the problem.
+//
+// Pinned to a version and already treated as immutable below, so there is nothing to
+// go stale here — the URL changes when the file does. Kept in step with the pages by
+// a test, because a version bumped in seven HTML files and not here is a precache
+// that quietly warms nothing.
+// WARMED WHEN THE PAGE SAYS IT HAS FINISHED, NOT DURING INSTALL
+//
+// Fetching these alongside the small files above is the obvious thing and it is wrong.
+// Install runs WHILE open 1 is still downloading the very same three bundles, so the
+// worker would be racing the download it is trying to save — and a device that lost
+// that race pulls 800KB instead of 400KB, making the first open, already the worst
+// one, worse.
+//
+// Reasoned rather than measured, and worth being honest about which: the probe that
+// would settle it answers gstatic through Playwright's route.fulfill(), and a fulfilled
+// response is never stored in the browser's HTTP cache, so every fetch counts and reuse
+// cannot be seen at all. What IS measured is the thing this exists for — the second
+// open of every page goes from three requests to none.
+//
+// So the worker waits to be told. build-check.js sends PRECACHE_SDK on load — it is on
+// all seven pages and is already the file that reasons about the shell cache. By then
+// the page's own copies are in the browser's HTTP cache, which gstatic marks immutable
+// for a year, so this should cost nothing; and if it ever does cost something, it is
+// after the page is up rather than in front of it.
+const SDK_BASE = 'https://www.gstatic.com/firebasejs/12.17.1/';
+const PRECACHE_SDK = [SDK_BASE + 'firebase-app-compat.js',
+                      SDK_BASE + 'firebase-database-compat.js',
+                      SDK_BASE + 'firebase-auth-compat.js'];
+
+let sdkWarmed = false;
+self.addEventListener('message', (event) => {
+  const d = event.data;
+  if (!d || d.type !== 'PRECACHE_SDK') return;
+  if (sdkWarmed) return;                                  // once per worker
+  sdkWarmed = true;
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(CACHE);
+      await Promise.all(PRECACHE_SDK.map(async (u) => {
+        try {
+          if (await cache.match(u)) return;               // already held
+          // CORS with credentials omitted, which is what crossorigin="anonymous" on the
+          // page's own tags asks on. This has to match, and not for tidiness: a no-cors
+          // fetch yields an OPAQUE response, and serving one of those back to a tag
+          // carrying an integrity hash fails the check — SRI cannot verify a body it is
+          // not allowed to read — so the page would end up with no SDK at all.
+          //
+          // Default cache mode, so the copy the page has just downloaded is reused
+          // rather than fetched again. These are pinned to a version; there is no
+          // freshness to chase.
+          const res = await fetch(new Request(u, { mode: 'cors', credentials: 'omit' }));
+          if (res && res.ok) await cache.put(u, res);
+        } catch (e) {}
+      }));
+    } catch (e) {}
+  })());
+});
+
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     try {

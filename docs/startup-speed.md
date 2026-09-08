@@ -306,6 +306,56 @@ now pulls 0.
 
 ---
 
+## 7c. the SDK — the biggest file of all — was still taking three opens — FIXED
+
+Found by going back to the "white screen in all apps" complaint after items 1, 2, 3, 7
+and 7b were in, and it is the largest of them.
+
+The precache in item 7 lists **same-origin files only**. The three Firebase bundles —
+the better part of 400KB, on every page — were not in it, so they kept the exact
+behaviour item 7 was written to fix: not seen on open 1 (nothing is controlling the
+page), a full miss and a full download on open 2, cached in time for open 3.
+
+Measured with gstatic answered locally, `pos.html` opened three times on one device:
+
+| open | requests that reached the network | held in the cache |
+|---|---|---|
+| 1 | 3 | none |
+| 2 | **3 again** | all three |
+| 3 | 0 | all three |
+
+This is the biggest single thing behind the complaint, because **every page's own script
+sits below those three tags and cannot run until all of them have arrived and been
+compiled**. For that time the app is not slow, it is absent — the shell paints and
+nothing is on it. Fixing the HTML and the small shared files but not the 400KB next to
+them fixed the smaller half.
+
+**Not fetched during install, which is the obvious version and is wrong.** Install runs
+while open 1 is still downloading those same three files, so the worker would be racing
+the download it is trying to save, and a device that lost that race pulls 800KB instead
+of 400KB — making the first open, already the worst, worse. So the worker waits to be
+told: `build-check.js` (on all seven pages, and the file that already reasons about the
+shell cache) posts `PRECACHE_SDK` on `load`. By then the page's own copies are in the
+browser's HTTP cache, which gstatic marks immutable for a year, so the fetch should cost
+nothing — and if it ever does cost something, it is after the page is up rather than in
+front of it.
+
+`test/shell-cache.test.js` checks the worker's URL list against the ones the pages
+actually load, in both directions. A version bumped in seven HTML files and not in
+`sw.js` breaks nothing, throws nothing, and reads as fixed — the worker would warm three
+files no page asks for and every page would go back to being slow on its second open.
+Verified by drifting the version: it fails both ways.
+
+**What is measured here and what is not.** Open 2 going from three requests to zero is
+measured. Whether the warm fetch on open 1 is free is *not*, and cannot be with this
+harness: Playwright's `route.fulfill()` responses are never stored in the browser's HTTP
+cache, so every fetch through a fulfilled route counts and reuse is invisible. Checked
+directly — the same immutable URL fetched twice hits the route handler twice. Serving
+the stub over real HTTP would fix that, but `route.continue({url})` requires the same
+protocol and the local server is not HTTPS. The design avoids the cost by construction
+rather than by measurement, which is worth saying plainly rather than leaving as a
+number nobody can reproduce.
+
 ## 8. two blind spots in the probes, which is why items 1 and 6 were invisible
 
 Both are in `tools/perf/probe.js`, and both are reasonable decisions with a consequence
@@ -378,6 +428,7 @@ The first three were what the floor was complaining about. Items 2 and 3 followe
 |---|---|---|
 | 7 | precache the shared shell on install, and cache the installing client's own page | second open of every app: full download → **0 bytes** |
 | 7b | key navigations on the path, not the query string | a new table QR: 158 KB → **0** |
+| 7c | warm the 400 KB Firebase SDK on `load`, not on install | second open of every app: 3 requests → **0** |
 | 1 | guard the `controllerchange` reload in `index.html` | a customer's first visit: 2 page loads → **1** |
 | 2 | roll up `customers` into `customers/_stats` | admin cold open 0.45 MB → 0.20 MB, and it no longer grows |
 | 3 | defer Kitchen Accuracy behind its card | admin cold open → **0.13 MB** with #2, a 71% cut |
