@@ -755,6 +755,9 @@
         // every load, and reload once a new worker takes control, so what's on screen is
         // always what was last pushed.
         if ('serviceWorker' in navigator) {
+            // Read before registering: register() can lead to a claim, and after that
+            // this can no longer tell a first visit from a replacement.
+            var _hadController = !!navigator.serviceWorker.controller;
             try {
                 navigator.serviceWorker.register('/sw.js').then(function(reg){
                     try { reg.update(); } catch(e){}
@@ -768,8 +771,29 @@
                         });
                     });
                 }).catch(function(){});
+                // ONLY WHEN A WORKER WAS ACTUALLY REPLACED
+                //
+                // This is here so that a device already showing the app picks up a new
+                // build rather than sitting on the old one. But controllerchange also
+                // fires the FIRST time a worker takes control, and sw.js claims its
+                // clients as soon as it activates — so on a phone that has never been
+                // here, the sequence was: page loads, worker installs, worker claims,
+                // this fires, page throws itself away and loads again.
+                //
+                // Which is most of the people who open this page. It is reached by
+                // scanning the QR code on a table, usually by somebody who has never
+                // seen it before, and what they got was the menu appearing, going
+                // white, and appearing again — measured at 2890ms against 500ms for
+                // the opens after it, on café wifi.
+                //
+                // Reading the controller BEFORE registering is what separates the two
+                // cases. No controller at that moment means nothing is being replaced;
+                // there is no old build on this screen to get rid of, because there is
+                // no build on it at all yet. A device that does have one still has a
+                // controller here, so a real update still reloads.
                 var _swReloaded = false;
                 navigator.serviceWorker.addEventListener('controllerchange', function(){
+                    if (!_hadController) return;                   // first visit: nothing replaced
                     if (_swReloaded) return; _swReloaded = true;   // guard: never loop
                     location.reload();
                 });

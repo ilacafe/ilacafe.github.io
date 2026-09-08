@@ -7,9 +7,14 @@ service worker serves the shell. `npm run perf boot` agrees — every page's own
 first paint is in line with the baseline in `tools/perf/README.md`, and nothing in this
 document is about making a page draw faster.
 
-What is left is not paint. It is the four things that happen around it: a page that
-loads itself twice, three pages that pull down data before anything asks for it, and two
-blind spots in the probes that have been hiding the first of those.
+What is left is not paint. It is what happens around it: a shell cache that did not
+start working until a page's third open, a page that loaded itself twice, three pages
+that pull down data before anything asks for it, and two blind spots in the probes that
+were hiding the first two.
+
+The first three are fixed — items 1, 7 and 7b, which together are what "sometimes it
+opens instantly, other times a white screen and then the app" actually was. The rest is
+still on the table.
 
 Measurements below were taken on `2026-09-08.1` with `npm run perf`, at `CPU=4` and
 `DAYS_OPEN=550 BILLS_DAY=100 CUSTOMERS=4000`, the same scale as the baseline. Where a
@@ -18,7 +23,7 @@ putting the file back — not by estimating.
 
 ---
 
-## 1. index.html loads itself twice on a first visit
+## 1. index.html loads itself twice on a first visit — FIXED
 
 The worst one, on the page that can least afford it: the customer's, opened from a table
 QR code by somebody who has never been to the site, on café wifi.
@@ -215,18 +220,63 @@ paths properly first.
 
 ---
 
-## 7. the service worker precaches nothing
+## 7. the service worker precached nothing, and the second open paid for it — FIXED
 
-`sw.js` installs with `self.skipWaiting()` and an empty cache, and fills it as pages ask
-for things. So the shared shell — the three SDK bundles, `connection.js`, `dialogs.js`,
-`build-check.js`, `auth-gate.js`, the fonts — is fetched fresh the first time each device
-opens its first page, and a device that opens a second app (a manager going from `pos` to
-`inventory`) fetches that page's HTML cold.
+**This was filed here as a minor cross-page nicety and it was the main event.** It is
+what "sometimes it opens instantly, other times a white screen and then the app" was.
+The answer is that it was never intermittent: it was the *second* open of any page,
+every time, on every app.
 
-An install handler that warms the shared files is a small change and makes the *second*
-app on a device open like the first one's repeat open. It is deliberately not a
-suggestion to precache all seven HTML pages: that is about a megabyte, most of it for
-roles the device will never use, and it would slow the install it is meant to help.
+The cache used to be filled only by the fetch handler, which is fine until you ask when
+the worker starts seeing requests:
+
+| | what happened | navigation pulled |
+|---|---|---|
+| open 1 | nothing controls the page; every file goes to the network and the worker — registered at the foot of the page — installs *after* they have all been and gone, having seen none of them | `pos.html` 357 KB |
+| open 2 | it controls now, so it sees them, and every one is a **miss**; each falls through to `await network`, blank until it lands, and only then fills the cache | `pos.html` **357 KB again** |
+| open 3 | hits | 0 |
+
+Measured by inspecting the cache directly: after open 1, `caches` held `ila-shell-v2: []`.
+It is empty. Nobody found this by testing, because by the third open everything is fast
+and stays fast — and it comes back whenever the cache is lost, which for the customer
+page is **every new customer**, and on iOS is any device that has not opened the app for
+a week.
+
+Fixed in `sw.js`, in two parts:
+
+- an install handler that fetches the seven shared files (`auth-gate.js`, `pin-mask.js`,
+  `build-check.js`, `dialogs.js`, `connection.js`, `qr.js`, `logo.png`) while open 1 is
+  still being read, each swallowing its own failure — `cache.addAll()` is atomic and one
+  404 would mean the worker never installs at all;
+- an activate handler that, after claiming, caches **the page that installed it**, read
+  off `clients.matchAll()`. That is the one page this device demonstrably opens and the
+  one thing a static precache list cannot know the name of. The till caches the till,
+  the kitchen caches the kitchen, and neither pays for the other.
+
+Deliberately *not* precaching all seven HTML pages: that is about a megabyte, most of it
+for roles the device will never open, downloaded in competition with the page the person
+is actually looking at.
+
+| page | second open, before | after |
+|---|---|---|
+| pos.html | 357 KB | **0** |
+| admin.html | 163 KB | **0** |
+| chef.html | 53 KB | **0** |
+| inventory.html | 50 KB | **0** |
+
+## 7b. every table QR code was its own cache entry — FIXED
+
+Found while fixing the above. The cache keys on the whole URL including the query
+string, and the customer page is only ever opened *with* one — the table QR codes are
+`ila.cafe/?table=3`, `?table=7`, and so on round the room. So every table was a separate
+entry that had to be filled by its own slow open, and a customer moving tables got a cold
+page on a phone holding the identical bytes under another number.
+
+The document is the same file whichever table asked for it — the number is read by the
+page at runtime, not served differently — so navigations are now stored and looked up
+under the path alone (`docKey`). Only navigations: a query string on anything else may
+well pick the file. Measured: table 7 pulled 158 KB after table 3 had been opened, and
+now pulls 0.
 
 ---
 
@@ -294,15 +344,34 @@ aborting them, so that "what does a stranger's first visit cost" has an answer a
 
 ---
 
-## In the order worth doing them
+## Done
+
+These three were what the floor was complaining about, and they are in.
 
 | | change | measured effect |
 |---|---|---|
-| 1 | guard the `controllerchange` reload in `index.html` | one page load saved on every customer's first visit |
+| 7 | precache the shared shell on install, and cache the installing client's own page | second open of every app: full download → **0 bytes** |
+| 7b | key navigations on the path, not the query string | a new table QR: 158 KB → **0** |
+| 1 | guard the `controllerchange` reload in `index.html` | a customer's first visit: 2 page loads → **1** |
+
+`test/second-open-browser.test.js` guards all three, and was checked against the old code
+first: it fails six ways there, naming the exact byte count each page pulled on its
+second open. None of this was visible to the existing suites, and none of it is readable
+off the source — `sw.js` can be inspected all day and it will not say *when* the worker
+starts seeing requests.
+
+## Still worth doing
+
+| | change | measured effect |
+|---|---|---|
 | 2 | roll up `customers` for `admin.html` | admin cold open 0.45 MB → 0.20 MB, and stops it growing |
 | 3 | defer Kitchen Accuracy behind its card | admin cold open → 0.13 MB with #2 |
 | 4 | defer `demandBoot()` to the Demand Map tab | 4 round trips off the analytics open |
 | 5 | build `todayRecs` from `records` in memory | 2 round trips off the analytics open |
 | 6 | `defer` the auth SDK on `index.html`, and narrow the test | not measured — see item 8 |
-| 7 | precache the shared shell on install | second app on a device opens warm |
 | 8 | let the `wifi` probe see the service worker; count navigations | would have caught #1 |
+
+#2 and #3 are the ones a person would still feel: admin holds a ~1.2 second gap between
+the shell painting and the numbers appearing, on every open, *even fully cached* — that
+gap is the 0.45 MB, and it is the only white-screen complaint the three fixes above do
+not answer.

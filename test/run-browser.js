@@ -47,6 +47,7 @@ const suites = [
   'analytics-drill-browser.test.js',
   'eod-summary-browser.test.js',
   'shell-cache-browser.test.js',
+  'second-open-browser.test.js',
   'analytics-alltime-browser.test.js',
 ];
 
