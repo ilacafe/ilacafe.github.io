@@ -46,6 +46,22 @@
       "pushHealth": {
         ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      },
+      "clientErrors": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$sig": {
+          ".write": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').exists())",
+          ".validate": "newData.hasChildren(['page','message'])",
+          "page":     { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "kind":     { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "message":  { ".validate": "newData.isString() && newData.val().length <= 300" },
+          "source":   { ".validate": "newData.isString() && newData.val().length <= 200" },
+          "build":    { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "count":    { ".validate": "newData.isNumber()" },
+          "firstAt":  { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999" },
+          "lastAt":   { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999999999" },
+          "$other":   { ".validate": false }
+        }
       }
     },
     "upiReview": {

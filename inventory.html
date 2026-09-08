@@ -108,6 +108,7 @@
     <link rel="preload" as="script" href="/auth-gate.js">
     <link rel="preload" as="script" href="/pin-mask.js">
     <link rel="preload" as="script" href="/dialogs.js">
+    <link rel="preload" as="script" href="/build-check.js">
     <link rel="preload" as="script" href="/connection.js">
 
     <style>
@@ -365,6 +366,12 @@
     <script src="/auth-gate.js"></script>
     <!-- Masks the staff PIN without making it a field iOS offers to fill. -->
     <script src="/pin-mask.js"></script>
+    <!-- Watches for a newer deploy and offers a reload. This screen may be open
+         all day, and the service worker only applies a new build on the next
+         open. Keep data-build in step with build.json — npm test checks it.
+         The stock tablet was the one page without this: it could sit on a build
+         from weeks ago with nothing on screen to say so, and nothing to tap. -->
+    <script src="/build-check.js" data-build="2026-09-08.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -405,6 +412,12 @@
             appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
         };
         firebase.initializeApp(firebaseConfig);
+        // The shared service worker: push, and the cache that makes an open instant.
+        // This page went without one for as long as it existed, so every open fetched it
+        // whole from the network. GitHub Pages sends a ten-minute HTTP cache (see sw.js),
+        // which is exactly why reopening straight away felt quick and reopening later did
+        // not — inside ten minutes the browser answered, and after it nothing did.
+        if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.js').catch(function(){}); } catch(e){} }
         const db = firebase.database();
 
         const auth = firebase.auth();

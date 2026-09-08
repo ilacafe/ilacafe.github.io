@@ -881,7 +881,10 @@ async function heartbeat(job){
   }
 }
 
-async function reportIfItThrows(job, promise){
+// `isScheduled` says whether this job is one of the crons. It is the caller's to
+// declare rather than something guessed from the name, because a name is not a
+// schedule and the next non-cron caller would inherit the wrong answer silently.
+async function reportIfItThrows(job, promise, isScheduled){
   let result;
   try {
     result = await promise;
@@ -937,8 +940,20 @@ async function reportIfItThrows(job, promise){
   // or from the catch above, would say the Worker is alive while saying nothing
   // about whether the job did anything — which is the failure this is supposed to
   // catch, wearing a green tick.
-  await heartbeatRecord(job);
-  await heartbeat(job);
+  //
+  // ONLY FOR A SCHEDULED JOB, THOUGH. A heartbeat answers "did the thing that runs
+  // on a timer run?", and that question is meaningless for work that happens when
+  // something arrives. The bank-credit ingest reports failures through here too, and
+  // it is triggered by an email: it was writing a heartbeat row and pinging the
+  // external monitor with a job name that is not on any schedule, on every credit.
+  // Nothing broke — check-cron-heartbeat.js reads a fixed list of jobs, so it could
+  // not false-alarm — but it put two more sequential round trips on the path a
+  // payment arrives down, and sent an unasked-for check name to whatever service is
+  // on the other end of HEARTBEAT_URL.
+  if (isScheduled){
+    await heartbeatRecord(job);
+    await heartbeat(job);
+  }
   return result;
 }
 
@@ -1372,6 +1387,10 @@ async function runVerificationMonitor(nowMs, isWeekly){
   // couple of hours, and one that accumulates hands out every trackId in the café
   // eventually. Its own try/catch, because nothing below should fail for it.
   try { await pruneTableIndex(token); } catch (e) { console.error('prune tableIndex', e); }
+  // Same argument, different node: the tills' fault reports are diagnostics, not
+  // records, and a fault nobody has seen for a fortnight is not what anybody opens
+  // that panel to read.
+  try { await pruneClientErrors(token); } catch (e) { console.error('prune clientErrors', e); }
   // Also housekeeping, also on its own: this one moves an audit record, so a failure
   // here must never take the payment alerts below down with it.
   try { await settleLateVerifications(token); } catch (e) { console.error('late verifications', e); }
@@ -1764,6 +1783,173 @@ async function pruneTableIndex(token){
   return { pruned: pruned };
 }
 
+// ============================================================================
+//  THE TILLS' FAULT REPORTS, KEPT SHORT
+// ============================================================================
+// connection.js writes ops/clientErrors when a page throws something nobody caught.
+// The key is a signature — page, message, where it came from — so a fault that
+// happens a thousand times is one row with a count on it, and the node is as long as
+// the number of DISTINCT things going wrong.
+//
+// That is nearly bounded and not quite: a message can carry variable text in it (a
+// database refusal names its own path, and a path can hold an id), and every variant
+// is its own signature. Left alone that accumulates, slowly, forever — which is the
+// shape this project has been caught by twice.
+//
+// So it is pruned rather than argued about. These are diagnostics, not records:
+// nothing downstream reads them, an old one has already been fixed or is no longer
+// happening, and losing it costs a line on a panel nobody was looking at. A fault
+// still occurring rewrites its own row on the next occurrence and comes straight
+// back, which is the property that makes this safe to delete from at all.
+const CLIENT_ERR_KEEP_MS = 14 * 24 * 60 * 60000;
+
+async function pruneClientErrors(token){
+  let all;
+  try {
+    const res = await fetch(DB_URL + '/ops/clientErrors.json?auth=' + token);
+    if (!res.ok) return { pruned: 0 };
+    all = await res.json();
+  } catch (e) { return { pruned: 0 }; }
+  if (!all || typeof all !== 'object') return { pruned: 0 };
+
+  const cutoff = Date.now() - CLIENT_ERR_KEEP_MS;
+  const updates = {};
+  let pruned = 0;
+  for (const sig in all) {
+    const row = all[sig];
+    const at = Number(row && row.lastAt);
+    // A row with no readable timestamp is left alone rather than guessed at — the
+    // same rule the table index prune follows, for the same reason.
+    if (!isFinite(at) || at <= 0 || at >= cutoff) continue;
+    updates['ops/clientErrors/' + sig] = null;
+    pruned++;
+  }
+  if (!pruned) return { pruned: 0 };
+  try {
+    await fetch(DB_URL + '/.json?auth=' + token, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates)
+    });
+  } catch (e) { return { pruned: 0 }; }
+  return { pruned: pruned };
+}
+
+// ---- The one page that could not report its own faults ---------------------
+//
+// connection.js writes ops/clientErrors from every staff page and skipped an
+// anonymous session, because the rules refuse one. That gap was in the worst place it
+// could be: the ordering page is the only screen a CUSTOMER touches, it is where the
+// fault that cost real money happened — an order refused for one field too long, its
+// rejection attached to nothing — and it is the one screen with nobody standing over
+// the device to notice that something went wrong.
+//
+// It cannot be closed by opening the node. Writing it from the ordering page means
+// ops/clientErrors is writable by anyone holding an anonymous token, which is anyone
+// at all, on the database that holds the café's takings. So the customer's browser
+// asks the Worker instead and the Worker writes as the robot — the same shape as the
+// cash-out and the stock log, for the same reason.
+//
+// NOTHING THE CALLER SENDS IS TRUSTED WITH ANYTHING:
+//
+//   The KEY is computed here, from the text, after the text is bounded. If the caller
+//   chose it, every row in the node would be a stranger's to overwrite — including the
+//   till's own reports, which is the half of this node that matters.
+//
+//   The PAGE is not read from the request at all for an anonymous session. An
+//   anonymous token only ever comes from the ordering page, and a report claiming to
+//   come from pos.html would send somebody to look at the wrong screen.
+//
+//   Every field is bounded by safeText at the lengths the rules validate, so a
+//   refusal from the database here is a bug in this file rather than normal traffic.
+//
+// WHAT ENDS UP IN IT. `message` is whatever the browser said, which on the ordering
+// page can carry text a customer typed — a validation failure quoting a field, a
+// refusal naming a path with an order id in it. That is the same exposure the tills
+// already have and it is why the node is readable by an admin and the robot and by
+// nobody else, why nothing here asks for more than the error, and why the robot drops
+// a row a fortnight after it was last seen.
+//
+// AND THE NODE IS CAPPED. The browser's own limits — eight faults a load, one a minute
+// per signature — bind an honest page and bind nothing else: anyone can post this
+// route a million distinct messages, and every distinct message is its own row. What
+// bounds the node is that a report which would CREATE a row is refused once the node
+// is already long, while a row that exists is always updatable. So a fault already
+// known goes on counting, and the worst a flood costs the café is a node of a size it
+// chose. Staff reporting is untouched either way: it does not come through here, and
+// the rules let a till write whether the node is long or not.
+const CLIENT_ERR_MAX_ROWS = 200;
+
+// The same signature connection.js computes, deliberately: one definition of what
+// counts as "the same fault", so a report through this route and a report written
+// directly by a till land on the same row rather than on two.
+function clientErrKey(page, sig){
+  let h = 0;
+  for (let i = 0; i < sig.length; i++) { h = ((h << 5) - h + sig.charCodeAt(i)) | 0; }
+  return page + '-' + (h >>> 0).toString(36);
+}
+
+async function handleClientError(data, claims){
+  const anon = !!(claims.firebase && claims.firebase.sign_in_provider === 'anonymous');
+
+  // Firebase keys cannot hold . # $ [ ] / — and the page is only the caller's word for
+  // it, which is why an anonymous session does not get to say.
+  const page = anon ? 'index_html'
+                    : (safeText(data && data.page, 40).replace(/[.#$\[\]\/]/g, '_') || 'unknown');
+  const kind    = safeText(data && data.kind, 20) || 'error';
+  const message = safeText(data && data.message, 300);
+  const source  = safeText(data && data.source, 200);
+  const build   = safeText(data && data.build, 40) || 'unknown';
+  if (!message) return { status: 400, body: { error: 'nothing to report' } };
+
+  const key = clientErrKey(page, page + '|' + kind + '|' + message + '|' + source);
+  const at  = '/ops/clientErrors/' + encodeURIComponent(key);
+
+  let token; try { token = await getRobotToken(); }
+  catch (e) { return { status: 502, body: { error: 'no credential' } }; }
+
+  // Read the row first. It answers three questions in one round trip: whether this is
+  // a new fault (so whether the cap applies), what the count was, and when it was
+  // first seen. A read that FAILS is not treated as "new" — that would reset a count
+  // and lose the age of a fault every time the database hiccuped.
+  let row;
+  try {
+    const res = await fetch(DB_URL + at + '.json?auth=' + token);
+    if (!res.ok) return { status: 502, body: { error: 'could not read' } };
+    row = await res.json();
+  } catch (e) { return { status: 502, body: { error: 'could not read' } }; }
+
+  // Only a report that would LENGTHEN the node pays for the count, and only a report
+  // that would lengthen it can be refused for length.
+  if (row == null) {
+    let n = 0;
+    try {
+      const res = await fetch(DB_URL + '/ops/clientErrors.json?shallow=true&auth=' + token);
+      if (!res.ok) return { status: 502, body: { error: 'could not read' } };
+      const keys = await res.json();
+      n = (keys && typeof keys === 'object') ? Object.keys(keys).length : 0;
+    } catch (e) { return { status: 502, body: { error: 'could not read' } }; }
+    // Not an error to the caller. The page has nowhere else to put this and nothing to
+    // do about it, and a 4xx would only teach it to retry.
+    if (n >= CLIENT_ERR_MAX_ROWS) return { status: 200, body: { ok: true, stored: false, reason: 'full' } };
+  }
+
+  const now  = Date.now();
+  const prev = (row && typeof row === 'object') ? row : {};
+  // Read-then-write rather than a server-side increment. Two phones hitting the same
+  // fault in the same instant can lose one of the two, which moves a number nobody
+  // acts on by one; the alternative is a wire-format server value this file cannot
+  // test against the real database, on the path that exists to record failures.
+  const count   = (Number(prev.count)   > 0 ? Number(prev.count)   : 0) + 1;
+  // Kept from the row it was on, so the age of a fault survives every later
+  // occurrence overwriting the rest of the record.
+  const firstAt = (Number(prev.firstAt) > 0 ? Number(prev.firstAt) : now);
+
+  let res;
+  try { res = await dbPut(at, { page, kind, message, source, build, count, firstAt, lastAt: now }); }
+  catch (e) { return { status: 502, body: { error: 'could not write' } }; }
+  if (!res.ok) return { status: 502, body: { error: 'refused' } };
+  return { status: 200, body: { ok: true, stored: true } };
+}
+
 export default {
   async fetch(request, env){
     loadConfig(env);
@@ -1823,6 +2009,20 @@ export default {
       }
       if (!(await staffRoleOf(who.sub))) return json({ error:'forbidden' }, 403);
       const r = await handleInventoryLog(data, who);
+      return json(r.body, r.status);
+    }
+
+    // A fault on the ordering page, which is the one screen that cannot record its
+    // own. This is deliberately the ONLY route here an anonymous token may use, and
+    // the reason it can is that the caller is trusted with nothing: the row it writes
+    // to, the page it claims to be, and the length of every string are all decided in
+    // handleClientError rather than sent. It takes no PIN and asks for no role, so it
+    // must also never be able to do anything but add a bounded line to a diagnostic
+    // node — check that again before ever widening it.
+    if (data && data.action === 'client-error') {
+      const who = await verifyIdToken(data.token);
+      if (!who) return json({ error:'unauthorized' }, 401);
+      const r = await handleClientError(data, who);
       return json(r.body, r.status);
     }
 
@@ -1887,11 +2087,11 @@ export default {
     const cron = event && event.cron ? event.cron : '';
     const now = Date.now();
     if (cron === '0 20 1 * *'){
-      ctx.waitUntil(reportIfItThrows('recalibration', runRecalibration(false)));
+      ctx.waitUntil(reportIfItThrows('recalibration', runRecalibration(false), true));
     } else {
       const isMonday = new Date(now).getUTCDay() === 1;   // digest once a week on Monday ticks
       const isWeeklySlot = isMonday && new Date(now).getUTCHours() === 4;   // ~one tick/week (04:00 UTC Mon)
-      ctx.waitUntil(reportIfItThrows('monitor', runVerificationMonitor(now, isWeeklySlot)));
+      ctx.waitUntil(reportIfItThrows('monitor', runVerificationMonitor(now, isWeeklySlot), true));
     }
   },
 

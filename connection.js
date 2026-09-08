@@ -264,6 +264,171 @@
     // recalculated rather than left on the number it was started with.
     window.ilaNet.onVerdict(function () { if (downSince && !bar) arm(); });
 
+    // ------------------------------------------------------- the error nobody saw
+    //
+    // A REFUSED READ HAS SOMEWHERE TO GO. AN UNCAUGHT ERROR HAD NOWHERE.
+    //
+    // The Worker is the component nobody watches, so it is the one that is watched:
+    // ops/cronFailure records a throw, ops/pushHealth records whether a notification
+    // landed, ops/cronHeartbeat records that a scheduled job ran at all, and a GitHub
+    // workflow reads the last of those from outside. That is the right amount of
+    // instrumentation for something invisible.
+    //
+    // The tills had none of it, and they are where the money is. Across the seven
+    // pages there are 113 `catch (e) {}` and a score of console.error, on devices with
+    // no console open, in a café. Every fault found here so far was found by somebody
+    // noticing something odd at the counter, or by reading the source afterwards.
+    //
+    // The sharpest case is the one that cost real money: the ordering page wrote an
+    // order, the database refused it for being one field too long, and the rejection
+    // was attached to nothing. That is an `unhandledrejection` — the browser knew, and
+    // there was nothing listening. A customer paid for an order that did not exist.
+    //
+    // WHAT THIS IS NOT. It is not a log. A log grows, and this node must not: the key
+    // is a signature — page, message, and where it came from — so the hundredth
+    // occurrence of one fault overwrites the first and bumps a count. The node is as
+    // long as the number of DISTINCT things going wrong, which is a number that should
+    // be nearly zero and is worth looking at when it is not.
+    //
+    // WHO MAY WRITE, AND HOW THE CUSTOMER PAGE DOES.
+    //
+    // Staff write this node directly, and the rules say so rather than this file: a
+    // till is authorised by having an entry under users/{uid}, which an anonymous
+    // session does not have. Every customer on the ordering page is anonymous, so for
+    // a long time that page ran this reporter and reported nothing — the deliberate
+    // gap, because letting it write would mean a node anybody at all can write to on
+    // the database that holds the café's takings.
+    //
+    // It was also the worst possible place to have a gap. The ordering page is the one
+    // screen a customer touches, it is where the fault that cost real money happened,
+    // and it is the one screen with nobody standing over the device to see anything go
+    // wrong. So the customer's browser asks the Worker instead, and the Worker writes
+    // the row as the robot — the same shape as the cash-out and the stock log.
+    //
+    // The rules are unchanged by that and still refuse an anonymous write, which is
+    // the point: the trust lives in handleClientError, where the key is computed from
+    // the text rather than sent, the page is not the caller's to claim, and a report
+    // that would ADD a row is refused once the node is long. Nothing here is trusted
+    // by anything there.
+    var ERR_MAX_PER_LOAD = 8;         // a loop that throws must not become a loop that writes
+    var ERR_REPEAT_GAP_MS = 60000;    // the same signature, at most once a minute
+    var errSent = 0, errLast = {}, errBusy = false;
+
+    // The same Worker the tills use for a cash-out. The URL is a literal in five pages
+    // already and is public by construction — it is a route, not a credential, and
+    // every one of its routes authorises the caller for itself.
+    var ERR_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';
+    var ERR_WORKER_TIMEOUT_MS = 8000;
+
+    // keepalive, because a page that has just thrown is a page somebody is about to
+    // close, and a report that dies with the tab is the gap this closes reopening
+    // itself. Every failure is swallowed: there is nowhere else to put this, and an
+    // error reporter that can raise an error is a loop.
+    function reportViaWorker(u, page, kind, msg, src, build) {
+        try {
+            u.getIdToken().then(function (tok) {
+                var ctl = null;
+                try {
+                    ctl = new AbortController();
+                    setTimeout(function () { try { ctl.abort(); } catch (e) {} }, ERR_WORKER_TIMEOUT_MS);
+                } catch (e) { ctl = null; }
+                return fetch(ERR_WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'client-error', token: tok,
+                        page: page, kind: kind, message: msg, source: src, build: build
+                    }),
+                    signal: ctl ? ctl.signal : undefined,
+                    keepalive: true
+                });
+            }).catch(function () { });
+        } catch (e) { /* deliberately nothing */ }
+    }
+
+    function errPage() {
+        var p = (location.pathname || '').replace(/^\/+/, '');
+        return (p || 'index.html').replace(/[.#$\[\]\/]/g, '_');
+    }
+    // Firebase keys cannot hold . # $ [ ] /, and a signature has to be short and stable
+    // rather than readable — the readable version is a field inside the record.
+    function errKey(sig) {
+        var h = 0;
+        for (var i = 0; i < sig.length; i++) { h = ((h << 5) - h + sig.charCodeAt(i)) | 0; }
+        return errPage() + '-' + (h >>> 0).toString(36);
+    }
+
+    // Never throws, never reports itself, and never reports twice for the same thing in
+    // the same minute. Anything that goes wrong in here is swallowed on purpose: an
+    // error reporter that can raise an error is a loop.
+    function report(kind, message, where) {
+        if (errBusy) return;                       // re-entrancy: our own failure is not news
+        try {
+            if (errSent >= ERR_MAX_PER_LOAD) return;
+            var msg = String(message == null ? '' : message).slice(0, 300);
+            if (!msg) return;
+            var src = String(where || '').slice(0, 200);
+            var sig = errPage() + '|' + kind + '|' + msg + '|' + src;
+            var now = Date.now();
+            if (errLast[sig] && (now - errLast[sig]) < ERR_REPEAT_GAP_MS) return;
+            errLast[sig] = now;
+
+            if (!(window.firebase && firebase.apps && firebase.apps.length && firebase.database)) return;
+            var u = null;
+            try { u = firebase.auth && firebase.auth().currentUser; } catch (e) { return; }
+            // Nobody is signed in yet — not even anonymously — so there is no identity
+            // to write with and nothing that would accept the write.
+            if (!u) return;
+
+            errSent++;
+            errBusy = true;
+            var build = String(window.ILA_BUILD || 'unknown').slice(0, 40);
+
+            if (u.isAnonymous) {
+                // The ordering page. The rules refuse this write and should; the Worker
+                // makes it on the customer's behalf, having trusted none of it.
+                reportViaWorker(u, errPage(), kind, msg, src, build);
+            } else {
+                var ref = firebase.database().ref('ops/clientErrors/' + errKey(sig));
+                ref.update({
+                    page: errPage(),
+                    kind: kind,
+                    message: msg,
+                    source: src,
+                    build: build,
+                    lastAt: firebase.database.ServerValue.TIMESTAMP,
+                    count: firebase.database.ServerValue.increment(1)
+                }).catch(function () { /* refused or offline: there is nowhere else to put this */ });
+                // firstAt is written only if the row is new, so the age of a fault survives
+                // every later occurrence overwriting the rest of the record.
+                ref.child('firstAt').transaction(function (cur) {
+                    return cur === null ? Date.now() : undefined;
+                }, function () {}, false);
+            }
+        } catch (e) {
+            // deliberately nothing
+        }
+        errBusy = false;
+    }
+
+    // Exposed so a page can report something it caught itself and cannot otherwise
+    // surface — and so the suite can drive it without throwing inside a test.
+    window.ilaOops = function (message, where) { report('caught', message, where); };
+
+    window.addEventListener('error', function (ev) {
+        // Two different events share this name. A resource that failed to load has a
+        // target and no message, and says nothing a person can act on; an uncaught
+        // exception has a message and a place.
+        if (!ev || !ev.message) return;
+        report('error', ev.message, (ev.filename || '') + (ev.lineno ? ':' + ev.lineno : ''));
+    });
+    window.addEventListener('unhandledrejection', function (ev) {
+        var r = ev && ev.reason;
+        var msg = (r && (r.message || r.code)) || String(r == null ? 'rejected' : r);
+        // A Firebase refusal names its own path, which is the most useful half of it.
+        report('rejection', msg, (r && r.stack ? String(r.stack).split('\n')[1] || '' : '').trim());
+    });
+
     // The pages initialise Firebase in their own inline script, which runs after this
     // file. Waiting for that rather than assuming it keeps this independent of where
     // the tag sits — and if a page never initialises one, this quietly does nothing

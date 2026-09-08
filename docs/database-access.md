@@ -345,6 +345,57 @@ window its cap cut short rather than quietly refitting on less evidence than it 
 it has. `test/unbounded-reads.test.js` sweeps the Worker alongside the seven pages and
 fails on a whole-node read nobody has classified.
 
+## The one ops node a browser writes
+
+`ops/cronFailure`, `ops/pushHealth` and `ops/cronHeartbeat` are the robot's, and the
+rules name that address explicitly on each. `ops/clientErrors` is the exception and is
+worth reading the rule for, because it is the only place a till writes into `ops` at
+all: `connection.js` puts an uncaught fault there so that the pages stop failing
+silently, and a page's write is authorised by having a staff role rather than by
+holding the robot credential.
+
+Two things bound what that opens up.
+
+**An anonymous session cannot write it, and the ordering page reports anyway.** The
+rule refuses a customer outright — `root.child('users')` has no entry for an anonymous
+uid — and it stays that way, because a node an anonymous token can write is a node
+anybody at all can write, on the database that holds the café's takings. That left the
+ordering page unable to report anything, which was the worst place for a gap to be: the
+only screen a customer touches, where the fault that cost real money happened, and the
+one screen with nobody standing over the device.
+
+So the customer's browser posts the fault to the Worker (`action: 'client-error'`) and
+the Worker writes the row as the robot. It is the only route there an anonymous token
+may use, and it can be, because the caller is trusted with nothing:
+
+- the **key** is computed in `handleClientError` from the text, after the text is
+  bounded. If the caller chose it, every row in the node — including every fault a till
+  has reported — would be a stranger's to overwrite;
+- the **page** is not read from the request at all for an anonymous session. An
+  anonymous token only ever comes from the ordering page, and a report claiming to be
+  from `pos.html` would send somebody to look at the wrong screen;
+- every **string** is cut by `safeText` to the length the rule validates, so a refusal
+  from the database on this path is a bug in the Worker rather than ordinary traffic;
+- and the **node is capped**. The browser's own limits — eight faults a load, one a
+  minute per signature — bind an honest page and nobody else, so a report that would
+  CREATE a row is refused once the node is `CLIENT_ERR_MAX_ROWS` long. A row that
+  exists is always updatable, so a fault already known goes on counting through a
+  flood, and the worst it costs is a node of a size the café chose. Staff reporting is
+  untouched: it does not come through this route, and the rule lets a till write
+  whether the node is long or not.
+
+**The shape is fixed and every string is bounded**, so a staff account cannot use it as
+free storage: `$other` is refused, `message` caps at 300 characters, and the key is a
+signature rather than a push id, so a fault that happens a thousand times is one row
+with a count on it. The Worker prunes anything not seen for a fortnight
+(`pruneClientErrors`), on the same argument as the table index — these are diagnostics
+rather than records, and a fault still occurring rewrites its row and comes back.
+
+`test/rules-emulator.test.js` asserts all of this by hand rather than deriving it. The
+access map reads the seven pages, and this write lives in a shared script, so nothing
+derived would notice a rule that refused it — and a reporter whose write is denied
+reports nothing and looks exactly like a fortnight with no faults.
+
 ## The staff PIN, and what it now authorises
 
 `staff` maps `SHA-256(fixed salt + PIN) → name`, the salt is a literal in the page
