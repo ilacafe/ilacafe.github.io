@@ -356,13 +356,33 @@ holding the robot credential.
 
 Two things bound what that opens up.
 
-**An anonymous session cannot write it.** The ordering page runs the same reporter and
-skips a customer on its own, but the rule says so as well — `root.child('users')` has
-no entry for an anonymous uid, so the write is refused whatever the page does. That
-makes the customer page a real gap in the reporting, and it is the deliberate half of
-the trade: collecting from a stranger's browser would mean a node the world can write
-to on the database that holds the café's takings. The Worker is the way to close it if
-that is ever wanted.
+**An anonymous session cannot write it, and the ordering page reports anyway.** The
+rule refuses a customer outright — `root.child('users')` has no entry for an anonymous
+uid — and it stays that way, because a node an anonymous token can write is a node
+anybody at all can write, on the database that holds the café's takings. That left the
+ordering page unable to report anything, which was the worst place for a gap to be: the
+only screen a customer touches, where the fault that cost real money happened, and the
+one screen with nobody standing over the device.
+
+So the customer's browser posts the fault to the Worker (`action: 'client-error'`) and
+the Worker writes the row as the robot. It is the only route there an anonymous token
+may use, and it can be, because the caller is trusted with nothing:
+
+- the **key** is computed in `handleClientError` from the text, after the text is
+  bounded. If the caller chose it, every row in the node — including every fault a till
+  has reported — would be a stranger's to overwrite;
+- the **page** is not read from the request at all for an anonymous session. An
+  anonymous token only ever comes from the ordering page, and a report claiming to be
+  from `pos.html` would send somebody to look at the wrong screen;
+- every **string** is cut by `safeText` to the length the rule validates, so a refusal
+  from the database on this path is a bug in the Worker rather than ordinary traffic;
+- and the **node is capped**. The browser's own limits — eight faults a load, one a
+  minute per signature — bind an honest page and nobody else, so a report that would
+  CREATE a row is refused once the node is `CLIENT_ERR_MAX_ROWS` long. A row that
+  exists is always updatable, so a fault already known goes on counting through a
+  flood, and the worst it costs is a node of a size the café chose. Staff reporting is
+  untouched: it does not come through this route, and the rule lets a till write
+  whether the node is long or not.
 
 **The shape is fixed and every string is bounded**, so a staff account cannot use it as
 free storage: `$other` is refused, `message` caps at 300 characters, and the key is a

@@ -21,6 +21,7 @@ It does four things:
 | **Table index prune** | on the same hourly tick | drops `orders/tableIndex` entries older than six hours |
 | **Cash out of the drawer** | `POST /` with `action: cashout` | verifies a staff token *and* a PIN, then writes the ledger entry itself |
 | **Stock on and off the shelf** | `POST /` with `action: inventory-log` | the same, for a prep or a delivery — and it reads the recipe rather than being told it |
+| **A customer's fault report** | `POST /` with `action: client-error` | the one route an anonymous token may use — writes `ops/clientErrors` as the robot, having trusted nothing the caller sent |
 
 ## Deploying
 
@@ -268,6 +269,53 @@ entry is simply not there. `addLedgerEntry` now reports a failed write on screen
 that order is survivable too. It is still the wrong one: the message it produces
 tells a cashier something is broken, where the recommended order tells them the
 button is not available yet.
+
+## The fault on a customer's phone
+
+`connection.js` listens for an uncaught throw or an unhandled rejection on every page
+and writes `ops/clientErrors`, so the screens stop failing silently. The ordering page
+could not: it is signed in anonymously, and the rules refuse that — correctly, because
+a node an anonymous token can write is a node **anybody at all** can write, on the
+database holding the café's takings.
+
+That put the gap in the worst place available. The ordering page is the only screen a
+customer touches, it is where the fault that cost real money happened — an order refused
+for one field too long, its rejection attached to nothing — and it is the one screen
+with nobody standing over the device to notice.
+
+```json
+{ "action": "client-error", "token": "<firebase idToken>",
+  "page": "index_html", "kind": "rejection",
+  "message": "PERMISSION_DENIED at /orders/pendingWeb",
+  "source": "index.html:412", "build": "2026-09-06.1" }
+```
+
+It takes no PIN and asks for no role. **That is only safe because the caller is trusted
+with nothing**, and every one of these is load-bearing — check them again before ever
+widening this route:
+
+- **The key is computed here**, from the text, after the text is bounded. If the caller
+  chose it, every row in the node — including every fault a till has reported — would be
+  a stranger's to overwrite, and the node would stop being evidence of anything.
+- **The page is ignored for an anonymous session.** An anonymous token only ever comes
+  from the ordering page, and a report claiming to come from `pos.html` would send
+  somebody to look at the wrong screen.
+- **Every string is cut by `safeText`** to the length the rules validate, so a refusal
+  from the database on this path is a bug in this file rather than ordinary traffic.
+- **A report that would ADD a row is refused** once the node is `CLIENT_ERR_MAX_ROWS`
+  long. The browser's own limits — eight faults a load, one a minute per signature —
+  bind an honest page and nobody else. A row that already exists is always updatable, so
+  a fault already known goes on counting through a flood, and the worst it costs is a
+  node of a size the café chose.
+
+The rules did **not** change to allow any of this, and must not: `ops/clientErrors` is
+still refused to an anonymous session and still granted to a staff role, so the tills go
+on writing it directly rather than paying a Worker round trip for every fault. If this
+route is ever revisited, that rule staying shut is the first thing to check.
+
+The robot prunes anything not seen for a fortnight (`pruneClientErrors`), on the same
+argument as the table index: these are diagnostics, not records, and a fault still
+happening rewrites its row and comes straight back.
 
 ## Who may send a push
 

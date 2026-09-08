@@ -719,11 +719,18 @@ costs money:
   back. Two caps hold a page that is coming apart from also filling the node it reports
   into — eight faults per load, and the same signature at most once a minute — and the
   reporter refuses to report itself, because an error reporter that can raise an error
-  is a loop. **The customer page is the deliberate gap.** It runs the same code and
-  skips an anonymous session, because collecting from a stranger's browser would mean a
-  node the world can write to on the database that holds the café's takings; the rules
-  say the same thing rather than trusting the guard, and the emulator suite checks both
-  halves. The Worker is the way to close that gap if the café ever wants it.
+  is a loop. **The customer page reports through the Worker**, because it cannot write
+  the node and must not be able to: an anonymous session is every stranger, and the
+  rules refuse one — which left the gap sitting on the only screen a customer touches,
+  where the fault that cost money happened, and the one screen with nobody standing over
+  the device. So the ordering page posts the fault and the Worker writes the row as the
+  robot, having trusted none of it: the key is computed from the text rather than sent,
+  so a caller cannot pick a row to overwrite; the page is not the caller's to claim, so
+  a report cannot pretend to come from the till; every string is cut to the length the
+  rules validate; and a report that would ADD a row is refused once the node is already
+  long, while a row that exists goes on counting — the browser's eight-a-load is an
+  honest page's limit and nobody else's. The rule itself did not move, which is the
+  thing to check first if this is ever revisited.
 - **every page carries every shared mechanism** — the offline bar, the update banner,
   the shell cache and the app's own dialogs are cross-cutting by design, and each was
   wired into the pages one at a time, by hand. A page gets missed, and nothing says so,

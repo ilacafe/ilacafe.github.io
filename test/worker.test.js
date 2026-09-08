@@ -712,5 +712,226 @@ async function main() {
         'a token the sign-in keeps handing back would spin forever');
 }
 
+// ------------------------------------------- the customer's fault, written by the robot
+//
+// The ordering page is the only screen a customer touches, it is where the fault that
+// cost real money happened, and it is the one screen with nobody standing over the
+// device. It could not report anything: ops/clientErrors is refused to an anonymous
+// session, and it must stay refused — a node the world can write to, on the database
+// holding the café's takings, is not a trade worth one reporting channel.
+//
+// So the browser asks the Worker and the Worker writes the row as the robot. That is
+// the ONE route here an anonymous token may use, which means every question about it
+// is about what a stranger can make it do. All of these are that question.
+{
+  // Read out of the Worker rather than copied, so moving the cap moves it here too and
+  // a cap quietly dropped fails instead of passing against a number this file
+  // remembers. It throws rather than returning null for the reason extractFunction
+  // does: this constant is the only thing bounding ops/clientErrors against a caller
+  // who ignores the browser's own limits, so its absence is the finding.
+  const capLine = /const CLIENT_ERR_MAX_ROWS = (\d+);/.exec(src);
+  if (!capLine) throw new Error(
+    'could not find CLIENT_ERR_MAX_ROWS in worker.js.\n' +
+    'It is what stops a stranger lengthening ops/clientErrors without limit. If it ' +
+    'was renamed, update this suite; if it was removed, put it back.');
+  const CAP = parseInt(capLine[1], 10);
+
+  // The real handler, over a fake database. Each case declares what the database
+  // holds and what it will say, and every request it makes is recorded.
+  function harness(opts) {
+    opts = opts || {};
+    const calls = [];
+    const fetchStub = async (url, init) => {
+      calls.push({ url: String(url).replace(/auth=[^&]*/, 'auth=X'),
+                   method: (init && init.method) || 'GET',
+                   body: init && init.body ? JSON.parse(init.body) : null });
+      if (/shallow=true/.test(url)) {
+        if (opts.countFails) return { ok: false, status: 500, json: async () => null };
+        const keys = {};
+        for (let i = 0; i < (opts.rows || 0); i++) keys['row' + i] = true;
+        return { ok: true, status: 200, json: async () => keys };
+      }
+      if (/clientErrors\/[^.]+\.json/.test(url)) {
+        if (opts.readFails) return { ok: false, status: 500, json: async () => null };
+        return { ok: true, status: 200, json: async () => (opts.row || null) };
+      }
+      return { ok: true, status: 200, json: async () => null };
+    };
+    const api = buildModule([
+      "const DB_URL = 'https://db.example';",
+      capLine[0],
+      "async function getRobotToken(){ return 'robot-token'; }",
+      "async function dbPut(p, body){ await fetch(DB_URL + p + '.json?auth=t', " +
+        "{ method:'PUT', body: JSON.stringify(body) }); return { ok: true }; }",
+      extractFunction(src, 'safeText'),
+      extractFunction(src, 'clientErrKey'),
+      extractFunction(src, 'handleClientError'),
+    ], { fetch: fetchStub, Number, String, Object, Date, JSON, encodeURIComponent },
+       ['handleClientError', 'clientErrKey']);
+    return { api, calls, wrote: () => calls.filter(c => c.method === 'PUT')[0] || null };
+  }
+  const ANON  = { sub: 'anon1', firebase: { sign_in_provider: 'anonymous' } };
+  const STAFF = { sub: 'staff1', firebase: { sign_in_provider: 'password' } };
+  const FAULT = { action: 'client-error', kind: 'rejection',
+                  message: 'PERMISSION_DENIED at /orders/pendingWeb', source: 'index.html:412',
+                  build: '2026-09-06.1' };
+
+  // ---- it writes at all
+  {
+    const h = harness({});
+    const r = await h.api.handleClientError(FAULT, ANON);
+    check('a customer’s fault is written by the robot', r.status === 200 && r.body.stored === true,
+          JSON.stringify(r));
+    const w = h.wrote();
+    check('and it says what went wrong', w && /PERMISSION_DENIED/.test(w.body.message),
+          JSON.stringify(w && w.body));
+    check('and starts the count at one, with a first-seen time',
+          w && w.body.count === 1 && w.body.firstAt > 0 && w.body.lastAt > 0,
+          JSON.stringify(w && w.body));
+  }
+
+  // ---- the page is not the caller's to claim
+  //
+  // An anonymous token only ever comes from the ordering page. A report that could
+  // claim to be pos.html would send somebody to look at the wrong screen, and it is
+  // free to say so — nothing about the request is evidence of where it came from.
+  {
+    const h = harness({});
+    await h.api.handleClientError({ ...FAULT, page: 'pos_html' }, ANON);
+    const w = h.wrote();
+    check('an anonymous report cannot claim to be from the till',
+          w && w.body.page === 'index_html', JSON.stringify(w && w.body.page));
+    check('and lands on a row named for the page it really is',
+          w && /\/ops\/clientErrors\/index_html-/.test(w.url), w && w.url);
+  }
+
+  // ---- and the ROW is not the caller's to choose either
+  //
+  // This is the one that would matter most. If the key came from the request, every
+  // row in the node — including every fault a till has reported — is a stranger's to
+  // overwrite, and the node stops being evidence of anything.
+  {
+    const h = harness({});
+    await h.api.handleClientError({ ...FAULT, key: 'pos_html-deadbeef', sig: 'x' }, ANON);
+    const w = h.wrote();
+    check('a key sent by the caller is ignored', w && !/deadbeef/.test(w.url), w && w.url);
+    const src2 = extractFunction(src, 'handleClientError');
+    check('because the key is computed from the text, here',
+          /clientErrKey\(/.test(src2) && !/data\.key/.test(src2) && !/data\.sig/.test(src2));
+  }
+
+  // ---- the same fault twice is one row
+  {
+    const h = harness({ row: { page: 'index_html', message: 'old', count: 6, firstAt: 111 } });
+    await h.api.handleClientError(FAULT, ANON);
+    const w = h.wrote();
+    check('a fault already known bumps its count rather than adding a row',
+          w && w.body.count === 7, JSON.stringify(w && w.body.count));
+    check('and keeps the time it was first seen, which is the half that cannot be recovered',
+          w && w.body.firstAt === 111, JSON.stringify(w && w.body.firstAt));
+    check('and does not pay for a count of the node it is not lengthening',
+          h.calls.filter(c => /shallow=true/.test(c.url)).length === 0,
+          'an update cannot make the node longer, so nothing needs to be counted');
+  }
+
+  // ---- and the node is capped, because the browser's own caps bind nobody
+  {
+    const full = harness({ rows: CAP });
+    const r = await full.api.handleClientError(FAULT, ANON);
+    check('a NEW fault is refused once the node is already long',
+          r.status === 200 && r.body.stored === false && !full.wrote(), JSON.stringify(r));
+    note('eight a load and one a minute are the honest page’s limits and nobody else’s');
+
+    // The distinction that makes the cap survivable: a flood cannot silence a fault
+    // that is already being counted.
+    const known = harness({ rows: CAP, row: { count: 3, firstAt: 111 } });
+    await known.api.handleClientError(FAULT, ANON);
+    check('but a fault already in the node goes on counting through a flood',
+          !!known.wrote() && known.wrote().body.count === 4,
+          JSON.stringify(known.wrote()));
+
+    const room = harness({ rows: CAP - 1 });
+    await room.api.handleClientError(FAULT, ANON);
+    check('and one below the cap still writes', !!room.wrote(), 'cap is ' + CAP);
+  }
+
+  // ---- a database that will not answer is not a database that is empty
+  {
+    const h = harness({ readFails: true });
+    const r = await h.api.handleClientError(FAULT, ANON);
+    check('a read that fails does not become a row with the count reset',
+          r.status === 502 && !h.wrote(), JSON.stringify(r));
+    note('treating an unreadable row as new would lose a fault’s age on every hiccup');
+  }
+
+  // ---- everything is bounded to what the rules will take
+  {
+    const h = harness({});
+    await h.api.handleClientError({
+      ...FAULT,
+      kind: 'k'.repeat(400), message: 'm'.repeat(4000),
+      source: 's'.repeat(4000), build: 'b'.repeat(400)
+    }, ANON);
+    const b = h.wrote().body;
+    check('every string is cut to the length the rules validate',
+          b.kind.length <= 20 && b.message.length <= 300 &&
+          b.source.length <= 200 && b.build.length <= 40,
+          JSON.stringify({ kind: b.kind.length, message: b.message.length,
+                           source: b.source.length, build: b.build.length }));
+    check('and no field the rules refuse is written',
+          Object.keys(b).every(k => ['page','kind','message','source','build',
+                                     'count','firstAt','lastAt'].includes(k)),
+          Object.keys(b).join(', '));
+    note('$other is refused by the rule, so an extra field would fail the whole write');
+  }
+  {
+    const h = harness({});
+    const r = await h.api.handleClientError({ ...FAULT, message: '   ' }, ANON);
+    check('a report with nothing in it is refused rather than stored empty',
+          r.status === 400 && !h.wrote(), JSON.stringify(r));
+  }
+
+  // ---- staff still come through the front door
+  {
+    const h = harness({});
+    await h.api.handleClientError({ ...FAULT, page: 'pos_html' }, STAFF);
+    check('a staff token may name its own page, because it has a role behind it',
+          h.wrote().body.page === 'pos_html', JSON.stringify(h.wrote().body.page));
+    note('staff pages do not use this route at all — they write the node directly');
+  }
+
+  // ---- one signature, computed the same way in both places
+  //
+  // A till writing directly and this route writing for a customer have to agree about
+  // what "the same fault" is, or one fault becomes two rows that never merge.
+  {
+    const h = harness({});
+    const conn = readPage('connection.js');
+    const pageHash = /h = \(\(h << 5\) - h \+ ([a-zA-Z]+)\.charCodeAt\(i\)\) \| 0;/;
+    check('connection.js and the Worker hash a signature the same way',
+          pageHash.test(conn) && pageHash.test(src),
+          'two definitions of "the same fault" means one fault, two rows');
+    check('and shape the key the same way — page, then the hash in base 36',
+          /toString\(36\)/.test(extractFunction(src, 'clientErrKey')) &&
+          /toString\(36\)/.test(conn));
+    check('the key holds nothing Firebase refuses in one',
+          !/[.#$\[\]\/]/.test(h.api.clientErrKey('index_html', 'a/b.c#d$e[f]')),
+          h.api.clientErrKey('index_html', 'a/b.c#d$e[f]'));
+  }
+
+  // ---- and the route is wired the way the handler assumes
+  {
+    const route = src.slice(src.indexOf("data.action === 'client-error'"));
+    const head = route.slice(0, route.indexOf('handleClientError('));
+    check('the route verifies the token before it does anything else',
+          /verifyIdToken\(data\.token\)/.test(head) && /unauthorized/.test(head),
+          'an unsigned report is not a report, it is an unauthenticated write');
+    check('and does NOT ask for a staff role, which is the whole point of it',
+          !/staffRoleOf/.test(head),
+          'requiring a role here would reinstate the gap this route exists to close');
+    note('the safety is in what the handler refuses to read, not in who is allowed to call');
+  }
+}
+
 done();
 }

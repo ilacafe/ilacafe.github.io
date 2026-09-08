@@ -76,7 +76,25 @@ const STUB = (anonymous) => `
     initializeApp: () => ({}), apps: [{}], database: database,
     auth: () => ({ onAuthStateChanged: () => {}, signOut: () => Promise.resolve(),
                    currentUser: { uid: 'u1', isAnonymous: ${anonymous ? 'true' : 'false'},
-                                  getIdToken: () => Promise.resolve('t') } })
+                                  getIdToken: () => Promise.resolve('id-token-for-u1') } })
+  };
+
+  // The Worker, answering. Everything else — connection.js's own /build.json probe —
+  // goes to the real fetch, because that probe decides how the offline bar behaves and
+  // stubbing it would change the thing under test.
+  window.__posts = [];
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (url.indexOf('workers.dev') !== -1) {
+      let body = null;
+      try { body = JSON.parse((init && init.body) || 'null'); } catch (e) { body = '[unparseable]'; }
+      window.__posts.push({ url: url, keepalive: !!(init && init.keepalive),
+                            aborts: !!(init && init.signal), body: body });
+      return Promise.resolve(new Response('{"ok":true,"stored":true}',
+        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }
+    return realFetch(input, init);
   };
 })();
 `;
@@ -186,20 +204,75 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       await ctx.close();
     }
 
-    // ----------------------------------------------- the customer page, deliberately not
+    // ------------------------------------------- the customer page, through the Worker
     //
-    // connection.js runs on the ordering page too, and skips an anonymous session on
-    // purpose: collecting from a stranger's browser would mean a node the world can
-    // write to, on the database that holds the café's takings. The rules say the same
-    // thing — see rules-emulator.test.js — and this is the near half of it, so the page
-    // does not spend a till's connection on a write that will be refused.
+    // The ordering page runs this same reporter and cannot write the node: it is signed
+    // in anonymously, and the rules refuse that — deliberately, because a node an
+    // anonymous token can write is a node anybody at all can write, on the database
+    // holding the café's takings. That gap sat in the worst place it could: the only
+    // screen a customer touches, where the fault that cost money happened, and the one
+    // screen with nobody standing over the device to notice.
+    //
+    // So the page asks the Worker, which writes the row as the robot having trusted
+    // nothing the page said — see the handleClientError block in worker.test.js. Both
+    // halves are checked here: that the report goes out, AND that it does not go to the
+    // database, because a write made only to be refused is noise on the connection a
+    // customer is trying to order over.
+    const posts = (pg) => pg.evaluate(() => window.__posts);
     {
       const { ctx, pg } = await open('index.html', true);
       await pg.evaluate(() => { Promise.reject(new Error('a customer’s browser threw')); });
-      await sleep(300);
+      await sleep(400);
       const r = await reports(pg);
-      check('an anonymous session reports nothing', r.keys.length === 0, JSON.stringify(r.keys));
-      note('a real gap in the reporting, and the trade is deliberate');
+      const p = await posts(pg);
+      check('an anonymous session does not write the database', r.keys.length === 0,
+            JSON.stringify(r.keys));
+      check('it reports through the Worker instead', p.length === 1, p.length + ' post(s)');
+      const b = (p[0] && p[0].body) || {};
+      check('naming the route, so it is not read as a push', b.action === 'client-error',
+            JSON.stringify(b.action));
+      check('carrying the customer’s own token, which is what the Worker verifies',
+            b.token === 'id-token-for-u1', JSON.stringify(b.token));
+      check('and saying what went wrong', /browser threw/.test(String(b.message || '')),
+            JSON.stringify(b.message));
+      check('and which build it was', typeof b.build === 'string' && b.build.length > 0,
+            JSON.stringify(b.build));
+      check('it does not send a row to write to — the Worker decides that',
+            b.key === undefined && b.sig === undefined, Object.keys(b).join(', '));
+      check('it survives the tab closing, which is what a page that has just thrown does',
+            p[0] && p[0].keepalive === true, JSON.stringify(p[0] && p[0].keepalive));
+      check('and it cannot hang, because a dead uplink connects and then says nothing',
+            p[0] && p[0].aborts === true, 'no abort signal on the request');
+      await ctx.close();
+    }
+
+    // The caps are the page's, so they have to hold on this path too — the Worker's own
+    // cap is a different one, on the node's length, and neither substitutes for the
+    // other.
+    {
+      const { ctx, pg } = await open('index.html', true);
+      await pg.evaluate(() => {
+        for (let i = 0; i < 25; i++) Promise.reject(new Error('the same thing again'));
+        for (let i = 0; i < 40; i++) Promise.reject(new Error('distinct fault number ' + i));
+      });
+      await sleep(500);
+      const p = await posts(pg);
+      check('a page coming apart does not become forty requests to the Worker',
+            p.length > 0 && p.length <= 8, p.length + ' post(s) for 65 rejections');
+      await ctx.close();
+    }
+
+    // And staff go on writing directly. Two paths that both work is the point; two
+    // paths where one quietly took over the other is a regression neither half would
+    // report on its own.
+    {
+      const { ctx, pg } = await open('pos.html');
+      await pg.evaluate(() => { Promise.reject(new Error('a till threw')); });
+      await sleep(300);
+      check('a till still writes the node itself rather than going through the Worker',
+            (await reports(pg)).keys.length === 1 && (await posts(pg)).length === 0,
+            JSON.stringify(await posts(pg)));
+      note('a Worker round trip on every till fault would be a slower path for no gain');
       await ctx.close();
     }
 

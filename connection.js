@@ -290,15 +290,61 @@
     // long as the number of DISTINCT things going wrong, which is a number that should
     // be nearly zero and is worth looking at when it is not.
     //
-    // WHO MAY WRITE. Staff only, and the rules say so rather than this file. An
-    // anonymous session is skipped here as well, which is every customer on the
-    // ordering page: collecting from them would mean a world-writable node on the
-    // database that holds the café's takings, and that trade is not worth one more
-    // reporting channel. It is the one real gap in this, and it is deliberate — the
-    // Worker is the way to close it if the café ever wants to.
+    // WHO MAY WRITE, AND HOW THE CUSTOMER PAGE DOES.
+    //
+    // Staff write this node directly, and the rules say so rather than this file: a
+    // till is authorised by having an entry under users/{uid}, which an anonymous
+    // session does not have. Every customer on the ordering page is anonymous, so for
+    // a long time that page ran this reporter and reported nothing — the deliberate
+    // gap, because letting it write would mean a node anybody at all can write to on
+    // the database that holds the café's takings.
+    //
+    // It was also the worst possible place to have a gap. The ordering page is the one
+    // screen a customer touches, it is where the fault that cost real money happened,
+    // and it is the one screen with nobody standing over the device to see anything go
+    // wrong. So the customer's browser asks the Worker instead, and the Worker writes
+    // the row as the robot — the same shape as the cash-out and the stock log.
+    //
+    // The rules are unchanged by that and still refuse an anonymous write, which is
+    // the point: the trust lives in handleClientError, where the key is computed from
+    // the text rather than sent, the page is not the caller's to claim, and a report
+    // that would ADD a row is refused once the node is long. Nothing here is trusted
+    // by anything there.
     var ERR_MAX_PER_LOAD = 8;         // a loop that throws must not become a loop that writes
     var ERR_REPEAT_GAP_MS = 60000;    // the same signature, at most once a minute
     var errSent = 0, errLast = {}, errBusy = false;
+
+    // The same Worker the tills use for a cash-out. The URL is a literal in five pages
+    // already and is public by construction — it is a route, not a credential, and
+    // every one of its routes authorises the caller for itself.
+    var ERR_WORKER_URL = 'https://ila-push.sraveen-chirania.workers.dev/';
+    var ERR_WORKER_TIMEOUT_MS = 8000;
+
+    // keepalive, because a page that has just thrown is a page somebody is about to
+    // close, and a report that dies with the tab is the gap this closes reopening
+    // itself. Every failure is swallowed: there is nowhere else to put this, and an
+    // error reporter that can raise an error is a loop.
+    function reportViaWorker(u, page, kind, msg, src, build) {
+        try {
+            u.getIdToken().then(function (tok) {
+                var ctl = null;
+                try {
+                    ctl = new AbortController();
+                    setTimeout(function () { try { ctl.abort(); } catch (e) {} }, ERR_WORKER_TIMEOUT_MS);
+                } catch (e) { ctl = null; }
+                return fetch(ERR_WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'client-error', token: tok,
+                        page: page, kind: kind, message: msg, source: src, build: build
+                    }),
+                    signal: ctl ? ctl.signal : undefined,
+                    keepalive: true
+                });
+            }).catch(function () { });
+        } catch (e) { /* deliberately nothing */ }
+    }
 
     function errPage() {
         var p = (location.pathname || '').replace(/^\/+/, '');
@@ -330,27 +376,35 @@
             if (!(window.firebase && firebase.apps && firebase.apps.length && firebase.database)) return;
             var u = null;
             try { u = firebase.auth && firebase.auth().currentUser; } catch (e) { return; }
-            // Not signed in, or signed in as a customer: the rules would refuse this, and
-            // a write made only to be refused is noise on a till's connection.
-            if (!u || u.isAnonymous) return;
+            // Nobody is signed in yet — not even anonymously — so there is no identity
+            // to write with and nothing that would accept the write.
+            if (!u) return;
 
             errSent++;
             errBusy = true;
-            var ref = firebase.database().ref('ops/clientErrors/' + errKey(sig));
-            ref.update({
-                page: errPage(),
-                kind: kind,
-                message: msg,
-                source: src,
-                build: String(window.ILA_BUILD || 'unknown').slice(0, 40),
-                lastAt: firebase.database.ServerValue.TIMESTAMP,
-                count: firebase.database.ServerValue.increment(1)
-            }).catch(function () { /* refused or offline: there is nowhere else to put this */ });
-            // firstAt is written only if the row is new, so the age of a fault survives
-            // every later occurrence overwriting the rest of the record.
-            ref.child('firstAt').transaction(function (cur) {
-                return cur === null ? Date.now() : undefined;
-            }, function () {}, false);
+            var build = String(window.ILA_BUILD || 'unknown').slice(0, 40);
+
+            if (u.isAnonymous) {
+                // The ordering page. The rules refuse this write and should; the Worker
+                // makes it on the customer's behalf, having trusted none of it.
+                reportViaWorker(u, errPage(), kind, msg, src, build);
+            } else {
+                var ref = firebase.database().ref('ops/clientErrors/' + errKey(sig));
+                ref.update({
+                    page: errPage(),
+                    kind: kind,
+                    message: msg,
+                    source: src,
+                    build: build,
+                    lastAt: firebase.database.ServerValue.TIMESTAMP,
+                    count: firebase.database.ServerValue.increment(1)
+                }).catch(function () { /* refused or offline: there is nowhere else to put this */ });
+                // firstAt is written only if the row is new, so the age of a fault survives
+                // every later occurrence overwriting the rest of the record.
+                ref.child('firstAt').transaction(function (cur) {
+                    return cur === null ? Date.now() : undefined;
+                }, function () {}, false);
+            }
         } catch (e) {
             // deliberately nothing
         }

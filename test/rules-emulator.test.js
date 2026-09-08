@@ -632,13 +632,15 @@ const SAMPLES = {
           (await canWrite('ops/clientErrors/chef_html-b2', 'chef', ERR)));
     check('and the robot can prune one that has not been seen for a fortnight',
           await canWrite('ops/clientErrors/pos_html-a1', 'robot', ERR));
-    // The customer page runs the same reporter, and connection.js skips an anonymous
-    // session on purpose: collecting from a stranger's browser would mean a node the
-    // world can write to, on the database that holds the café's takings. The rules say
-    // the same thing rather than trusting that guard.
-    check('a customer cannot write to it, so it is not a public write surface',
+    // AND THE CUSTOMER PAGE STILL CANNOT, which is the point of this one. The ordering
+    // page does report its faults now, but through the Worker, which writes the row as
+    // the robot having trusted nothing the page sent — see handleClientError. If the
+    // rule were relaxed instead, ops/clientErrors would be writable by anyone holding
+    // an anonymous token, which is anyone at all, on the database that holds the café's
+    // takings. So closing that gap must NOT have moved this check.
+    check('a customer still cannot write it directly, so it is not a public surface',
           !(await canWrite('ops/clientErrors/index_html-c3', 'customer', ERR)));
-    note('that is a real gap in the reporting, and the trade is deliberate');
+    note('the ordering page reports through the Worker; this is the door that stays shut');
 
     // A trackId is the only thing between one customer's order and another's.
     await call('PUT', 'orders/track/someoneElse', OWNER, SAMPLES['orders/track/$key']);

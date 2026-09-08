@@ -92,7 +92,12 @@ const BOUNDED = {
                             'names its own path, and a path can hold an id), so the Worker ' +
                             'prunes anything not seen for a fortnight — see pruneClientErrors. ' +
                             'Safe to delete from because these are diagnostics rather than ' +
-                            'records: a fault still happening rewrites its row and comes back.',
+                            'records: a fault still happening rewrites its row and comes back. ' +
+                            'The ordering page reports through the Worker rather than writing ' +
+                            'this itself, and that route refuses a report that would ADD a row ' +
+                            'once the node is CLIENT_ERR_MAX_ROWS long — a caller who ignores ' +
+                            'the browser\'s own caps can still only reach a length the café ' +
+                            'chose.',
   'pos/unverified':         'payments still owed at closing. The Worker records each one ' +
                             'into the archive for its day once a late credit matches, and ' +
                             'clears the row on the run AFTER the archive shows it — so this ' +
