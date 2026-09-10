@@ -721,7 +721,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-10.1"></script>
+    <script src="/build-check.js" data-build="2026-09-10.2"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -851,6 +851,35 @@
         let txnWindowed = false;   // true when the table is showing a window, not the range
         let historyQuery = null, historyFrom = null;
         let CATMAP = {};     // menu item name -> category
+        // BOTH OF THESE READS ARE BOUNDED, AND BOTH PANELS TOTAL WHAT THEY HOLD.
+        //
+        // That is the right way round — an unbounded read of every void the café has ever
+        // recorded is exactly what this project keeps having to undo. But the summaries
+        // then printed "(all time)" under a range of "all", which is true of the RANGE and
+        // not of the data: past this many records the oldest simply are not here, and the
+        // count and the total silently understate.
+        //
+        // It matters more here than anywhere else on the page. These two panels are not
+        // reporting — they are the controls for somebody taking money out of the till, and
+        // a control that quietly stops covering the beginning of the period is worse than
+        // one that admits what it covers. The transactions table already says "the most
+        // recent N" for the same reason; these two did not.
+        //
+        // So the label says what is actually counted, and names the earliest record it
+        // holds so the reader knows where the floor is.
+        const SECURITY_CAP = 2000;
+        function securityScope(all, key){
+            const n = Object.keys(all || {}).length;
+            if (key !== 'all') return '';
+            if (n < SECURITY_CAP) return ' (all time)';
+            let oldest = Infinity;
+            for (const k in all){ const t = Number(all[k] && all[k].ts); if (isFinite(t) && t > 0 && t < oldest) oldest = t; }
+            return isFinite(oldest)
+                ? ' (the most recent ' + SECURITY_CAP.toLocaleString('en-IN') + ', back to ' +
+                  new Date(oldest).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ')'
+                : ' (the most recent ' + SECURITY_CAP.toLocaleString('en-IN') + ')';
+        }
+
         let VOIDS = {};      // security/voids
         let MODEL = null;    // eta/model — the wait-time model in use right now
         let MODELPREV = null;// eta/modelPrevious — the one the last accepted refit replaced
@@ -923,10 +952,10 @@
             db.ref('menu').on('value', s => { buildCatMap(s.val()||{}); scheduleRender(); }, window.ilaRefused("menu"));
             // Voids are rare — a few a week — so 2000 is years of them, and it stops
             // this being the next node that grows without limit.
-            db.ref('security/voids').limitToLast(2000).on('value', s => { VOIDS = s.val()||{}; scheduleRender(); }, window.ilaRefused("security/voids"));
+            db.ref('security/voids').limitToLast(SECURITY_CAP).on('value', s => { VOIDS = s.val()||{}; scheduleRender(); }, window.ilaRefused("security/voids"));
             // Bounded like the voids beside it: append-only, and a café that ran for
             // years would otherwise pull every walkout it ever had into a phone.
-            db.ref('security/unpaid').limitToLast(2000).on('value', s => { UNPAID = s.val()||{}; scheduleRender(); }, window.ilaRefused("security/unpaid"));
+            db.ref('security/unpaid').limitToLast(SECURITY_CAP).on('value', s => { UNPAID = s.val()||{}; scheduleRender(); }, window.ilaRefused("security/unpaid"));
             // Small fixed-size nodes — the refit's record and the cron failure record.
             // Neither grows, so neither needs a cap.
             db.ref('eta/recalMeta').on('value', s => { RECAL = s.val()||null; renderWorkerHealth(); }, window.ilaRefused.quiet("eta/recalMeta"));
@@ -1704,7 +1733,7 @@
             VOID_ROWS = rows;
             const totVal = rows.reduce((s,r) => s + r.value, 0);
             document.getElementById('voids-summary').innerHTML = rows.length
-                ? `<strong>${rows.length}</strong> voids · <strong>${rupee(totVal)}</strong> total value${key==='all' ? ' (all time)' : ''}`
+                ? `<strong>${rows.length}</strong> voids · <strong>${rupee(totVal)}</strong> total value${securityScope(VOIDS, key)}`
                 : 'No voids in this range.';
             const byStaff = {};
             rows.forEach(r => { if(!byStaff[r.by]) byStaff[r.by] = {count:0, val:0}; byStaff[r.by].count++; byStaff[r.by].val += r.value; });
@@ -2015,7 +2044,7 @@
 
             const totDue = rows.reduce((s,r) => s + r.due, 0);
             document.getElementById('unpaid-summary').innerHTML = rows.length
-                ? `<strong>${rows.length}</strong> bill${rows.length===1?'':'s'} written off · <strong>${rupee(totDue)}</strong> unpaid${key==='all' ? ' (all time)' : ''}`
+                ? `<strong>${rows.length}</strong> bill${rows.length===1?'':'s'} written off · <strong>${rupee(totDue)}</strong> unpaid${securityScope(UNPAID, key)}`
                 : 'No bills written off in this range.';
 
             const byStaff = {};

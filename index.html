@@ -700,7 +700,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-10.1"></script>
+    <script src="/build-check.js" data-build="2026-09-10.2"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1091,7 +1091,7 @@
             window.watchOrderStatus=function(){
                 const trackId=localStorage.getItem('ila_track_id');
                 if(trackId){
-                    const items=JSON.parse(localStorage.getItem('ila_track_items')||'{}');
+                    const items=window.ilaStored('ila_track_items', {});
                     const started=parseInt(localStorage.getItem('ila_track_started')||'0');
                     if(started && Date.now()-started > 2*3600*1000){ window.dismissStatus(); return; }
                     bindStatus(trackId, items);
@@ -1219,11 +1219,11 @@
             fixedDisplay.innerText = "Ordering for Table " + urlTable;
         }
 
-        window.cart = JSON.parse(localStorage.getItem('ila_customer_cart')) || {}; 
+        window.cart = window.ilaStored('ila_customer_cart', {}); 
         window.totalAmount = parseFloat(localStorage.getItem('ila_customer_amount')) || 0;
         window.totalItems = parseInt(localStorage.getItem('ila_customer_items')) || 0;
         
-        window.lastOrder = JSON.parse(localStorage.getItem('ila_last_order')) || null;
+        window.lastOrder = window.ilaStored('ila_last_order', null);
         window.lastAmount = parseFloat(localStorage.getItem('ila_last_amount')) || 0;
         window.lastAddress = localStorage.getItem('ila_last_address') || "";
         window.currentOrderType = localStorage.getItem('ila_last_order_type') || "Dine-in";

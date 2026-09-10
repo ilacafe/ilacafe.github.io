@@ -1051,7 +1051,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-10.1"></script>
+    <script src="/build-check.js" data-build="2026-09-10.2"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -2175,8 +2175,10 @@
             return { tables: v.tables, at: v.at };
         }
 
-        window.staffPins = JSON.parse(localStorage.getItem('ila_cached_staff')) || {};
-        window.cart = JSON.parse(localStorage.getItem('ila_pos_cart')) || {};
+        // Via ilaStored: an unreadable cache here used to throw on the boot path and the
+        // till never started at all. See connection.js.
+        window.staffPins = window.ilaStored('ila_cached_staff', {});
+        window.cart = window.ilaStored('ila_pos_cart', {});
         // A cart saved by an older build has no base/cat/mods. Backfill so the add-on sheet and
         // the table write don't trip over it.
         try {
@@ -3148,8 +3150,8 @@
                 }
             } catch(e){}
             let cachedMenu = menuFromStore();
-            let cachedOrder = JSON.parse(localStorage.getItem('ila_cached_category_order'));
-            window.currentItemOrder = JSON.parse(localStorage.getItem('ila_cached_item_order')) || {};
+            let cachedOrder = window.ilaStored('ila_cached_category_order', null);
+            window.currentItemOrder = window.ilaStored('ila_cached_item_order', {});
             // A till with no connection works from this cached menu — that is the
             // whole point of this branch, and buildMenuMaps above is it deciding to
             // trust the cache for pricing. So the provisional flag has to come off
@@ -5385,62 +5387,113 @@
             openModal('move-table-modal');
         };
 
+        // MOVING A TABLE IS THE ONE PLACE THIS FILE USED TO DO THE THING IT FORBIDS.
+        //
+        // Everywhere else, a table is changed with a field-level increment or inside a
+        // transaction — see addToTable, acceptWebOrder and removeTableItem, and the note
+        // above calculateDailyCups: "writing the node from a local snapshot is what lost
+        // orders; don't reintroduce it." This function reintroduced it. It merged the two
+        // bills in JavaScript out of window.activeTables and wrote the result over the
+        // destination node whole, so anything that landed on that table between the local
+        // read and the server applying the write was erased: an item another till added, a
+        // web order accepted onto it, a payment.
+        //
+        // THE WINDOW IS NOT A FEW MILLISECONDS. The Firebase SDK queues writes while the
+        // connection is down — that is the whole premise of connection.js. An increment or
+        // a transaction still resolves correctly whenever it lands. A whole-node write does
+        // not: a till that merges two tables on dead café wifi and reconnects ten minutes
+        // later overwrites everything the other till did to that table in between.
+        //
+        // The parent pos/activeTables cannot be transacted as one node — the rules grant
+        // .write per table and write rules do not cascade upward — so this is two steps,
+        // and the ORDER of them is the safety. Merge into the destination first, let go of
+        // the source only once that has landed. A failure in between leaves the bill on
+        // both tables, which somebody can see and sort out; the other order loses it.
+        // Same argument as the tip payout, which marks the pool settled only after the
+        // cash has actually left the drawer.
         window.confirmMoveTable = async function(newTableID) {
             const oldTableID = window.checkoutTableID;
             if (newTableID === oldTableID) {
                 closeModal('move-table-modal'); window.openCheckout(oldTableID); return;
             }
-            
             if (window.activeTables[newTableID] && !await ilaAsk(`Table ${newTableID} is already occupied`, 'Merge the two bills into one?', { ok: 'Merge', cancel: 'Cancel' })) return;
 
-            // 1. Shift the POS Data
-            const tableData = window.activeTables[oldTableID];
-            if (window.activeTables[newTableID]) {
-                let existing = window.activeTables[newTableID];
-                existing.total = (parseFloat(existing.total) || 0) + (parseFloat(tableData.total) || 0);
-                existing.paid = (parseFloat(existing.paid) || 0) + (parseFloat(tableData.paid) || 0);
-                if (tableData.notes) existing.notes = existing.notes ? existing.notes + " | " + tableData.notes : tableData.notes;
-                
-                for (let item in tableData.items) {
-                    if (existing.items[item]) existing.items[item].qty += tableData.items[item].qty;
-                    else existing.items[item] = tableData.items[item];
-                }
-            } else {
-                window.activeTables[newTableID] = tableData;
-            }
-            delete window.activeTables[oldTableID];
+            const num = v => parseFloat(v) || 0;
+            const r2  = v => Math.round(v * 100) / 100;
+            const moveFailed = (why) => {
+                ilaTell("The table did not move", why);
+                try { if (window.ilaOops) window.ilaOops('move table ' + oldTableID + ' -> ' + newTableID + ': ' + why, 'confirmMoveTable'); } catch(e){}
+            };
 
-            // Persist BOTH sides of the move in ONE atomic write: save the moved/merged
-            // table AND remove the old one together, so the live 'pos/activeTables' listener
-            // always rebuilds from a consistent state. (The previous code synced only the
-            // removed table, so the moved order was never written to the cloud and the
-            // listener then wiped it from this device too.)
-            const movedData = window.activeTables[newTableID] || null;
-            const moveUpdates = {};
-            moveUpdates['pos/activeTables/' + newTableID] = movedData;
-            moveUpdates['pos/activeTables/' + oldTableID] = null;
-            db.ref().update(moveUpdates).catch(e => console.error("Move sync error: ", e));
+            // The bill as the SERVER has it, not as this screen last saw it.
+            let src = null;
+            try { src = (await db.ref('pos/activeTables/' + oldTableID).once('value')).val(); }
+            catch (e) { return moveFailed("The bill could not be read. Nothing has changed."); }
+            if (!src) return moveFailed("There is nothing on that table any more.");
+            const srcTotal = num(src.total);
 
-            // 2. Silently Hunt and Update KDS Tickets
-            const oldDest = oldTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + oldTableID;
-            const newDest = newTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + newTableID;
-
-            ['chef', 'barista'].forEach(station => {
-                db.ref(`orders/active/${station}`).once('value', snap => {
-                    const tickets = snap.val();
-                    if (tickets) {
-                        for (let id in tickets) {
-                            if (tickets[id].destination === oldDest) {
-                                db.ref(`orders/active/${station}/${id}`).update({ destination: newDest });
-                            }
-                        }
+            db.ref('pos/activeTables/' + newTableID).transaction(function(dst){
+                if (!dst) return src;                       // empty table: the bill just moves
+                dst.items = dst.items || {};
+                for (const it in (src.items || {})) {
+                    if (dst.items[it]) {
+                        // Both sides are numbers on the wire (every qty is written with
+                        // ServerValue.increment), but += on a value read back from the
+                        // database is how a quantity becomes a string, so this adds rather
+                        // than appends. paidAmt travels with the line, or a part-paid item
+                        // would read as unpaid on the split screen while table-level `paid`
+                        // said otherwise.
+                        dst.items[it].qty = num(dst.items[it].qty) + num(src.items[it].qty);
+                        const pa = num(dst.items[it].paidAmt) + num(src.items[it].paidAmt);
+                        if (pa > 0) dst.items[it].paidAmt = r2(pa);
+                    } else {
+                        dst.items[it] = src.items[it];
                     }
-                });
-            });
+                }
+                dst.total = r2(num(dst.total) + srcTotal);
+                dst.paid  = r2(num(dst.paid)  + num(src.paid));
+                if (src.notes) dst.notes = dst.notes ? dst.notes + " | " + src.notes : src.notes;
+                // Two bills split different ways cannot be one split, so the destination's
+                // own headcount wins and the source's is only used if it had none.
+                if (!dst.shares && src.shares) dst.shares = src.shares;
+                return dst;
+            }, function(err, committed){
+                if (err) return moveFailed("The bill is still on " + (oldTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + oldTableID) + ". Check the connection.");
+                if (!committed) return moveFailed("Somebody else changed that table at the same moment. Nothing has been moved.");
 
-            // 3. Reset the visual state
-            closeModal('move-table-modal');
-            window.openCheckout(newTableID);
+                // Only now let the old table go — and only the bill that was actually
+                // moved. Anything rung up on it while the merge was in flight stays where
+                // it is rather than disappearing with it.
+                db.ref('pos/activeTables/' + oldTableID).transaction(function(cur){
+                    if (!cur) return null;                              // already gone
+                    if (Math.abs(num(cur.total) - srcTotal) > LINE_EPS) return;   // it grew: leave it
+                    return null;
+                }, function(err2, cleared){
+                    if (!err2 && !cleared) {
+                        ilaToast("Moved. Something was added to the old table while that happened — it is still there.");
+                    } else if (err2) {
+                        ilaToast("Moved, but the old table could not be cleared. Check it.");
+                    }
+                    // The kitchen is retagged only once the bill has actually moved. Doing
+                    // it before meant a move that never happened still sent the tickets.
+                    const oldDest = oldTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + oldTableID;
+                    const newDest = newTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + newTableID;
+                    ['chef', 'barista'].forEach(station => {
+                        db.ref(`orders/active/${station}`).once('value', snap => {
+                            const tickets = snap.val();
+                            if (tickets) {
+                                for (let id in tickets) {
+                                    if (tickets[id].destination === oldDest) {
+                                        db.ref(`orders/active/${station}/${id}`).update({ destination: newDest });
+                                    }
+                                }
+                            }
+                        });
+                    });
+                    closeModal('move-table-modal');
+                    window.openCheckout(newTableID);
+                }, false);
+            }, false);
         };
 
         updateCartUI();
