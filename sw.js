@@ -88,6 +88,57 @@ const PRECACHE_SDK = [SDK_BASE + 'firebase-app-compat.js',
                       SDK_BASE + 'firebase-database-compat.js',
                       SDK_BASE + 'firebase-auth-compat.js'];
 
+// REFRESHING THE SHELL IN PLACE, SO THE RELOAD IS NOT A COLD ONE
+//
+// build-check.js used to apply an update by deleting this cache outright and then
+// reloading. The reason was sound — a plain reload is served the build the page was
+// already on, so the update would not apply — but the cost was hidden and large: the
+// reload lands on an EMPTY cache, so every file misses, and the person who tapped
+// "update" watches the whole app download again with nothing on screen.
+//
+// That is a blank screen on every one of the seven apps, on every device, after every
+// deploy, and it is the "it has gone slow again" that came back. It was always there;
+// it only became the biggest thing on the screen once the cache was what made the app
+// fast, which is what the precache above did.
+//
+// So the shell is REPLACED rather than emptied. Same guarantee — every file the next
+// load needs is re-fetched from the network, so the reload really is the new build —
+// without the window where the cache holds nothing.
+//
+// It also closes a gap that had nothing to do with speed. The fetch handler
+// revalidates each file on its own, so a page and the scripts it depends on could land
+// in the cache one build apart: index.html and pos.html call window.ilaStored(), which
+// lives in connection.js, and a new page paired with an old script throws on the boot
+// path and renders nothing at all. Refreshed as a set, they cannot separate.
+self.addEventListener('message', (event) => {
+  const d = event.data;
+  if (!d || d.type !== 'REFRESH_SHELL') return;
+  const reply = (ok) => { try { if (event.ports && event.ports[0]) event.ports[0].postMessage({ ok: ok }); } catch (e) {} };
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(CACHE);
+      // The page asking, plus everything every page loads. Not the other six documents:
+      // they are refreshed by their own next open, and fetching them here would make
+      // one person's update pay for roles this device may never open.
+      const urls = PRECACHE.slice();
+      try {
+        const here = new URL(d.url || '', self.location.origin);
+        if (here.origin === self.location.origin) urls.push(docKey(here));
+      } catch (e) {}
+      await Promise.all(urls.map(async (u) => {
+        try {
+          // 'reload' rather than 'no-cache': this must not be answered by the browser's
+          // own HTTP cache either, or the update would apply to the worker's cache and
+          // the page would still be served the build it is trying to leave.
+          const res = await fetch(u, { cache: 'reload', credentials: 'same-origin' });
+          if (res && res.ok) await cache.put(u, res);
+        } catch (e) {}
+      }));
+      reply(true);
+    } catch (e) { reply(false); }
+  })());
+});
+
 let sdkWarmed = false;
 self.addEventListener('message', (event) => {
   const d = event.data;

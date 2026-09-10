@@ -6,6 +6,42 @@
     <meta name="theme-color" content="#8D6E52">
     <title>ILA | Inventory</title>
     <link rel="apple-touch-icon" href="/icon.png" />
+    <!-- THE LAUNCH SCREEN, WHICH WAS OTHERWISE BLACK
+         An installed home-screen app on iOS shows a launch image while the page loads.
+         Android builds one from the manifest's background_color and icon; iOS does not
+         — it wants these, one per device size and orientation, and with none of them
+         present it shows black. With black-translucent above, very black.
+         So all seven apps opened onto a black rectangle for as long as startup took,
+         which is what the café called "black screen, then the app". Startup being
+         quicker is a separate job; this is what is on screen while it happens.
+         Generated, not drawn: `node tools/splash/make.js`. Apple adds device sizes
+         every autumn and a new one should be a line in that file and a re-run. -->
+    <link rel="apple-touch-startup-image" href="/splash/320x568@2-portrait.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/375x667@2-portrait.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/414x736@3-portrait.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/375x812@3-portrait.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/414x896@2-portrait.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/414x896@3-portrait.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/390x844@3-portrait.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/393x852@3-portrait.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/402x874@3-portrait.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/428x926@3-portrait.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/430x932@3-portrait.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/440x956@3-portrait.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/744x1133@2-portrait.png" media="(device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/744x1133@2-landscape.png" media="(device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/768x1024@2-portrait.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/768x1024@2-landscape.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/810x1080@2-portrait.png" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/810x1080@2-landscape.png" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/820x1180@2-portrait.png" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/820x1180@2-landscape.png" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1112@2-portrait.png" media="(device-width: 834px) and (device-height: 1112px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1112@2-landscape.png" media="(device-width: 834px) and (device-height: 1112px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1194@2-portrait.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1194@2-landscape.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/1024x1366@2-portrait.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/1024x1366@2-landscape.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
     <!-- THE TWO HOSTS THE BROWSER FINDS OUT ABOUT LAST
          A connection to a new host costs a DNS lookup, a TCP handshake and a TLS
          handshake before a single byte of what was asked for comes back — on café
@@ -371,7 +407,7 @@
          open. Keep data-build in step with build.json — npm test checks it.
          The stock tablet was the one page without this: it could sit on a build
          from weeks ago with nothing on screen to say so, and nothing to tap. -->
-    <script src="/build-check.js" data-build="2026-09-10.2"></script>
+    <script src="/build-check.js" data-build="2026-09-10.3"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -391,6 +427,17 @@
          to them would be the one change that looks harmless and is not: deferred
          scripts run after the parser finishes, which is AFTER the inline script
          below has already run and already thrown on an undefined `firebase`. -->
+    <!-- ABOVE THE SDK ON PURPOSE, AND IT IS THE ONLY REASON THIS IS A SEPARATE TAG.
+         The page's own script is at the foot of this document, below the three bundles
+         under it, and cannot run until the better part of 400KB has arrived and
+         compiled — seconds on café wifi, with nothing on screen for all of it. This
+         draws what was there last time, now, out of localStorage, while that download
+         is still in flight; the real render replaces it when the database answers.
+         See ilaLastScreen in connection.js, loaded a few lines above. -->
+    <script>
+        try { window.ilaLastScreen && window.ilaLastScreen.paint('dynamic-tabs-container'); } catch(e){}
+    </script>
+
     <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
             integrity="sha384-rGbwvB6k85I5jkhcy5vYOSdABhBKcD9CHXb0RJIIuxMYVZatT6uul1faR/C5QI1U"
             crossorigin="anonymous"></script>
@@ -632,6 +679,9 @@
                 isFirst = false;
             });
             container.innerHTML = tabsHtml;
+            // Kept so the next cold start can draw this before the SDK lands. See
+            // ilaLastScreen in connection.js.
+            try { if (window.ilaLastScreen) window.ilaLastScreen.save('dynamic-tabs-container'); } catch(e){}
             
             // Maintain active tab
             const activeBtn = document.querySelector('.tab-btn.active');

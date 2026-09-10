@@ -27,6 +27,7 @@ const suites = [
   'analytics-range.test.js',
   'repeat-customers.test.js',
   'customer-rollup.test.js',
+  'splash.test.js',
   'unbounded-reads.test.js',
   'refused-reads.test.js',
   'shared-mechanisms.test.js',

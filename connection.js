@@ -304,6 +304,82 @@
         return { rebind: bind, path: function () { return cur; } };
     };
 
+    // ------------------------------------------------------- what was on screen last time
+    //
+    // THE APP IS ABSENT FOR THREE SECONDS AND THEN IT IS THERE
+    //
+    // A cold start on café wifi paints the shell at about half a second and has nothing
+    // on it until the till reaches 3.4s, the ordering page 2.3s and admin 2.6s. On an
+    // installed iPhone or iPad that whole stretch is the launch screen, which is black,
+    // and then the app.
+    //
+    // Almost all of the gap is one thing: every page's own script sits BELOW three
+    // Firebase bundles, the better part of 400KB, and cannot run until all of them have
+    // arrived and compiled. So even the pages that already keep their menu in
+    // localStorage — the till and the ordering page both do — cannot draw it until the
+    // download they do not need has finished.
+    //
+    // THIS FILE RUNS ABOVE THOSE TAGS. That is the whole trick. connection.js is one of
+    // the small scripts at the foot of the body, ahead of the SDK, so anything here
+    // happens while those 400KB are still on the wire.
+    //
+    // What it paints is the last thing the page really drew, kept as the markup the
+    // page's own renderer produced. Not a second renderer that has to be kept in step
+    // with the first — there is exactly one, and this stores its output.
+    //
+    // IT IS THE LAST SCREEN, NOT THE CURRENT ONE, and callers have to treat it that way.
+    // Whatever the page draws when its data arrives replaces this wholesale. Nothing
+    // here is a source of truth and nothing may be written back from it: it exists so
+    // that somebody looking at the screen sees the café instead of a black rectangle
+    // while the real thing loads.
+    //
+    // A kitchen display deliberately does NOT use this. A ticket that has been made and
+    // cleared reappearing on the pass, even for a second, is worse than an empty board
+    // — and the board already draws "waiting for tickets" out of its own markup, which
+    // is honest and instant.
+    var LAST_SCREEN_KEY = 'ila.lastscreen.v1';
+    var LAST_SCREEN_MAX_AGE = 3 * 24 * 60 * 60 * 1000;
+    var LAST_SCREEN_MAX_CHARS = 400000;
+
+    function lastScreenAll() {
+        var v = window.ilaStored ? window.ilaStored(LAST_SCREEN_KEY, null) : null;
+        if (!v || typeof v !== 'object') return null;
+        if (!v.at || (Date.now() - v.at) > LAST_SCREEN_MAX_AGE) return null;
+        if (v.page !== location.pathname) return null;        // one page's markup is not another's
+        return v;
+    }
+
+    window.ilaLastScreen = {
+        // Draw it, and say so. Returns true when something was actually put on screen.
+        paint: function (id) {
+            try {
+                var el = document.getElementById(id);
+                if (!el || el.dataset.ilaPainted) return false;
+                var v = lastScreenAll();
+                if (!v || !v.panes || typeof v.panes[id] !== 'string' || !v.panes[id]) return false;
+                el.innerHTML = v.panes[id];
+                el.dataset.ilaPainted = '1';                   // so a save cannot store it back
+                return true;
+            } catch (e) { return false; }
+        },
+        // Called by the page once it has drawn the real thing.
+        save: function (id) {
+            try {
+                var el = document.getElementById(id);
+                if (!el) return;
+                var html = el.innerHTML;
+                if (!html || html.length > LAST_SCREEN_MAX_CHARS) return;
+                var v = lastScreenAll() || { at: 0, page: location.pathname, panes: {} };
+                v.panes[id] = html;
+                v.at = Date.now();
+                v.page = location.pathname;
+                delete el.dataset.ilaPainted;                  // this is the real thing now
+                localStorage.setItem(LAST_SCREEN_KEY, JSON.stringify(v));
+            } catch (e) { /* full, private mode, anything: the app does not depend on it */ }
+        },
+        forget: function () { try { localStorage.removeItem(LAST_SCREEN_KEY); } catch (e) {} }
+    };
+
     var bar = null, timer = null, downSince = 0;
 
     function show() {

@@ -50,6 +50,7 @@ const suites = [
   'eod-summary-browser.test.js',
   'shell-cache-browser.test.js',
   'second-open-browser.test.js',
+  'last-screen-browser.test.js',
   'analytics-alltime-browser.test.js',
 ];
 
