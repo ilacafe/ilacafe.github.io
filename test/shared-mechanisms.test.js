@@ -36,7 +36,7 @@
 // a browser, and the browser suites already ask the harder question of whether each
 // mechanism then works.
 
-const { readPage, suite } = require('./helpers');
+const { readPage, suite, stripComments } = require('./helpers');
 
 const { check, note, done } = suite('Shared mechanisms — every page carries every one');
 
@@ -120,6 +120,80 @@ for (const m of MECHANISMS) {
         offenders.length === 0,
         offenders.join(', ') + ' — a shell cache that depends on push support is not a shell cache');
   note('admin.html registered it only inside notifInit(), which returns early with no push');
+}
+
+// ------------------------------------------------- a listener on a node named after today
+//
+// THE SCREENS ARE NEVER RELOADED. EOD deliberately does not reload the till, and the
+// only location.reload() there is sign-out, so a tab lives for days. A listener bound
+// to a path with a DATE in it therefore goes on reading the day it booted on, for ever,
+// while every write to that node computes the key fresh — and the two silently drift.
+//
+// It happened twice, in different units:
+//
+//   pos/tips/{day}             the tip pool. Held on yesterday, the card read "already
+//                              paid out" and hid its payout button, while today's tips
+//                              accrued in the database, invisible and unpayable. Tips
+//                              are cash the café owes its staff.
+//   upiRouting/totals/{month}  the per-VPA monthly caps, which feed settings/upiList —
+//                              what the ordering page reads to pick the VPA a customer
+//                              pays. Held on last month, the caps stop being enforced.
+//
+// Both call sites LOOKED right; what was wrong was that the key was evaluated once. So
+// this is a source check on that shape, not on the symptom: a read of a date-keyed node
+// goes through window.ilaRolling (connection.js), which recomputes the path and moves
+// the listener. Watching the PARENT instead would be a read of every day the node has
+// ever held, on the screen that can least afford one — unbounded-reads.test.js would
+// reject it, correctly.
+{
+  // db.ref(<expr>) with balanced parens, and whatever is chained onto it.
+  function refCalls(src) {
+    const out = [];
+    for (let i = src.indexOf('db.ref('); i >= 0; i = src.indexOf('db.ref(', i + 1)) {
+      let d = 0, j = src.indexOf('(', i);
+      for (; j < src.length; j++) {
+        if (src[j] === '(') d++;
+        else if (src[j] === ')' && --d === 0) break;
+      }
+      out.push({ expr: src.slice(src.indexOf('(', i) + 1, j), after: src.slice(j + 1, j + 8) });
+    }
+    return out;
+  }
+  // A path is date-keyed if it is built from a clock or from a *Key() helper named for
+  // a calendar unit — tipDayKey(), upiMonthKey(), dayKeyOf().
+  const DATED = /\bnew Date\b|\bDate\.now\b|\b[A-Za-z_]*(Day|Month|Date)Key[A-Za-z_]*\s*\(/;
+
+  // The admin case did not read db.ref('...' + upiMonthKey()) — it read a local the
+  // month had been assigned to twenty lines earlier, which is how it survived being
+  // looked at. So a name assigned from a clock counts as a clock.
+  function datedNames(src) {
+    const names = [];
+    const re = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+)/g;
+    let m;
+    while ((m = re.exec(src))) if (DATED.test(m[2])) names.push(m[1]);
+    return names;
+  }
+
+  const offenders = [];
+  for (const p of PAGES) {
+    const clean = stripComments(src[p]);
+    const names = datedNames(clean);
+    const viaLocal = names.length ? new RegExp('\\b(' + names.join('|') + ')\\b') : null;
+    for (const c of refCalls(clean)) {
+      if (!DATED.test(c.expr) && !(viaLocal && viaLocal.test(c.expr))) continue;
+      if (!/^\s*\.on\(/.test(c.after)) continue;      // a write or a .once() is evaluated fresh
+      offenders.push(p + ': db.ref(' + c.expr.trim().slice(0, 60) + ').on(');
+    }
+  }
+  check('no page binds a listener straight to a node named after the date',
+        offenders.length === 0,
+        offenders.join(' | ') + ' — use window.ilaRolling so the listener moves when the key does');
+
+  // And the mechanism it must use is actually there to be used.
+  check('and the rolling listener exists for them to use',
+        /window\.ilaRolling\s*=/.test(readPage('connection.js')),
+        'connection.js no longer defines ilaRolling — the pages above have nothing to call');
+  note('the tip pool and the UPI monthly caps were both bound once, on screens open for days');
 }
 
 // ---------------------------------------------------------------- the cost, stated

@@ -206,6 +206,73 @@
     // and "the callback never fired" are otherwise the same thing to look at.
     window.ilaRefused.seenQuiet = function () { return Object.keys(refusedQuiet); };
 
+    // ------------------------------------------------- a listener on a node named after today
+    //
+    // THE SCREENS ARE NEVER RELOADED. That is the fact this exists for. A till is a
+    // tablet that gets switched on and left, EOD does not reload the page — it
+    // deliberately does not, so a closing cannot lose what is on screen — and the only
+    // location.reload() on the till is sign-out. So a tab lives for days.
+    //
+    // Two nodes are keyed by a date, and both were read by a listener bound once at
+    // boot while every write to them computed the key fresh:
+    //
+    //   pos/tips/{day}            the tip pool. Tips are a liability the café owes its
+    //                             staff in cash, so they survive EOD on purpose. The
+    //                             till read the day it booted on for ever: after the
+    //                             key rolled, every new tip was written to the new day
+    //                             and the card went on showing the old one — already
+    //                             paid out, so the payout button hid itself. Tips
+    //                             accrued correctly in the database and were invisible
+    //                             and unpayable on the screen, with nothing to say why.
+    //                             Worse where the old day was NOT settled: the amount
+    //                             on screen left the drawer and was recorded against a
+    //                             day it had not been collected on.
+    //
+    //   upiRouting/totals/{month} what is left under each VPA's monthly cap. It feeds
+    //                             settings/upiList, which the ordering page reads to
+    //                             decide which VPA a customer actually pays. Held on
+    //                             last month's totals, the caps stop being enforced.
+    //
+    // So: recompute the path, and move the listener when it changes.
+    //
+    // WHY NOT WATCH THE PARENT and pick today's child out of it. Because that is a read
+    // of every day the node has ever held, on the screen that can least afford one —
+    // unbounded-reads.test.js would reject it, correctly.
+    //
+    // WHEN TO LOOK. There is no event for "the date changed", so this asks rather than
+    // assumes, on two triggers that cover different failures. The timer catches a tab
+    // that is awake through the rollover. visibilitychange catches the far commoner
+    // case — a tablet asleep all night, where background timers are throttled or
+    // suspended entirely and the first thing that happens is somebody waking it up.
+    // The check itself is a string compare and costs nothing; only a path that has
+    // actually changed touches the network.
+    var ROLL_CHECK_MS = 60000;
+
+    window.ilaRolling = function (pathFor, handler, onRefused) {
+        var cur = null, cb = null;
+
+        function bind() {
+            var next;
+            try { next = String(pathFor()); } catch (e) { return; }
+            if (next === cur) return;                    // the common case, every minute
+            try {
+                if (cur && cb) firebase.database().ref(cur).off('value', cb);
+                cb = firebase.database().ref(next).on('value', handler, onRefused);
+                cur = next;
+            } catch (e) { /* not initialised yet, or refused: the next tick tries again */ }
+        }
+
+        bind();
+        setInterval(bind, ROLL_CHECK_MS);
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) bind();
+        });
+        // The path the data on screen actually came from. A caller that SETTLES what it
+        // is showing — a tip payout — must write back to this rather than to whatever
+        // the date is by the time somebody has finished typing a PIN.
+        return { rebind: bind, path: function () { return cur; } };
+    };
+
     var bar = null, timer = null, downSince = 0;
 
     function show() {
