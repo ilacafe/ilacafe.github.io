@@ -97,13 +97,56 @@
         document.getElementById('ila-update-now').onclick = applyNewBuild;
     }
 
-    // A plain reload would be served the cached shell again. Drop the shell cache
-    // first, so the reload actually fetches the build that is being offered.
+    // A plain reload would be served the cached shell again, so the new build has to be
+    // fetched before the page reloads onto it.
+    //
+    // THIS USED TO EMPTY THE CACHE AND RELOAD INTO NOTHING
+    //
+    // Deleting every ila-shell entry did make the reload fetch the new build. It also
+    // meant the reload began with an empty cache, so every file missed and the person
+    // who tapped "update" watched the whole app come down again with a blank screen in
+    // front of them — 357KB on the till, and the Firebase SDK on top of it, on café
+    // wifi. On all seven apps, on every device, after every deploy.
+    //
+    // It was always this way and it did not matter much, because the cache used to be
+    // nearly empty anyway. Once the cache became the thing that makes an app open
+    // instantly, emptying it became the most expensive thing this file does.
+    //
+    // So the worker REPLACES the shell instead, and only then does the page reload —
+    // onto a cache that is warm and entirely of the new build. Same guarantee, no gap.
+    //
+    // The wait is bounded, and the fallback is the old behaviour rather than nothing:
+    // if there is no worker, or it does not answer, a person who tapped "update" must
+    // still get the update. A slow reload is a bad outcome; not applying a fix somebody
+    // asked for is a worse one.
+    var REFRESH_WAIT_MS = 8000;
+
+    function refreshShell() {
+        return new Promise(function (resolve) {
+            var sw = navigator.serviceWorker;
+            if (!sw || !sw.controller) return resolve(false);
+            var done = false;
+            var finish = function (v) { if (!done) { done = true; resolve(v); } };
+            try {
+                var ch = new MessageChannel();
+                ch.port1.onmessage = function () { finish(true); };
+                sw.controller.postMessage({ type: 'REFRESH_SHELL', url: location.href }, [ch.port2]);
+                setTimeout(function () { finish(false); }, REFRESH_WAIT_MS);
+            } catch (e) { finish(false); }
+        });
+    }
+
     async function applyNewBuild() {
-        try {
-            const keys = await caches.keys();
-            await Promise.all(keys.filter(k => k.indexOf('ila-shell') === 0).map(k => caches.delete(k)));
-        } catch (e) {}
+        var refreshed = false;
+        try { refreshed = await refreshShell(); } catch (e) {}
+        if (!refreshed) {
+            // No worker, or it did not answer in time. Fall back to what this did
+            // before: empty the shell so the reload cannot be served the old build.
+            try {
+                const keys = await caches.keys();
+                await Promise.all(keys.filter(k => k.indexOf('ila-shell') === 0).map(k => caches.delete(k)));
+            } catch (e) {}
+        }
         location.reload();
     }
 
