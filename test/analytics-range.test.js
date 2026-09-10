@@ -114,11 +114,29 @@ const ago = d => now - d * DAY;
   // Named rather than left to the sweep above, because both are security logs that
   // only ever grow and both are read on a phone. The sweep would catch an unbounded
   // read; this says out loud that these two are meant to be capped.
+  //
+  // The cap is a named constant rather than a literal, because the LABEL under each of
+  // these panels has to agree with it. Both summaries total whatever the read returned
+  // and used to print "(all time)" over it, which is true of the range and not of the
+  // data — past the cap the oldest records are not there, and the count and the total
+  // understate. On the two panels that exist to catch somebody taking money, that is the
+  // worst place on the page for a number to be quietly short.
+  const capDecl = /const SECURITY_CAP\s*=\s*(\d+)\s*;/.exec(idx);
+  check('the security-log cap is declared once, so the reads and the label cannot disagree',
+        !!capDecl, 'SECURITY_CAP is gone — a literal in each read is how the label drifts from the data');
   for (const node of ['security/voids', 'security/unpaid']) {
     const read = new RegExp("db\\.ref\\('" + node + "'\\)((?:\\.\\w+\\([^)]*\\))*)").exec(idx);
-    check(node + ' is read with a cap', !!read && /limitToLast\(\d+\)/.test(read[1]),
+    check(node + ' is read with a cap',
+          !!read && /limitToLast\((\d+|SECURITY_CAP)\)/.test(read[1]),
           read ? read[1] : 'not read at all');
   }
+  // And that the panels say so. A cap the reader is not told about is the finding.
+  check('and each summary says what it actually counted, rather than "all time"',
+        (idx.match(/securityScope\(/g) || []).length >= 3 &&
+        !/total value\$\{key===.all.\s*\?\s*. \(all time\)./.test(idx),
+        'a bounded read totalled under an "(all time)" label');
+  if (capDecl) note('cap is ' + Number(capDecl[1]).toLocaleString('en-IN') +
+                    ' records; past that the label names the oldest one still held');
 }
 
 // ---------------------------------------------------------------- the demand-map cap is justified

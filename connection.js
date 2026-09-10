@@ -206,6 +206,37 @@
     // and "the callback never fired" are otherwise the same thing to look at.
     window.ilaRefused.seenQuiet = function () { return Object.keys(refusedQuiet); };
 
+    // ------------------------------------------------------ reading back a cached thing
+    //
+    // Every page starts by restoring something from localStorage — the cart, the cached
+    // staff PINs, the offline menu. Most of those reads are wrapped; a few on the BOOT
+    // path were not, and an unwrapped JSON.parse there does not degrade, it throws: the
+    // inline script stops at that line and the page never starts. A till that will not
+    // open is the most expensive failure this app has, and the cause would be invisible
+    // — a blank screen and a value nobody can see.
+    //
+    // JSON.parse(null) is null rather than a throw, so a missing key was never the
+    // hazard. A CORRUPT one is: a value written by a build that stored a different
+    // shape, storage damaged on a cheap tablet, a key something else wrote. Rare, and
+    // the cost of being wrong about how rare is the whole till.
+    //
+    // It is also worth knowing about. A page that silently fell back to an empty cart
+    // looks like a page that had no cart, so a bad value is dropped AND reported —
+    // ops/clientErrors is exactly where a thing like this should turn up.
+    window.ilaStored = function (key, fallback) {
+        var raw = null;
+        try { raw = localStorage.getItem(key); } catch (e) { return fallback; }
+        if (raw === null || raw === undefined || raw === '') return fallback;
+        try {
+            var v = JSON.parse(raw);
+            return (v === null || v === undefined) ? fallback : v;
+        } catch (e) {
+            try { localStorage.removeItem(key); } catch (e2) {}
+            try { if (window.ilaOops) window.ilaOops('unreadable cache, discarded: ' + key, 'ilaStored'); } catch (e3) {}
+            return fallback;
+        }
+    };
+
     // ------------------------------------------------- a listener on a node named after today
     //
     // THE SCREENS ARE NEVER RELOADED. That is the fact this exists for. A till is a
