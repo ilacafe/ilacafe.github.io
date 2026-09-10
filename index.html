@@ -723,6 +723,17 @@
          to them would be the one change that looks harmless and is not: deferred
          scripts run after the parser finishes, which is AFTER the inline script
          below has already run and already thrown on an undefined `firebase`. -->
+    <!-- ABOVE THE SDK ON PURPOSE, AND IT IS THE ONLY REASON THIS IS A SEPARATE TAG.
+         The page's own script is at the foot of this document, below the three bundles
+         under it, and cannot run until the better part of 400KB has arrived and
+         compiled — seconds on café wifi, with nothing on screen for all of it. This
+         draws what was there last time, now, out of localStorage, while that download
+         is still in flight; the real render replaces it when the database answers.
+         See ilaLastScreen in connection.js, loaded a few lines above. -->
+    <script>
+        try { window.ilaLastScreen && window.ilaLastScreen.paint('live-menu-container'); } catch(e){}
+    </script>
+
     <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
             integrity="sha384-rGbwvB6k85I5jkhcy5vYOSdABhBKcD9CHXb0RJIIuxMYVZatT6uul1faR/C5QI1U"
             crossorigin="anonymous"></script>
@@ -1592,6 +1603,9 @@
             });
             container.innerHTML = menuHTML;
             window.renderInlineControls();
+            // Kept so the next cold start can draw this before the SDK lands. See
+            // ilaLastScreen in connection.js.
+            try { if (window.ilaLastScreen) window.ilaLastScreen.save('live-menu-container'); } catch(e){}
         }
 
         window.validateAndSyncCart = function(cartObj) {

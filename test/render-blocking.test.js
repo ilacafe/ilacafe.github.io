@@ -141,11 +141,24 @@ const markup = (page) => readPage(page).replace(/<!--[\s\S]*?-->/g, '');
 // a tag ending up below the inline script, or someone adding defer to one of them —
 // deferred scripts run after the parser finishes, which is after the inline script
 // has already run and already thrown.
+//
+// FOUND BY THE SCRIPT THAT CALLS initializeApp, NOT BY BEING THE FIRST ONE.
+//
+// It used to take the first inline <script> in the document and call that the page's
+// own code, which was true until a page had a reason to run something BEFORE the SDK.
+// One does now: an early tag that draws the last screen out of localStorage while the
+// 400KB underneath it is still on the wire, which is the whole point of it being up
+// there. Read the old way, that tag looked like the page's own code and the three
+// bundles below it looked out of order.
+//
+// So the rule is stated the way it was always meant: whatever calls initializeApp
+// must come after the SDK. An early tag that does not touch firebase is not that
+// script and is checked separately, below.
 {
   const wrongOrder = [], deferred = [], notLast = [];
   for (const page of PAGES) {
     const src = markup(page);
-    const app = src.search(/\n\s*<script>\s*\n/);        // the page's own inline code
+    const app = src.indexOf('firebase.initializeApp');   // the page's own inline code
 
     let last = -1;
     for (const m of src.matchAll(/<script\b[^>]*?\bsrc="([^"]*firebasejs[^"]*)"[^>]*?>/gs)) {
@@ -165,6 +178,36 @@ const markup = (page) => readPage(page).replace(/<!--[\s\S]*?-->/g, '');
         deferred.length === 0, deferred.join(', ') + ' — defer here runs AFTER the inline script');
   check('the page’s own script is still the last thing in the document',
         notLast.length === 0, notLast.join(', '));
+}
+
+// ------------------------------------------- and the early one stays early, and dumb
+// The last-screen paint only does anything because it runs BEFORE the SDK. Moved below
+// it — or below the page's own script — it still works, still passes every other check
+// here, and buys nothing at all: it would draw the cached screen at the moment the real
+// one was about to be drawn anyway. That is the failure this catches, because there is
+// nothing on screen to tell you it happened.
+//
+// And it must not touch firebase. It runs before the SDK by design, so a line that
+// reaches for it throws on the boot path, above everything, on the till.
+{
+  const tooLate = [], touchesSdk = [];
+  for (const page of PAGES) {
+    const src = markup(page);
+    const at = src.indexOf('ilaLastScreen.paint');
+    if (at < 0) continue;                                  // this page does not use it
+    const firstSdk = src.search(/<script\b[^>]*\bsrc="[^"]*firebasejs/);
+    if (firstSdk >= 0 && at > firstSdk) tooLate.push(page);
+
+    // the tag it sits in
+    const open = src.lastIndexOf('<script>', at);
+    const close = src.indexOf('</script>', at);
+    const body = (open >= 0 && close > open) ? src.slice(open, close) : '';
+    if (/\bfirebase\b|\bdb\.ref\b/.test(body)) touchesSdk.push(page);
+  }
+  check('the last-screen paint runs before the SDK, which is the only reason it helps',
+        tooLate.length === 0, tooLate.join(', ') + ' — below the SDK it buys nothing');
+  check('and does not reach for firebase, which has not loaded yet',
+        touchesSdk.length === 0, touchesSdk.join(', '));
 }
 
 done();
