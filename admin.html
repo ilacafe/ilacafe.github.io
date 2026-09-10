@@ -686,7 +686,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-08.2"></script>
+    <script src="/build-check.js" data-build="2026-09-10.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1886,7 +1886,6 @@
 
         let upiCfg = {}, upiTot = {}, upiAllTot = {}, upiMigrated = false;
         function loadUPIRouting(){
-            const mk = upiMonthKey();
             db.ref('upiRouting/config').on('value', snap => {
                 upiCfg = snap.val() || {};
                 if (!Object.keys(upiCfg).length && !upiMigrated){
@@ -1903,7 +1902,14 @@
                 }
                 renderUPIRouting(); renderUPIHistory(); syncPublicUPIList();
             }, window.ilaRefused("upiRouting/config"));
-            db.ref('upiRouting/totals/' + mk).on('value', snap => { upiTot = snap.val() || {}; renderUPIRouting(); syncPublicUPIList(); }, window.ilaRefused("upiRouting/totals"));
+            // Rolling: this admin screen is left open, and the key is a MONTH. Frozen on
+            // the month it booted in, upiTot goes on describing last month — and it is
+            // not just a display: syncPublicUPIList() below feeds settings/upiList, which
+            // the ordering page reads to choose the VPA a customer actually pays. Caps
+            // stop being enforced the moment the month turns.
+            window.upiTotFeed = window.ilaRolling(function(){ return 'upiRouting/totals/' + upiMonthKey(); },
+                snap => { upiTot = snap.val() || {}; renderUPIRouting(); syncPublicUPIList(); },
+                window.ilaRefused("upiRouting/totals"));
             db.ref('upiRouting/totals').on('value', snap => { upiAllTot = snap.val() || {}; renderUPIHistory(); }, window.ilaRefused("upiRouting/totals"));
         }
         function syncPublicUPIList(){

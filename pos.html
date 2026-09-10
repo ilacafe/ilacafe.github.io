@@ -1051,7 +1051,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-08.2"></script>
+    <script src="/build-check.js" data-build="2026-09-10.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -4998,11 +4998,18 @@
         // it out, and the ledger line clears it. Pooled, split equally by headcount.
         window.tipPool = { accrued: 0, paidOut: 0 };
         function tipDayKey(){ return new Date().toISOString().slice(0, 10); }
+        // Rolling, because the till is never reloaded and this key changes underneath it.
+        // The day the snapshot came from is carried on the pool: the payout below settles
+        // the day it is SHOWING, which is not necessarily the day it is by then.
         function startTipFeed(){
             try {
-                db.ref('pos/tips/' + tipDayKey()).on('value', s => {
+                window.tipFeed = window.ilaRolling(function(){ return 'pos/tips/' + tipDayKey(); }, s => {
                     const v = s.val() || {};
-                    window.tipPool = { accrued: parseFloat(v.accrued) || 0, paidOut: parseFloat(v.paidOut) || 0 };
+                    window.tipPool = {
+                        accrued: parseFloat(v.accrued) || 0,
+                        paidOut: parseFloat(v.paidOut) || 0,
+                        day: s.key || tipDayKey()
+                    };
                     renderTipPool();
                 }, window.ilaRefused("pos/tips"));
             } catch(e){}
@@ -5032,7 +5039,16 @@
             renderTipPool();
         };
         window.payOutTips = async function(){
-            const due = Math.max(0, (window.tipPool.accrued || 0) - (window.tipPool.paidOut || 0));
+            // BOTH off the same pool, in the same tick. `due` is what leaves the drawer
+            // and `settleDay` is the day it clears, so they have to come from one
+            // snapshot: everything below this line awaits — a PIN prompt, a drawer
+            // warning, a Worker round trip — and that is minutes, long enough to cross
+            // the rollover and rebind the feed underneath us. Settling against whatever
+            // the date is by then would clear a day nobody collected on and leave the
+            // real liability standing.
+            const pool = window.tipPool || {};
+            const due = Math.max(0, (pool.accrued || 0) - (pool.paidOut || 0));
+            const settleDay = pool.day || tipDayKey();
             if (!(due > 0)) return;
             const heads = parseInt(window.lastTipHeads) || 0;
             if (heads < 1) return ilaToast('Set how many people are sharing it first');
@@ -5051,7 +5067,7 @@
             if (!paid.ok) return ilaTell("Payout not recorded", paid.why);
             const staffName = paid.by;
             try {
-                db.ref('pos/tips/' + tipDayKey()).update({
+                db.ref('pos/tips/' + settleDay).update({
                     paidOut: firebase.database.ServerValue.increment(due),
                     lastPayout: { amount: due, heads: heads, each: each, by: staffName, at: firebase.database.ServerValue.TIMESTAMP }
                 });
