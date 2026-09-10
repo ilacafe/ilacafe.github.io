@@ -162,8 +162,8 @@ const markup = (page) => readPage(page).replace(/<!--[\s\S]*?-->/g, '');
 
     let last = -1;
     for (const m of src.matchAll(/<script\b[^>]*?\bsrc="([^"]*firebasejs[^"]*)"[^>]*?>/gs)) {
+      if (/\bdefer\b|\basync\b/.test(m[0])) { deferred.push(page); continue; }   // checked below instead
       if (m.index > app) { wrongOrder.push(page + ' → ' + m[1]); continue; }
-      if (/\bdefer\b|\basync\b/.test(m[0])) deferred.push(page + ' → ' + m[1]);
       if (m.index < last) wrongOrder.push(page + ' → ' + m[1] + ' is out of order');
       last = m.index;
     }
@@ -174,10 +174,59 @@ const markup = (page) => readPage(page).replace(/<!--[\s\S]*?-->/g, '');
   }
   check('the SDK still runs before the page that initialises it',
         wrongOrder.length === 0, wrongOrder.join(', '));
-  check('and is still loaded synchronously, not deferred',
-        deferred.length === 0, deferred.join(', ') + ' — defer here runs AFTER the inline script');
   check('the page’s own script is still the last thing in the document',
         notLast.length === 0, notLast.join(', '));
+}
+
+// ------------------------------------ a deferred SDK, and the rule that makes it safe
+//
+// This file used to say flatly that the SDK must never be deferred, because the page's
+// own script called firebase.initializeApp on its first working line and deferred
+// scripts run after the parser has finished — after that line had already thrown.
+//
+// That was a rule about ONE arrangement, written as though it were about the SDK. The
+// arrangement is what was costing the café: three bundles, the better part of 400KB,
+// loaded synchronously means the parser stops at the tags and the whole of the page's
+// own code waits for all of it. Measured on inventory.html with the SDK held for the
+// two seconds 400KB takes on café wifi, the page's own script reached its first line at
+// 2515ms synchronous and 1124ms deferred.
+//
+// So a page may defer the SDK, and what it owes in exchange is this: NOTHING AT TOP
+// LEVEL MAY TOUCH IT. Deferred scripts are all finished before DOMContentLoaded, so
+// anything hung off that event has the SDK and is safe; anything at top level runs
+// while the bundles are still in flight and gets `undefined`.
+//
+// That is the whole contract, and it is the thing that breaks quietly later — one
+// db.ref() added at top level by someone who has no reason to know, on a page that
+// looks exactly like the six that still load it synchronously.
+{
+  // Worked out here rather than borrowed from the block above, which scopes it.
+  const defersSdk = PAGES.filter(page =>
+    [...markup(page).matchAll(/<script\b[^>]*?\bsrc="[^"]*firebasejs[^"]*"[^>]*?>/gs)]
+      .some(m => /\bdefer\b|\basync\b/.test(m[0])));
+
+  const leaked = [];
+  for (const page of PAGES) {
+    if (!defersSdk.includes(page)) continue;
+    const src = markup(page);
+    const start = src.indexOf('let db, auth;');
+    if (start < 0) { leaked.push(page + ' → deferred but no `let db, auth;` to anchor on'); continue; }
+    const body = src.slice(start, src.lastIndexOf('</script>'));
+
+    // Brace depth from that anchor: zero is the top level of the page's own script.
+    let depth = 0;
+    for (const line of body.split('\n')) {
+      const code = line.replace(/\/\/.*$/, '');
+      if (depth === 0 && /\b(db|auth|firebase)\s*\./.test(code) && !/^\s*(let|var|const)\s/.test(code))
+        leaked.push(page + ' → ' + code.trim().slice(0, 60));
+      depth += (code.match(/\{/g) || []).length - (code.match(/\}/g) || []).length;
+    }
+  }
+  check('a page that defers the SDK touches none of it at top level',
+        leaked.length === 0, leaked.slice(0, 4).join('; '));
+  note(defersSdk.length ? defersSdk.join(', ') + ' defer it'
+                        : 'no page defers it yet');
+  note('deferred scripts all finish before DOMContentLoaded — that is the hook, and the only safe one');
 }
 
 // ------------------------------------------- and the early one stays early, and dumb

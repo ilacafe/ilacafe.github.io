@@ -438,13 +438,13 @@
         try { window.ilaLastScreen && window.ilaLastScreen.paint('dynamic-tabs-container'); } catch(e){}
     </script>
 
-    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
+    <script defer src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
             integrity="sha384-rGbwvB6k85I5jkhcy5vYOSdABhBKcD9CHXb0RJIIuxMYVZatT6uul1faR/C5QI1U"
             crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-database-compat.js"
+    <script defer src="https://www.gstatic.com/firebasejs/12.17.1/firebase-database-compat.js"
             integrity="sha384-DVRvWnCIBtUIWOm6GpD+wukXwI8nijglXsBFYMlBIOgL5qBHlB8sa1CUlOftmd0R"
             crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"
+    <script defer src="https://www.gstatic.com/firebasejs/12.17.1/firebase-auth-compat.js"
             integrity="sha384-FlKYNHBedwGFdcKg5PNKA38dWBcbf9RzKO4qBmxO3DaDw5yuYP0DXikg/fgj4xID"
             crossorigin="anonymous"></script>
 
@@ -458,16 +458,51 @@
             messagingSenderId: "473595092965",
             appId: "1:473595092965:web:4ba6243e67b9ed0adb990c"
         };
-        firebase.initializeApp(firebaseConfig);
-        // The shared service worker: push, and the cache that makes an open instant.
+        // THE SDK IS DEFERRED, AND THIS SCRIPT NO LONGER WAITS FOR IT
+        //
+        // Those three bundles are the better part of 400KB. Loaded synchronously — which
+        // is how every page here loaded them — the parser stops at the tags and NOTHING
+        // below runs until all of it has arrived and compiled. This whole script is
+        // below them, so on café wifi the page sat inert for seconds with its markup
+        // already parsed and waiting.
+        //
+        // Deferred, the script runs the moment the parser reaches it, and the SDK
+        // arrives alongside. The ordering that matters is kept by the spec rather than
+        // by luck: deferred scripts run in order and ALL of them finish before
+        // DOMContentLoaded, so anything hung off that event has the SDK.
+        //
+        // What must not creep back in is a top-level line that touches `firebase`,
+        // `db` or `auth`. There is no SDK when this script runs. Everything needing one
+        // goes in ilaFirebaseBoot below; everything else — the service worker, the
+        // helpers, the cached first paint — runs now, which is the point.
+        //
+        // The service worker registration is one of the things that does not need it.
         // This page went without one for as long as it existed, so every open fetched it
         // whole from the network. GitHub Pages sends a ten-minute HTTP cache (see sw.js),
         // which is exactly why reopening straight away felt quick and reopening later did
         // not — inside ten minutes the browser answered, and after it nothing did.
         if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register('/sw.js').catch(function(){}); } catch(e){} }
-        const db = firebase.database();
 
-        const auth = firebase.auth();
+        // let, not const: they are assigned when the SDK lands, not now.
+        let db, auth;
+
+        function ilaFirebaseBoot() {
+            try {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.database();
+                auth = firebase.auth();
+            } catch (e) {
+                // The SDK did not arrive. Before this change that threw on the first
+                // line of the page and took the whole screen with it; now the page is
+                // up, showing what it had, and says so through the usual channel.
+                try { if (window.ilaOops) window.ilaOops('SDK did not load: ' + (e && e.message), 'ilaFirebaseBoot'); } catch (e2) {}
+                return;
+            }
+            ilaAuthWatch();
+        }
+        // Deferred scripts are all finished before this fires — that is what makes it
+        // the right hook and not merely a convenient one.
+        document.addEventListener('DOMContentLoaded', ilaFirebaseBoot);
         let inventoryStarted = false;
         // Ingredient names come from admin and land in both the visible text and a JS
         // string inside an onclick attribute. Neither was escaped, so "Baker's
@@ -514,6 +549,9 @@
             document.getElementById('login-error').innerText = "Signing in...";
             auth.signInWithEmailAndPassword(email, pw).catch(() => { document.getElementById('login-error').innerText = "Sign-in failed. Check email and password."; });
         };
+        // Wrapped rather than moved: ilaFirebaseBoot calls it once the SDK is up, and
+        // keeping it here keeps it next to showLogin and signIn, which are its subject.
+        function ilaAuthWatch() {
         auth.onAuthStateChanged(async (user) => {
             if (!user) { roleCache.forget(); showLogin(); return; }
 
@@ -545,6 +583,7 @@
                 if (!known) showLogin("Could not verify access. Check connection and retry.");
             }
         });
+        }
         function startInventory() {
             db.ref('inventory/stock').on('value', snap => { currentStock = snap.val() || {}; renderUI(); }, window.ilaRefused("inventory/stock"));
             // No recipes and no staff map any more. The Worker reads the recipe when it
