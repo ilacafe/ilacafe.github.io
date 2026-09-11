@@ -84,9 +84,27 @@ const page = (w, h, logo) => `<!DOCTYPE html><html><head><meta charset="utf-8"><
       fs.writeFileSync(path.join(OUT, file), buf);
       bytes += buf.length;
       await ctx.close();
-      links.push(`    <link rel="apple-touch-startup-image" href="/splash/${file}" ` +
-                 `media="(device-width: ${w}px) and (device-height: ${h}px) and ` +
-                 `(-webkit-device-pixel-ratio: ${r}) and (orientation: ${orient})">`);
+      // TWO THINGS HERE ARE BELT AND BRACES, DELIBERATELY.
+      //
+      // `screen and` leads the query. Every working reference implementation writes it
+      // that way; the first version of this left it out. Without a media type the query
+      // is still valid CSS and should behave identically — should, and this is a
+      // feature Apple archived the documentation for, so matching the form that is
+      // known to work costs a few characters and removes a variable.
+      //
+      // And landscape is declared BOTH WAYS. The common convention keeps the portrait
+      // device-width/device-height and varies only `orientation`, which is what the
+      // widely-copied gists do. But device-width is defined as the width of the output
+      // surface, and there is no guarantee across versions that it does not swap when
+      // the iPad is turned. A till or a kitchen display lives in landscape, so getting
+      // this wrong is a black screen on exactly the devices that are on all day.
+      // Both spellings point at the same file: it is one extra link, not one extra
+      // image, and at most one of them can match.
+      const q = (dw, dh) => `screen and (device-width: ${dw}px) and (device-height: ${dh}px) and ` +
+                            `(-webkit-device-pixel-ratio: ${r}) and (orientation: ${orient})`;
+      links.push(`    <link rel="apple-touch-startup-image" href="/splash/${file}" media="${q(w, h)}">`);
+      if (orient === 'landscape')
+        links.push(`    <link rel="apple-touch-startup-image" href="/splash/${file}" media="${q(h, w)}">`);
     }
   }
   // AND ONE WITH NO MEDIA QUERY AT ALL, WHICH IS THE POINT.

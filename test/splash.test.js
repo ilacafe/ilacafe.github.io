@@ -96,13 +96,19 @@ const tagsOf = (page) => {
         unqueried.length === 1 && tags[tags.length - 1] === unqueried[0],
         'the un-queried tag is at position ' + (tags.indexOf(unqueried[0]) + 1) + ' of ' + tags.length);
 
-  const noOrientation = [], noRatio = [];
+  const noOrientation = [], noRatio = [], noScreen = [];
   for (const tag of tags) {
     const media = queryOf(tag);
     if (!media) continue;                                  // the fallback, checked above
     if (!/orientation:\s*(portrait|landscape)/.test(media)) noOrientation.push(media.slice(0, 60));
     if (!/-webkit-device-pixel-ratio:\s*\d/.test(media)) noRatio.push(media.slice(0, 60));
+    if (!/^screen and /.test(media)) noScreen.push(media.slice(0, 60));
   }
+  // Every reference implementation that is known to work leads with the media type.
+  // Without it the query is still valid CSS and should behave the same — should, on a
+  // feature whose documentation Apple archived, which is not a bet worth taking.
+  check('and leads with the media type, as the working examples do',
+        noScreen.length === 0, noScreen.join(', '));
   check('every other one says which way up', noOrientation.length === 0, noOrientation.join(', '));
   check('and at what pixel ratio', noRatio.length === 0, noRatio.join(', '));
 }
@@ -119,6 +125,19 @@ const tagsOf = (page) => {
     !new RegExp('device-width:\\s*' + w + 'px.*?device-height:\\s*' + h + 'px').test(media));
   check('the iPads in the café are among them',
         missing.length === 0, missing.map(m => m[2]).join(', ') + ' — these launch black');
+
+  // A till and a kitchen display live in landscape, and device-width is defined as the
+  // width of the output surface — there is no guarantee it does not swap when the iPad
+  // is turned. So both spellings are declared, and both have to stay.
+  const landscapeBoth = [[834, 1194, 'iPad Pro 11-inch (3rd/4th gen)'], [1024, 1366, 'iPad Pro 12.9-inch']];
+  const oneWayOnly = landscapeBoth.filter(([w, h]) => {
+    const a = new RegExp('device-width:\\s*' + w + 'px[^"]*device-height:\\s*' + h + 'px[^"]*orientation: landscape').test(media);
+    const b = new RegExp('device-width:\\s*' + h + 'px[^"]*device-height:\\s*' + w + 'px[^"]*orientation: landscape').test(media);
+    return !(a && b);
+  });
+  check('and landscape is declared both ways round for them',
+        oneWayOnly.length === 0, oneWayOnly.map(m => m[2]).join(', '));
+  note('a till lives in landscape — one spelling missing is a black screen on the busiest device');
 }
 
 done();
