@@ -439,6 +439,45 @@ second open. None of this was visible to the existing suites, and none of it is 
 off the source — `sw.js` can be inspected all day and it will not say *when* the worker
 starts seeing requests.
 
+## Two things that measured as nothing, and one that fixed itself
+
+Kept because both look obvious enough to be tried again.
+
+**Deferring the SDK buys nothing on a device that has used the app.** Moving every
+SDK-dependent statement behind `DOMContentLoaded` took a page's own script from ~2515ms
+to ~1050ms on chef, barista and inventory — reproducibly, and the number is real. It was
+measured with `serviceWorkers: 'block'`, which is a device that has **never** opened the
+app, and that is no device in the café. Measured again on a warm profile — browser fully
+closed and reopened between runs, a cold process start with storage intact:
+
+| chef.html | before | after | SDK requests reaching the wire |
+|---|---|---|---|
+| | 171ms | 185ms | **0** |
+
+`sw.js` precaches the SDK, so it never goes near the network and there is nothing to
+defer. `pos.html` was flat cold as well as warm: cold it is dominated by its own 357KB of
+HTML, which the parser must get through before it reaches any script. Five pages
+including the till were refactored for this and the whole of it was reverted.
+
+It found one real fault worth remembering if this is ever picked up again: `admin.html`
+called `notifInit()` at top level, nothing on that line mentioned the SDK, and two calls
+down it read `ops/pushHealth`. Deferring broke it silently — the read threw into a catch
+that returns, so the panel simply stayed empty — and only `push-health-browser.test.js`
+noticed. A depth-zero check for the SDK's name cannot see that shape.
+
+**The black launch screen on iPad was not diagnosed; it stopped.** Five explanations were
+offered and none survived: a missing device size (the size was there), a stale cached
+document, `screen and` on the media queries, `display: fullscreen` in the manifest, and
+iOS process start. It went away on `2026-09-11.1` with none of them addressed. The one
+change in that build that plausibly bears on it is `build-check.js` refreshing the shell
+as soon as it sees a newer build, which stops a device lingering on a stale document —
+but that is a guess and it is recorded here as one.
+
+The lesson that is not a guess: **every wrong answer above was reasoned from memory about
+what iOS does, and the two facts that actually moved things forward came from the floor**
+— "it is fine in a Safari tab" and "it launched without a black screen before". Ask for
+those first.
+
 ## Still worth doing
 
 | | change | measured effect |
