@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-build="2026-09-11.1">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ILA — launch screen check</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#8D6E52">
+<link rel="apple-touch-icon" href="/icon.png">
+
+<!-- WHY THIS PAGE EXISTS
+     The launch screen on the café's iPads was black, four different explanations were
+     wrong, and every one of them was a guess about what iOS was doing. This asks it.
+
+     It carries the same apple-touch-startup-image set the seven apps carry and reports
+     which of them iOS says matches, using matchMedia — the same engine that decides
+     which one it would draw. If nothing matches, the set is wrong and this names the
+     numbers to add. If something matches and the screen is still black, then the tags
+     are being ignored and the answer is somewhere else entirely.
+
+     Not linked from anywhere. Open it directly, read it out, delete it when done. -->
+    <link rel="apple-touch-startup-image" href="/splash/320x568@2-portrait.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/375x667@2-portrait.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/414x736@3-portrait.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/375x812@3-portrait.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/414x896@2-portrait.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/414x896@3-portrait.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/390x844@3-portrait.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/393x852@3-portrait.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/402x874@3-portrait.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/428x926@3-portrait.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/430x932@3-portrait.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/440x956@3-portrait.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/744x1133@2-portrait.png" media="(device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/744x1133@2-landscape.png" media="(device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/768x1024@2-portrait.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/768x1024@2-landscape.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/810x1080@2-portrait.png" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/810x1080@2-landscape.png" media="(device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/820x1180@2-portrait.png" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/820x1180@2-landscape.png" media="(device-width: 820px) and (device-height: 1180px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1112@2-portrait.png" media="(device-width: 834px) and (device-height: 1112px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1112@2-landscape.png" media="(device-width: 834px) and (device-height: 1112px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1194@2-portrait.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1194@2-landscape.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/1024x1366@2-portrait.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/1024x1366@2-landscape.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1210@2-portrait.png" media="(device-width: 834px) and (device-height: 1210px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/834x1210@2-landscape.png" media="(device-width: 834px) and (device-height: 1210px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/1032x1376@2-portrait.png" media="(device-width: 1032px) and (device-height: 1376px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/splash/1032x1376@2-landscape.png" media="(device-width: 1032px) and (device-height: 1376px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
+    <link rel="apple-touch-startup-image" href="/splash/fallback.png">
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; padding:18px; background:#8D6E52; color:#fff;
+         font-family: -apple-system, system-ui, sans-serif; line-height:1.45; }
+  h1 { font-size:1.1rem; letter-spacing:2px; text-transform:uppercase; margin:0 0 4px; }
+  p.sub { margin:0 0 18px; font-size:0.8rem; opacity:0.75; }
+  .box { background:rgba(0,0,0,0.18); border:1px solid rgba(255,255,255,0.16);
+         border-radius:10px; padding:14px; margin-bottom:14px; }
+  .k { font-size:0.7rem; letter-spacing:1.5px; text-transform:uppercase; opacity:0.7; }
+  .v { font-size:1.3rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .good { color:#9ff0b5; } .bad { color:#ff9e9e; }
+  code { font-size:0.78rem; word-break:break-all; }
+  ul { margin:8px 0 0; padding-left:18px; font-size:0.8rem; }
+</style>
+</head>
+<body>
+<h1>Launch screen check</h1>
+<p class="sub">Read this out. It says what iOS thinks this device is, and whether any
+launch image is a match for it.</p>
+
+<div class="box">
+  <div class="k">Verdict</div>
+  <div class="v" id="verdict">…</div>
+  <div id="verdict-note" style="font-size:0.8rem; opacity:0.85; margin-top:6px;"></div>
+</div>
+
+<div class="box">
+  <div class="k">This device, as iOS reports it</div>
+  <div class="v" id="dims">…</div>
+  <ul id="detail"></ul>
+</div>
+
+<div class="box">
+  <div class="k">Matching launch images</div>
+  <div id="matches" style="margin-top:6px;"><code>…</code></div>
+</div>
+
+<div class="box">
+  <div class="k">Build this page came from</div>
+  <div class="v" id="build">…</div>
+  <ul id="buildnote"></ul>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var sw = screen.width, sh = screen.height, dpr = window.devicePixelRatio || 1;
+
+  $('dims').textContent = sw + ' \u00d7 ' + sh + '  @' + dpr;
+  var d = $('detail');
+  var add = function (t) { var li = document.createElement('li'); li.textContent = t; d.appendChild(li); };
+  add('device pixels: ' + Math.round(sw * dpr) + ' \u00d7 ' + Math.round(sh * dpr));
+  add('window: ' + window.innerWidth + ' \u00d7 ' + window.innerHeight);
+  add('launched from the home screen: ' + (navigator.standalone === true ? 'yes' : 'no (a browser tab)'));
+  add('orientation: ' + (window.innerWidth > window.innerHeight ? 'landscape' : 'portrait'));
+
+  // Which startup images does iOS consider a match? matchMedia is the same engine
+  // that decides which one it would draw.
+  var links = [].slice.call(document.querySelectorAll('link[rel="apple-touch-startup-image"]'));
+  var queried = 0, matched = [], fallback = false;
+  links.forEach(function (l) {
+    var m = l.getAttribute('media');
+    if (!m) { fallback = true; return; }
+    queried++;
+    try { if (window.matchMedia(m).matches) matched.push(l.getAttribute('href') + '  \u2190  ' + m); } catch (e) {}
+  });
+
+  var box = $('matches');
+  box.innerHTML = '';
+  if (matched.length) {
+    matched.forEach(function (t) {
+      var p = document.createElement('div');
+      p.className = 'good'; p.style.marginBottom = '6px';
+      p.innerHTML = '<code>' + t.replace(/</g, '&lt;') + '</code>';
+      box.appendChild(p);
+    });
+  } else {
+    box.innerHTML = '<code class="bad">none of the ' + queried + ' queried images matches this device</code>';
+  }
+  if (fallback) {
+    var f = document.createElement('div');
+    f.style.cssText = 'margin-top:8px; font-size:0.78rem; opacity:0.85;';
+    f.textContent = 'a fallback image with no media query is also present';
+    box.appendChild(f);
+  }
+
+  // Verdict
+  var v = $('verdict'), n = $('verdict-note');
+  if (!links.length) {
+    v.textContent = 'NO TAGS AT ALL'; v.className = 'v bad';
+    n.textContent = 'This device is being served a build with no launch images in it — '
+      + 'almost certainly an old page out of the app cache. That alone would explain a black screen.';
+  } else if (matched.length) {
+    v.textContent = 'A MATCH EXISTS'; v.className = 'v good';
+    n.textContent = 'iOS has an image it should be drawing for this device. If the launch '
+      + 'screen is still black, the tags are being ignored rather than missing, and the '
+      + 'size list is not the problem.';
+  } else if (fallback) {
+    v.textContent = 'FALLBACK ONLY'; v.className = 'v';
+    n.textContent = 'No exact size matches, but the un-queried fallback should still be drawn. '
+      + 'Add ' + sw + '\u00d7' + sh + '@' + dpr + ' to tools/splash/make.js for a pixel-exact one.';
+  } else {
+    v.textContent = 'NOTHING MATCHES'; v.className = 'v bad';
+    n.textContent = 'That is the black screen. Add ' + sw + '\u00d7' + sh + '@' + dpr
+      + ' to DEVICES in tools/splash/make.js.';
+  }
+
+  // Which build is this page, and which is live?
+  var mine = document.documentElement.getAttribute('data-build') || 'unknown';
+  $('build').textContent = mine;
+  fetch('/build.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+    var li = document.createElement('li');
+    li.textContent = 'live build on the server: ' + j.build;
+    if (j.build !== mine) {
+      li.className = 'bad';
+      li.textContent += '  \u2014 this page is older than the server, so the app cache is serving a stale copy';
+    }
+    $('buildnote').appendChild(li);
+  }).catch(function () {});
+})();
+</script>
+</body>
+</html>
