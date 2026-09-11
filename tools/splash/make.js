@@ -40,6 +40,12 @@ const DEVICES = [
   [744, 1133, 2, 'pad'], [768, 1024, 2, 'pad'], [810, 1080, 2, 'pad'],
   [820, 1180, 2, 'pad'], [834, 1112, 2, 'pad'], [834, 1194, 2, 'pad'],
   [1024, 1366, 2, 'pad'],
+  // The M4 iPad Pros, which changed size. THIS IS WHY THE FIRST VERSION OF THIS DID
+  // NOTHING: the café runs recent iPad Pros, neither of these was in the list, nothing
+  // matched, and iOS fell straight back to black — exactly as if none of it had
+  // shipped. A missing size and a broken feature look identical from the floor.
+  [834, 1210, 2, 'pad'],                 // iPad Pro 11" (M4)
+  [1032, 1376, 2, 'pad'],                // iPad Pro 13" (M4)
 ];
 
 const page = (w, h, logo) => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -78,11 +84,62 @@ const page = (w, h, logo) => `<!DOCTYPE html><html><head><meta charset="utf-8"><
       fs.writeFileSync(path.join(OUT, file), buf);
       bytes += buf.length;
       await ctx.close();
-      links.push(`    <link rel="apple-touch-startup-image" href="/splash/${file}" ` +
-                 `media="(device-width: ${w}px) and (device-height: ${h}px) and ` +
-                 `(-webkit-device-pixel-ratio: ${r}) and (orientation: ${orient})">`);
+      // TWO THINGS HERE ARE BELT AND BRACES, DELIBERATELY.
+      //
+      // `screen and` leads the query. Every working reference implementation writes it
+      // that way; the first version of this left it out. Without a media type the query
+      // is still valid CSS and should behave identically — should, and this is a
+      // feature Apple archived the documentation for, so matching the form that is
+      // known to work costs a few characters and removes a variable.
+      //
+      // And landscape is declared BOTH WAYS. The common convention keeps the portrait
+      // device-width/device-height and varies only `orientation`, which is what the
+      // widely-copied gists do. But device-width is defined as the width of the output
+      // surface, and there is no guarantee across versions that it does not swap when
+      // the iPad is turned. A till or a kitchen display lives in landscape, so getting
+      // this wrong is a black screen on exactly the devices that are on all day.
+      // Both spellings point at the same file: it is one extra link, not one extra
+      // image, and at most one of them can match.
+      const q = (dw, dh) => `screen and (device-width: ${dw}px) and (device-height: ${dh}px) and ` +
+                            `(-webkit-device-pixel-ratio: ${r}) and (orientation: ${orient})`;
+      links.push(`    <link rel="apple-touch-startup-image" href="/splash/${file}" media="${q(w, h)}">`);
+      if (orient === 'landscape')
+        links.push(`    <link rel="apple-touch-startup-image" href="/splash/${file}" media="${q(h, w)}">`);
     }
   }
+  // AND ONE WITH NO MEDIA QUERY AT ALL, WHICH IS THE POINT.
+  //
+  // Everything above is an exact match against a device that existed when it was
+  // written, and Apple ships new sizes every year. The first version of this had no
+  // fallback, so the café's iPad Pros matched nothing and got the black screen the
+  // whole exercise was about — and there was no way to tell that apart from the tags
+  // never having been added.
+  //
+  // iOS takes an un-queried apple-touch-startup-image when no queried one matches, and
+  // scales it. Scaled is not ideal; it is a flat brand colour with a mark in the middle,
+  // so scaled is fine. What it buys is that an unknown device is never black again,
+  // which matters more than the pixels.
+  //
+  // Generated at the largest size in the list so it is never scaled UP, and its LINK
+  // is emitted after all the queried ones. Among links whose media query matches, order
+  // decides, and an un-queried one matches everything — first in the list it could
+  // shadow every exact match on a browser that takes the first hit. Last, an exact match
+  // wins wherever there is one and this catches the rest. Neither order can produce a
+  // black screen, which is the property that matters; this order also keeps the pixels
+  // right on the devices that are named.
+  {
+    const [fw, fh] = [1032, 1376], r = 2;
+    const ctx = await browser.newContext({ viewport: { width: fw, height: fh }, deviceScaleFactor: r });
+    const tab = await ctx.newPage();
+    await tab.setContent(page(fw, fh, logo), { waitUntil: 'load' });
+    const buf = await tab.screenshot({ type: 'png' });
+    fs.writeFileSync(path.join(OUT, 'fallback.png'), buf);
+    bytes += buf.length;
+    await ctx.close();
+  }
+
+  links.push('    <link rel="apple-touch-startup-image" href="/splash/fallback.png">');
+
   await browser.close();
   // Tags to stdout, progress to stderr, so the useful half can be piped or pasted
   // without a generated file sitting in the repo going quietly out of date.

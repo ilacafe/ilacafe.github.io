@@ -68,20 +68,76 @@ const tagsOf = (page) => {
 }
 
 // ---------------------------------------------------------- the media query is usable
-// A tag without one applies to every device, so iOS takes whichever it saw last and
-// stretches it. They also have to name an orientation, or a landscape kitchen display
-// gets the portrait image.
+// Every queried tag has to name a device, an orientation and a pixel ratio, or it does
+// not identify a device at all: no orientation and a landscape kitchen display gets the
+// portrait image.
+//
+// EXACTLY ONE TAG IS ALLOWED NO QUERY, AND IT IS REQUIRED.
+//
+// This suite used to forbid that, and the rule cost the café the whole feature. Every
+// queried tag is an exact match against a device that existed when it was written;
+// Apple ships new sizes every year; and the café runs recent iPad Pros, which changed
+// size. Nothing matched, iOS fell straight back to black, and the deploy was
+// indistinguishable from never having shipped — the floor reported the same black
+// screen and there was nothing to say which of the two it was.
+//
+// The un-queried tag matches everything, so an unknown device gets a scaled brand
+// screen instead. It goes LAST: among matching links order decides, and first in the
+// list it could shadow every exact match.
 {
-  const noMedia = [], noOrientation = [], noRatio = [];
-  for (const tag of tagsOf(PAGES[0])) {
-    const media = (/media="([^"]+)"/.exec(tag) || [])[1];
-    if (!media) { noMedia.push(tag.slice(0, 60)); continue; }
+  const tags = tagsOf(PAGES[0]);
+  const queryOf = (t) => (/media="([^"]+)"/.exec(t) || [])[1];
+  const unqueried = tags.filter(t => !queryOf(t));
+
+  check('there is a fallback for a device nobody has thought of yet',
+        unqueried.length === 1, unqueried.length + ' tags carry no media query');
+  note('without one, a device Apple ships next year is black and looks like a broken deploy');
+  check('and it is the last of them, so an exact match still wins',
+        unqueried.length === 1 && tags[tags.length - 1] === unqueried[0],
+        'the un-queried tag is at position ' + (tags.indexOf(unqueried[0]) + 1) + ' of ' + tags.length);
+
+  const noOrientation = [], noRatio = [], noScreen = [];
+  for (const tag of tags) {
+    const media = queryOf(tag);
+    if (!media) continue;                                  // the fallback, checked above
     if (!/orientation:\s*(portrait|landscape)/.test(media)) noOrientation.push(media.slice(0, 60));
     if (!/-webkit-device-pixel-ratio:\s*\d/.test(media)) noRatio.push(media.slice(0, 60));
+    if (!/^screen and /.test(media)) noScreen.push(media.slice(0, 60));
   }
-  check('each one says which device it is for', noMedia.length === 0, noMedia.join(', '));
-  check('and which way up', noOrientation.length === 0, noOrientation.join(', '));
+  // Every reference implementation that is known to work leads with the media type.
+  // Without it the query is still valid CSS and should behave the same — should, on a
+  // feature whose documentation Apple archived, which is not a bet worth taking.
+  check('and leads with the media type, as the working examples do',
+        noScreen.length === 0, noScreen.join(', '));
+  check('every other one says which way up', noOrientation.length === 0, noOrientation.join(', '));
   check('and at what pixel ratio', noRatio.length === 0, noRatio.join(', '));
+}
+
+// ------------------------------------------------- the devices the café actually runs
+// Named rather than counted, because "31 tags" is true of a set that misses the one
+// iPad in the building. These two are the M4 iPad Pros — the sizes that were missing
+// when this shipped the first time and turned the whole thing into a no-op.
+{
+  const media = tagsOf(PAGES[0]).map(t => (/media="([^"]+)"/.exec(t) || [])[1] || '').join(' | ');
+  const need = [[834, 1210, 'iPad Pro 11-inch (M4)'], [1032, 1376, 'iPad Pro 13-inch (M4)'],
+                [820, 1180, 'iPad Air 11-inch'],     [1024, 1366, 'iPad Pro 12.9-inch']];
+  const missing = need.filter(([w, h]) =>
+    !new RegExp('device-width:\\s*' + w + 'px.*?device-height:\\s*' + h + 'px').test(media));
+  check('the iPads in the café are among them',
+        missing.length === 0, missing.map(m => m[2]).join(', ') + ' — these launch black');
+
+  // A till and a kitchen display live in landscape, and device-width is defined as the
+  // width of the output surface — there is no guarantee it does not swap when the iPad
+  // is turned. So both spellings are declared, and both have to stay.
+  const landscapeBoth = [[834, 1194, 'iPad Pro 11-inch (3rd/4th gen)'], [1024, 1366, 'iPad Pro 12.9-inch']];
+  const oneWayOnly = landscapeBoth.filter(([w, h]) => {
+    const a = new RegExp('device-width:\\s*' + w + 'px[^"]*device-height:\\s*' + h + 'px[^"]*orientation: landscape').test(media);
+    const b = new RegExp('device-width:\\s*' + h + 'px[^"]*device-height:\\s*' + w + 'px[^"]*orientation: landscape').test(media);
+    return !(a && b);
+  });
+  check('and landscape is declared both ways round for them',
+        oneWayOnly.length === 0, oneWayOnly.map(m => m[2]).join(', '));
+  note('a till lives in landscape — one spelling missing is a black screen on the busiest device');
 }
 
 done();

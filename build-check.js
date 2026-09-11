@@ -49,6 +49,23 @@
             const v = await res.json();
             if (!buildIsNewer(MY_BUILD, v && v.build)) return false;
             showUpdateBanner(v.build);
+            // AND FETCH IT INTO THE CACHE NOW, WITHOUT WAITING TO BE TAPPED.
+            //
+            // The shell cache serves the page it already holds, so between a deploy and
+            // somebody tapping that banner this device is SHOWING A PAGE FROM THE OLD
+            // BUILD. Usually that only means the fix is a tap away.
+            //
+            // It cost the café the launch screen. Adding a web app to the iOS home
+            // screen captures the document that is on screen at that moment, and iOS
+            // reads its apple-touch-startup-image tags then and keeps them. Re-adding
+            // the app during that window — which is exactly when somebody would, having
+            // just been told a fix had shipped — captures the OLD page, which has no
+            // such tags, so the app went on launching black and the deploy looked like
+            // it had done nothing.
+            //
+            // Nothing on screen changes here and nothing reloads. It only means the
+            // NEXT open is the new build, so whatever iOS reads then is current.
+            refreshShell();
             return true;
         } catch (e) { return false; }
     }
