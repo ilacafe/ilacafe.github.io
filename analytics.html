@@ -771,7 +771,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-11.1"></script>
+    <script src="/build-check.js" data-build="2026-09-15.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -2012,6 +2012,50 @@
                            ' &middot; ' + fresh + ' new orders since the last refit' +
                            '<div style=" font-size:0.85rem;">It waits for 1,500 before refitting, so the model is unchanged.</div></div>');
             }
+
+            // What the refit actually measured, rather than what it assumed.
+            //
+            // The refit holds the newest fifth of the window out of the fit and replays
+            // both models over it — the one shipping and the one proposed — so "the model
+            // improved" is a number rather than a hope. That number is the same one the
+            // accuracy card in admin shows, computed on trade neither model was fitted to,
+            // and it is the evidence behind an accept or a reject. It was not recorded
+            // anywhere before, because it was not computed.
+            const h = m.holdout;
+            if (h && h.current && h.candidate) {
+                const pct = v => Math.round((Number(v) || 0) * 100) + '%';
+                const better = Number(h.candidate.coverage) >= Number(h.current.coverage);
+                parts.push('<div style="margin-top:8px; font-size:0.85rem;">' +
+                    'On ' + escapeHTML(h.n || 0) + ' held-out orders: on-time ' +
+                    escapeHTML(pct(h.current.coverage)) + ' \u2192 <strong style="color:' +
+                    (better ? '#7CFC9A' : '#ffcc66') + ';">' + escapeHTML(pct(h.candidate.coverage)) +
+                    '</strong> &middot; typical error ' + escapeHTML(h.current.medErr) + ' \u2192 ' +
+                    escapeHTML(h.candidate.medErr) + ' min' +
+                    (h.candidate.capRate != null ? ' &middot; quoted open-ended ' +
+                        escapeHTML(pct(h.candidate.capRate)) : '') +
+                    '</div>');
+            }
+
+            // Which queue the saturation curves are fitted against, and how far the
+            // cushions had to move to cover the café. Both change what every page quotes,
+            // and neither is visible in the model itself without reading the numbers.
+            const detail = [];
+            if (m.loadUnit) detail.push('queue measured in ' + escapeHTML(m.loadUnit));
+            if (m.cushionScale != null && Number(m.cushionScale) !== 1)
+                detail.push('cushions \u00d7' + escapeHTML(m.cushionScale));
+            if (m.cushionOffset) detail.push('cushions +' + escapeHTML(m.cushionOffset) + ' min');
+            if (detail.length) parts.push('<div style=" font-size:0.85rem; margin-top:4px;">' +
+                detail.join(' &middot; ') + '</div>');
+
+            // Anything the refit had to work around: a curve whose bands disagreed with
+            // the shape, an item base held back, a cushion that could not reach the
+            // target. None of it is a failure, and all of it is a fact about the numbers
+            // now in use.
+            const notes = Array.isArray(m.notes) ? m.notes : [];
+            // Size and weight for hierarchy, never opacity — dimmed text on this
+            // background drops under AA, and the contrast suite enforces it.
+            if (notes.length) parts.push('<div style=" font-size:0.85rem; margin-top:4px;">' +
+                notes.map(x => escapeHTML(String(x))).join('<br>') + '</div>');
 
             return parts.join('');
         }

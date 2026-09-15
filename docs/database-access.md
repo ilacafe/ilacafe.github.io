@@ -265,7 +265,8 @@ numbers meant publishing the café's whole order history to anyone who asked.
 The POS now publishes just those numbers to **`eta/live`**:
 
 ```
-eta/live: { activeChef, activeBarista, lastPizzaOut, pace: [{at, r}…], updatedAt }
+eta/live: { activeChef, activeBarista, workChef, workBarista,
+            lastPizzaOut, tempo, pace: [{at, r}…], heartbeatMs, updatedAt }
 ```
 
 `pace` is one ratio per recent completion — how long it took against what the
@@ -273,6 +274,23 @@ model expects — with no item names, no destination and no notes. The ordering
 page still runs its own median, window and smoothing over it, so the estimate is
 unchanged; `test/eta-summary.test.js` asserts that both routes produce the same
 tempo to within 1e-9.
+
+`activeChef`/`activeBarista` count open tickets; `workChef`/`workBarista` count
+the items inside them. Both are published because the saturation curves are fitted
+against one or the other and the model says which through `eta/model.loadUnit` —
+a ticket of six pizzas and a single espresso are the same number to the first and
+six times apart in the second, and it is the second the stations actually feel.
+A model still on its seeds says `tickets`; the first refit that re-fits both
+saturation curves stamps `items`. Reading the wrong one silently rescales every
+saturation lookup, which is why the model declares it rather than the pages
+guessing.
+
+`lastPizzaOut` and every `at` in `pace` are **server** timestamps, and every page
+that measures against them goes through `.info/serverTimeOffset` rather than its
+own `Date.now()`. The kitchen screens write them that way too — `completedAt` and
+`orders/ready.timestamp` used to be the tablet's own clock against a server-stamped
+`createdAt`, which made every duration the monthly refit learns from
+`that tablet's clock minus the server's`.
 
 The POS is the writer because it is open throughout service and already holds
 every input. If no POS is open, the node goes stale, and the ordering page checks
@@ -296,13 +314,20 @@ The ordering page keeps the old direct reads as a fallback for exactly this
 window. Once the rules are deployed those reads fail, which is harmless: the
 values stay at their neutral defaults and `eta/live` is doing the work.
 
+A page on an older build that reads `eta/live` and finds no `workChef` falls back
+to the ticket counts, which keeps its reading on the scale its own curves were
+fitted against rather than quoting a busy kitchen as an empty one.
+
 ## The robot account, and what refits the ETA model
 
 `eta/model` is not static. The Cloudflare Worker in [`worker/`](../worker/)
 refits it monthly from 75 days of completions — per-item base times, the oven
 curve, both saturation curves, the quantity curve, cushions and margins — behind
 guardrails that reject a refit whose numbers are absurd, and a snapshot at
-`eta/modelPrevious` to roll back to. `eta/recalMeta` records what the last run
+`eta/modelPrevious` to roll back to. The refit holds the newest fifth of its
+window out of the fit and replays both models over it, so a candidate that would
+quote the café worse than the model in use is refused rather than shipped.
+`eta/recalMeta` records what the last run
 did.
 
 That Worker signs in as `robot@cafeila.app`, which is why the rules name that

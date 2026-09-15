@@ -391,11 +391,56 @@ const RECAL_SWING_REJECT_PCT = 0.40;   // reject whole refit if a core coefficie
 const RECAL_LOOKBACK_DAYS    = 75;     // window of completed orders to derive from
 // per-coefficient minimum clean sample sizes (else keep previous value for that coef)
 const RECAL_MIN_N = { itemBase: 30, pizzaBaseAll: 120, oven: 10, sat: 10, qty: 8, cushion: 30, margin: 30 };
-// hard sanity bounds (minutes) — a derived value outside these => reject refit
+// Hard sanity bounds (minutes). Every one of these is now READ. drinkBase, bakedBase,
+// ovenMax and satMax were declared here from the beginning and checked nowhere: a
+// refit could hand back a saturation curve that added forty minutes at an empty
+// counter, or an item base of an hour, and every gate passed it. The bounds read as
+// protection and were decoration.
 const RECAL_BOUNDS = {
   pizzaBase: [4, 20], drinkBase: [2, 15], bakedBase: [1, 12],
   ovenMax: [0, 35], satMax: [0, 40], cushion: [0, 15], margin: [0, 15]
 };
+
+// ---- how the curves are cut ----
+// Bands used to be fixed edges guessed in advance ([0,2],[3,4],[5,7],[8,99]) and each
+// band's point was emitted at its LOWER EDGE while carrying the median of the whole
+// band. interp then read that as the value AT the edge, which tilts every curve left
+// by half a band. Bands are cut at the pool's own distinct values now, sized to clear
+// the sample gate, and each point sits at its band's median x — where the evidence
+// actually is. It also means a curve no longer needs edges rewritten by hand when the
+// thing it is measured against changes scale.
+const RECAL_MAX_BANDS = 6;
+
+// "Quiet" and "hot", in the units the derivation itself computes. Load is measured in
+// ITEMS ahead (see rcAttachLoad), not tickets.
+const RECAL_QUIET_AHEAD = 3;
+const RECAL_HOT_IDLE    = 10;
+
+// ---- what the refit is actually trying to be good at ----
+// The café's accuracy report scores one number: the share of orders that finished
+// inside the quote. The refit never computed it. It fitted medians and p85/p95 spreads
+// on filtered pools, checked that nothing looked absurd, and shipped — so "the model
+// got better" was an assumption, never a measurement, and a refit that made the café
+// less accurate passed every gate it had.
+//
+// The newest slice of the window is now held back from the fit and used to score the
+// candidate and the incumbent against each other on orders neither was fitted to. The
+// cushions are then calibrated until the candidate actually hits the coverage target,
+// instead of assuming p85 of a filtered pool lands there.
+const RECAL_HOLDOUT_FRAC     = 0.20;   // newest share of the window kept out of the fit
+const RECAL_TARGET_COVERAGE  = 0.85;   // the share of orders that should finish inside the quote
+const RECAL_COVERAGE_SLACK   = 0.02;   // candidate may not be worse than the incumbent by more than this
+const RECAL_ERR_SLACK        = 1.10;   // nor worse than 1.10x on median absolute error
+// The cushion is adjusted as `cushion * scale + offset`, searched in two passes.
+//
+// Scaling first, because the derived cushions differ by category on purpose — a
+// dessert's spread is genuinely small and a cooling pizza's is not — and scaling keeps
+// that shape. But scaling alone cannot inflate a cushion derived at nearly nothing, and
+// that is exactly the case where the estimate needs help: a pool whose spread looked
+// tight in the fitting window against a service with a long right tail. So when no
+// scale reaches the target, the second pass leaves the shape alone and adds minutes.
+const RECAL_CUSHION_SCALES   = [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0];
+const RECAL_CUSHION_OFFSETS  = [0.5, 1, 1.5, 2, 3, 4, 5, 6, 8];
 
 // What counts as a pizza. The live answer is eta/model.pizzaKeys — the same list
 // pos.html and index.html classify by — and this literal is now only what is used
@@ -413,7 +458,11 @@ const RECAL_BOUNDS = {
 // that cannot read the model must not silently classify nothing as a pizza — that is
 // the same silent failure with the numbers moved.
 const RC_PIZZA_FALLBACK = ["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"];
-const RC_BAKED = ["cake","bread","banana"];
+// And the same for what counts as a dessert, for exactly the same reasons. This was a
+// literal the refit classified by while every page classified by eta/model.bakedKeys —
+// the pizza list's problem with the numbers moved, and quieter, because the categories
+// it decides (cushionBaked, margin.baked) have the smallest samples in the model.
+const RC_BAKED_FALLBACK = ["cake","bread","banana"];
 
 // Set once per refit, by rcDerive, before it reads anything. Module state because
 // rcIsPizza is reached from four functions inside one derivation and threading a
@@ -421,21 +470,50 @@ const RC_BAKED = ["cake","bread","banana"];
 // shape as the robot token and JWKS caches above, and safe for the same reason —
 // a warm isolate carrying the previous run's value is overwritten before use.
 let _rcPizzaKeys = RC_PIZZA_FALLBACK;
+let _rcBakedKeys = RC_BAKED_FALLBACK;
 
 // Returns which list it settled on, so the caller can report it rather than absorb
 // it. A refit running on the fallback is not an error, but it is a fact about how
 // the numbers below were derived, and it is invisible everywhere else.
 function rcUsePizzaKeys(keys){
-  const clean = Array.isArray(keys)
-    ? keys.filter(k => typeof k === 'string' && k.trim()).map(k => k.trim().toLowerCase())
-    : [];
+  const clean = rcCleanKeys(keys);
   _rcPizzaKeys = clean.length ? clean : RC_PIZZA_FALLBACK;
   return clean.length ? 'model' : 'fallback';
 }
+function rcUseBakedKeys(keys){
+  const clean = rcCleanKeys(keys);
+  _rcBakedKeys = clean.length ? clean : RC_BAKED_FALLBACK;
+  return clean.length ? 'model' : 'fallback';
+}
+function rcCleanKeys(keys){
+  return Array.isArray(keys)
+    ? keys.filter(k => typeof k === 'string' && k.trim()).map(k => k.trim().toLowerCase())
+    : [];
+}
 
 function rcIsPizza(name){ const n=(name||'').toLowerCase(); return _rcPizzaKeys.some(k=>n.includes(k)); }
-function rcIsBaked(name){ const n=(name||'').toLowerCase(); return RC_BAKED.some(k=>n.includes(k)); }
+function rcIsBaked(name){ const n=(name||'').toLowerCase(); return _rcBakedKeys.some(k=>n.includes(k)); }
 function rcQty(it){ const q=parseInt(it&&it.qty); return isNaN(q)?1:q; }
+
+// "Every item on this ticket is a dessert" — and there is at least one item.
+//
+// This was a bare Object.keys(o.items).every(rcIsBaked) in four places, and every() on
+// an empty array is true. rcLoadCompleted defaults a missing item map to {}, so any
+// completed record that lost its items — a merged bill, a voided line — was filed as an
+// all-dessert order and went into cushionBaked and margin.baked, which are the two
+// numbers in the model with the smallest and most tightly clustered samples.
+function rcAllBaked(items){
+  const names = Object.keys(items || {});
+  return names.length > 0 && names.every(rcIsBaked);
+}
+function rcAnyPizza(items){ return Object.keys(items || {}).some(rcIsPizza); }
+
+// The work on a ticket, not the fact of it.
+function rcWork(o){
+  let q = 0;
+  for(const nm in (o.items || {})) q += rcQty(o.items[nm]);
+  return q || 1;        // a ticket whose items cannot be read still occupies the station
+}
 
 // ---- stats helpers ----
 function rcMedian(arr){ if(!arr.length) return null; const a=[...arr].sort((x,y)=>x-y); const m=Math.floor(a.length/2); return a.length%2?a[m]:(a[m-1]+a[m])/2; }
@@ -518,13 +596,25 @@ async function rcLoadCompleted(token){
   return out;
 }
 
-// ---- compute "orders ahead" (load) per order: same-station intervals active at its start ----
+// ---- compute "work ahead" (load) per order: same-station intervals active at its start ----
+//
+// This counted TICKETS. A ticket of six pizzas and a single espresso were the same
+// number to it, which is not how either station experiences a queue — and it is the
+// variable the whole saturation curve is fitted against, so the curve was being asked
+// to explain the wait using a number that does not describe the load causing it.
+//
+// It counts the items in those tickets now. That changes the x-scale of the saturation
+// curves, so a model fitted this way declares loadUnit:'items' and the pages read the
+// item-weighted queue the till publishes alongside the ticket counts. A model still on
+// its seeds says 'tickets' and keeps reading the ticket counts. The two can't be mixed.
 function rcAttachLoad(orders){
   for(const station of ['chef','barista']){
     const arr = orders.filter(o=>o.station===station);
-    for(const o of arr){
+    const work = arr.map(rcWork);
+    for(let i=0;i<arr.length;i++){
+      const o = arr[i];
       let ahead=0;
-      for(const c of arr){ if(c.start<o.start && c.done>o.start) ahead++; }
+      for(let j=0;j<arr.length;j++){ const c=arr[j]; if(c.start<o.start && c.done>o.start) ahead += work[j]; }
       o.ahead = ahead;
     }
   }
@@ -544,45 +634,317 @@ function rcAttachOvenIdle(orders){
 //      duration is long AND a non-dessert order at the same table overlapped it
 //      => it was served after the meal by choice, not prep delay. Exclude.
 function rcIsDessertAfterFood(o, orders){
-  if(!(Object.keys(o.items).every(rcIsBaked))) return false;  // only desserts
+  if(!rcAllBaked(o.items)) return false;                       // only desserts (and only if there ARE items)
   if(o.dur <= 6) return false;                                 // quick = served now, keep
   // any non-dessert order at same table overlapping this dessert's window?
   for(const c of orders){
     if(c===o) continue;
     if(c.table!==o.table) continue;
-    if(Object.keys(c.items).every(rcIsBaked)) continue;        // need a real meal item
+    if(rcAllBaked(c.items)) continue;                          // need a real meal item
     if(c.start <= o.done && c.done >= o.start) return true;    // overlapping meal => after-food
   }
   return false;
 }
 
+// ---- banding: cut the evidence where the evidence is ----
+//
+// Every curve in this model is "how much does X add", fitted by grouping orders on X
+// and taking each group's median. The grouping used to be fixed edges written into
+// this file — [0,2],[3,4],[5,7],[8,99] — and each group's point was emitted at the
+// group's LOWER EDGE while carrying the median of the whole group. interp() on the
+// pages then read that value as the value AT the edge, so every curve was tilted half
+// a band to the left: the cost of being four items deep was charged from three.
+//
+// Bands are cut here from the pool's own distinct values, grown until each clears the
+// sample gate, and each point is placed at its band's MEDIAN x. Nothing needs rewriting
+// when the variable changes scale, and no band is ever emitted from fewer orders than
+// the gate asks for. A distinct x is never split across two bands, which is what keeps
+// the representative x values strictly increasing — interp divides by the gap between
+// consecutive points, so a repeat would be a division by zero.
+function rcBands(pool, xOf, minN){
+  if(!pool || !pool.length) return null;
+  const byX = new Map();
+  let n = 0;
+  for(const o of pool){
+    const x = xOf(o);
+    if(x == null || !isFinite(x)) continue;
+    if(!byX.has(x)) byX.set(x, []);
+    byX.get(x).push(o);
+    n++;
+  }
+  if(n < minN*2) return null;            // fewer than two bands' worth: nothing to say about a slope
+  const xs = [...byX.keys()].sort((a,b)=>a-b);
+  const per = Math.max(minN, Math.ceil(n / RECAL_MAX_BANDS));
+  const bands = [];
+  let bucket = [];
+  for(const x of xs){
+    bucket = bucket.concat(byX.get(x));
+    if(bucket.length >= per){ bands.push(bucket); bucket = []; }
+  }
+  // the tail is merged into the last band rather than emitted short
+  if(bucket.length){ if(bands.length) bands[bands.length-1] = bands[bands.length-1].concat(bucket); else bands.push(bucket); }
+  return bands.length >= 2 ? { bands, xOf } : null;
+}
+
+// A curve of ADDED minutes over x, differenced against its own quietest band.
+//
+// This is the fix for the saturation bug. satChef() used to pool pizzas at every oven
+// idle and then subtract a baseline fitted on hot ones only, so the number it handed
+// back at an empty counter was the cost of a cooling oven wearing a saturation label —
+// and the estimate added ovenCurve on top of it. Differencing against the pool's OWN
+// first band means whatever else is going on in the pool is in the baseline too, and
+// cancels. The two terms are independent for the first time.
+function rcCurve(pool, xOf, minN){
+  const b = rcBands(pool, xOf, minN);
+  if(!b) return null;
+  const meds = b.bands.map(band => rcMedian(rcIQRClean(band.map(o=>o.dur))));
+  const baseline = meds[0];
+  if(baseline == null) return null;
+  const pts = [];
+  for(let i=0;i<b.bands.length;i++){
+    if(meds[i] == null) continue;
+    const mx = rcMedian(b.bands[i].map(xOf));
+    if(mx == null) continue;
+    const x = +mx.toFixed(1);
+    if(pts.length && x <= pts[pts.length-1][0]) continue;
+    pts.push([x, Math.max(0, +(meds[i]-baseline).toFixed(1))]);
+  }
+  return pts.length >= 2 ? { points: pts, baseline: +baseline.toFixed(1), n: pool.length } : null;
+}
+
+// A curve of CUSHION over x: how far past its own median a band's 85th percentile sits.
+// Absolute, not a delta — a cushion is padding, not an addition to a base time.
+function rcSpreadCurve(pool, xOf, minN){
+  const b = rcBands(pool, xOf, minN);
+  if(!b) return null;
+  const pts = [];
+  for(const band of b.bands){
+    const cleaned = rcIQRClean(band.map(o=>o.dur));
+    if(!cleaned.length) continue;
+    const mx = rcMedian(band.map(xOf));
+    if(mx == null) continue;
+    const x = +mx.toFixed(1);
+    if(pts.length && x <= pts[pts.length-1][0]) continue;
+    pts.push([x, Math.max(0, +(rcPctl(cleaned,0.85) - rcMedian(cleaned)).toFixed(1))]);
+  }
+  return pts.length >= 2 ? pts : null;
+}
+
+// Nothing stopped a noisy refit producing a curve that went DOWN — a quote that got
+// shorter as the kitchen got busier, or as the oven got colder. Lifting the dips is
+// better than rejecting the whole refit for one thin band, but it is not free
+// information: it says the evidence in that band disagreed with the shape we are
+// imposing, so it goes in the notes and reaches recalMeta.
+function rcMonotone(points, notes, label){
+  if(!points) return points;
+  let lifted = 0, run = -Infinity;
+  const out = points.map(p => {
+    let y = p[1];
+    if(y < run){ y = run; lifted++; } else { run = y; }
+    return [p[0], y];
+  });
+  if(lifted) notes.push(label + ': ' + lifted + ' band(s) lifted to keep the curve non-decreasing');
+  return out;
+}
+
+// ---- the shipped estimate, replayed ----
+//
+// A copy of the formula in pos.html and index.html, narrowed to one station, so the
+// refit can ask the only question that actually matters: would this candidate model
+// have quoted these orders better than the one it is replacing?
+//
+// It is a third copy of logic that already exists twice, which this codebase has been
+// bitten by before — the pizza list and the kitchen tempo both diverged that way. So it
+// is pinned: test/eta-agreement.test.js drives this, pos.html's estimateETA and
+// index.html's custEstimateETA over the same carts and requires all three to agree.
+//
+// Two deliberate simplifications, both stated rather than hidden. Tickets in
+// orders/completed/{station} are already per-station splits, so "the slower of two
+// stations" collapses to the one station this ticket was on. And tempo is 1.0: nothing
+// records what the kitchen's live tempo was at the time, and inventing one would score
+// the model against a condition it never saw.
+function rcInterp(curve, x){
+  if(!curve || !curve.length) return 0;
+  if(x <= curve[0][0]) return curve[0][1];
+  if(x >= curve[curve.length-1][0]) return curve[curve.length-1][1];
+  for(let i=1;i<curve.length;i++){
+    if(x <= curve[i][0]){
+      const [x0,y0]=curve[i-1], [x1,y1]=curve[i];
+      return y0 + (y1-y0)*(x-x0)/(x1-x0);
+    }
+  }
+  return curve[curve.length-1][1];
+}
+function rcModelBase(model, name, station){
+  const n = (name||'').toLowerCase();
+  let best = null, bestLen = -1;
+  for(const k in (model.itemBase||{})){ if(n.includes(k) && k.length>bestLen){ best = model.itemBase[k]; bestLen = k.length; } }
+  if(best != null) return best;
+  const fb = model.fallback || {};
+  if(rcIsPizza(name)) return fb.pizza != null ? fb.pizza : 7.5;
+  if(rcIsBaked(name)) return fb.baked != null ? fb.baked : 3.1;
+  if(station === 'chef' && fb.hotfood != null) return fb.hotfood;
+  return fb.drink != null ? fb.drink : 5.5;
+}
+function rcQuote(model, o){
+  const items = o.items || {};
+  let base = 0, qty = 0, pizza = false, bakedOnly = true, has = false;
+  for(const nm in items){
+    const b = rcModelBase(model, nm, o.station);
+    if(b > base) base = b;
+    qty += rcQty(items[nm]);
+    if(rcIsPizza(nm)) pizza = true;
+    if(!rcIsBaked(nm)) bakedOnly = false;
+    has = true;
+  }
+  if(!has) return null;
+  const load = o.ahead || 0;
+  const idle = (o.idle != null) ? o.idle : 999;
+  let add = rcInterp(model.qtyCurve, qty);
+  if(pizza) add += rcInterp(model.ovenCurve, idle);
+  add += rcInterp(o.station === 'chef' ? model.satCurveChef : model.satCurveBarista, load);
+  const point = base + add;
+  const cat = (o.station === 'chef') ? (pizza ? 'pizza' : 'hotfood') : (bakedOnly ? 'baked' : 'drink');
+  let cush;
+  if(cat === 'pizza')        cush = Math.max(rcInterp(model.cushionPizzaByOven || [[0,5]], idle),
+                                             rcInterp(model.cushionPizzaByLoad || [[0,0]], load));
+  else if(cat === 'hotfood') cush = model.cushionHotfood != null ? model.cushionHotfood : 5;
+  else if(cat === 'baked')   cush = model.cushionBaked   != null ? model.cushionBaked   : 2;
+  else                       cush = rcInterp(model.cushionDrinkByLoad || [[0,4]], load);
+  const quote = point + cush;
+  const w = (model.rangeWidth || 5)/2;
+  return { low: Math.max(3, Math.round(quote - w)), high: Math.round(quote + w),
+           capped: quote > (model.maxQuote || 32) };
+}
+
+// Coverage is the number the café's accuracy report shows. medErr is how far the
+// middle of the quote sat from the truth, which coverage alone cannot see: a model
+// that quotes an hour for everything scores 100% coverage.
+function rcScore(model, orders){
+  let n = 0, covered = 0, capped = 0;
+  const errs = [];
+  for(const o of orders){
+    const q = rcQuote(model, o);
+    if(!q) continue;
+    n++;
+    if(o.dur <= q.high) covered++;
+    if(q.capped) capped++;
+    errs.push(Math.abs(o.dur - (q.low + q.high)/2));
+  }
+  if(!n) return null;
+  return { n: n, coverage: +(covered/n).toFixed(4), medErr: +rcMedian(errs).toFixed(2),
+           capRate: +(capped/n).toFixed(4) };
+}
+
+// Cushions were derived as "p85 minus median of a filtered pool" and assumed to land
+// on the coverage target. Nothing checked that they did. This scales them until the
+// replayed quote actually hits the target on the fitting window — the smallest scale
+// that gets there, so the estimate is never padded further than it has to be.
+function rcScaleCushions(model, k, add){
+  const m = JSON.parse(JSON.stringify(model));
+  const plus = add || 0;
+  const sc = v => Math.max(0, +(v*k + plus).toFixed(1));
+  const curve = c => Array.isArray(c) ? c.map(p => [p[0], sc(p[1])]) : c;
+  m.cushionDrinkByLoad = curve(m.cushionDrinkByLoad);
+  m.cushionPizzaByOven = curve(m.cushionPizzaByOven);
+  m.cushionPizzaByLoad = curve(m.cushionPizzaByLoad);
+  if(m.cushionBaked   != null) m.cushionBaked   = sc(m.cushionBaked);
+  if(m.cushionHotfood != null) m.cushionHotfood = sc(m.cushionHotfood);
+  return m;
+}
+function rcCalibrateCushions(model, fitOrders, notes){
+  let chosen = null, last = null;
+  function tryIt(k, add){
+    const cand = rcScaleCushions(model, k, add);
+    const sc = rcScore(cand, fitOrders);
+    if(!sc) return false;
+    last = { k: k, add: add, model: cand, score: sc };
+    if(sc.coverage >= RECAL_TARGET_COVERAGE){ chosen = last; return true; }
+    return false;
+  }
+  // pass one: keep the shape, find the smallest scale that covers the café
+  for(const k of RECAL_CUSHION_SCALES){ if(tryIt(k, 0)) break; }
+  // pass two: the shape cannot be stretched far enough, so add minutes to it instead
+  if(!chosen){ for(const add of RECAL_CUSHION_OFFSETS){ if(tryIt(1, add)) break; } }
+  if(!chosen) chosen = last;
+  if(!chosen) return { model: model, scale: 1, offset: 0, score: null };
+
+  const how = (chosen.k !== 1 ? 'scaled x' + chosen.k : '') +
+              (chosen.k !== 1 && chosen.add ? ' and ' : '') +
+              (chosen.add ? 'widened by ' + chosen.add + ' min' : '');
+  if(how) notes.push('cushions ' + how + ' to reach ' +
+                     Math.round(RECAL_TARGET_COVERAGE*100) + '% coverage on the fitting window');
+  if(chosen.score.coverage < RECAL_TARGET_COVERAGE)
+    notes.push('cushions could not reach the coverage target at all (best ' +
+               Math.round(chosen.score.coverage*100) + '% at x' + chosen.k + ' +' + (chosen.add||0) + ')');
+  return { model: chosen.model, scale: chosen.k, offset: chosen.add || 0, score: chosen.score };
+}
+
+// ---- attaching the derived conditions, once ----
+// The holdout is scored with the load and oven-idle each order actually had, which can
+// only be computed against the whole window — an order's neighbours do not stop
+// existing because they landed on the other side of the split. So this runs on the full
+// set before anything is split, and marks the array so rcDerive does not redo it on a
+// slice and quietly recompute every load from a fifth of the evidence.
+function rcAttach(orders){
+  if(orders.attached) return orders;
+  rcAttachLoad(orders);
+  rcAttachOvenIdle(orders);
+  orders.attached = true;
+  return orders;
+}
+
+// Holds the newest slice of the window out of the fit so the candidate and the
+// incumbent can be compared on orders the candidate was not fitted to. Split by
+// completion time rather than at random: the question is whether the new model would
+// have quoted the most recent trade better, and a random split lets the fit see the
+// same service it is later judged on.
+function rcSplitWindow(orders, frac){
+  const byDone = orders.slice().sort((a,b) => a.done - b.done);
+  const cut = Math.max(1, Math.floor(byDone.length * (1-frac)));
+  const fit = byDone.slice(0, cut), hold = byDone.slice(cut);
+  fit.attached = hold.attached = true;
+  return { fit: fit, hold: hold };
+}
+
 // ---- the full derivation: returns a proposed model (same shape as eta/model) ----
-function rcDerive(orders, pizzaKeys){
+function rcDerive(orders, pizzaKeys, bakedKeys){
   // Before anything is classified: the whole derivation below asks "is this a pizza"
   // through rcIsPizza, so the list has to be settled first.
   const pizzaKeySource = rcUsePizzaKeys(pizzaKeys);
-  rcAttachLoad(orders);
-  rcAttachOvenIdle(orders);
-  const idleOf = new Map(orders.map(o=>[o, o.idle]));
+  rcUseBakedKeys(bakedKeys);
+  rcAttach(orders);
 
   // filter out dessert-after-food contamination up front
   const clean = orders.filter(o=>!rcIsDessertAfterFood(o, orders));
 
   const notes = [];
+  const idleOf = o => (o.idle != null ? o.idle : 9999);
+  const soleItem = o => { const names = Object.keys(o.items||{}); return names.length === 1 ? names[0] : null; };
+  // "The oven is not cold" — which INCLUDES a negative idle, and that is the whole
+  // point of writing it this way. A negative idle means the previous pizza was still
+  // cooking when this one went in: the oven is not merely hot, it is occupied. Those
+  // are also, necessarily, the busiest moments in the window — so excluding them (as
+  // every pool here used to, with `i >= 0`) threw away precisely the evidence the
+  // saturation curve exists to measure, and left it fitting a busy kitchen from the
+  // quiet end of the data.
+  //
+  // The oven curve is the one place negatives are still dropped, because there the
+  // idle IS the x-axis and a pizza that never stopped cooking has no cooling time to
+  // plot against.
+  const isHot    = o => idleOf(o) < RECAL_HOT_IDLE;
+  const isQuiet  = o => (o.ahead || 0) <= RECAL_QUIET_AHEAD;
+  const totQty   = o => { let q=0; for(const nm in (o.items||{})) q += rcQty(o.items[nm]); return q; };
 
-  // ---------- per-item base (hot oven idle<10 for pizzas, low load<=2, single qty1) ----------
+  // ---------- per-item base: one item, one of it, a quiet station, a hot oven ----------
   const itemDurs = {};
   for(const o of clean){
-    const names = Object.keys(o.items);
-    if(names.length!==1) continue;
-    if(rcQty(o.items[names[0]])!==1) continue;
-    if(o.ahead>2) continue;
-    if(o.dur>45) continue;
-    const nm = names[0];
-    if(o.station==='chef' && rcIsPizza(nm)){
-      const idl = idleOf.get(o);
-      if(!(idl!=null && idl>=0 && idl<10)) continue;  // truly hot, exclude overlapping (neg idle)
-    }
+    const nm = soleItem(o);
+    if(!nm) continue;
+    if(rcQty(o.items[nm]) !== 1) continue;
+    if(!isQuiet(o)) continue;
+    if(o.dur > 45) continue;
+    if(o.station === 'chef' && rcIsPizza(nm) && !isHot(o)) continue;
     (itemDurs[nm] = itemDurs[nm] || []).push(o.dur);
   }
   const itemBase = {};
@@ -592,147 +954,98 @@ function rcDerive(orders, pizzaKeys){
   }
 
   // pizza hot base (all pizzas pooled) — the shared baseline
-  const pizzaHot = [];
-  for(const o of clean){
-    const names=Object.keys(o.items);
-    if(names.length!==1 || rcQty(o.items[names[0]])!==1) continue;
-    if(o.station!=='chef' || !rcIsPizza(names[0])) continue;
-    if(o.ahead>2) continue;
-    const idl=idleOf.get(o);
-    if(!(idl!=null && idl>=0 && idl<10)) continue;
-    if(o.dur>45) continue;
-    pizzaHot.push(o.dur);
-  }
+  const pizzaHot = clean.filter(o => {
+    const nm = soleItem(o);
+    return nm && rcQty(o.items[nm]) === 1 && o.station === 'chef' && rcIsPizza(nm)
+        && isQuiet(o) && isHot(o) && o.dur <= 45;
+  }).map(o => o.dur);
   const pizzaHotClean = rcIQRClean(pizzaHot);
   const pizzaBase = pizzaHotClean.length>=RECAL_MIN_N.pizzaBaseAll ? +rcMedian(pizzaHotClean).toFixed(1) : null;
 
-  // ---------- oven curve (delta from pizza hot base), single low-load pizzas by idle ----------
-  function ovenPool(){
-    return clean.filter(o=>{
-      const names=Object.keys(o.items);
-      return names.length===1 && rcQty(o.items[names[0]])===1 && o.station==='chef'
-        && rcIsPizza(names[0]) && o.ahead<=2 && o.dur<=90;
-    });
-  }
-  const ovenBands = [[0,10],[10,15],[15,20],[20,30],[30,45],[45,60],[60,120],[120,99999]];
-  const ovenCurve=[]; const op = ovenPool(); const base = pizzaBase!=null?pizzaBase:7.5;
-  for(const [lo,hi] of ovenBands){
-    const sub = rcIQRClean(op.filter(o=>{const i=idleOf.get(o); return i>=lo && i<hi;}).map(o=>o.dur));
-    if(sub.length>=RECAL_MIN_N.oven){
-      const delta = Math.max(0, +(rcMedian(sub)-base).toFixed(1));
-      ovenCurve.push([lo===0?0:lo, delta]);
+  // ---------- oven curve: single low-load pizzas, over idle ----------
+  // Low load only, so the saturation effect is held still while the oven varies —
+  // the mirror of what satChef now does with the oven.
+  const ovenPool = clean.filter(o => {
+    const nm = soleItem(o);
+    return nm && rcQty(o.items[nm]) === 1 && o.station === 'chef' && rcIsPizza(nm)
+        && isQuiet(o) && idleOf(o) >= 0 && o.dur <= 90;
+  });
+  let ovenCurve = null;
+  {
+    const c = rcCurve(ovenPool, idleOf, RECAL_MIN_N.oven);
+    if(c){
+      // A hot oven adds nothing by definition — that cost is already inside pizzaBase.
+      // Anchoring at zero keeps the two from overlapping at the hot end.
+      const pts = (c.points[0][0] > 0) ? [[0,0]].concat(c.points) : c.points;
+      ovenCurve = rcMonotone(pts, notes, 'ovenCurve');
     }
-  }
-  if(ovenCurve.length===0 || ovenCurve[0][0]!==0) ovenCurve.unshift([0,0]);
-
-  // ---------- saturation curves, station-specific ----------
-  // chef: single hot pizzas by load
-  function satChef(){
-    const pool = clean.filter(o=>{
-      const names=Object.keys(o.items);
-      if(!(names.length===1 && rcQty(o.items[names[0]])===1)) return false;
-      if(o.station!=='chef' || !rcIsPizza(names[0])) return false;
-      const i=idleOf.get(o); return i!=null && i>=0; // any load, but exclude neg-idle
-    });
-    const bands=[[0,2],[3,4],[5,7],[8,99]]; const out=[];
-    const b = pizzaBase!=null?pizzaBase:7.5;
-    for(const [lo,hi] of bands){
-      const sub=rcIQRClean(pool.filter(o=>o.ahead>=lo && o.ahead<=hi).map(o=>o.dur));
-      if(sub.length>=RECAL_MIN_N.sat){ out.push([lo, Math.max(0,+(rcMedian(sub)-b).toFixed(1))]); }
-    }
-    if(out.length && out[0][0]!==0) out.unshift([0, out[0][1]]);
-    return out.length?out:null;
-  }
-  // barista: single drinks by load (no oven)
-  function satBar(){
-    const pool = clean.filter(o=>{
-      const names=Object.keys(o.items);
-      return names.length===1 && o.station==='barista' && !rcIsBaked(names[0]);
-    });
-    const b = rcMedian(rcIQRClean(pool.filter(o=>o.ahead<=1).map(o=>o.dur)));
-    if(b==null) return null;
-    const bands=[[0,1],[2,3],[4,6],[7,99]]; const out=[];
-    for(const [lo,hi] of bands){
-      const sub=rcIQRClean(pool.filter(o=>o.ahead>=lo && o.ahead<=hi).map(o=>o.dur));
-      if(sub.length>=RECAL_MIN_N.sat){ out.push([lo, Math.max(0,+(rcMedian(sub)-b).toFixed(1))]); }
-    }
-    if(out.length && out[0][0]!==0) out.unshift([0,0]);
-    return out.length?out:null;
   }
 
-  // ---------- quantity curve (chef, hot, low load) ----------
-  function qtyCurve(){
-    const pool = clean.filter(o=>{
-      if(o.station!=='chef') return false;
-      const anyPizza = Object.keys(o.items).some(rcIsPizza);
-      if(anyPizza){ const i=idleOf.get(o); if(!(i!=null && i>=0 && i<15)) return false; }
-      return o.ahead<=2 && o.dur<=60;
-    });
-    function totQty(o){ let q=0; for(const nm in o.items) q+=rcQty(o.items[nm]); return q; }
-    const b = rcMedian(rcIQRClean(pool.filter(o=>totQty(o)===1).map(o=>o.dur)));
-    if(b==null) return null;
-    const bands=[[1,1],[2,2],[3,4],[5,99]]; const out=[];
-    for(const [lo,hi] of bands){
-      const sub=rcIQRClean(pool.filter(o=>{const q=totQty(o); return q>=lo&&q<=hi;}).map(o=>o.dur));
-      if(sub.length>=RECAL_MIN_N.qty){ out.push([lo, Math.max(0,+(rcMedian(sub)-b).toFixed(1))]); }
-    }
-    if(out.length && out[0][0]!==1) out.unshift([1,0]);
-    return out.length?out:null;
-  }
+  // ---------- saturation, station by station, each over its own quiet baseline ----------
+  // chef: single pizzas on a HOT oven only. The restriction is the whole point: with the
+  // oven free to vary, this curve absorbed the oven's cost and the estimate charged for
+  // it twice.
+  const satChefPool = clean.filter(o => {
+    const nm = soleItem(o);
+    return nm && rcQty(o.items[nm]) === 1 && o.station === 'chef' && rcIsPizza(nm) && isHot(o);
+  });
+  const satBarPool = clean.filter(o => {
+    const nm = soleItem(o);
+    return nm && o.station === 'barista' && !rcIsBaked(nm);
+  });
+  const satChefC = rcCurve(satChefPool, o => o.ahead || 0, RECAL_MIN_N.sat);
+  const satBarC  = rcCurve(satBarPool,  o => o.ahead || 0, RECAL_MIN_N.sat);
+  const satCurveChef    = satChefC ? rcMonotone(satChefC.points, notes, 'satCurveChef')    : null;
+  const satCurveBarista = satBarC  ? rcMonotone(satBarC.points,  notes, 'satCurveBarista') : null;
 
-  // ---------- per-category cushion — DERIVED AS CURVES over the driving condition ----------
-  // (residual spread GROWS with load/oven, so a flat number is wrong; we fit a small curve)
-  function spreadOf(orderSubset){
-    const cleaned = rcIQRClean(orderSubset.map(o=>o.dur));
+  // ---------- quantity curve (chef, hot, quiet) ----------
+  const qtyPool = clean.filter(o => {
+    if(o.station !== 'chef') return false;
+    if(rcAnyPizza(o.items) && !(idleOf(o) >= 0 && idleOf(o) < 15)) return false;
+    return isQuiet(o) && o.dur <= 60;
+  });
+  const qtyC = rcCurve(qtyPool, totQty, RECAL_MIN_N.qty);
+  const qtyCurve = qtyC ? rcMonotone(qtyC.points, notes, 'qtyCurve') : null;
+
+  // ---------- cushions: the spread, over whatever is driving it ----------
+  const drinkPool = clean.filter(o => o.station==='barista' && soleItem(o) && !rcAllBaked(o.items));
+  // two pizza pools, each holding the other condition still
+  const pizzaQuiet = clean.filter(o => { const nm=soleItem(o); return nm && o.station==='chef' && rcIsPizza(nm) && rcQty(o.items[nm])===1 && isQuiet(o); });
+  const pizzaHotP  = clean.filter(o => { const nm=soleItem(o); return nm && o.station==='chef' && rcIsPizza(nm) && rcQty(o.items[nm])===1 && isHot(o); });
+  const cushionDrinkByLoad = rcSpreadCurve(drinkPool,  o => o.ahead || 0, RECAL_MIN_N.cushion);
+  const cushionPizzaByOven = rcSpreadCurve(pizzaQuiet, idleOf,            RECAL_MIN_N.cushion);
+  const cushionPizzaByLoad = rcSpreadCurve(pizzaHotP,  o => o.ahead || 0, RECAL_MIN_N.cushion);
+
+  function flatSpread(pool){
+    const cleaned = rcIQRClean(pool.map(o=>o.dur));
     if(cleaned.length < RECAL_MIN_N.cushion) return null;
     return Math.max(0, +(rcPctl(cleaned,0.85) - rcMedian(cleaned)).toFixed(1));
   }
-  // drink cushion over load
-  const drinkPool = clean.filter(o=>o.station==='barista' && !Object.keys(o.items).some(rcIsBaked) && Object.keys(o.items).length===1);
-  const cushionDrinkByLoad=[];
-  for(const [lo,hi,pt] of [[0,1,0],[2,3,3],[4,99,5]]){
-    const s=spreadOf(drinkPool.filter(o=>o.ahead>=lo && o.ahead<=hi));
-    if(s!=null) cushionDrinkByLoad.push([pt,s]);
-  }
-  // pizza cushion over oven idle (low load)
-  const pizzaPool = clean.filter(o=>{const names=Object.keys(o.items);return o.station==='chef' && rcIsPizza(names[0]) && names.length===1 && rcQty(o.items[names[0]])===1 && o.ahead<=2;});
-  const cushionPizzaByOven=[];
-  for(const [lo,hi,pt] of [[0,10,0],[10,30,20],[30,9999,60]]){
-    const s=spreadOf(pizzaPool.filter(o=>{const i=idleOf.get(o); return i>=lo && i<hi;}));
-    if(s!=null) cushionPizzaByOven.push([pt,s]);
-  }
-  if(cushionPizzaByOven.length && cushionPizzaByOven[0][0]!==0) cushionPizzaByOven.unshift([0,cushionPizzaByOven[0][1]]);
-  // dessert (served-now) cushion — flat, data shows it's stable
-  const cushionBaked = spreadOf(clean.filter(o=>Object.keys(o.items).every(rcIsBaked) && o.dur<=6));
+  const cushionBaked = flatSpread(clean.filter(o => rcAllBaked(o.items) && o.dur <= 6));
+  // Hot food never had a derived cushion at all — the model shipped a hand-picked 5 and
+  // the refit left it alone forever, which is the same silence the cap had.
+  const cushionHotfood = flatSpread(clean.filter(o => o.station==='chef' && !rcAnyPizza(o.items) && !rcAllBaked(o.items)));
 
   // ---------- per-category margin (p95-median at fixed conditions) ----------
-  function marginFor(catFilter, fixedFilter){
-    const pool = clean.filter(o=> catFilter(o) && fixedFilter(o));
+  function marginFor(pool){
     const cleaned = rcIQRClean(pool.map(o=>o.dur));
     if(cleaned.length < RECAL_MIN_N.margin) return null;
     return Math.max(0, +(rcPctl(cleaned,0.95) - rcMedian(cleaned)).toFixed(1));
   }
   const margin = {
-    pizza: marginFor(
-      o=>o.station==='chef' && Object.keys(o.items).some(rcIsPizza),
-      o=>{const i=idleOf.get(o); const names=Object.keys(o.items); return names.length===1 && rcQty(o.items[names[0]])===1 && i!=null && i>=0 && i<10 && o.ahead<=2;}),
-    drink: marginFor(
-      o=>o.station==='barista' && !Object.keys(o.items).some(rcIsBaked),
-      o=>{const names=Object.keys(o.items); return names.length===1 && o.ahead<=1;}),
-    baked: marginFor(
-      o=>Object.keys(o.items).every(rcIsBaked),
-      o=>o.dur<=6)
+    pizza: marginFor(pizzaHotP.filter(isQuiet)),
+    drink: marginFor(drinkPool.filter(o => (o.ahead||0) <= 1)),
+    baked: marginFor(clean.filter(o => rcAllBaked(o.items) && o.dur <= 6))
   };
 
   return {
     derived: {
       itemBase, pizzaBase,
-      ovenCurve: ovenCurve.length>1?ovenCurve:null,
-      satCurveChef: satChef(), satCurveBarista: satBar(),
-      qtyCurve: qtyCurve(),
-      cushionDrinkByLoad: cushionDrinkByLoad.length?cushionDrinkByLoad:null,
-      cushionPizzaByOven: cushionPizzaByOven.length>1?cushionPizzaByOven:null,
-      cushionBaked,
+      ovenCurve,
+      satCurveChef, satCurveBarista,
+      qtyCurve,
+      cushionDrinkByLoad, cushionPizzaByOven, cushionPizzaByLoad,
+      cushionBaked, cushionHotfood,
       margin
     },
     counts: {
@@ -745,19 +1058,54 @@ function rcDerive(orders, pizzaKeys){
   };
 }
 
+// ---- per-item guard: bounds and swing, item by item ----
+//
+// rcMergeModel merged these straight in. Only the POOLED pizzaBase was ever gated, so a
+// single item's base could go from 5.9 to 19 minutes on a thin, unlucky sample and every
+// check passed it. Dropping the entry keeps the rest of a good refit, which is the
+// proportionate answer to one bad item — but if most of them are being dropped the
+// problem is not the items, and the caller rejects the run.
+function rcGuardItemBase(current, derived, notes){
+  const curBase = (current && current.itemBase) || {};
+  const kept = {}, dropped = [];
+  for(const k in derived.itemBase){
+    const v = derived.itemBase[k];
+    const b = rcIsPizza(k) ? RECAL_BOUNDS.pizzaBase : (rcIsBaked(k) ? RECAL_BOUNDS.bakedBase : RECAL_BOUNDS.drinkBase);
+    if(!(v >= b[0] && v <= b[1])){ dropped.push(k + ' ' + v + ' outside [' + b[0] + ',' + b[1] + ']'); continue; }
+    const was = curBase[k];
+    if(was > 0 && Math.abs(v - was)/was > RECAL_SWING_REJECT_PCT){
+      dropped.push(k + ' ' + was + '→' + v + ' (' + Math.round(100*Math.abs(v-was)/was) + '%)');
+      continue;
+    }
+    kept[k] = v;
+  }
+  if(dropped.length) notes.push(dropped.length + ' item base(s) held back: ' + dropped.slice(0,5).join('; '));
+  return { kept: kept, dropped: dropped, considered: Object.keys(derived.itemBase).length };
+}
+
 // ---- merge derived values into the current model, honoring per-coef volume gates ----
 // (a derived value that passed its sample gate replaces; otherwise current value is kept)
-function rcMergeModel(current, derived){
+function rcMergeModel(current, derived, notes){
   const m = JSON.parse(JSON.stringify(current));   // start from current (keeps anything not re-derived)
   // item bases: merge per item
   if(derived.itemBase){ m.itemBase = Object.assign({}, m.itemBase, derived.itemBase); }
   if(derived.ovenCurve)        m.ovenCurve        = derived.ovenCurve;
-  if(derived.satCurveChef)     m.satCurveChef     = derived.satCurveChef;
-  if(derived.satCurveBarista)  m.satCurveBarista  = derived.satCurveBarista;
+  // The two saturation curves move together or not at all. They are fitted on work
+  // ahead in ITEMS while the model's existing pair are on tickets, and adopting one of
+  // each would leave the model reading two different scales through one loadUnit.
+  if(derived.satCurveChef && derived.satCurveBarista){
+    m.satCurveChef    = derived.satCurveChef;
+    m.satCurveBarista = derived.satCurveBarista;
+    m.loadUnit        = 'items';
+  } else if(derived.satCurveChef || derived.satCurveBarista){
+    if(notes) notes.push('only one saturation curve had the volume to refit; kept both on the previous scale');
+  }
   if(derived.qtyCurve)         m.qtyCurve         = derived.qtyCurve;
   if(derived.cushionDrinkByLoad)  m.cushionDrinkByLoad = derived.cushionDrinkByLoad;
   if(derived.cushionPizzaByOven)  m.cushionPizzaByOven = derived.cushionPizzaByOven;
+  if(derived.cushionPizzaByLoad)  m.cushionPizzaByLoad = derived.cushionPizzaByLoad;
   if(derived.cushionBaked!=null)  m.cushionBaked = derived.cushionBaked;
+  if(derived.cushionHotfood!=null) m.cushionHotfood = derived.cushionHotfood;
   if(derived.margin){ m.margin = m.margin||{}; for(const k in derived.margin){ if(derived.margin[k]!=null) m.margin[k]=derived.margin[k]; } }
   if(derived.pizzaBase!=null){ m.fallback = m.fallback||{}; m.fallback.pizza = derived.pizzaBase; }
   m.version = (current.version||1) + 1;
@@ -767,24 +1115,73 @@ function rcMergeModel(current, derived){
 }
 
 // ---- guardrails: returns {ok, reasons[]} ----
-function rcCheckGates(current, derived, counts){
+//
+// `candidate` is the merged, cushion-calibrated model that would actually ship, so the
+// bounds below judge what the café would run rather than what came out of the fit.
+function rcCheckGates(current, candidate, derived, counts, guard, scoreOld, scoreNew){
   const reasons=[];
-  // bounds checks on the headline numbers
-  function inb(v, [lo,hi]){ return v==null || (v>=lo && v<=hi); }
-  if(derived.pizzaBase!=null && !inb(derived.pizzaBase, RECAL_BOUNDS.pizzaBase)) reasons.push('pizzaBase '+derived.pizzaBase+' out of bounds');
-  if(derived.cushionBaked!=null && !inb(derived.cushionBaked, RECAL_BOUNDS.cushion)) reasons.push('cushionBaked out of bounds');
-  if(derived.cushionDrinkByLoad){ for(const pt of derived.cushionDrinkByLoad){ if(!inb(pt[1], RECAL_BOUNDS.cushion)) reasons.push('cushionDrink point out of bounds'); } }
-  if(derived.cushionPizzaByOven){ for(const pt of derived.cushionPizzaByOven){ if(!inb(pt[1], RECAL_BOUNDS.cushion)) reasons.push('cushionPizza point out of bounds'); } }
+  function inb(v, b){ return v==null || (v>=b[0] && v<=b[1]); }
+  function curveMax(c){ return (Array.isArray(c) && c.length) ? Math.max.apply(null, c.map(p=>p[1])) : null; }
+
+  // headline bases
+  if(!inb(derived.pizzaBase, RECAL_BOUNDS.pizzaBase)) reasons.push('pizzaBase '+derived.pizzaBase+' out of bounds');
+
+  // the curves the estimate adds minutes from — these bounds existed and were never read
+  if(!inb(curveMax(candidate.ovenCurve), RECAL_BOUNDS.ovenMax)) reasons.push('ovenCurve peaks at '+curveMax(candidate.ovenCurve)+' min');
+  if(!inb(curveMax(candidate.satCurveChef), RECAL_BOUNDS.satMax)) reasons.push('satCurveChef peaks at '+curveMax(candidate.satCurveChef)+' min');
+  if(!inb(curveMax(candidate.satCurveBarista), RECAL_BOUNDS.satMax)) reasons.push('satCurveBarista peaks at '+curveMax(candidate.satCurveBarista)+' min');
+  if(!inb(curveMax(candidate.qtyCurve), RECAL_BOUNDS.satMax)) reasons.push('qtyCurve peaks at '+curveMax(candidate.qtyCurve)+' min');
+
+  // cushions, after calibration — a runaway scale is caught here
+  for(const k of ['cushionDrinkByLoad','cushionPizzaByOven','cushionPizzaByLoad']){
+    if(!inb(curveMax(candidate[k]), RECAL_BOUNDS.cushion)) reasons.push(k+' peaks at '+curveMax(candidate[k])+' min');
+  }
+  if(!inb(candidate.cushionBaked,   RECAL_BOUNDS.cushion)) reasons.push('cushionBaked out of bounds');
+  if(!inb(candidate.cushionHotfood, RECAL_BOUNDS.cushion)) reasons.push('cushionHotfood out of bounds');
   if(derived.margin){ for(const k in derived.margin){ if(!inb(derived.margin[k], RECAL_BOUNDS.margin)) reasons.push('margin.'+k+' out of bounds'); } }
+
   // swing check vs current (only for values we actually re-derived)
   function swing(now, was){ if(now==null||was==null||was===0) return 0; return Math.abs(now-was)/was; }
   if(derived.pizzaBase!=null && current.fallback && current.fallback.pizza){
     const s = swing(derived.pizzaBase, current.fallback.pizza);
     if(s > RECAL_SWING_REJECT_PCT) reasons.push('pizzaBase swing '+(s*100).toFixed(0)+'%');
   }
-  // (cushion is now condition-curves; bounds-checked above. Swing check focuses on the headline base.)
+
+  // per-item guard: one bad item is dropped, a majority of them is systemic
+  if(guard && guard.considered >= 4 && guard.dropped.length > guard.considered/2){
+    reasons.push(guard.dropped.length+' of '+guard.considered+' item bases failed their bounds or swing check');
+  }
+
   // volume floor
   if(counts.totalClean < 200) reasons.push('too few clean orders ('+counts.totalClean+')');
+
+  // ---- the gate this never had: is it actually better? ----
+  // Both models replayed over the held-out slice neither was fitted to. A refit that
+  // makes the café less accurate now fails, which used to be something nobody measured
+  // and therefore something nothing could stop.
+  if(!scoreNew || !scoreOld){
+    reasons.push('could not score the candidate against the held-out window');
+  } else {
+    // Coverage is a CONSTRAINT, not a quantity to maximise, and the difference matters
+    // here. A model that quotes an hour for everything covers 100% of orders, so a gate
+    // that simply required coverage not to fall would prefer the sloppiest model
+    // available — and would reject a refit for the crime of being more accurate, which
+    // is exactly what a model carrying a phantom saturation floor looks like: it
+    // over-quotes, so it covers 97%, and it is wrong by three and a half minutes.
+    //
+    // So: a candidate that clears the target has satisfied the constraint and is judged
+    // on error alone. Only one falling SHORT of the target, and worse than the model it
+    // would replace, is refused on coverage.
+    if(scoreNew.coverage < RECAL_TARGET_COVERAGE &&
+       scoreNew.coverage < scoreOld.coverage - RECAL_COVERAGE_SLACK){
+      reasons.push('holdout coverage would fall ' + Math.round(scoreOld.coverage*100) + '% → ' +
+                   Math.round(scoreNew.coverage*100) + '%, short of the ' +
+                   Math.round(RECAL_TARGET_COVERAGE*100) + '% target');
+    }
+    if(scoreOld.medErr > 0 && scoreNew.medErr > scoreOld.medErr * RECAL_ERR_SLACK){
+      reasons.push('holdout median error would rise ' + scoreOld.medErr + ' → ' + scoreNew.medErr + ' min');
+    }
+  }
   return { ok: reasons.length===0, reasons };
 }
 
@@ -1000,9 +1397,28 @@ async function runRecalibration(dryRun){
   if(!current){ return { ran:false, reason:'no current eta/model to compare against' }; }
 
   // Classify by the list the pages classify by. `current` is the live eta/model,
-  // fetched above, and pizzaKeys is the field pos.html and index.html read.
-  const { derived, counts, pizzaKeySource } = rcDerive(orders, current.pizzaKeys);
-  const gate = rcCheckGates(current, derived, counts);
+  // fetched above, and pizzaKeys is the field pos.html and index.html read. Both
+  // models are scored through this same list, so the comparison below is between the
+  // coefficients and nothing else.
+  //
+  // Conditions are attached across the WHOLE window before it is split — an order's
+  // queue depth is a fact about the service it was cooked in, not about which side of
+  // a holdout boundary it landed on.
+  rcAttach(orders);
+  const { fit, hold } = rcSplitWindow(orders, RECAL_HOLDOUT_FRAC);
+  const { derived, counts, pizzaKeySource, notes } = rcDerive(fit, current.pizzaKeys, current.bakedKeys);
+
+  const guard = rcGuardItemBase(current, derived, notes);
+  derived.itemBase = guard.kept;
+
+  // Merge, then calibrate the cushions on the fitting window, then score both models
+  // over the held-out slice neither of them was fitted to.
+  const cal = rcCalibrateCushions(rcMergeModel(current, derived, notes), fit, notes);
+  const candidate = cal.model;
+  const holdClean = hold.filter(o => !rcIsDessertAfterFood(o, orders));
+  const scoreNew = rcScore(candidate, holdClean);
+  const scoreOld = rcScore(current,   holdClean);
+  const gate = rcCheckGates(current, candidate, derived, counts, guard, scoreOld, scoreNew);
 
   const summary = {
     ran: !dryRun && gate.ok,
@@ -1021,10 +1437,22 @@ async function runRecalibration(dryRun){
     // this file, which is a thing to know before trusting pizzaBase below.
     pizzaKeySource,
     pizzaBase: derived.pizzaBase,
-    cushionDrink: derived.cushionDrinkByLoad,
-    cushionPizza: derived.cushionPizzaByOven,
+    cushionDrink: candidate.cushionDrinkByLoad,
+    cushionPizza: candidate.cushionPizzaByOven,
+    cushionScale: cal.scale,
+    cushionOffset: cal.offset,
     margin: derived.margin,
-    itemsUpdated: counts.items,
+    itemsUpdated: Object.keys(guard.kept).length,
+    itemsHeldBack: guard.dropped,
+    // Which queue signal the candidate's saturation curves are fitted against. A model
+    // that says 'items' is read against the item-weighted queue eta/live publishes.
+    loadUnit: candidate.loadUnit || 'tickets',
+    // The whole point of the holdout: what each model would have quoted on trade
+    // neither of them was fitted to. `coverage` is the share finishing inside the quote
+    // — the number admin's accuracy card shows — and `capRate` the share quoted
+    // open-ended, which is how often the estimate ran past what the model will vouch for.
+    holdout: { n: (scoreNew && scoreNew.n) || 0, current: scoreOld, candidate: scoreNew },
+    notes: notes,
     gatePassed: gate.ok,
     gateReasons: gate.reasons
   };
@@ -1034,7 +1462,8 @@ async function runRecalibration(dryRun){
   if(!gate.ok){
     // rejected: keep current model, record the attempt + notify
     await fetch(DB_URL + '/eta/recalMeta.json?auth=' + token, {
-      method:'PUT', body: JSON.stringify({ lastRunAt: Date.now(), lastResult:'rejected', reasons: gate.reasons, orders: orders.length })
+      method:'PUT', body: JSON.stringify({ lastRunAt: Date.now(), lastResult:'rejected', reasons: gate.reasons,
+                                           orders: orders.length, notes: notes, holdout: summary.holdout })
     });
     await rcNotifyOwner(token, '⚠️ ETA recalibration REJECTED', 'Kept current model. ' + gate.reasons.join('; '));
     return summary;
@@ -1042,14 +1471,19 @@ async function runRecalibration(dryRun){
 
   // passed: snapshot current -> previous, write merged new model
   await fetch(DB_URL + '/eta/modelPrevious.json?auth=' + token, { method:'PUT', body: JSON.stringify(current) });
-  const merged = rcMergeModel(current, derived);
+  const merged = candidate;
   await fetch(DB_URL + '/eta/model.json?auth=' + token, { method:'PUT', body: JSON.stringify(merged) });
   await fetch(DB_URL + '/eta/recalMeta.json?auth=' + token, {
-    method:'PUT', body: JSON.stringify({ lastRunAt: Date.now(), lastResult:'updated', version: merged.version, orders: orders.length })
+    method:'PUT', body: JSON.stringify({ lastRunAt: Date.now(), lastResult:'updated', version: merged.version,
+                                         orders: orders.length, notes: notes, holdout: summary.holdout,
+                                         cushionScale: cal.scale, cushionOffset: cal.offset,
+                                         loadUnit: merged.loadUnit || 'tickets' })
   });
   await rcNotifyOwner(token, '✅ ETA model updated (v'+merged.version+')',
     'pizza '+(current.fallback&&current.fallback.pizza)+'→'+derived.pizzaBase+
-    ' · '+counts.totalClean+' orders · '+counts.items+' items refit' +
+    ' · '+counts.totalClean+' orders · '+Object.keys(guard.kept).length+' items refit' +
+    (scoreOld && scoreNew ? ' · on-time on held-out trade ' + Math.round(scoreOld.coverage*100) +
+                            '% → ' + Math.round(scoreNew.coverage*100) + '%' : '') +
     (orders.truncated ? ' · read capped at ' + RECAL_MAX_RECORDS + ' a station — raise it' : ''));
   return summary;
 }

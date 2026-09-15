@@ -67,7 +67,12 @@ const customer = buildModule([
   // ----------------------------------------------------------------------------
   'function resetTempo(){ kitchenTempo = 1.0; }',
   'function readTempo(){ return kitchenTempo; }',
-], { MODEL, Math, Date, Object },
+], { MODEL, Math, Date, Object,
+     // The page measures the tempo window against the SERVER's clock now — p.at is a
+     // server-stamped completion, and comparing it with the handset's own threw away
+     // every ratio in the window on a phone that was running fast. Offset zero here, so
+     // the frozen reference above and the shipping code are still the same arithmetic.
+     serverNow: () => Date.now() },
    ['recomputeTempo', 'recomputeTempoFromPace', 'resetTempo', 'readTempo', 'tempoExpected']);
 
 // POS side: turning completions into publishable ratios

@@ -1101,7 +1101,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-11.1"></script>
+    <script src="/build-check.js" data-build="2026-09-15.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1222,11 +1222,29 @@
             // oven cooling: minutes-since-last-pizza-out -> ADDED minutes (delta from hot base)
             // piecewise, interpolated. Last point plateaus.
             ovenCurve: [ [0,0],[10,0],[15,6],[20,6],[30,12],[45,14],[60,13],[120,13],[180,20] ],
-            // saturation is STATION-SPECIFIC: orders-ahead-cooking -> ADDED minutes.
-            // chef/pizza carries a floor (~+6) from overlapping pizzas the ahead-count under-captures.
-            // barista/drinks has NO floor — a lone drink is just its base time.
-            satCurveChef:    [ [0,7],[2,7],[4,10],[7,22],[8,23] ],
+            // saturation is STATION-SPECIFIC: work-ahead -> ADDED minutes.
+            //
+            // The chef curve used to start at +7 with NOTHING ahead, described as a floor
+            // for "overlapping pizzas the ahead-count under-captures". It was not. satChef()
+            // in the Worker pooled pizzas at EVERY oven idle and then subtracted a baseline
+            // fitted on hot ones only, so the constant it handed back was the cost of a
+            // cooling oven wearing a saturation label — and stationTime() then added
+            // ovenCurve on top of it. An empty café with a hot oven quoted 15-20 min for a
+            // Margherita whose measured median under exactly those conditions is 5.9.
+            //
+            // satChef now differences against its own quietest band on a hot-oven-only pool,
+            // the way satBar always did, so the two terms are finally independent. These
+            // seeds keep every increment the old curve described about how load changes the
+            // wait and drop only the constant the oven curve was already charging for.
+            satCurveChef:    [ [0,0],[2,0],[4,3],[7,15],[8,16] ],
             satCurveBarista: [ [0,0],[1,0],[3,4],[6,5],[7,8] ],
+            // Which live signal the curves above are fitted against. 'tickets' counts open
+            // orders; 'items' counts the work in them, so a six-pizza ticket no longer
+            // weighs the same as one espresso. The seeds are on the ticket scale because
+            // that is what they were reconstructed from; the first refit re-fits both sat
+            // curves together on the item scale and stamps 'items' here. The estimators
+            // read whichever signal this names, so the two can never be mixed.
+            loadUnit: 'tickets',
             // quantity within a station: total items -> ADDED minutes
             qtyCurve:  [ [1,0],[2,4],[4,9],[5,15] ],
             // cushion — a CURVE evaluated live, not a flat number. The residual spread (how much to pad
@@ -1237,9 +1255,22 @@
             //   dessert: genuinely stable (~2) once 'served after food' excluded -> flat is correct here
             cushionDrinkByLoad: [ [0,4], [3,9], [5,11] ],
             cushionPizzaByOven: [ [0,4.7], [10,4.7], [20,9], [45,8], [60,7] ],
+            // Pizza spread over LOAD as well as over oven idle. This was a bare `if (load
+            // >= 5) cush += 2` in both estimators — a ticket-scale constant nobody derived
+            // and nothing could recalibrate. It is a curve now, fitted like the others, and
+            // the estimate takes whichever of the two conditions is driving the spread.
+            cushionPizzaByLoad: [ [0,0], [5,2] ],
             cushionHotfood: 5,     // hot food: thin data, single sensible value
             cushionBaked: 2,       // desserts: data shows stable spread -> flat justified
-            maxQuote: 32,       // never display more than this (min); overruns caught by overdue alarm
+            // Past this point estimate we stop promising an upper bound. It used to clamp
+            // the number instead, which meant 27, 43 and 47 minutes of real prep all quoted
+            // "30-35 min": the busiest kitchen of the day was indistinguishable from the
+            // quietest cold-oven one, the customer was under-quoted by a quarter of an hour,
+            // and nothing downstream could learn it — the refit never touches this value and
+            // the accuracy report just files the order as late. Beyond it the quote goes
+            // open-ended ("45+ min"), which is the honest shape for a number whose upper end
+            // we do not believe.
+            maxQuote: 32,
             rangeWidth: 5       // width of the displayed range
           };
         
@@ -1269,7 +1300,16 @@
           function lc(s){ return (s||"").toLowerCase(); }
           function isPizza(name){ return window.etaModel.pizzaKeys.some(k=>lc(name).includes(k)); }
           function isBaked(name){ return window.etaModel.bakedKeys.some(k=>lc(name).includes(k)); }
-          function itemBaseTime(name){
+          // `station` is optional. Passed, an unlisted item that the kitchen is cooking
+          // falls back to hot food instead of to a drink — fallback.hotfood was declared in
+          // the model from the start and never once read, so a new chef-routed dish nobody
+          // had measured yet was quoted 5.5 minutes, the fastest category there is, while
+          // sitting on the slowest station.
+          //
+          // Omitted, it answers exactly as it always did. The tempo ratio calls it that way
+          // on purpose: that number is a normaliser, and it only means anything if both
+          // sides of the ratio are divided by the same thing.
+          function itemBaseTime(name, station){
             const M = window.etaModel, n = lc(name);
             // exact-ish: longest matching key wins (so "cappuccino (large)" beats "cappuccino")
             let best=null, bestLen=-1;
@@ -1277,16 +1317,37 @@
             if (best!=null) return best;
             if (isPizza(name)) return M.fallback.pizza;
             if (isBaked(name)) return M.fallback.baked;
+            if (station === 'chef' && M.fallback.hotfood != null) return M.fallback.hotfood;
             return M.fallback.drink;
           }
         
           // ---- 4. LIVE SIGNALS (read from the running DB state) ----
-          // load ahead per station = count of orders currently in orders/active/{station}
+          // Load ahead per station, counted two ways from orders/active/{station}.
+          //
+          // `etaLoad` is open tickets, which is what the curves were originally fitted
+          // against. `etaWork` is the items inside them — a ticket of six pizzas and a
+          // single espresso are the same number to the first and six times apart in the
+          // second, and it is the second that the oven and the barista actually feel.
+          //
+          // Both are published and both are kept: the model says through loadUnit which
+          // scale its curves are on, so the signal and the curve can never be mixed.
           window.etaLoad = { chef: 0, barista: 0 };
+          window.etaWork = { chef: 0, barista: 0 };
           window.etaLastPizzaOutMs = 0;
+          function etaWorkFrom(s){
+            let tickets = 0, items = 0;
+            s.forEach(ch => {
+              tickets++;
+              const o = ch.val() || {};
+              let q = 0;
+              for (const nm in (o.items || {})) q += (parseInt(o.items[nm].qty) || 1);
+              items += (q || 1);        // a ticket whose items cannot be read still occupies the station
+            });
+            return { tickets: tickets, items: items };
+          }
           try {
-            db.ref('orders/active/chef').on('value', s => { window.etaLoad.chef = s.numChildren(); publishEtaLive(); }, window.ilaRefused("orders/active/chef"));
-            db.ref('orders/active/barista').on('value', s => { window.etaLoad.barista = s.numChildren(); publishEtaLive(); }, window.ilaRefused("orders/active/barista"));
+            db.ref('orders/active/chef').on('value', s => { const w = etaWorkFrom(s); window.etaLoad.chef = w.tickets; window.etaWork.chef = w.items; publishEtaLive(); }, window.ilaRefused("orders/active/chef"));
+            db.ref('orders/active/barista').on('value', s => { const w = etaWorkFrom(s); window.etaLoad.barista = w.tickets; window.etaWork.barista = w.items; publishEtaLive(); }, window.ilaRefused("orders/active/barista"));
             // most recent pizza completion -> for oven idle. orders/ready carries items + timestamp.
             db.ref('orders/ready').limitToLast(40).on('value', s => {
               let last = 0;
@@ -1382,6 +1443,11 @@
                 const payload = {
                   activeChef: window.etaLoad.chef || 0,
                   activeBarista: window.etaLoad.barista || 0,
+                  // The same queues weighed by the items in them. Published alongside the
+                  // ticket counts rather than instead of them, so a page on an older build
+                  // keeps reading the signal its curves were fitted against.
+                  workChef: window.etaWork.chef || 0,
+                  workBarista: window.etaWork.barista || 0,
                   lastPizzaOut: window.etaLastPizzaOutMs || 0,
                   // Published so the ordering page uses the SAME tempo the counter used,
                   // rather than deriving its own and drifting. `pace` stays as the fallback
@@ -1445,7 +1511,7 @@
             for (const name in cart){
               const qty = (cart[name].qty)||1;
               const station = route[name]==='chef' ? 'chef' : (route[name]==='barista' ? 'barista' : (isPizza(name)?'chef':'barista'));
-              const b = itemBaseTime(name);
+              const b = itemBaseTime(name, station);
               if (b > st[station].base) st[station].base = b;   // slowest item sets the station floor (parallel)
               st[station].qty += qty;
               st[station].has = true;
@@ -1461,12 +1527,20 @@
             // CURRENT kitchen state, so only those are scaled by live tempo. Base and cushion
             // are untouched — the same split the ordering page uses.
             const tempo = (typeof window.etaTempo === 'number' && window.etaTempo > 0) ? window.etaTempo : 1.0;
+            // Whichever queue signal this model's curves were fitted against. A model that
+            // has been refitted says 'items' and is read against the item-weighted queue; one
+            // still on its seeds says 'tickets' and is read against the ticket count. Mixing
+            // them would silently rescale every saturation lookup.
+            function loadOf(key){
+              if (M.loadUnit === 'items' && window.etaWork && typeof window.etaWork[key] === 'number') return window.etaWork[key];
+              return (window.etaLoad[key] || 0);
+            }
             function stationTime(s, key){
               if (s.base===0 && s.qty===0) return 0;
               let conditionAdd = interp(M.qtyCurve, s.qty);
               if (s.pizza) conditionAdd += interp(M.ovenCurve, idleMin);
               const satCurve = (key==='chef') ? M.satCurveChef : M.satCurveBarista;
-              conditionAdd += interp(satCurve, (window.etaLoad[key]||0));
+              conditionAdd += interp(satCurve, loadOf(key));
               return s.base + conditionAdd*tempo;
             }
             // determine the DOMINANT category (the one driving the estimate) for cushion selection
@@ -1490,23 +1564,27 @@
             // pizza/hotfood -> by oven idle; drink -> by live load; dessert -> stable flat (data-justified).
             let cush;
             if (domCat === 'pizza' || domCat === 'hotfood') {
-              cush = interp(M.cushionPizzaByOven || [[0,5]], idleMin);
-              // heavy load adds a little more spread on top (pizza gets less predictable under backlog)
-              const ld = window.etaLoad ? (window.etaLoad.chef||0) : 0;
-              if (ld >= 5) cush += 2;
+              // Two conditions drive how unpredictable a pizza is, and they are not the
+              // same condition: a cooling oven and a deep queue. Take whichever is driving
+              // the spread rather than adding them — spreads do not stack like that.
+              cush = Math.max(interp(M.cushionPizzaByOven || [[0,5]], idleMin),
+                              interp(M.cushionPizzaByLoad || [[0,0]], loadOf('chef')));
               if (domCat === 'hotfood') cush = M.cushionHotfood != null ? M.cushionHotfood : cush;
             } else if (domCat === 'baked') {
               cush = M.cushionBaked != null ? M.cushionBaked : 2;
             } else { // drink
-              const ld = window.etaLoad ? (window.etaLoad.barista||0) : 0;
-              cush = interp(M.cushionDrinkByLoad || [[0,4]], ld);
+              cush = interp(M.cushionDrinkByLoad || [[0,4]], loadOf('barista'));
             }
-            let quote = point + cush;
-            quote = Math.min(quote, M.maxQuote||32);
-        
+            // The quote is never clamped now. Past maxQuote it goes open-ended instead, so
+            // the number keeps tracking the kitchen all the way up and the customer is not
+            // handed an upper bound nobody believes. low/high stay the real estimate, which
+            // is what admin's accuracy report scores.
+            const quote = point + cush;
+            const capped = quote > (M.maxQuote || 32);
             const low = Math.max(3, Math.round(quote - (M.rangeWidth||5)/2));
             const high = Math.round(quote + (M.rangeWidth||5)/2);
-            return { low, high, point: Math.round(point), label: low + "–" + high + " min" };
+            return { low, high, point: Math.round(point), capped: capped,
+                     label: capped ? (low + "+ min") : (low + "–" + high + " min") };
           };
         })();
         /* =================== END ILA ETA ENGINE =================== */
@@ -3737,9 +3815,19 @@
                 if (_eta) {
                     predBlock = {
                         predLow: _eta.low, predHigh: _eta.high, predPoint: _eta.point,
-                        predOvenIdleMin: (window.etaLastPizzaOutMs ? Math.round(Math.max(0,(Date.now()-window.etaLastPizzaOutMs)/60000)) : null),
+                        // The quote went open-ended: the estimate ran past maxQuote, so the
+                        // customer was told "45+ min" rather than a range. admin's accuracy
+                        // card counts these separately — an open quote that comes true is
+                        // still on time, and the rate is what says the café has outgrown the
+                        // range the model is willing to promise.
+                        predCapped: !!_eta.capped,
+                        // Server clock: lastPizzaOut is a server timestamp, and this figure is
+                        // read back as evidence about the kitchen that produced the quote.
+                        predOvenIdleMin: (window.etaLastPizzaOutMs ? Math.round(Math.max(0,(serverNow()-window.etaLastPizzaOutMs)/60000)) : null),
                         predLoadChef: (window.etaLoad ? window.etaLoad.chef : null),
                         predLoadBarista: (window.etaLoad ? window.etaLoad.barista : null),
+                        predWorkChef: (window.etaWork ? window.etaWork.chef : null),
+                        predWorkBarista: (window.etaWork ? window.etaWork.barista : null),
                         predModelVersion: (window.etaModel ? window.etaModel.version : null)
                     };
                 }
