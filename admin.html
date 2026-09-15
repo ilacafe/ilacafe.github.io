@@ -736,7 +736,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-11.1"></script>
+    <script src="/build-check.js" data-build="2026-09-15.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1351,9 +1351,33 @@
         // screens stamp completedAt onto orders/completed/*. Both already exist and nothing has
         // ever read them back, so the ETA model has only ever been tuned by judgement.
         // Joined on trackId. An order spanning two stations counts once, at its LAST completion.
-        const ETA_PIZZA_KEYS = ["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"];
+        // What counts as a pizza — read from the model, not from a literal here.
+        //
+        // The till, the ordering page and the Worker's refit were all unified on
+        // eta/model.pizzaKeys, and test/pizza-keys.test.js holds them there. This card was
+        // the one place left with its own copy, and it is the place where the copy is
+        // hardest to notice: put a Diavola on the menu and add it to the list, and every
+        // Diavola gets filed under drinks here. Both the pizza figure and the drink figure
+        // are then wrong, in the one report somebody would use to decide whether the model
+        // is working — while the till, which is right, gives nobody any reason to look.
+        //
+        // The literal survives only as the answer before the model has loaded, or if the
+        // field is unusable. A report that silently classified nothing as a pizza would be
+        // the same silent failure with the numbers moved.
+        const ETA_PIZZA_FALLBACK = ["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"];
+        let etaPizzaKeys = ETA_PIZZA_FALLBACK;
+        try {
+            db.ref('eta/model').on('value', s => {
+                const m = s.val();
+                const keys = m && Array.isArray(m.pizzaKeys)
+                    ? m.pizzaKeys.filter(k => typeof k === 'string' && k.trim()).map(k => k.trim().toLowerCase())
+                    : [];
+                etaPizzaKeys = keys.length ? keys : ETA_PIZZA_FALLBACK;
+                if (etaAccLoaded) recomputeETAAccuracy();
+            }, window.ilaRefused.quiet("eta/model"));
+        } catch(e){}
         function etaHasPizza(items){
-            for (const n in (items||{})){ const x = String(n).toLowerCase(); if (ETA_PIZZA_KEYS.some(k => x.includes(k))) return true; }
+            for (const n in (items||{})){ const x = String(n).toLowerCase(); if (etaPizzaKeys.some(k => x.includes(k))) return true; }
             return false;
         }
         let etaDone = {}, etaTracks = {};
@@ -1387,6 +1411,12 @@
                 const actual = (d.completedAt - d.createdAt) / 60000;
                 if (actual < 0.5 || actual > 120) continue;              // clock skew / stale tickets
                 rows.push({ actual: actual, low: t.predLow, high: t.predHigh, pizza: etaHasPizza(t.items), items: t.items, at: d.completedAt,
+                            // The estimate ran past what the model will vouch for, so the
+                            // customer was quoted an open "45+ min" rather than a range. Worth
+                            // its own number: it used to be invisible, because the quote was
+                            // clamped to maxQuote instead and 27, 43 and 47 minutes of real
+                            // prep all read "30–35 min".
+                            capped: !!t.predCapped,
                             // what the CUSTOMER was shown, and whether the kitchen was live for it
                             qLow: t.quotedLow, qHigh: t.quotedHigh, qLive: t.quotedLive });
             }
@@ -1418,6 +1448,15 @@
             h += '<div class="rec-kpi ' + cls + '"><div class="lbl">On time</div><div class="val">' + pct + '%</div><div class="sub">' + onTime + ' of ' + n + ' within the quote</div></div>';
             h += '<div class="rec-kpi"><div class="lbl">Median actual vs quoted</div><div class="val">' + medActual.toFixed(0) + ' / ' + medQuote.toFixed(0) + ' min</div><div class="sub">' + (medActual > medQuote ? 'slower than quoted' : 'faster than quoted') + '</div></div>';
             h += '<div class="rec-kpi"><div class="lbl">When late, by</div><div class="val">' + (late.length ? '+' + avgOver.toFixed(1) + ' min' : '\u2014') + '</div><div class="sub">' + late.length + ' late \u00b7 ' + early + ' early</div></div>';
+            {
+                // How often the kitchen was busy enough that the estimate stopped promising
+                // an upper bound. A rising number here is the café outgrowing maxQuote, and
+                // it is the one thing the on-time percentage cannot tell you: an open quote
+                // that comes true still counts as on time.
+                const cap = rows.filter(r => r.capped).length;
+                const capPct = Math.round(100 * cap / n);
+                h += '<div class="rec-kpi' + (capPct >= 20 ? ' warn' : '') + '"><div class="lbl">Quoted open-ended</div><div class="val">' + capPct + '%</div><div class="sub">' + cap + ' of ' + n + ' past the model\u2019s range</div></div>';
+            }
             h += '<div class="rec-kpi"><div class="lbl">Pizza vs rest</div><div class="val">' + (pzP == null ? '\u2014' : pzP + '%') + ' / ' + (drP == null ? '\u2014' : drP + '%') + '</div><div class="sub">' + pz.length + ' with pizza \u00b7 ' + dr.length + ' without</div></div>';
             // The customer's own quote, which is a different number from the counter's and
             // the only one they ever see. It is also the one that can be made blind: the

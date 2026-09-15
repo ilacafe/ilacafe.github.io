@@ -499,6 +499,31 @@ costs money:
   when the live model does not carry those curves. `etaInterp` reads a missing
   curve as zero, so the alarm would come in short and start calling on-time
   tickets late, silently.
+- **the wait estimate agrees with itself** — the same formula exists three times:
+  the till quotes from it, the ordering page quotes from it, and the monthly refit
+  replays it to decide whether a new model is better than the one it is replacing.
+  The suite drives all three over the same carts and requires the same answer, and it
+  drives each of them on a DIFFERENT CLOCK. Every timestamp the estimate reads is
+  stamped by the server; the devices reading them are a counter iPad, a customer's
+  handset and a Worker, and each used to subtract its own `Date.now()`. The old suite
+  could not see it, because it handed all of them the same machine's clock — so a
+  handset a quarter of an hour fast read the oven as a quarter of an hour colder than
+  it was, worth up to twelve minutes on a pizza, silently, because a cold oven is a
+  perfectly ordinary thing for the number to say.
+- **the refit attributes the wait to the right cause** — the monthly refit rewrites
+  the model every page quotes from, and nothing tested it. Its guards were a handful
+  of bounds, four of which were declared and read by nothing. It is now driven over a
+  synthetic café whose real coefficients this repo knows, and asked not to recover
+  them exactly but to blame the right thing: the saturation curve pooled pizzas at
+  every oven idle and differenced them against a baseline fitted on hot ones only, so
+  an EMPTY station carried the average cost of a cooling oven — and the estimate then
+  added the oven curve on top. An empty café with a hot oven quoted 15–20 minutes for
+  a pizza whose measured median under exactly those conditions is 5.9.
+  The suite also holds the gate that decides whether a refit ships at all. The newest
+  fifth of the window is held out of the fit, both models are replayed over it, and a
+  candidate that would make the café less accurate is refused. Before this, "the model
+  improved" was an assumption — the refit fitted medians and spreads, checked nothing
+  looked absurd, and shipped.
 - **web orders arrive billed** — a takeaway ordered from a phone reaches the till
   carrying the VPA it is billed to and `billedAt`, the moment the customer was shown
   a code, in the same write that creates it, on the server's clock rather than the
@@ -800,6 +825,16 @@ of them, so nothing already recorded has to satisfy a rule it predates.
 ingests bank credit alerts, and refits the ETA model each month. It is the only
 component that runs somewhere a customer's browser cannot reach, and the only
 holder of the credential allowed to write `eta/model` and `payments/incoming`.
+
+The refit now measures itself. It holds the newest fifth of its window out of the
+fit, replays both the candidate model and the one in use over those orders, and
+refuses a candidate that would quote them worse — on-time share, and how far the
+middle of the quote sat from the truth. That replay is a third copy of the estimate
+formula, which this codebase has been bitten by twice before, so it is pinned by
+`eta-agreement`: the till, the ordering page and the Worker are driven over the same
+carts and have to agree. What the refit measured is written to `eta/recalMeta` and
+shown on the model card in analytics, because a refit that made things worse and a
+refit that made things better used to look identical from outside.
 
 It does **not** deploy with the pages — see [`worker/README.md`](worker/README.md).
 

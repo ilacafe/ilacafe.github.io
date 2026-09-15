@@ -16,6 +16,7 @@ const suites = [
   'qr.test.js',
   'eta-summary.test.js',
   'eta-agreement.test.js',
+  'eta-recalibration.test.js',
   'kds-threshold.test.js',
   'kds-done.test.js',
   'rules.test.js',

@@ -29,7 +29,9 @@ async function main() {
 // literal and the module-level list rcIsPizza actually reads.
 const decls = [
   /^const RC_PIZZA_FALLBACK\s*=.*$/m,
-  /^let _rcPizzaKeys\s*=.*$/m
+  /^const RC_BAKED_FALLBACK\s*=.*$/m,
+  /^let _rcPizzaKeys\s*=.*$/m,
+  /^let _rcBakedKeys\s*=.*$/m
 ].map(re => {
   const m = src.match(re);
   if (!m) throw new Error('could not find a declaration the suite depends on: ' + re);
@@ -37,9 +39,11 @@ const decls = [
 });
 
 const api = buildModule(
-  [...decls, extractFunction(src, 'rcUsePizzaKeys'), extractFunction(src, 'rcIsPizza')],
+  [...decls, extractFunction(src, 'rcCleanKeys'),
+   extractFunction(src, 'rcUsePizzaKeys'), extractFunction(src, 'rcIsPizza'),
+   extractFunction(src, 'rcUseBakedKeys'), extractFunction(src, 'rcIsBaked')],
   { Array, String },
-  ['rcUsePizzaKeys', 'rcIsPizza', 'RC_PIZZA_FALLBACK']
+  ['rcUsePizzaKeys', 'rcIsPizza', 'rcUseBakedKeys', 'rcIsBaked', 'RC_PIZZA_FALLBACK']
 );
 
 // ---------------------------------------------------------------- it uses the model's list
@@ -102,15 +106,19 @@ const api = buildModule(
   const clean = stripComments(src);
 
   check('rcDerive takes the keys as a parameter',
-        /function\s+rcDerive\s*\(\s*orders\s*,\s*pizzaKeys\s*\)/.test(clean),
+        /function\s+rcDerive\s*\(\s*orders\s*,\s*pizzaKeys\s*[,)]/.test(clean),
         'rcDerive(orders) alone cannot be told what the model says');
 
   check('and settles the list before it classifies anything',
         /function\s+rcDerive\s*\([^)]*\)\s*\{\s*(?:const|let)\s+pizzaKeySource\s*=\s*rcUsePizzaKeys\(\s*pizzaKeys\s*\)/.test(clean),
         'rcAttachOvenIdle asks rcIsPizza on the first line of the derivation');
 
+  // The window is split before it is derived from (the newest slice is held out to
+  // score the candidate), so what is passed is the fitting set rather than the whole
+  // window. What this asks has not changed: whatever the orders are called, the keys
+  // have to come from the live model.
   check('the only call site passes the live model’s field',
-        /rcDerive\(\s*orders\s*,\s*current\.pizzaKeys\s*\)/.test(clean),
+        /rcDerive\(\s*\w+\s*,\s*current\.pizzaKeys\s*[,)]/.test(clean),
         'without this the refit reads the model and then ignores what it says');
 
   const isPizza = extractFunction(src, 'rcIsPizza');
@@ -127,6 +135,41 @@ const api = buildModule(
         /pizzaKeySource/.test(clean) && /pizzaKeySource,/.test(clean),
         'a refit running on the fallback is not an error, but it is a fact about the numbers');
   note('a dry run now says whether it classified from the model or from this file');
+}
+
+// ---------------------------------------------------------------- and the dessert list, which had the same problem
+//
+// rcIsBaked classified by a literal of its own while every page classified by
+// eta/model.bakedKeys. It is the pizza bug with the numbers moved, and quieter: the
+// categories this list decides — cushionBaked and margin.baked — have the smallest
+// samples in the model, so a dessert the refit cannot see simply makes an already thin
+// sample thinner and the coefficient stops being re-derived.
+{
+  const clean = stripComments(src);
+
+  const source = api.rcUseBakedKeys(['brownie', 'tiramisu']);
+  check('a dessert list from the model is the list it classifies by', source === 'model');
+  check('and a dessert only that list knows is a dessert', api.rcIsBaked('Brownie') === true);
+  check('and a name from the old literal is not, once the model has spoken',
+        api.rcIsBaked('Carrot Cake') === false,
+        'the model is authoritative here too — the literal is not unioned in');
+
+  check('a missing dessert list falls back to the literal',
+        api.rcUseBakedKeys(undefined) === 'fallback' && api.rcIsBaked('Carrot Cake') === true);
+  check('and so does a list of blanks',
+        api.rcUseBakedKeys(['', '  ']) === 'fallback' && api.rcIsBaked('Banana Bread') === true);
+
+  check('rcIsBaked reads the settled list and not the literal',
+        /_rcBakedKeys\.some/.test(extractFunction(src, 'rcIsBaked')),
+        'a literal here is the shadow list coming back');
+  check('no RC_BAKED constant survives beside the fallback',
+        !/\bRC_BAKED\b(?!_FALLBACK)/.test(clean));
+  check('rcDerive takes the dessert keys too, and settles them',
+        /function\s+rcDerive\s*\(\s*orders\s*,\s*pizzaKeys\s*,\s*bakedKeys\s*\)/.test(clean) &&
+        /rcUseBakedKeys\(\s*bakedKeys\s*\)/.test(clean));
+  check('and the call site passes the live model’s field',
+        /rcDerive\(\s*\w+\s*,\s*current\.pizzaKeys\s*,\s*current\.bakedKeys\s*\)/.test(clean));
+  note('both lists now come from the model, and neither can fail to nothing');
 }
 
 done();

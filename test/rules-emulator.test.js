@@ -689,6 +689,15 @@ const SAMPLES = {
     // line is the rule that stops the same browser adding them afterwards.
     check('and it arrives billed: the VPA, and when the customer was asked',
           (await asAnon('web', (o) => { o.upiId = 'cafe.ila.blr@okaxis'; o.billedAt = { '.sv': 'timestamp' }; })));
+
+    // The wait the customer was actually shown, recorded on the order that was
+    // quoted. `$other` on this node is `.validate: false`, so a field the rules do
+    // not name does not fail on its own — it fails the WHOLE write, and the order is
+    // never placed. A page that starts recording a new field without a rule for it
+    // stops taking orders, and the page cannot tell that apart from being offline.
+    check('and it may record the quote the customer was shown, open-ended or not',
+          (await asAnon('track', (o) => { o.quotedLow = 12; o.quotedHigh = 17; o.quotedLive = true; })) &&
+          (await asAnon('track', (o) => { o.quotedLow = 45; o.quotedCapped = true; o.quotedLive = true; })));
     await call('PUT', 'orders/pendingWeb/billed', OWNER, WEB());
     check('but cannot be re-billed to somewhere else afterwards',
           !(await canWrite('orders/pendingWeb/billed/upiId', 'anon', 'attacker@ybl')) &&
@@ -699,6 +708,8 @@ const SAMPLES = {
       if (await asAnon(node, mutate)) rejected.push(what);
     };
     await must('a field nobody wrote', 'track', (o) => { o.payload = 'x'; });
+    await must('a quote that is not a quote', 'track', (o) => { o.quotedCapped = 'yes'; });
+    await must('a wait of four hours', 'track', (o) => { o.quotedHigh = 3000; });
     await must('a field nobody wrote, on an order', 'web', (o) => { o.payload = 'x'; });
     // payLinkSentAt was billedAt's old name. It is no longer a field: nothing writes
     // it and the rules no longer name it, so it falls to the $other catch-all like

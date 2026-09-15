@@ -68,10 +68,15 @@ for (const [page, station] of [['chef.html', 'chef'], ['barista.html', 'barista'
     const state = { [ACTIVE(station)]: ORDER(), [TRACK]: TRACKED() };
     const log = [];
     const timers = [];
+    // The KDS pages measure and stamp through the server's clock now — their own
+    // Date.now() was half of every duration the ETA model is fitted to, against a
+    // server-stamped createdAt. Offset zero here: this suite is about double taps.
     const api = buildModule([source], {
       db: makeDb(state, log),
       document: { getElementById: () => null },
       setTimeout: (fn) => { timers.push(fn); },
+      serverNow: () => Date.now(),
+      firebase: { database: { ServerValue: { TIMESTAMP: { '.sv': 'timestamp' } } } },
       Date, JSON, Object, console, Promise,
     }, ['markOrderDone']);
     for (let i = 0; i < taps; i++) { api.markOrderDone('o1'); await settle(); }
@@ -123,7 +128,9 @@ for (const [page, station] of [['chef.html', 'chef'], ['barista.html', 'barista'
   for (const [page, station] of [['chef.html', 'chef'], ['barista.html', 'barista']]) {
     const api = buildModule([extractAssignedFunction(readPage(page), 'markOrderDone')], {
       db: makeDb(state, log), document: { getElementById: () => null },
-      setTimeout: (fn) => { timers.push(fn); }, Date, JSON, Object, console, Promise,
+      setTimeout: (fn) => { timers.push(fn); }, serverNow: () => Date.now(),
+      firebase: { database: { ServerValue: { TIMESTAMP: { '.sv': 'timestamp' } } } },
+      Date, JSON, Object, console, Promise,
     }, ['markOrderDone']);
     api.markOrderDone('o1'); await settleAll();
     api.markOrderDone('o1'); await settleAll();   // both stations double-tapped
@@ -167,7 +174,9 @@ for (const [page, station] of [['chef.html', 'chef'], ['barista.html', 'barista'
     const timers = [];
     const api = buildModule([extractAssignedFunction(readPage(page), 'markOrderDone')], {
       db: makeDb(state, log), document: { getElementById: () => null },
-      setTimeout: (fn) => { timers.push(fn); }, Date, JSON, Object, console, Promise,
+      setTimeout: (fn) => { timers.push(fn); }, serverNow: () => Date.now(),
+      firebase: { database: { ServerValue: { TIMESTAMP: { '.sv': 'timestamp' } } } },
+      Date, JSON, Object, console, Promise,
     }, ['markOrderDone']);
     api.markOrderDone('o9'); await settleAll();
     timers.forEach(fn => fn()); await settleAll();
@@ -186,7 +195,9 @@ for (const [page, station] of [['chef.html', 'chef'], ['barista.html', 'barista'
     s2['orders/track/t8'] = { status: 'preparing', stations: 2, stationsDone: 0 };
     const api2 = buildModule([extractAssignedFunction(readPage(page), 'markOrderDone')], {
       db: makeDb(s2, l2), document: { getElementById: () => null },
-      setTimeout: (fn) => { t2.push(fn); }, Date, JSON, Object, console, Promise,
+      setTimeout: (fn) => { t2.push(fn); }, serverNow: () => Date.now(),
+      firebase: { database: { ServerValue: { TIMESTAMP: { '.sv': 'timestamp' } } } },
+      Date, JSON, Object, console, Promise,
     }, ['markOrderDone']);
     api2.markOrderDone('o8'); await settleAll();
     api2.markOrderDone('o8'); await settleAll();   // the second tap, moments later

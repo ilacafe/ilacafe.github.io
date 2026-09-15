@@ -16,7 +16,7 @@ It does four things:
 |---|---|---|
 | **Push relay** | `POST /` from the pages | encrypts and sends Web Push to admin devices |
 | **Payment ingest** | `POST /ingest`, and Email Routing | parses a bank credit alert → `payments/incoming/{utr}`, with both clocks: `at` (ingested) and `bankTime` (what the bank says, epoch ms, `null` when unsure) |
-| **ETA recalibration** | cron `0 20 1 * *` | refits `eta/model` from 75 days of completions |
+| **ETA recalibration** | cron `0 20 1 * *` | refits `eta/model` from 75 days of completions, holding the newest fifth back to score the result |
 | **Verification monitor** | cron `0 * * * *` | unverified-payment alerts, per-bank alarm, weekly digest |
 | **Table index prune** | on the same hourly tick | drops `orders/tableIndex` entries older than six hours |
 | **Cash out of the drawer** | `POST /` with `action: cashout` | verifies a staff token *and* a PIN, then writes the ledger entry itself |
@@ -427,5 +427,30 @@ notification — when a derived coefficient lands outside a hard bound, when
 filtering. `RECAL_MIN_NEW_ORDERS` is separate: it declines to *attempt* a refit
 until 1,500 completions have finished since the last run.
 
-None of that checks whether the model is *good*, only that it is not absurd.
-Judging quality is what `analytics.html`'s accuracy report is for.
+The bounds are in `RECAL_BOUNDS`, and all of them are now read. `drinkBase`,
+`bakedBase`, `ovenMax` and `satMax` were declared there from the beginning and
+checked by nothing, so a refit could hand back a saturation curve adding forty
+minutes at an empty counter and every gate passed it. Individual item bases are
+gated too — one whose base tripled on a thin sample is dropped and the rest of the
+refit still lands, and a majority of them failing rejects the run as systemic.
+
+**Whether the model is any good is now a measurement.** The newest
+`RECAL_HOLDOUT_FRAC` of the window is held out of the fit; `rcQuote` replays both
+the candidate and the model in use over those orders, and `rcCheckGates` refuses a
+candidate whose on-time share falls or whose typical error rises. The cushions are
+calibrated against that same target rather than assumed to land on it: they were
+derived as "p85 minus median of a filtered pool", and nothing checked that the pool's
+p85 was the café's.
+
+`rcQuote` is a third copy of a formula that also lives in `pos.html` and
+`index.html`, which is a shape this codebase has been caught by twice (the pizza
+list, the kitchen tempo). It is pinned: `test/eta-agreement.test.js` drives all
+three over the same carts and requires identical answers, and
+`test/eta-recalibration.test.js` drives the derivation over a café whose real
+coefficients it knows.
+
+What the run measured — held-out on-time share for both models, typical error, how
+far the cushions had to move, and anything the derivation had to work around — is
+written to `eta/recalMeta` and shown on the model card in `analytics.html`. A refit
+that made the café worse and one that made it better used to look identical from
+outside.

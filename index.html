@@ -750,7 +750,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-11.1"></script>
+    <script src="/build-check.js" data-build="2026-09-15.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -869,10 +869,12 @@
                 pizzaKeys:["margherita","funghi","burrata","formaggi","marc","pizza","fav","quattro","vodka"],
                 bakedKeys:["cake","bread","banana"],
                 ovenCurve:[[0,0],[10,0],[15,6],[20,6],[30,12],[45,14],[60,13],[120,13],[180,20]],
-                satCurveChef:[[0,7],[2,7],[4,10],[7,22],[8,23]],
+                satCurveChef:[[0,0],[2,0],[4,3],[7,15],[8,16]],
                 satCurveBarista:[[0,0],[1,0],[3,4],[6,5],[7,8]],
+                loadUnit:'tickets',
                 qtyCurve:[[1,0],[2,4],[4,9],[5,15]],
                 cushionDrinkByLoad:[[0,4],[3,9],[5,11]], cushionPizzaByOven:[[0,4.7],[10,4.7],[20,9],[45,8],[60,7]],
+                cushionPizzaByLoad:[[0,0],[5,2]],
                 cushionHotfood:5, cushionBaked:2, maxQuote:32, rangeWidth:5
             };
             let MODEL = ETA_DEF;
@@ -886,7 +888,10 @@
                     try { if (typeof window.refreshTakeawayETA==='function') window.refreshTakeawayETA(); } catch(e){}
                 }, window.ilaRefused.quiet("eta/model"));
             } catch(e){}
-            let loadChef=0, loadBar=0, lastPizzaOut=0;
+            // Two readings of the same queue: open tickets, and the items inside them.
+            // Which one the estimate uses is decided by MODEL.loadUnit, because that is the
+            // scale the saturation curves were fitted on. See the POS, which publishes both.
+            let loadChef=0, loadBar=0, workChef=0, workBar=0, lastPizzaOut=0;
             // The POS publishes exactly the numbers this page needs to quote a wait, so
             // the order nodes themselves no longer have to be readable from here — they
             // carry every order's items, notes and delivery address and are never pruned.
@@ -936,6 +941,11 @@
                     window.etaLiveFresh = true;      // read when an order records its quote
                     loadChef = parseInt(v.activeChef) || 0;
                     loadBar  = parseInt(v.activeBarista) || 0;
+                    // A till on an older build publishes no work figures. Falling back to the
+                    // ticket counts keeps the reading on SOME consistent scale rather than
+                    // quoting a busy kitchen as an empty one.
+                    workChef = (v.workChef  != null) ? (parseInt(v.workChef)  || 0) : loadChef;
+                    workBar  = (v.workBarista != null) ? (parseInt(v.workBarista) || 0) : loadBar;
                     if (v.lastPizzaOut) lastPizzaOut = v.lastPizzaOut;
                     // Prefer the tempo the POS computed: one number, so the counter and this
                     // page cannot quote different waits for the same cart. Falling back to
@@ -977,7 +987,11 @@
             // Same maths, fed by the ratios the POS already computed, so this page never
             // has to see the orders they came from.
             function recomputeTempoFromPace(pace){
-                const now = Date.now();
+                // p.at is a server-stamped completion. The staleness check above already
+                // learned this lesson; the tempo window is the same comparison and has to
+                // use the same clock, or a phone a quarter of an hour fast throws away
+                // every ratio in the window and sits at a neutral 1.0 forever.
+                const now = serverNow();
                 const ratios = [];
                 (pace||[]).forEach(p=>{
                     if(!p || !p.at || !p.r) return;
@@ -996,37 +1010,58 @@
             function lc(s){return(s||'').toLowerCase();}
             function isPizza(o){ const n=(typeof o==='string')?lc(o):Object.keys(o||{}).join(' ').toLowerCase(); return MODEL.pizzaKeys.some(k=>n.includes(k)); }
             function isBaked(name){ return MODEL.bakedKeys.some(k=>lc(name).includes(k)); }
-            function itemBase(name){ const n=lc(name); let best=null,bl=-1; for(const k in MODEL.itemBase){if(n.includes(k)&&k.length>bl){best=MODEL.itemBase[k];bl=k.length;}} if(best!=null)return best; if(isPizza(name))return MODEL.fallback.pizza; if(isBaked(name))return MODEL.fallback.baked; return MODEL.fallback.drink; }
+            // `station` optional — passed, an unlisted dish the kitchen cooks falls back to
+            // hot food rather than to a drink (fallback.hotfood shipped in the model from the
+            // start and was never read). Omitted, it answers as it always did: the tempo
+            // ratio calls it that way, and that number only means something if both sides of
+            // it are divided by the same base. Mirrors itemBaseTime in pos.html.
+            function itemBase(name, station){ const n=lc(name); let best=null,bl=-1; for(const k in MODEL.itemBase){if(n.includes(k)&&k.length>bl){best=MODEL.itemBase[k];bl=k.length;}} if(best!=null)return best; if(isPizza(name))return MODEL.fallback.pizza; if(isBaked(name))return MODEL.fallback.baked; if(station==='chef'&&MODEL.fallback.hotfood!=null)return MODEL.fallback.hotfood; return MODEL.fallback.drink; }
             // expose live oven-idle (minutes since last pizza out) for honest status messaging
-            window.custOvenIdleMin = function(){ return lastPizzaOut ? Math.max(0,(Date.now()-lastPizzaOut)/60000) : 999; };
+            // lastPizzaOut is a SERVER timestamp (the KDS stamps it through the server
+            // clock and the till republishes it), so this must not be measured against the
+            // handset's own. A phone fifteen minutes fast read the oven as fifteen minutes
+            // colder than it was, which is worth up to +12 min of oven curve on every
+            // pizza quote — and it is silent, because a cold oven is a perfectly ordinary
+            // thing for the number to say.
+            window.custOvenIdleMin = function(){ return lastPizzaOut ? Math.max(0,(serverNow()-lastPizzaOut)/60000) : 999; };
             // whole-order estimate (range), splitting pizza->chef else barista
             window.custEstimateETA = function(items){
                 const st={chef:{base:0,qty:0,pizza:false,bakedOnly:true},barista:{base:0,qty:0,pizza:false,bakedOnly:true}};
                 let any=false;
-                for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const rt=custRouteFor(nm); const station = rt==='chef' ? 'chef' : (rt==='barista' ? 'barista' : (isPizza(nm)?'chef':'barista')); const b=itemBase(nm); if(b>st[station].base)st[station].base=b; st[station].qty+=q; if(isPizza(nm))st[station].pizza=true; if(!isBaked(nm))st[station].bakedOnly=false; any=true; }
+                for(const nm in (items||{})){ const q=parseInt(items[nm].qty)||1; const rt=custRouteFor(nm); const station = rt==='chef' ? 'chef' : (rt==='barista' ? 'barista' : (isPizza(nm)?'chef':'barista')); const b=itemBase(nm, station); if(b>st[station].base)st[station].base=b; st[station].qty+=q; if(isPizza(nm))st[station].pizza=true; if(!isBaked(nm))st[station].bakedOnly=false; any=true; }
                 if(!any)return null;
-                const idle = lastPizzaOut ? Math.max(0,(Date.now()-lastPizzaOut)/60000) : 999;
+                const idle = lastPizzaOut ? Math.max(0,(serverNow()-lastPizzaOut)/60000) : 999;   // server clock: see custOvenIdleMin
                 const tempo = (typeof kitchenTempo==='number' && kitchenTempo>0) ? kitchenTempo : 1.0;
                 // stt: base is FIXED (physical prep); the load+oven additions reflect CURRENT kitchen
                 // state, so ONLY those are scaled by live tempo (guard #5). Base and cushion untouched.
+                // The queue reading the curves were fitted against — see MODEL.loadUnit.
+                function loadOf(key){
+                    if(MODEL.loadUnit==='items') return key==='chef'?workChef:workBar;
+                    return key==='chef'?loadChef:loadBar;
+                }
                 function stt(s,key){
                     if(s.base===0&&s.qty===0)return 0;
                     let conditionAdd = interp(MODEL.qtyCurve,s.qty);
                     if(s.pizza) conditionAdd += interp(MODEL.ovenCurve,idle);
-                    conditionAdd += interp(key==='chef'?MODEL.satCurveChef:MODEL.satCurveBarista, key==='chef'?loadChef:loadBar);
+                    conditionAdd += interp(key==='chef'?MODEL.satCurveChef:MODEL.satCurveBarista, loadOf(key));
                     return s.base + conditionAdd*tempo;   // tempo nudges only the condition-driven part
                 }
                 const chefT=stt(st.chef,'chef'), barT=stt(st.barista,'barista');
                 let domCat; if(chefT>=barT&&(st.chef.base>0||st.chef.qty>0)){domCat=st.chef.pizza?'pizza':'hotfood';}else{domCat=st.barista.bakedOnly?'baked':'drink';}
                 const point=Math.max(chefT,barT);
                 // cushion: live from conditions (drink->load, pizza->oven), dessert flat (data-justified)
+                // A cooling oven and a deep queue are different conditions; take whichever
+                // is driving the spread rather than adding them. Mirrors pos.html exactly.
                 let cush;
-                if(domCat==='pizza'||domCat==='hotfood'){ cush=interp(MODEL.cushionPizzaByOven||[[0,5]], idle); if(loadChef>=5)cush+=2; if(domCat==='hotfood')cush=MODEL.cushionHotfood!=null?MODEL.cushionHotfood:cush; }
+                if(domCat==='pizza'||domCat==='hotfood'){ cush=Math.max(interp(MODEL.cushionPizzaByOven||[[0,5]], idle), interp(MODEL.cushionPizzaByLoad||[[0,0]], loadOf('chef'))); if(domCat==='hotfood')cush=MODEL.cushionHotfood!=null?MODEL.cushionHotfood:cush; }
                 else if(domCat==='baked'){ cush=MODEL.cushionBaked!=null?MODEL.cushionBaked:2; }
-                else { cush=interp(MODEL.cushionDrinkByLoad||[[0,4]], loadBar); }
-                let quote=Math.min(point+cush, MODEL.maxQuote||32);
+                else { cush=interp(MODEL.cushionDrinkByLoad||[[0,4]], loadOf('barista')); }
+                // Never clamped: past maxQuote the quote goes open-ended rather than promising
+                // an upper bound the kitchen cannot hold. See the POS for why.
+                const quote=point+cush;
+                const capped=quote>(MODEL.maxQuote||32);
                 const low=Math.max(3,Math.round(quote-(MODEL.rangeWidth||5)/2)), high=Math.round(quote+(MODEL.rangeWidth||5)/2);
-                return { low, high, label: low+'–'+high+' min' };
+                return { low, high, capped: capped, label: capped ? (low+'+ min') : (low+'–'+high+' min') };
             };
 
             // ----- status watcher -----
@@ -1998,7 +2033,7 @@
                         const e = (typeof window.custEstimateETA === 'function')
                                     ? window.custEstimateETA(orderItemsSnapshot) : null;
                         if (!e || e.low == null || e.high == null) return {};
-                        return { quotedLow: e.low, quotedHigh: e.high, quotedLive: !!window.etaLiveFresh };
+                        return { quotedLow: e.low, quotedHigh: e.high, quotedCapped: !!e.capped, quotedLive: !!window.etaLiveFresh };
                     } catch (err) { return {}; }
                 })();
                 return placed.then(function(){
