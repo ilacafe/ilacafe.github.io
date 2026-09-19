@@ -194,7 +194,23 @@
         #login-overlay.hidden { display: none; }
         #login-box { width: 100%; max-width: 320px; text-align: center; }
         #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
-        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.25); color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        /* THE ONLY LABEL THESE TWO FIELDS HAVE, AND IT WAS INVISIBLE
+           There is no <label> in the sign-in box on purpose — the form lives in a
+           <template> so iOS cannot find a password field on a till that is already
+           signed in — so the placeholder is the whole of what a sighted person has to
+           go on. Nothing declared a placeholder colour, which left the browser's own:
+           #757575, on #8D6E52, which measures 1.02:1. Not dim. The same colour as the
+           background, to two decimal places. Staff were looking at two empty boxes and
+           guessing which one took the email.
+
+           A placeholder has to be quieter than what you type into it, and on this brown
+           there is no quieter white that is still legible — white at 0.75 over the page
+           is 3.41:1. So the field gets a floor of its own instead: darkening it lowers
+           the background under both, which buys the hint back its contrast (4.92:1) and
+           leaves the value you type at 7.24:1, still plainly the louder of the two. The
+           same trade the rest of the app makes with chips. */
+        #login-box input::placeholder { color: rgba(255,255,255,0.75); opacity: 1; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
            #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
@@ -248,14 +264,44 @@
            for a while; these pages never got it. */
         .logo { max-width: min(350px, 78vw); height: auto; display: block; margin: 0 auto; }
         
-        h2 { font-size: 1.2rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;}
+        /* A ONE-WORD HEADING CANNOT WRAP, SO IT HAS TO FIT
+           "NOTIFICATIONS" at 1.2rem with 2px of tracking is 174px of unbreakable word,
+           and a card on a 320px screen gives it 144px — so it ran out over the edge of
+           its own card with nowhere to break. Tracking is the cheapest thing to give
+           back: it is a third signal on a heading that is already uppercase and bold,
+           and dropping it below 380px buys 26px. break-word is the floor under that,
+           for a word longer than any tracking will save. */
+        h2 { font-size: 1.2rem; letter-spacing: 2px; text-transform: uppercase; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; overflow-wrap: break-word;}
+        @media (max-width: 380px) { h2 { letter-spacing: 0.5px; font-size: 1.1rem; } }
         
         .admin-card { background-color: rgba(0, 0, 0, 0.15); border-radius: 12px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(255, 255, 255, 0.1); }
         
         .form-group { margin-bottom: 15px; }
-        .row-group { display: flex; gap: 10px; width: 100%; }
+        /* SAME TWO PROBLEMS AS .list-item, IN THE FORMS
+           Every control in these rows is a flex item with min-width:auto, so a row of
+           three — Label, Cap, Add — could not fit inside a phone and simply hung over the
+           edge instead, taking the placeholders with it ("Label (e", "Cap ₹"). min-width:0
+           lets them give way; the floor stops them giving way past the point of being
+           usable, and wrap sends them to a second line when that point is reached. 7rem
+           is wide enough for a two-word button or a short number, and at any width that
+           already fitted three controls on a line, nothing moves. */
+        .row-group { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
+        .row-group > * { min-width: min(100%, 7rem); }
         label { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; margin-bottom: 5px; }
-        input[type="text"], input[type="number"], input[type="password"], select { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; background: rgba(255,255,255,0.9); color: #333; }
+        /* email AND tel BELONG IN THIS LIST
+           They were left out, and a type the list does not name gets nothing: no width,
+           no box-sizing, no font. "Email (used to log in)" on the Create Login form was
+           rendering as a raw browser control — Arial, dark grey, its own default width —
+           which at 320px hung 41px outside the form group it sits in. It looked like a
+           field that belonged to a different page, because in styling terms it did.
+           Listing by type is what left the hole; there is no third type in use here, and
+           the suite now checks every typed input on every page resolves to this. */
+        input[type="text"], input[type="number"], input[type="password"], input[type="email"], input[type="tel"], select { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; background: rgba(255,255,255,0.9); color: #333; }
+        /* And the hint inside them. Left to the browser it is #757575, which on this
+           near-white field is 4.08:1 — under AA on the line that says what the field
+           wants ("VPA — e.g. name@okaxis", "Cap Rs/mo (0 = none)"). #5a5a5a is 6.10:1 and
+           still plainly quieter than the #333 you type. */
+        input::placeholder, .remark-input::placeholder { color: #5a5a5a; opacity: 1; }
         .checkbox-group { display: flex; align-items: center; gap: 10px; font-weight: bold; margin-top: 10px; }
         /* Used by the Inventory Manager and Recipe Builder controls. It is a pos.html class name
            and was never defined here, so those selects and inputs rendered as raw browser
@@ -281,6 +327,22 @@
              targets do not reach each other's centres. */
         .btn-move { position: relative; background-color: rgba(255,255,255,0.1); color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.9rem; border: none; cursor: pointer; }
         .btn-move-item { position: relative; background: transparent; border: none; color: #fff; cursor: pointer; padding: 4px; font-size: 1rem; line-height: 1;}
+        .move-stack { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
+        /* AN ARROW WITH NOWHERE TO GO
+           The first row cannot move up and the last cannot move down, and both used to
+           say so with `opacity:0.2; pointer-events:none` written into the element. That
+           left the glyph at 1.64:1 — so the row read as having lost a button rather than
+           as having one that does nothing — and pointer-events stops only the pointer:
+           the button kept its place in the tab order and still fired on Enter. The
+           attribute is what actually disables a button, to the keyboard and to assistive
+           technology as well as to the finger, and the arrow stays legible while it is
+           plainly inert.
+
+           And it gives up its 44px target. These two sit 2px apart in a column, so a
+           target on the one that does nothing takes half the space of the one that
+           does — on the first row of a list, where ▼ is the only arrow there is. */
+        .btn-move:disabled, .btn-move-item:disabled { background-color: transparent; color: rgba(255,255,255,0.85); cursor: default; }
+        .btn-move:disabled::after, .btn-move-item:disabled::after { content: none; }
         .btn-move::after, .btn-move-item::after, .rec-mini::after, .btn-action::after {
             content: ''; position: absolute; left: 50%; top: 50%;
             width: 44px; height: 44px; transform: translate(-50%, -50%);
@@ -291,7 +353,20 @@
         .status-open { background-color: var(--brand-text); color: var(--brand-bg); }
         .status-closed { background-color: transparent; color: var(--brand-text); border: 2px solid var(--brand-text);}
 
-        .list-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 12px 0; margin-bottom: 5px; }
+        /* WRAPS, AND EVERY CHILD MAY SHRINK
+           A flex item is min-width:auto by default, which means it refuses to go narrower
+           than its own content — so the role <select> and the ✖ on an account row, or a
+           long email beside them, pushed the right-hand end of the row clean outside the
+           card: 34px past it on a phone, and far enough at 320px to give the whole page a
+           horizontal scrollbar. min-width:0 lets them shrink, wrapping catches the case
+           where shrinking is not enough, and overflow-wrap is for the email itself, which
+           has no spaces to break at. */
+        .list-item { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; overflow-wrap: anywhere; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 12px 0; margin-bottom: 5px; }
+        .list-item > * { min-width: 0; }
+        /* A hidden item is marked by its "Out" badge, not by being faded out of reading
+           range — see the note in renderAllViews(). This is what is left of the fade: the
+           row sits back a little without taking any of its text with it. */
+        .list-item.is-hidden { background: rgba(0,0,0,0.18); border-radius: 8px; padding-left: 10px; padding-right: 10px; }
         .list-item:last-child { border-bottom: none; }
         
         .category-block { margin-top: 30px; }
@@ -320,7 +395,7 @@
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--brand-text); }
         input:checked + .slider:before { transform: translateX(24px); background-color: var(--brand-bg); }
-        .control-row { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; flex: 1; }
+        .control-row { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; flex: 1; box-sizing: border-box; }
 
         /* ADVANCED ANALYTICS UI */
         .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
@@ -378,10 +453,21 @@
         .rec-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 18px; }
         .rec-mini { position: relative; background: rgba(255,255,255,0.10); color: #fff; border: 1px solid rgba(255,255,255,0.25); padding: 4px 10px; border-radius: 5px; font-family: 'Quicksand', sans-serif; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
         .rec-mini:active { background: rgba(255,255,255,0.2); }
+        /* THE TAB YOU ARE ON, INVERTED RATHER THAN WASHED
+           Every way of saying "selected" by adding white to this palette spends the
+           label's own contrast: a 0.28 wash took these buttons to 2.80:1, the worst
+           reading on the card. Inverting costs nothing — brown on white is the same
+           4.68:1 as white on brown — and it is also the louder signal. */
+        .rec-mini.on { background: #fff; color: var(--brand-bg); border-color: #fff; }
         @media(max-width: 500px) { .rec-kpis { grid-template-columns: 1fr; } }
         @media(max-width: 430px) {
             .control-row { padding: 12px; }
-            .row-group.stack-narrow { flex-direction: column; }
+            /* nowrap matters here and only here. .row-group wraps so a row of controls
+               that no longer fits drops to a second line instead of leaving the card —
+               but in `flex-direction: column` the cross axis is the horizontal one, and a
+               wrapping column sizes its line to its widest item rather than to the
+               container. That put these two toggles 8px outside the card at 320px. */
+            .row-group.stack-narrow { flex-direction: column; flex-wrap: nowrap; }
         }
 
         /* SOMETHING TO SEE WHEN YOU TAB
@@ -736,7 +822,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-15.1"></script>
+    <script src="/build-check.js" data-build="2026-09-19.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1013,9 +1099,15 @@
             else {
                 let sorterHTML = "";
                 sortedCats.forEach((cat, index) => {
-                    let upDisabled = index === 0 ? 'opacity:0.2; pointer-events:none;' : '';
-                    let downDisabled = index === sortedCats.length - 1 ? 'opacity:0.2; pointer-events:none;' : '';
-                    sorterHTML += `<div class="list-item"><strong>${cat}</strong><div><button class="btn-move" style="${upDisabled}" onclick="moveCategory(${index}, -1)">↑</button> <button class="btn-move" style="${downDisabled}" onclick="moveCategory(${index}, 1)">↓</button></div></div>`;
+                    // disabled, NOT `opacity:0.2; pointer-events:none`. That pair was wrong
+                    // twice over: it put the arrow at 1.64:1, so the top row looked like it
+                    // had lost its ↑ rather than like the ↑ had nothing to do; and
+                    // pointer-events only stops the pointer, so the button stayed in the tab
+                    // order and still fired on Enter, silently reordering nothing. See the
+                    // .btn-move:disabled rule for what a disabled arrow looks like now.
+                    const upOff = index === 0 ? 'disabled' : '';
+                    const downOff = index === sortedCats.length - 1 ? 'disabled' : '';
+                    sorterHTML += `<div class="list-item"><strong>${cat}</strong><div><button class="btn-move" ${upOff} onclick="moveCategory(${index}, -1)">↑</button> <button class="btn-move" ${downOff} onclick="moveCategory(${index}, 1)">↓</button></div></div>`;
                 });
                 sorterContainer.innerHTML = sorterHTML;
             }
@@ -1036,10 +1128,17 @@
                     const safeVisibility = jsAttr(item.visibility ? item.visibility : 'both');
                     const safeRouting = jsAttr(item.routing ? item.routing : 'barista');
                     
-                    let upDisabled = index === 0 ? 'opacity:0.2; pointer-events:none;' : '';
-                    let downDisabled = index === validItems.length - 1 ? 'opacity:0.2; pointer-events:none;' : '';
+                    const upOff = index === 0 ? 'disabled' : '';
+                    const downOff = index === validItems.length - 1 ? 'disabled' : '';
 
-                    let statusStyle = item.inStock ? "" : "opacity: 0.5;";
+                    // A HIDDEN ITEM IS STILL A ROW YOU HAVE TO READ AND ACT ON
+                    // It used to be opacity:0.5 on the whole .list-item, which is 2.8:1 for
+                    // the name, the price and all three buttons — and the arrows inside it
+                    // compounded to 1.26:1. The row you most need to find in the list, to
+                    // put the item back in stock, was the one row you could not read. The
+                    // "Out" badge beside the name is what says it is hidden; the badge was
+                    // already there, and was the only part of the fade doing any work.
+                    const outClass = item.inStock ? "" : " is-hidden";
                     let badgeHTML = item.inStock ? "" : `<span class="badge">Out</span>`;
                     let visLabel = item.visibility === "pos" ? "POS Only" : (item.visibility === "customer" ? "App Only" : "");
                     let visHTML = visLabel ? `<span class="badge">${visLabel}</span>` : "";
@@ -1048,7 +1147,7 @@
                     let routeHTML = `<span class="badge">${routeLabel}</span>`;
                     let priceDisplay = item.hasSizes ? `₹${item.priceReg} / ₹${item.priceLrg}` : `₹${item.price}`;
 
-                    menuHTML += `<div class="list-item" style="${statusStyle}"><div style="display:flex; flex-direction:column; gap:2px;"><button class="btn-move-item" style="${upDisabled}" onclick="moveItem('${safeCategory}', ${index}, -1)">▲</button><button class="btn-move-item" style="${downDisabled}" onclick="moveItem('${safeCategory}', ${index}, 1)">▼</button></div><div class="item-details"><div class="item-name">${itemName} ${badgeHTML} ${routeHTML}</div><div class="item-meta">${priceDisplay} ${visHTML}</div></div><div class="item-actions"><button class="btn-action" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0}, '${safeRouting}')">Edit</button><button class="btn-action" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${item.inStock ? "Hide" : "Show"}</button><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="deleteItem('${safeCategory}', '${safeName}')">✖</button></div></div>`;
+                    menuHTML += `<div class="list-item${outClass}"><div class="move-stack"><button class="btn-move-item" ${upOff} onclick="moveItem('${safeCategory}', ${index}, -1)">▲</button><button class="btn-move-item" ${downOff} onclick="moveItem('${safeCategory}', ${index}, 1)">▼</button></div><div class="item-details"><div class="item-name">${itemName} ${badgeHTML} ${routeHTML}</div><div class="item-meta">${priceDisplay} ${visHTML}</div></div><div class="item-actions"><button class="btn-action" onclick="editItem('${safeCategory}', '${safeName}', ${item.price || 0}, '${safeVisibility}', ${item.requiresSweetness || false}, ${item.hasSizes || false}, ${item.priceReg || 0}, ${item.priceLrg || 0}, '${safeRouting}')">Edit</button><button class="btn-action" onclick="toggleStock('${safeCategory}', '${safeName}', ${item.inStock})">${item.inStock ? "Hide" : "Show"}</button><button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="deleteItem('${safeCategory}', '${safeName}')">✖</button></div></div>`;
                 });
                 menuHTML += `</div>`;
             });
@@ -1225,7 +1324,12 @@
                 const n = g[t].length;
                 const label = t==='review' ? 'Needs review' : (t==='auto' ? 'Verified' : 'Ignored');
                 btn.innerText = label + ' (' + n + ')';
-                btn.style.background = (uvTab===t) ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)';
+                // A class, not a white wash. rgba(255,255,255,0.28) lifted the card from
+                // 120,94,70 to 158,139,122 and took the button's own white label down to
+                // 2.80:1 — the selected tab was the least readable of the three. .on turns
+                // it into a white pill with brown text instead: unmistakably the one you
+                // are on, at 4.68:1, and nothing is dimmed to make it so.
+                btn.classList.toggle('on', uvTab === t);
             });
 
             const rows = g[uvTab] || [];
@@ -1929,7 +2033,8 @@
         function renderUPIHistory2(){
             const box = document.getElementById('upi-verify-history'); if (!box) return;
             if (uvhArchive === 'loading' || uvhArchive === null){ box.innerHTML = "<p style=' font-size:0.9rem;'>Loading…</p>"; return; }
-            ['ignored','unverified','all'].forEach(m => { const b = document.getElementById('uvh-filter-'+ (m==='unverified'?'unver':m)); if (b) b.style.background = (uvhMode===m)?'rgba(255,255,255,0.28)':'rgba(255,255,255,0.10)'; });
+            // .on rather than a white wash — see the note beside the same line in renderUPIVerification()
+            ['ignored','unverified','all'].forEach(m => { const b = document.getElementById('uvh-filter-'+ (m==='unverified'?'unver':m)); if (b) b.classList.toggle('on', uvhMode === m); });
             const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
             // flatten every archived UPI payment across days
             const rows = [];
@@ -2144,14 +2249,14 @@
 
             let html = "";
             items.forEach((item, index) => {
-                let upDisabled = index === 0 ? 'opacity:0.2; pointer-events:none;' : '';
-                let downDisabled = index === items.length - 1 ? 'opacity:0.2; pointer-events:none;' : '';
-                
+                const upOff = index === 0 ? 'disabled' : '';
+                const downOff = index === items.length - 1 ? 'disabled' : '';
+
                 html += `
                 <div class="list-item">
-                    <div style="display:flex; flex-direction:column; gap:2px; margin-right: 15px;">
-                        <button class="btn-move-item" style="${upDisabled}" onclick="moveInventoryItem('${tab}', '${type}', ${index}, -1)">▲</button>
-                        <button class="btn-move-item" style="${downDisabled}" onclick="moveInventoryItem('${tab}', '${type}', ${index}, 1)">▼</button>
+                    <div class="move-stack" style="margin-right: 15px;">
+                        <button class="btn-move-item" ${upOff} onclick="moveInventoryItem('${tab}', '${type}', ${index}, -1)">▲</button>
+                        <button class="btn-move-item" ${downOff} onclick="moveInventoryItem('${tab}', '${type}', ${index}, 1)">▼</button>
                     </div>
                     <strong style="flex-grow: 1;">${escapeHTML(item)}</strong>
                     <button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="removeInventoryItem('${tab}', '${type}', ${index})">✖</button>

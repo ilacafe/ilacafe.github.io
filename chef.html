@@ -206,7 +206,14 @@
         .logo { max-width: min(150px, 40vw); height: auto; display: block; }
         .header-title { font-size: 1.2rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin: 0;}
         .clock { font-size: 1.2rem; font-weight: bold; }
-        .kds-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; align-items: start;
+        /* minmax(min(300px, 100%), …) AND NOT minmax(300px, …)
+           A 300px floor is a floor: below about 332px of viewport the board's own 5%
+           gutters leave less room than that, the track refuses to shrink, and the ticket
+           hangs out over the right-hand edge of the screen — on the one screen in the cafe
+           that is never scrolled sideways. min() lets the single-column case fall back to
+           the width that is actually there, and changes nothing at any size that already
+           fitted, because 100% only wins when it is the smaller of the two. */
+        .kds-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 20px; align-items: start;
                          padding: 0 calc(5% + env(safe-area-inset-right)) calc(50px + env(safe-area-inset-bottom)) calc(5% + env(safe-area-inset-left)); }
         .ticket-card { background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -218,7 +225,15 @@
         .item-row { display: flex; font-size: 1.3rem; margin-bottom: 10px; font-weight: 500; line-height: 1.3; align-items: flex-start;}
         .item-qty { font-weight: 700; width: 35px; flex-shrink: 0; }
         .item-name { flex-grow: 1; }
-        .ticket-notes { background: rgba(255, 204, 0, 0.1); border-left: 3px solid #ffcc00; padding: 10px; margin-bottom: 20px; font-size: 0.95rem; color: #ffcc00; font-style: italic; border-radius: 0 4px 4px 0;}
+        /* WHITE TEXT, AND THE YELLOW IS THE RULE BESIDE IT
+           Same reasoning as #login-error further down, and for a line that matters more:
+           "no onion", "nut allergy", "extra hot" is the one thing on a ticket that has to
+           be read exactly, and #ffcc00 on its own tinted background measures 3.41:1 —
+           under AA, at full opacity, from across a kitchen. Nothing yellow passes here
+           without turning pale enough to stop reading as a warning, so the colour stops
+           carrying the meaning: the text is white and the yellow is the rule down its
+           left edge and the wash behind it, which nothing else on the ticket has. */
+        .ticket-notes { background: rgba(255, 204, 0, 0.1); border-left: 3px solid #ffcc00; padding: 10px; margin-bottom: 20px; font-size: 0.95rem; color: #fff; font-style: italic; border-radius: 0 4px 4px 0;}
         .btn-done { background-color: var(--brand-text); color: var(--brand-bg); border: none; padding: 15px; border-radius: 8px; font-weight: 700; font-size: 1.2rem; cursor: pointer; font-family: 'Quicksand', sans-serif; width: 100%; text-transform: uppercase; letter-spacing: 2px; transition: opacity 0.2s;}
         .btn-done:active { opacity: 0.7; }
         /* A QUIET BOARD, NOT A FAINT ONE
@@ -234,7 +249,23 @@
         #login-overlay.hidden { display: none; }
         #login-box { width: 100%; max-width: 320px; text-align: center; }
         #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
-        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.25); color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        /* THE ONLY LABEL THESE TWO FIELDS HAVE, AND IT WAS INVISIBLE
+           There is no <label> in the sign-in box on purpose — the form lives in a
+           <template> so iOS cannot find a password field on a till that is already
+           signed in — so the placeholder is the whole of what a sighted person has to
+           go on. Nothing declared a placeholder colour, which left the browser's own:
+           #757575, on #8D6E52, which measures 1.02:1. Not dim. The same colour as the
+           background, to two decimal places. Staff were looking at two empty boxes and
+           guessing which one took the email.
+
+           A placeholder has to be quieter than what you type into it, and on this brown
+           there is no quieter white that is still legible — white at 0.75 over the page
+           is 3.41:1. So the field gets a floor of its own instead: darkening it lowers
+           the background under both, which buys the hint back its contrast (4.92:1) and
+           leaves the value you type at 7.24:1, still plainly the louder of the two. The
+           same trade the rest of the app makes with chips. */
+        #login-box input::placeholder { color: rgba(255,255,255,0.75); opacity: 1; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
            #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
@@ -257,8 +288,21 @@
             border-left: 3px solid #ff8f8f; padding: 2px 0 2px 10px; line-height: 1.45;
         }
         .ticket-elapsed { font-weight: bold; }
-        .ticket-card.overdue { border-color: #ff4d4d; background: rgba(255, 77, 77, 0.15); animation: kdsPulse 1.2s infinite; }
-        .ticket-card.overdue .ticket-elapsed { color: #ff6b6b; }
+        /* THE LATE TICKET WAS THE HARDEST ONE ON THE BOARD TO READ
+           Two things were working against it. The wash was rgba(255,77,77,0.15), which is
+           a light red: it LIFTED the card's background from 120,94,70 to 158,105,81 and so
+           cost every line on the ticket — the destination, the items, the notes — contrast
+           at exactly the moment the ticket became urgent. And the elapsed time on top of
+           it was #ff6b6b, which against that lifted background measures 1.65:1. "LATE ·
+           22m / ~8m" is the whole point of marking a ticket overdue, and it was the least
+           legible text on the screen.
+           So the wash goes dark red instead of pale red — same hue, same alarm, and the
+           card now reads at 6.1:1 rather than 4.6:1 — and the elapsed time goes white, the
+           way #login-error did and for the same reason: on this palette nothing tinted
+           towards red clears AA, so the red is carried by the border, the wash and the
+           pulse, and the text is simply readable. */
+        .ticket-card.overdue { border-color: #ff4d4d; background: rgba(120, 0, 0, 0.22); animation: kdsPulse 1.2s infinite; }
+        .ticket-card.overdue .ticket-elapsed { color: #fff; }
         @keyframes kdsPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,77,77,0.5); } 50% { box-shadow: 0 0 0 7px rgba(255,77,77,0); } }
         /* Faint, bottom-right, out of the way. A kitchen screen is never reloaded,
            so "which build is this one on?" is otherwise unanswerable from the floor. */
@@ -369,7 +413,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-15.1"></script>
+    <script src="/build-check.js" data-build="2026-09-19.1"></script>
     <!-- Says so when this screen stops talking to the database. Every device here is
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
