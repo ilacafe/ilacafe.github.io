@@ -253,6 +253,32 @@ costs money:
   condition that hover, focus or a touch brings it to full white, which the suite
   checks rather than takes on trust. Faint was always right; unreadable when you
   finally look was the bug.
+  That second, source-reading check was itself line-shaped for a while, and three kinds
+  of dimming walked straight past it: it wanted a whole rule on one line, or the word
+  `style=` somewhere on the line, and this codebase writes neither of those most of the
+  time. So `#provisional-note` — the line that says the prices on the till came off a
+  cache — sat at 3.36:1 because its rule was two lines long; the web-order count was set
+  to `opacity 0.5` from JavaScript whenever it read zero, which is the one number on the
+  dashboard that says nothing is waiting; and a hidden menu row in admin was faded whole
+  by a style STRING built in JS, taking its name, its price and all three of its buttons
+  to 2.8:1 with it. The scan reads structure now — every rule in every `<style>` block
+  however many lines it spans, and every opacity a script assigns or writes into a style
+  string, in the shared scripts as well as the pages. The last of them was in
+  `dialogs.js`, dimming a disabled control's own value: the role dropdown on your own
+  account row, where the value it is showing you is the whole reason the row is there.
+  A placeholder is text too, and nothing had ever said what colour it should be — which
+  leaves the browser's, `#757575`, which on `#8D6E52` measures 1.02:1. Not dim: the same
+  colour as the background to two decimal places. The sign-in box has no `<label>` by
+  design (the form lives in a `<template>` so iOS cannot find a password field on a till
+  that is already signed in), so the placeholder is the whole of what a sighted person
+  has to go on, and on all six staff pages it was invisible. There is no quieter white
+  that is still legible on this brown, so the field is darkened instead — the chip trade
+  again, one level down: the hint comes to 4.92:1 and what you type stays at 7.24:1, so
+  the hierarchy survives and both can be read. The suite asks the browser for the
+  resolved `::placeholder` colour against the field's own composited background, and
+  opens the modals before it looks, because most of these fields live in one and a
+  closed modal is `opacity: 0` — which would have measured every hint against the page
+  instead of the field and quietly reported the wrong number.
 - **reflow** — `.logo` was capped with `max-width: 350px`, which caps it against
   nothing: at a 320px viewport a 350px cap is still 350px, so the ordering page, the
   till and admin each carried 50px of horizontal scroll. It reads as a small-phone
@@ -293,7 +319,14 @@ costs money:
   painting out the word CURRENT in CURRENT ORDER with an opaque background at z-index 900.
   Nothing caught that because nothing above 430px had ever been measured, so the suite now
   stands the till up at three tablet widths and asks the question only a second column can
-  raise: does the strip stay in its own? Last, the notch: with `viewport-fit=cover` the page owns the strip of screen
+  raise: does the strip stay in its own? The note left beside that fix — that this media
+  block comes FIRST in the sheet, so at equal specificity every declaration in it loses
+  to the rule further down — was written about `top`, and the line directly under it was
+  doing the same thing and was not noticed: `#cart-banner { display: none }` lost to the
+  banner's own `display: flex` 200 lines later, so on a tablet till the white checkout
+  bar still slid up across the bottom of the menu, 78px of it, while the side rail beside
+  it was already showing the same total and the same SEND ORDER. Both overrides live
+  beside the rules they override now. Last, the notch: with `viewport-fit=cover` the page owns the strip of screen
   behind the clock, and the till pins its category strip below it, so the menu scrolls up
   through the gap and something must be painted over it. Something was — a fixed band at
   z-index 950 — and on the till it painted nothing: a photograph from an iPhone 13 has a
@@ -334,6 +367,55 @@ costs money:
   is — a rule, a fill, a weight — is a design decision and none of the suite's
   business; that there is one is not. The chip is marked now rather than the other
   five dimmed: a 2px rule beneath it, the same idiom the stock page's tabs already use.
+- **inside the box that holds it** — reported from the counter as "admin elements are
+  bleeding", and it was literal. A flex item is `min-width: auto` unless something says
+  otherwise, which means it refuses to become narrower than its own content — and every
+  row on these pages is a flex row. A `<select>` with "Barista" in it, an email beside a
+  ✖ button, "Save Recipe" sharing a line with another button: each one held its row open
+  and hung over the right-hand edge of the card it lives in, by up to 233px, and gave
+  admin a horizontal scrollbar at 390px as well as 320. It is the same defect in a dozen
+  places, so the suite asks the question once, of every element on every page: is your
+  border box inside your parent's content box? A child that means to hang out says so
+  with a negative margin — the till's category strip is full-bleed exactly that way —
+  and nothing else may. It needs a browser because whether a row overflows depends on
+  the text in it and the font it is set in, and it needs DATA because the account rows,
+  the menu rows, the kitchen tickets and the ledger lines do not exist until the
+  database answers: a suite that loads these pages against an empty stub sees the shell,
+  and the shell was fine. The stub here answers with a café's worth of plausible content,
+  including one deliberately long email, because the rows that broke broke on their
+  contents. One of the overflows was not a flex problem at all: admin styles its fields
+  by listing input types, and `email` and `tel` were not on the list — and a type the
+  list does not name gets nothing, no width, no box-sizing, no font. "Email (used to log
+  in)" on the Create Login form was a raw browser control in Arial at its own default
+  width, 41px outside the form group it sits in, looking like a field from a different
+  page because in styling terms it was one. The customer's phone field on the ordering
+  page was the same story with a hand-rolled inline style that had no box-sizing, so
+  `width: 100%` plus 12px of padding hung it 26px outside its step at every width.
+  The other axis is in the same suite and fails differently: a box that clips vertically
+  does not push anything over an edge where you would notice, it stops drawing. The
+  till's split-bill card did that — on a 320x568 screen its pinned head and foot alone
+  came to 580px in 550px of room, so `overflow: hidden` threw the last 30px away and ✖
+  CANCEL sat at 596, off the bottom of a modal with no way to close it and nothing to
+  scroll. So the second check walks every control anyone is meant to press and asks
+  whether a clipping ancestor with more content than room has put it out of reach,
+  counting a control that is PARTLY under the lid: CANCEL began 30px above the edge and
+  ended 16px below it, and a check that asked whether the whole button had fallen off
+  would have watched the bug go past.
+- **the mark on the category you are in** — the till's category strip lost its highlight
+  again, in a way the on-states suite above could not see: nothing about the class
+  stopped being visible, the class stopped being there. Tapping a chip marks it and
+  starts a smooth scroll, and the spy that keeps the mark in step with scrolling is
+  locked out for 900ms so it does not fight that animation. Separately, any change to
+  the menu re-renders it, and the render rebuilds every chip from scratch — leaving
+  `posSpy()` to put the mark back, which inside those 900ms is the one thing it will not
+  do. A render landing in that window cleared the highlight and nothing restored it
+  until the next scroll: tap BEVERAGES, and the rule underneath it appears and then
+  quietly goes out. The window is not narrow either — `renderPOSMenu` runs on every menu
+  edit, every stock toggle, every reorder and every reconnect, all of which happen while
+  the till is open, next to the iPad the menu is edited on. The render restores what it
+  just painted over now, and the spy still has the last word on the next scroll. The
+  suite drives the page's own renderer and the page's own jump handler and asks the
+  strip what it is showing, at the moment the two used to collide.
 - **the connection, said out loud** — every device here is on café wifi: two tills, two
   kitchen boards, the stock tablet, and a customer's phone at a table. Not one page had
   a line about losing that connection — no listener, nothing, on any of the seven. The
@@ -356,6 +438,18 @@ costs money:
   stops the pulse, which leaves a cook with colour alone — the case WCAG 1.4.1 exists
   for, and also just hard to read on a tablet across a kitchen, under glare, with a red
   tint at 15% over brown. The elapsed time now leads with the word.
+  The colour half was still wrong for a long time after that. `rgba(255,77,77,0.15)` is
+  a PALE red: it lifted the card's background from 120,94,70 to 158,105,81, so becoming
+  urgent cost the ticket contrast on every line it carries — and the elapsed time on top
+  of it was `#ff6b6b`, which against that lifted background measures 1.65:1. "LATE ·
+  22m / ~8m" was the least legible text on the board, on the only ticket anyone needed
+  to read at a glance. The wash is a dark red now, same hue and same alarm, and the
+  elapsed time is white — the rule this repo already reached for `#login-error`: on this
+  palette nothing tinted towards red clears AA, so the red is carried by the border, the
+  wash and the pulse, and the text is simply readable. The notes line went the same way
+  and for a larger reason: `#ffcc00` on its own tinted background is 3.41:1, and "no
+  onion", "nut allergy", "extra hot" is the one thing on a ticket that has to be read
+  exactly. White text, and the yellow is the rule down its left edge.
 - **the keypad a number asks for** — nothing in this café has a keyboard, so the keyboard
   a field raises IS its input method. `type="number"` alone does not settle that: on iOS
   it brings up the numbers-and-punctuation layout, small keys among symbols, rather than

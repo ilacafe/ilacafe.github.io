@@ -188,7 +188,23 @@
         #login-overlay.hidden { display: none; }
         #login-box { width: 100%; max-width: 320px; text-align: center; }
         #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
-        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.25); color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        /* THE ONLY LABEL THESE TWO FIELDS HAVE, AND IT WAS INVISIBLE
+           There is no <label> in the sign-in box on purpose — the form lives in a
+           <template> so iOS cannot find a password field on a till that is already
+           signed in — so the placeholder is the whole of what a sighted person has to
+           go on. Nothing declared a placeholder colour, which left the browser's own:
+           #757575, on #8D6E52, which measures 1.02:1. Not dim. The same colour as the
+           background, to two decimal places. Staff were looking at two empty boxes and
+           guessing which one took the email.
+
+           A placeholder has to be quieter than what you type into it, and on this brown
+           there is no quieter white that is still legible — white at 0.75 over the page
+           is 3.41:1. So the field gets a floor of its own instead: darkening it lowers
+           the background under both, which buys the hint back its contrast (4.92:1) and
+           leaves the value you type at 7.24:1, still plainly the louder of the two. The
+           same trade the rest of the app makes with chips. */
+        #login-box input::placeholder { color: rgba(255,255,255,0.75); opacity: 1; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
            #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
@@ -245,13 +261,15 @@
             .rail-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.25); font-weight: 700; font-size: 1.25rem; }
             .rail-eta { font-size: 0.78rem; margin-top: 6px; }
             .pane-cart .table-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0; }
-            #cart-banner { display: none; }
-            /* The strip's two-pane override lives beside its own rule below, not here:
-               this block comes FIRST in the sheet, so at equal specificity every
-               declaration in it loses to the .cat-strip rule further down. A `top:
+            /* The two-pane overrides for .cat-strip and #cart-banner live beside their own
+               rules below, not here: this block comes FIRST in the sheet, so at equal
+               specificity every declaration in it loses to the rule further down. A `top:
                env(safe-area-inset-top)` sat here doing nothing for exactly that reason —
                it only looked like it worked because the rule that beat it set the same
-               value. */
+               value. `#cart-banner { display: none }` sat here too and was doing nothing
+               at all: the banner's own rule sets `display: flex`, so on a tablet till the
+               white checkout bar slid up across the bottom of the menu even though the
+               side rail was already showing the same total and the same SEND ORDER. */
         }
         header { text-align: center; margin-bottom: 25px; }
         /* A LOGO WIDER THAN THE PHONE IS A PAGE THAT SLIDES SIDEWAYS
@@ -419,7 +437,17 @@
            names short enough never to reach the floor. Letting the track shrink below
            its content wraps the name instead, which is what a 320px screen wants. */
         .coffee-header { display: grid; grid-template-columns: minmax(0, 1fr) 76px 76px; column-gap: 10px; font-weight: bold; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
-        .coffee-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px 76px; column-gap: 10px; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .coffee-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px 76px; column-gap: 10px; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; overflow-wrap: break-word; }
+        /* AND THE WRAP THAT minmax(0, …) WAS RELYING ON
+           Letting the track shrink below its content only wraps the name if the name has
+           somewhere to wrap. At 320px the two price columns and their gaps take 172 of
+           the 248 a row has, leaving 76 — and "Cappuccino" is 93px of unbreakable word,
+           so it did not wrap, it ran straight over the Reg price beside it. The columns
+           cannot give way: they are 76px because .swap-container asks for 76px, and both
+           grids have to keep the same tracks or REG stops naming the column under it,
+           which is the bug the note above exists about. So the name breaks instead. It is
+           only ever reached on a name too long for the space, and a broken word is a
+           better answer than a name written across a price. */
         
         .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
         
@@ -454,6 +482,12 @@
 
         #cart-banner { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--brand-text); color: var(--brand-bg); padding: 15px 20px calc(15px + env(safe-area-inset-bottom)); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(0,0,0,0.1); transform: translateY(100%); transition: transform 0.3s ease; z-index: 1000; }
         #cart-banner.visible { transform: translateY(0); }
+        /* AND IT IS GONE ONCE THERE ARE TWO PANES — see the note in the media block above.
+           The rail is the cart on a tablet: it carries the running total, the table grid
+           and SEND ORDER, all of it in view without covering anything. A second copy of
+           that pinned across the bottom of the screen is 78px of menu the cashier cannot
+           reach, for no information they did not already have. */
+        @media (min-width: 900px) { #cart-banner { display: none; } }
         .cart-info { display: flex; flex-direction: column; cursor: pointer; }
         .cart-total { font-weight: 700; font-size: 1.1rem; }
         /* Brown on the white banner, same 4.68:1 knife-edge as white on brown, so
@@ -496,7 +530,12 @@
            itself is in the click handler, not here — this is only the affordance. */
         #live-menu-container.menu-provisional .swap-container,
         #live-menu-container.menu-provisional .add-btn { }
-        #provisional-note { display: none; text-align: center; font-size: 0.8rem; opacity: 0.75;
+        /* "These prices came off a cache" is a warning about money, so it is read at full
+           strength. At opacity 0.75 it was 3.36:1 — visible, and under AA, which is the
+           worst state for the one line that explains why a total might be wrong. It stays
+           out of the way by being small, centred and only present when it has something to
+           say (see speakProvisional), not by being faint. */
+        #provisional-note { display: none; text-align: center; font-size: 0.8rem;
             padding: 6px 0 2px; letter-spacing: 0.5px; }
         /* Shown only once it has something to explain — see speakProvisional(). The
            note used to appear the instant the cached menu was drawn, which meant a
@@ -533,7 +572,23 @@
            stay put, exactly ONE region scrolls. Fixes the nested-scroller problem without the
            crude alternative of letting the whole modal grow a mile long and pushing the buttons
            off the bottom. */
-        .modal-content.modal-stack { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 14px; }
+        /* `hidden auto` AND NOT `hidden`
+           The stack's deal is that the head and the foot are pinned and .modal-scroll in
+           between them takes whatever is left, so the card never needs to scroll itself.
+           That holds right up until the head and the foot alone are taller than the card:
+           .modal-scroll shrinks to 0, there is nothing left to give, and `overflow:
+           hidden` then throws away the remainder in silence. On a 320x568 screen the
+           split-bill card came out 580px tall in 550px of room and ✖ CANCEL sat at 596 —
+           off the bottom of a modal with no way to close it and no way to scroll to the
+           thing that closes it.
+           A second scroller is normally the wrong answer here — nesting two on iOS traps
+           the touch between them — but this one can only ever become scrollable in the
+           case where the alternative is content nobody can reach: while .modal-scroll has
+           any room at all, the flex layout means this box has nothing to scroll. The x
+           axis stays hidden, which is what `overflow: hidden` was doing for it.
+           body.short-viewport below is still the answer for the keyboard, which is a
+           bigger change than this and wants the card to be one scroller from the top. */
+        .modal-content.modal-stack { display: flex; flex-direction: column; overflow: hidden auto; padding-bottom: 14px; }
         /* When the keyboard is up there isn't room for a fixed head AND foot, so the card would
            clip its own footer with nothing to scroll. Below that height it becomes one scroller
            again, which keeps CANCEL and the pay buttons reachable. */
@@ -552,8 +607,16 @@
         .stat-row .val { font-size: 1.5rem; font-weight: 700; line-height: 1.15; white-space: nowrap; }
         .section-label { text-align: left; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 1.5px; margin: 2px 0 6px; }
                 
-        .remark-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
-        .remark-input::placeholder { color: rgba(255,255,255,0.4); }
+        /* A HINT HAS TO BE QUIETER THAN THE VALUE AND STILL LEGIBLE, AND ON THIS BROWN
+           IT CANNOT BE BOTH UNAIDED.
+           White at 0.4 over the page is 2.04:1, so every placeholder in these modals was
+           below the line — including the ones that carry a format ("10-digit number") or
+           an amount. Dimming further is not available and dimming less stops reading as a
+           hint, so the field is darkened instead: the same move the app makes with chips.
+           Over rgba(0,0,0,0.25) the hint comes to 4.92:1 and what you type stays at
+           7.24:1, so the hierarchy is intact and both are readable. */
+        .remark-input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(0,0,0,0.25); color: white; display: block; box-sizing: border-box; outline: none;}
+        .remark-input::placeholder { color: rgba(255,255,255,0.75); opacity: 1; }
         
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         .choice-btn { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; padding: 12px 5px; border-radius: 6px; font-family: 'Quicksand', sans-serif; font-size: 0.9rem; text-transform: uppercase; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1 1 0; min-width: 0;}
@@ -563,6 +626,9 @@
         .table-btn { background-color: transparent; color: var(--brand-text); border: 1px solid rgba(255,255,255,0.4); padding: 15px 0; border-radius: 6px; font-weight: bold; font-size: 1.1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         .table-btn { position: relative; line-height: 1.1; }
         .table-btn.occupied { background-color: #ffffff; color: #8D6E52; border: none;}
+        /* A slot with no bill on it. Its own rule rather than an inline opacity, for the
+           same reason as .btn:disabled below: the box recedes, the number does not. */
+        .table-btn-empty { border-style: dashed; border-color: rgba(255,255,255,0.22); cursor: default; }
         .table-sub { display: block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0; margin-top: 1px; }
         @media (max-width: 400px) {
             .modal-content { padding: 20px 16px; }
@@ -590,6 +656,18 @@
         .btn { padding: 12px 14px; min-height: 44px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1 1 0; min-width: 0; text-transform: uppercase; letter-spacing: 1px; border: none; white-space: nowrap; }
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
+        /* WHAT A DISABLED BUTTON LOOKS LIKE HERE
+           Three places used to set opacity on one inline — 0.4 on the split pay buttons,
+           0.45 on Accept — which put their labels at about 2:1 and left a cashier reading
+           a blank lozenge and guessing what it would have done. On this brown a dimmed
+           label is an unreadable label, so the fill and the border carry the state and the
+           text stays white: the button plainly cannot be pressed, and it still says what
+           it is. Applies wherever a button is genuinely disabled; :disabled is set in the
+           same line of JS that used to set the opacity. */
+        .btn:disabled, .choice-btn:disabled, .checkout-btn:disabled {
+            background-color: transparent; border: 1px dashed rgba(255,255,255,0.3);
+            color: var(--brand-text); cursor: not-allowed; box-shadow: none;
+        }
         .btn-dark { background-color: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); }
 
         /* Staff-facing contact affordances on a web order card. The number was already being
@@ -630,8 +708,8 @@
         .split-chip:active, .split-chip.selected { background: var(--brand-text); color: var(--brand-bg); border-color: var(--brand-text); }
         /* 16px minimum: anything smaller and iOS zooms the entire POS in when the box is tapped,
            which happens on every single share of a split bill. */
-        .split-amt { width: 80px; flex-shrink: 0; padding: 8px; min-height: 44px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 16px; font-weight: bold; text-align: right; outline: none; box-sizing: border-box; }
-        .split-amt::placeholder { color: rgba(255,255,255,0.35); font-weight: normal; }
+        .split-amt { width: 80px; flex-shrink: 0; padding: 8px; min-height: 44px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.25); color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 16px; font-weight: bold; text-align: right; outline: none; box-sizing: border-box; }
+        .split-amt::placeholder { color: rgba(255,255,255,0.75); font-weight: normal; opacity: 1; }
         .split-paid { }
 
         .staff-reveal { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 14px 16px; min-height: 44px; margin-top: 6px; cursor: pointer; }
@@ -668,7 +746,7 @@
         .qr-wait { width: 160px; height: 160px; margin: 16px auto 0; border-radius: 8px; display: none;
                    align-items: center; justify-content: center; text-align: center; padding: 12px;
                    box-sizing: border-box; border: 1px dashed rgba(255,255,255,0.35);
-                   font-size: 0.85rem; opacity: 0.75; line-height: 1.4; cursor: default; }
+                   font-size: 0.85rem; line-height: 1.4; cursor: default; }
         .qr-wait.qr-err { border-color: rgba(255,150,150,0.6); color: #ffb3b3; opacity: 1; cursor: pointer; }
 
         /* NO inner scroller. This sits inside .modal-content, which already scrolls — nesting two
@@ -1101,7 +1179,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-15.1"></script>
+    <script src="/build-check.js" data-build="2026-09-19.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1716,7 +1794,12 @@
                 let count = Object.keys(window.pendingWebOrders).length;
                 let countEl = document.getElementById('web-orders-count');
                 countEl.innerText = count;
-                countEl.style.opacity = count > 0 ? "1" : "0.5";
+                // NOT DIMMED WHEN IT READS ZERO. It sat at opacity 0.5 — 2.39:1 on this
+                // brown — so the one number that says "no web orders are waiting" was the
+                // one number on the dashboard nobody could read, and a cashier glancing at
+                // the bar could not tell zero from a stat that had failed to load. The
+                // attention state is the pulse below and the count itself; neither needs
+                // the quiet state to be illegible to be legible by comparison.
                 let dashStat = document.getElementById('web-dash-stat');
                 if (count > 0) { if (dashStat) dashStat.classList.add('pulse-alert'); }
                 else { if (dashStat) dashStat.classList.remove('pulse-alert'); }
@@ -2235,7 +2318,7 @@
                     // visible before a thumb reaches it. The way past it sits underneath.
                     const held = o.orderType !== 'Dine-in' && amt == null && !attested;
                     const acc = document.getElementById('acc-' + id);
-                    if (acc){ acc.disabled = held; acc.style.opacity = held ? '0.45' : '1'; }
+                    if (acc){ acc.disabled = held; }
                     const pay = document.getElementById('pay-' + id);
                     if (pay) pay.innerHTML = held
                         ? '<button class="btn btn-secondary" style="width:100%; margin-top:10px;" onclick="window.markWebOrderPaid(\'' + id + '\')">Payment received \u2014 confirm by hand</button>'
@@ -3440,6 +3523,21 @@
             if (strip) strip.innerHTML = catOrder.length > 1
                 ? catOrder.map(c => `<button class="cat-chip" data-cat="${c.id}" onclick="window.jumpToCategory('${c.id}')">${escapeHTML(c.name)}</button>`).join('')
                 : '';
+            // AND THE HIGHLIGHT SURVIVES THE REBUILD
+            // The line above replaces every chip, so the mark under the category the
+            // cashier is in goes with them. Putting it back was left entirely to
+            // posSpy() below — and posSpy() refuses to do anything for 900ms after a
+            // tap, because that is how it keeps from fighting the smooth scroll it
+            // started. A render landing inside that window therefore cleared the
+            // highlight and left nothing to restore it until the next scroll: tap
+            // BEVERAGES, and the underline appears and then quietly goes out.
+            //
+            // It is not a rare window. The menu re-renders on every edit made in admin,
+            // every stock toggle, every category or item reorder and every reconnect —
+            // on a till that is open all day, next to an iPad someone is editing the
+            // menu on. So the render restores what it just painted over, and posSpy
+            // corrects it on the next scroll as it always did.
+            try { setActiveChip(activeCat || (catOrder[0] && catOrder[0].id)); } catch(e){}
             try { syncCatOffsets(); if (window.posSpy) window.posSpy(); } catch(e){}
             window.renderInlineControls();
             // Kept so the next cold start has something to draw before the SDK lands.
@@ -3448,7 +3546,15 @@
             try { if (window.ilaLastScreen) window.ilaLastScreen.save('live-menu-container'); } catch(e){}
         }
 
+        // What the strip last said the cashier was in, kept outside the DOM so a rebuild
+        // of the strip cannot lose it. `var` and not `let` on purpose: the cached-menu
+        // path can render before this line is reached, and a let would be in its
+        // temporal dead zone at that point — which is the shape of failure that takes
+        // the whole inline script down rather than just this.
+        var activeCat = null;
         function setActiveChip(id){
+            if (!id) return;
+            activeCat = id;
             document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-cat') === id));
         }
         // The line the spy measures against, and the offset the jump lands on, must be the SAME
@@ -3937,7 +4043,11 @@
                 const due = t ? Math.max(0, (parseFloat(t.total) || 0) - (parseFloat(t.paid) || 0)) : 0;
                 const sub = t ? `<span class="table-sub">\u20b9${Math.round(due || (parseFloat(t.total) || 0))}</span>` : '';
                 if (mode === 'bill' && !t){
-                    html += `<button class="table-btn" disabled style="opacity:0.28;">${i}</button>`;
+                    // Inert, and still a table number you can read. At opacity 0.28 it was
+                    // 1.67:1, so the empty slots were blank boxes and the grid stopped
+                    // reading as tables 1-10 at all — you could not tell which square was
+                    // table 7 without counting. The class dims the BOX, not the numeral.
+                    html += `<button class="table-btn table-btn-empty" disabled>${i}</button>`;
                 } else {
                     html += `<button class="table-btn ${occ}" onclick="${fnName}('${i}')">${i}${sub}</button>`;
                 }
@@ -4324,7 +4434,7 @@
             document.getElementById('split-share-total').innerText = Math.round(share);
             const btnU = document.getElementById('split-pay-upi'), btnC = document.getElementById('split-pay-cash');
             const ok = share > 0;
-            [btnU, btnC].forEach(b => { if (b){ b.disabled = !ok; b.style.opacity = ok ? '1' : '0.4'; } });
+            [btnU, btnC].forEach(b => { if (b){ b.disabled = !ok; } });
             const note = document.getElementById('split-alloc-note');
             const names = Object.keys(window.splitSel);
             if (names.length) note.innerHTML = 'Covers: ' + escapeHTML(names.map(n => n + ' \u20b9' + Math.round(window.splitSel[n])).join(', '));

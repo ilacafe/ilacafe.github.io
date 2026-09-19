@@ -161,6 +161,9 @@ const AUDIT = () => {
 
 const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
                'barista.html', 'chef.html', 'inventory.html'];
+// Loaded by every page above, and every one of them paints text the same way these
+// do. dialogs.js was dimming a disabled control's own value to 3.24:1.
+const SHARED = ['dialogs.js', 'connection.js', 'auth-gate.js', 'qr.js', 'pin-mask.js', 'look2.js'];
 
 (async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -239,34 +242,162 @@ const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
   // where text is still visible but no longer readable is a bug wherever it appears.
   // A press is the exception — :active and :hover last a moment and nobody reads
   // during one — and so is the footer's separator glyph, which is marked aria-hidden.
+  //
+  // THIS SCAN USED TO BE LINE-SHAPED, AND THREE KINDS OF DIMMING WALKED PAST IT.
+  // It asked for a whole rule on one line, or for the word `style=` somewhere on the
+  // line. That is most of how this codebase writes CSS and none of how it writes the
+  // rest, so what it could not see was:
+  //
+  //   a rule broken over two lines   #provisional-note { …\n  … opacity: 0.75 }   3.36:1
+  //   an opacity set from JS         countEl.style.opacity = count ? '1' : '0.5'   2.39:1
+  //   a style string built in JS     statusStyle = inStock ? '' : 'opacity: 0.5;'  2.80:1
+  //
+  // All three shipped. The first hid the warning that says the prices on screen came
+  // off a cache; the second hid the web-order count whenever it read zero; the third
+  // took a hidden menu row in admin — name, price and all three of its buttons —
+  // down with it. So the scan is structural now: every rule in every <style> block,
+  // however many lines it spans, and every opacity a script assigns or writes into a
+  // style string. The shared scripts are read too, because one of them was doing it.
   {
-    const RULE = /^\s*([^{}\n]+)\{([^{}\n]*)\}\s*$/;
     const OPACITY = /opacity:\s*(0\.\d+)/g;
+    const JS_OPACITY = /\.style\.opacity\s*=[^;\n]*?['"](0\.\d+)['"]/g;
     const ALLOWED = /:active|:hover|\.footer-divider/;
+    // A keyframe step is not a selector and a pulse is not something anyone reads
+    // mid-cycle: `50% { opacity: 0.4 }` is an animation, not dimmed text.
+    const KEYFRAME_STEP = /^\s*(?:from|to|-?[\d.]+%)(?:\s*,\s*(?:from|to|-?[\d.]+%))*\s*$/;
+    // Below 0.3 is something deliberately painted to almost nothing; above 0.95
+    // changes nothing. Between them is text you can see and cannot read.
+    const UNREADABLE = (v) => v >= 0.3 && v <= 0.95;
 
     const offenders = [];
-    for (const page of PAGES) {
+    for (const page of [...PAGES, ...SHARED]) {
       const src = fs.readFileSync(path.join(ROOT, page), 'utf8');
-      for (const line of src.split('\n')) {
-        const m = RULE.exec(line);
-        const inStyleAttr = /style\s*=/.test(line);
-        if (!m && !inStyleAttr) continue;
-        if (m && ALLOWED.test(m[1])) continue;
-        for (const o of line.matchAll(OPACITY)) {
-          const v = parseFloat(o[1]);
-          // Below 0.3 is something deliberately painted to almost nothing; above
-          // 0.95 changes nothing. Between them is text you can see and cannot read.
-          if (v >= 0.3 && v <= 0.95) {
-            offenders.push(page + ': ' + line.trim().slice(0, 90));
-            break;
+      const styles = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[1]);
+
+      // ---- every CSS rule, whatever shape it is written in
+      for (const css of styles) {
+        // Comments first: these sheets explain themselves at length, and the prose
+        // quotes the very values this is looking for.
+        for (const chunk of css.replace(/\/\*[\s\S]*?\*\//g, '').split('}')) {
+          const brace = chunk.lastIndexOf('{');
+          if (brace < 0) continue;
+          const before = chunk.slice(0, brace);
+          const sel = before.slice(before.lastIndexOf('{') + 1).replace(/\s+/g, ' ').trim();
+          if (ALLOWED.test(sel) || KEYFRAME_STEP.test(sel)) continue;
+          for (const o of chunk.slice(brace + 1).matchAll(OPACITY)) {
+            if (UNREADABLE(parseFloat(o[1]))) {
+              offenders.push(page + ': ' + sel.slice(0, 60) + ' { … opacity: ' + o[1] + ' }');
+              break;
+            }
           }
         }
+      }
+
+      // ---- and everything outside the sheet: style attributes, style strings, and
+      //      element.style.opacity, all of which end up painting the same text.
+      const rest = styles.reduce((acc, css) => acc.replace(css, ''), src);
+      for (const line of rest.split('\n')) {
+        const t = line.trim();
+        if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) continue;
+        if (ALLOWED.test(t)) continue;
+        const hit = [...t.matchAll(JS_OPACITY)].concat(
+                      /style\s*=|opacity\s*:/.test(t) ? [...t.matchAll(OPACITY)] : [])
+                    .find(m => UNREADABLE(parseFloat(m[1])));
+        if (hit) offenders.push(page + ': ' + t.slice(0, 90));
       }
     }
     check('and nothing anywhere still dims text into the unreadable band',
           offenders.length === 0,
           offenders.length + ' left\n         ' + offenders.join('\n         '));
+    note('rules over several lines, style strings and element.style.opacity as well —');
+    note('all three of those shipped dimmed text past the version that read lines');
     note('the rows built from data never render here — this is how they are held to it');
+  }
+
+  // --------------------------------------------- the hint inside a field is text too
+  // Nothing declared a ::placeholder colour on the sign-in fields, so they got the
+  // browser's: #757575, which on #8D6E52 is 1.02:1. The same colour as the background
+  // to two decimal places — on the two fields whose placeholder is their only label,
+  // because the form lives in a <template> and carries no <label> at all. Every page
+  // that asks for a sign-in had it.
+  //
+  // So: no field may be left to the UA's idea of a placeholder, and the colour it is
+  // given has to clear AA against the field it is painted in. Asked of the browser,
+  // because what a placeholder resolves to is a pseudo-element on a background that
+  // may itself be semi-transparent.
+  {
+    const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1024, height: 900 } });
+    await ctx.addInitScript(STUB);
+    const bad = [];
+    for (const page of PAGES) {
+      const pg = await ctx.newPage();
+      pg.on('pageerror', e => threw.push(page + ': ' + String(e.message || e).split('\n')[0]));
+      await pg.route('**/*', r => r.request().url().startsWith(base) ? r.continue() : r.abort());
+      await pg.goto(base + '/' + page, { waitUntil: 'domcontentloaded' });
+      await pg.waitForTimeout(400);
+      const found = await pg.evaluate(() => {
+        const tpl = document.getElementById('login-box-template');
+        const ov = document.getElementById('login-overlay');
+        if (tpl && ov) { ov.classList.remove('hidden'); ov.appendChild(tpl.content.cloneNode(true)); }
+        document.querySelectorAll('details').forEach(d => { d.open = true; });
+        // Most of these fields live in a modal, and a closed modal is opacity:0 — which
+        // would make every placeholder in it measure against the page rather than
+        // against the field it is actually painted in, and quietly report the wrong
+        // number. This is what they look like when the modal is up, which is the only
+        // time anybody sees them.
+        document.querySelectorAll('*').forEach(el => {
+          if (getComputedStyle(el).opacity === '0') {
+            // transition first. A modal fades in over 0.3s, and getComputedStyle
+            // during a transition reports where the animation has got to — so
+            // setting opacity and reading it back in the same tick reads 0 and
+            // measures the placeholder against the page instead of the field.
+            el.style.transition = 'none';
+            el.style.opacity = '1';
+          }
+        });
+
+        const parse = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c); if (!m) return null;
+          const p = m[1].split(',').map(s => parseFloat(s.trim()));
+          return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+        const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+        const L = (c) => 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+        const blend = (f, b, a) => ({ r: f.r * a + b.r * (1 - a), g: f.g * a + b.g * (1 - a), b: f.b * a + b.b * (1 - a) });
+        const ratio = (a, b) => { const hi = Math.max(a, b), lo = Math.min(a, b); return (hi + 0.05) / (lo + 0.05); };
+        // The field's own background over everything painted behind it.
+        const under = (el) => {
+          const chain = [];
+          for (let n = el; n && n !== document.documentElement; n = n.parentElement) chain.push(n);
+          chain.reverse();
+          let bg = { r: 255, g: 255, b: 255 }, cum = 1;
+          for (const n of chain) {
+            const cs = getComputedStyle(n);
+            cum *= parseFloat(cs.opacity);
+            const c = parse(cs.backgroundColor);
+            if (c && c.a > 0) bg = blend(c, bg, Math.min(c.a * cum, 1));
+          }
+          return bg;
+        };
+
+        const out = [];
+        for (const el of document.querySelectorAll('[placeholder]')) {
+          if (!el.getClientRects().length) continue;
+          const ph = parse(getComputedStyle(el, '::placeholder').color);
+          if (!ph) continue;
+          const bg = under(el);
+          const r = ratio(L(blend(ph, bg, Math.min(ph.a, 1))), L(bg));
+          const name = el.tagName.toLowerCase() + (el.id ? '#' + el.id : '.' + el.className);
+          if (r < 4.5) out.push(name + ' ' + (+r.toFixed(2)) + ':1');
+        }
+        return out;
+      });
+      if (found.length) bad.push(page + ' → ' + [...new Set(found)].join(', '));
+      await pg.close();
+    }
+    check('every placeholder is legible in the field it sits in', bad.length === 0,
+          bad.join('\n         '));
+    note('left to the browser a placeholder is #757575, which on this brown is 1.02:1');
+    note('and on the sign-in box the placeholder IS the label — there is no <label>');
+    await ctx.close();
   }
 
   note('4.5:1 for body text, 3:1 for large (24px, or 18.66px bold) — WCAG 2.1 AA');

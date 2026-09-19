@@ -34,6 +34,8 @@ const suites = [
   'cart-guards-browser.test.js',
   'focus-ring-browser.test.js',
   'contrast-browser.test.js',
+  'inside-parent-browser.test.js',
+  'cat-strip-browser.test.js',
   'reflow-browser.test.js',
   'state-visible-browser.test.js',
   'connection-browser.test.js',

@@ -450,7 +450,12 @@
             'min-height:44px;padding:12px 14px;border-radius:6px;box-sizing:border-box;' +
             'background:transparent;color:' + FG + ';border:1px solid rgba(255,255,255,0.4);' +
             'font-family:Quicksand,sans-serif;font-size:0.95rem;font-weight:500;' +
-            'text-align:left;cursor:pointer;width:100%;' +
+            // min-width:0 because this replaces controls that sit in flex rows, where a
+            // flex item refuses by default to go narrower than its own text: the range
+            // picker on analytics, reading "No sales in this range", held the row open
+            // 8px past the card it is in. The label span already truncates; this is what
+            // lets it.
+            'text-align:left;cursor:pointer;width:100%;min-width:0;' +
             (st.flex ? 'flex:' + st.flex + ';' : '') +
             (st.minWidth ? 'min-width:' + st.minWidth + ';' : '') +
             (st.margin ? 'margin:' + st.margin + ';' : '');
@@ -467,7 +472,7 @@
         btn.__ilaText = text;
         btn.textContent = '';
         var t = document.createElement('span');
-        t.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        t.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0';
         t.textContent = text;
         var c = document.createElement('span');
         // NOT opacity. 0.7 white on this brown is 3.92:1 and the contrast suite caught
@@ -509,7 +514,14 @@
             var o = sel.options[sel.selectedIndex];
             paint(btn, o ? o.text : '', '▾');
             btn.disabled = sel.disabled;
-            btn.style.opacity = sel.disabled ? '0.5' : '1';
+            // A DISABLED FACE STILL HAS TO SAY WHAT IT IS SET TO
+            // opacity 0.5 put the value at 3.24:1 on the brand brown, and the one place
+            // this happens is the role dropdown on your OWN account row — where the value
+            // it is showing you ("Admin") is the whole reason the row is there. So the
+            // border goes quiet and the cursor says inert; the text stays readable.
+            btn.style.borderStyle = sel.disabled ? 'dashed' : 'solid';
+            btn.style.borderColor = sel.disabled ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.4)';
+            btn.style.cursor = sel.disabled ? 'default' : 'pointer';
             btn.setAttribute('aria-label', title + ': ' + (o ? o.text : ''));
         };
 

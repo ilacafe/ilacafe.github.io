@@ -193,7 +193,23 @@
         #login-overlay.hidden { display: none; }
         #login-box { width: 100%; max-width: 320px; text-align: center; }
         #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
-        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; outline: none; }
+        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.25); color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        /* THE ONLY LABEL THESE TWO FIELDS HAVE, AND IT WAS INVISIBLE
+           There is no <label> in the sign-in box on purpose — the form lives in a
+           <template> so iOS cannot find a password field on a till that is already
+           signed in — so the placeholder is the whole of what a sighted person has to
+           go on. Nothing declared a placeholder colour, which left the browser's own:
+           #757575, on #8D6E52, which measures 1.02:1. Not dim. The same colour as the
+           background, to two decimal places. Staff were looking at two empty boxes and
+           guessing which one took the email.
+
+           A placeholder has to be quieter than what you type into it, and on this brown
+           there is no quieter white that is still legible — white at 0.75 over the page
+           is 3.41:1. So the field gets a floor of its own instead: darkening it lowers
+           the background under both, which buys the hint back its contrast (4.92:1) and
+           leaves the value you type at 7.24:1, still plainly the louder of the two. The
+           same trade the rest of the app makes with chips. */
+        #login-box input::placeholder { color: rgba(255,255,255,0.75); opacity: 1; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
            #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
@@ -349,7 +365,18 @@
         .kpi-val { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
         .kpi-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 6px; }
         .kpi-cmp { font-size: 0.72rem; font-weight: 700; margin-top: 4px; }
-        .up { color: #6cd07f; } .down { color: #ff8a80; } .flat { opacity: 0.5; }
+        /* .flat is the one that carries WORDS — "no prior data", "vs —" — where .up and
+           .down carry an arrow and a percentage. At opacity 0.5 it read 2.61:1, so the
+           only one of the three that has something to say in English was the one that
+           could not be read, on the same card comparison block as the note above about
+           labels. It recedes the way everything else here recedes: it is the smallest,
+           lightest thing in the tile already, and it is not also faded. */
+        .up { color: #6cd07f; } .down { color: #ff8a80; }
+        /* .kpi-cmp.flat and not .flat: .kpi-cmp sets font-weight further down the sheet
+           at the same specificity, so a bare .flat rule here would lose to it and do
+           nothing at all — which is how the opacity came to be the only thing this
+           class did. */
+        .kpi-cmp.flat { font-weight: 500; }
 
         .chart-full { background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; height: 250px; position: relative; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
@@ -394,7 +421,10 @@
            the document grew 1150px. Measured, not assumed: the win here is entirely
            this one table, and so is the rule. */
         .scroll.bulk { content-visibility: auto; contain-intrinsic-size: auto 460px; }
-        select, input[type="text"] { padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; }
+        select, input[type="text"], input[type="search"], input[type="date"] { padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.9); color: #333; font-family: inherit; font-size: 0.85rem; box-sizing: border-box; max-width: 100%; }
+        /* The browser's own placeholder is #757575, which on this near-white field is
+           4.08:1 — under AA on the line telling you what the search box matches. */
+        input::placeholder { color: #5a5a5a; opacity: 1; }
         .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
         .muted { text-align: center; padding: 20px 0; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; }
         .pull-right { margin-left: auto; }
@@ -680,7 +710,12 @@
         <div class="card">
             <h2>Item Drill-down</h2>
             <div class="controls">
-                <select id="drill-select" aria-label="Item" onchange="window.renderDrill()" style="min-width:220px;"><option value="">Loading…</option></select>
+                <!-- min-width: min(100%, 220px) and not a flat 220px. A flat floor is a
+                     floor the row cannot get under: at 320px this control, and the long
+                     item names it shows, held the range row 8px outside the card it sits
+                     in. min() keeps the 220px it wants wherever there is 220px to have,
+                     and lets it fall back to the row on a screen that has less. -->
+                <select id="drill-select" aria-label="Item" onchange="window.renderDrill()" style="min-width:min(100%, 220px);"><option value="">Loading…</option></select>
                 <div id="drill-stats" style="font-size:0.85rem; "></div>
             </div>
             <div class="chart-full" style="height:230px;"><canvas id="chart-drill"></canvas></div>
@@ -771,7 +806,7 @@
     <!-- Not deferred, and not async: build-check.js reads document.currentScript to
          find its own data-build, and that is null for both. It would run and never
          fire. build-freshness.test.js holds this for every stamped page. -->
-    <script src="/build-check.js" data-build="2026-09-15.1"></script>
+    <script src="/build-check.js" data-build="2026-09-19.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>

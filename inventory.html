@@ -182,7 +182,23 @@
         #login-overlay.hidden { display: none; }
         #login-box { width: 100%; max-width: 320px; text-align: center; }
         #login-box h2 { letter-spacing: 3px; text-transform: uppercase; font-weight: 700; margin-bottom: 25px; }
-        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: transparent; color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        #login-box input { width: 100%; padding: 14px; margin: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.25); color: #fff; font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; outline: none; }
+        /* THE ONLY LABEL THESE TWO FIELDS HAVE, AND IT WAS INVISIBLE
+           There is no <label> in the sign-in box on purpose — the form lives in a
+           <template> so iOS cannot find a password field on a till that is already
+           signed in — so the placeholder is the whole of what a sighted person has to
+           go on. Nothing declared a placeholder colour, which left the browser's own:
+           #757575, on #8D6E52, which measures 1.02:1. Not dim. The same colour as the
+           background, to two decimal places. Staff were looking at two empty boxes and
+           guessing which one took the email.
+
+           A placeholder has to be quieter than what you type into it, and on this brown
+           there is no quieter white that is still legible — white at 0.75 over the page
+           is 3.41:1. So the field gets a floor of its own instead: darkening it lowers
+           the background under both, which buys the hint back its contrast (4.92:1) and
+           leaves the value you type at 7.24:1, still plainly the louder of the two. The
+           same trade the rest of the app makes with chips. */
+        #login-box input::placeholder { color: rgba(255,255,255,0.75); opacity: 1; }
         #login-box button { width: 100%; padding: 14px; margin-top: 16px; border: none; border-radius: 8px; background: #fff; color: var(--brand-bg); font-weight: 700; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Quicksand', sans-serif; }
         /* THE ONE LINE ON THIS SCREEN THAT HAS TO BE READ
            #ffcfcf on the brand brown is 3.36:1 — under AA, at full opacity, on the
@@ -296,8 +312,16 @@
         .modal-title { font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px; margin-top: 0; margin-bottom: 5px; }
         .modal-subtitle { font-size: 0.85rem; margin-bottom: 20px; font-style: italic; }
 
-        .remark-input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1.1rem; background-color: rgba(0,0,0,0.1); color: white; display: block; box-sizing: border-box; outline: none; text-align: center; font-weight: bold;}
-        .remark-input::placeholder { color: rgba(255,255,255,0.4); font-weight: normal; }
+        /* A HINT HAS TO BE QUIETER THAN THE VALUE AND STILL LEGIBLE, AND ON THIS BROWN
+           IT CANNOT BE BOTH UNAIDED.
+           White at 0.4 over the page is 2.04:1, so every placeholder in these modals was
+           below the line — including the ones that carry a format ("10-digit number") or
+           an amount. Dimming further is not available and dimming less stops reading as a
+           hint, so the field is darkened instead: the same move the app makes with chips.
+           Over rgba(0,0,0,0.25) the hint comes to 4.92:1 and what you type stays at
+           7.24:1, so the hierarchy is intact and both are readable. */
+        .remark-input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1.1rem; background-color: rgba(0,0,0,0.25); color: white; display: block; box-sizing: border-box; outline: none; text-align: center; font-weight: bold;}
+        .remark-input::placeholder { color: rgba(255,255,255,0.75); font-weight: normal; opacity: 1; }
 
         .btn-group { display: flex; gap: 10px; margin-top: 10px; }
         .btn { flex: 1; padding: 15px; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; font-family: 'Quicksand', sans-serif; text-transform: uppercase; border: none; letter-spacing: 1px;}
@@ -421,7 +445,7 @@
          open. Keep data-build in step with build.json — npm test checks it.
          The stock tablet was the one page without this: it could sit on a build
          from weeks ago with nothing on screen to say so, and nothing to tap. -->
-    <script src="/build-check.js" data-build="2026-09-15.1"></script>
+    <script src="/build-check.js" data-build="2026-09-19.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>

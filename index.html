@@ -240,7 +240,17 @@
            names short enough never to reach the floor. Letting the track shrink below
            its content wraps the name instead, which is what a 320px screen wants. */
         .coffee-header { display: grid; grid-template-columns: minmax(0, 1fr) 76px 76px; column-gap: 10px; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; border-bottom: 1px dashed rgba(255, 255, 255, 0.2); padding-bottom: 5px; }
-        .coffee-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px 76px; column-gap: 10px; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; }
+        .coffee-row { display: grid; grid-template-columns: minmax(0, 1fr) 76px 76px; column-gap: 10px; align-items: center; margin-bottom: 15px; font-size: 1.1rem; font-weight: 500; overflow-wrap: break-word; }
+        /* AND THE WRAP THAT minmax(0, …) WAS RELYING ON
+           Letting the track shrink below its content only wraps the name if the name has
+           somewhere to wrap. At 320px the two price columns and their gaps take 172 of
+           the 248 a row has, leaving 76 — and "Cappuccino" is 93px of unbreakable word,
+           so it did not wrap, it ran straight over the Reg price beside it. The columns
+           cannot give way: they are 76px because .swap-container asks for 76px, and both
+           grids have to keep the same tracks or REG stops naming the column under it,
+           which is the bug the note above exists about. So the name breaks instead. It is
+           only ever reached on a name too long for the space, and a broken word is a
+           better answer than a name written across a price. */
         
         .swap-container { display: flex; justify-content: flex-end; align-items: center; min-width: 76px; height: 32px; }
         
@@ -373,8 +383,16 @@
         }
         .modal-content h3 { margin: 0 0 18px; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 1.5px; }
         
-        .remark-input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: transparent; color: white; display: block; box-sizing: border-box; outline: none;}
-        .remark-input::placeholder { color: rgba(255,255,255,0.4); }
+        /* A HINT HAS TO BE QUIETER THAN THE VALUE AND STILL LEGIBLE, AND ON THIS BROWN
+           IT CANNOT BE BOTH UNAIDED.
+           White at 0.4 over the page is 2.04:1, so every placeholder in these modals was
+           below the line — including the ones that carry a format ("10-digit number") or
+           an amount. Dimming further is not available and dimming less stops reading as a
+           hint, so the field is darkened instead: the same move the app makes with chips.
+           Over rgba(0,0,0,0.25) the hint comes to 4.92:1 and what you type stays at
+           7.24:1, so the hierarchy is intact and both are readable. */
+        .remark-input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid rgba(255,255,255,0.4); font-family: 'Quicksand', sans-serif; font-size: 1rem; background-color: rgba(0,0,0,0.25); color: white; display: block; box-sizing: border-box; outline: none;}
+        .remark-input::placeholder { color: rgba(255,255,255,0.75); opacity: 1; }
 
         .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
         
@@ -390,6 +408,12 @@
         .btn { padding: 12px 15px; min-height: 44px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; cursor: pointer; font-family: 'Quicksand', sans-serif; flex: 1 1 0; min-width: 0; border: none; text-transform: uppercase; letter-spacing: 1px;}
         .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
         .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
+        /* WHAT A DISABLED BUTTON LOOKS LIKE HERE
+           Pay used to be dimmed to 0.5 inline while the café was closed, which reads
+           2.39:1 — a lozenge with something written on it. The fill and the border say
+           it cannot be pressed; the word stays legible, so it is still clear what is
+           being refused. */
+        .btn:disabled { background-color: transparent; border: 1px dashed rgba(255,255,255,0.3); color: var(--brand-text); cursor: not-allowed; }
         .btn-link { display: block; width: 100%; box-sizing: border-box; text-decoration: none; text-align: center; }
         
         /* 28px, and the one in the cart dialog that takes an item back off the
@@ -701,7 +725,12 @@
             <!-- STEP 1: phone number (required) -->
             <div id="pay-step-phone">
                 <label style="display:block; font-size:0.8rem;  margin-bottom:6px;">Your mobile number</label>
-                <input type="tel" id="cust-phone" aria-label="Your phone number" inputmode="numeric" maxlength="10" placeholder="10-digit number" style="width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.06); color:inherit; font-size:1rem; letter-spacing:1px;">
+                <!-- .remark-input rather than a hand-rolled inline: the inline had no
+                     box-sizing, so width:100% plus 12px of padding and a border hung 26px
+                     outside this step at every width, and no font-family, so the one field
+                     a customer types their number into was set in the browser's default
+                     face. The class carries both, and the placeholder colour with them. -->
+                <input type="tel" id="cust-phone" class="remark-input" aria-label="Your phone number" inputmode="numeric" maxlength="10" placeholder="10-digit number" style="border-radius:8px; letter-spacing:1px;">
                 <div id="phone-error" style="font-size:0.75rem; color:#ff9e9e; margin-top:6px; display:none;">Please enter a valid 10-digit Indian mobile number.</div>
                 <div id="large-order-note" style="font-size:0.78rem;  margin-top:10px; display:none; line-height:1.4;"></div>
                 <button class="btn btn-primary" style="width:100%; margin-top:14px;" onclick="window.startPayment()">Continue to payment</button>
@@ -750,7 +779,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-15.1"></script>
+    <script src="/build-check.js" data-build="2026-09-19.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1487,9 +1516,13 @@
             btnDin.classList.add('hidden'); 
 
             if(!window.storeStatus.delivery && !window.storeStatus.takeaway) {
-                scanMsg.style.display = 'block'; document.getElementById('order-type-section').style.display = 'none'; payBtn.disabled = true; payBtn.style.opacity = '0.5';
+                // disabled only. The 0.5 that used to come with it put PAY at 2.39:1 —
+                // the customer could see a button and not read what it was for, on the
+                // screen where the whole question is what happens if they press it. See
+                // .btn:disabled: the fill goes, the word stays.
+                scanMsg.style.display = 'block'; document.getElementById('order-type-section').style.display = 'none'; payBtn.disabled = true;
             } else {
-                scanMsg.style.display = 'none'; document.getElementById('order-type-section').style.display = 'block'; payBtn.disabled = false; payBtn.style.opacity = '1';
+                scanMsg.style.display = 'none'; document.getElementById('order-type-section').style.display = 'block'; payBtn.disabled = false;
                 if (window.currentOrderType === 'Delivery' && !window.storeStatus.delivery) window.setOrderType('Takeaway');
                 else if (window.currentOrderType === 'Takeaway' && !window.storeStatus.takeaway) window.setOrderType('Delivery');
                 else if (window.currentOrderType === 'Dine-in') {
