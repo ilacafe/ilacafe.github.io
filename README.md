@@ -92,15 +92,19 @@ screen reuses it when opened for the same amount — otherwise a fresh pick coul
 on another bank and the watcher's bank filter would refuse the very credit the link
 produced. Web orders use the code in the customer's own app instead.
 
-**A link's payment belongs to its table.** It is paid from wherever the customer is, so
-it lands with no QR on screen waiting for it, and every claimer matches on amount, bank
-and time — none of which can tell it from anyone else's. Left unowned, the next ₹450 QR
-on another table took Table 5's ₹450 link payment and closed as bank-verified before its
-own customer had paid. So `linkTablesFor` reserves a credit that fits an open table's
-`payLink` (amount, bank, paid after the link went out): the counter watcher and the manual
-confirm on any other table skip it, and so do the web-order sweep and the late
-reconciler. That table's own UPI screen takes it, past the usual 30-minute window. The
-reservation ends with the table.
+**A payment that fits a pay link is taken by nothing on its own.** It is paid from
+wherever the customer is, so it lands with no QR on screen waiting for it, and every
+claimer matches on amount, bank and time — none of which can say whose a ₹450 is. Left to
+the matchers, the next ₹450 QR on another table took Table 5's link payment and closed as
+bank-verified; reserved for Table 5 instead, Table 5's own screen closed on a walk-in's
+₹450 that happened to fit its link. So `linkTablesFor` marks any credit that fits an open
+table's `payLink` (amount, bank, paid after that link went out), and no watcher, manual
+confirm, web-order sweep or reconciler claims a marked credit. The UPI screen lists it
+behind **Staff** — who paid, when, whose link it fits — and one tap on **Use** claims it
+for the bill on screen, after the person at the till has asked. A link stays on the table
+until a bank-matched payment answers it (then it is removed, so a part-paid table stops
+holding later payments of that amount) or the table closes. A reminder for the same link
+keeps its first send time; a new link for a new total is added alongside the old one.
 
 `qr.js` is the encoder both pages draw with — one implementation, because a wrong
 QR is worse than a missing one: it scans, and it pays the wrong thing or nothing.

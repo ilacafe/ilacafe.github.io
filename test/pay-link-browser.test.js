@@ -273,11 +273,11 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
     {
       const { ctx, pg } = await open();
       const max = await pg.evaluate(() => parseInt(document.getElementById('checkout-phone').getAttribute('maxlength') || '0'));
-      check('the phone box has room for +91 and spaces, so a prefix is not cut off mid-number',
-            max >= 15, 'maxlength=' + max);
+      check('the phone box has room for any way of writing a number, so nothing is cut off mid-number',
+            max >= 30, 'maxlength=' + max);
       const sent = await pg.evaluate(() => {
         const out = {};
-        for (const typed of ['+91 98765 43210', '919876543210', '09876543210', '98765-43210']) {
+        for (const typed of ['+91 98765 43210', '919876543210', '09876543210', '98765-43210', '+91 98 76 54 32 10', '0091 9876543210']) {
           window.__opened = [];
           document.getElementById('checkout-phone').value = typed;
           window.sendBillPayLink();
@@ -292,11 +292,24 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
         return out;
       });
       check('+91, 91, a leading 0 and dashes all reach the same customer',
-            ['+91 98765 43210', '919876543210', '09876543210', '98765-43210'].every(k => sent[k] === 'https://wa.me/919876543210'),
+            ['+91 98765 43210', '919876543210', '09876543210', '98765-43210', '+91 98 76 54 32 10', '0091 9876543210'].every(k => sent[k] === 'https://wa.me/919876543210'),
             JSON.stringify(sent));
       check('a number that is not a 10-digit mobile is refused, not guessed at',
             ['98765432101', '1234567890', '9198765432101'].every(k => /^refused:/.test(sent[k])),
             JSON.stringify(sent));
+      const kept = await pg.evaluate(() => {
+        const out = {};
+        for (const typed of ['98765432101', '+91 98765 43210']) {
+          window.__setServer({});
+          document.getElementById('checkout-phone').value = typed;
+          archivePOSTable('5', { items: { Latte: { price: 100, qty: 1 } }, total: 100, paid: 100 }, 'Cash');
+          const s = window.__getServer(); const k = Object.keys(s).find(x => x.indexOf('pos/bills/') === 0);
+          out[typed] = k ? s[k].phone : 'no bill';
+        }
+        return out;
+      });
+      check('the number kept with the bill for Send Receipt is read the same way — a typo keeps none',
+            kept['98765432101'] === null && kept['+91 98765 43210'] === '9876543210', JSON.stringify(kept));
       await ctx.close();
     }
 
@@ -362,13 +375,14 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
       await ctx.close();
     }
 
-    // ============================================== the link's payment is its table's
+    // ============================================ a link's payment is nobody's to take
     //
-    // The customer pays from their seat. Nothing is on screen waiting for that credit, and
-    // every claimer matches on amount, bank and time — so it used to go to whoever asked
-    // first: the next ₹450 QR on any table, the web-order sweep, the late reconciler.
-    // Table 2 closed as bank-verified on Table 5's money, and Table 5's diner, who had paid,
-    // could never be verified.
+    // The customer pays from their seat, so nothing is on screen waiting for that credit,
+    // and amount, bank and time cannot say whose a ₹450 is. Left to the first ₹450 QR on
+    // another table, Table 2 closed verified on Table 5's money. Reserved for Table 5 and
+    // taken by Table 5's own screen, Table 5 closed verified on a walk-in's. So a credit that
+    // fits a link is taken by nothing on its own: the UPI screen lists it for staff, with who
+    // paid, and one deliberate tap uses it.
     const LINKED = async (pg, opts) => pg.evaluate((o) => {
       const now = Date.now();
       const t5 = { items: { Latte: { price: 150, qty: 3 } }, total: 450, paid: 0 };
@@ -379,50 +393,53 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
       window.getRandomUPI = () => 'first@okicici';
       document.getElementById('checkout-phone').value = '9876543210';
       window.sendBillPayLink();
-      window.activeTables['5'] = window.__getServer()['pos/activeTables/5'];
-      if (o.sentMinsAgo) { window.activeTables['5'].payLink.at = now - o.sentMinsAgo * 60000;
-                           window.__server['pos/activeTables/5'].payLink.at = now - o.sentMinsAgo * 60000; }
-      window.__server['payments/incoming'] = { c1: { amount: 450, at: now - o.paidMinsAgo * 60000, payer: 'LINK PAYER', bank: 'icici' } };
+      const sent = window.__server['pos/activeTables/5'];
+      const at = now - (o.sentMinsAgo || 0) * 60000;
+      sent.payLink.at = at; sent.payLink.sent.forEach(e => { e.at = at; });
+      window.activeTables['5'] = JSON.parse(JSON.stringify(sent));
+      window.__server['payments/incoming'] = { c1: { amount: 450, at: now - o.paidMinsAgo * 60000, payer: o.payer || 'LINK PAYER', bank: 'icici' } };
       return true;
     }, opts);
     const settled = (pg) => pg.evaluate(() => {
       const s = window.__getServer();
       return { claim: s['payments/claims/c1'] || null, t2: !!s['pos/activeTables/2'], t5: !!s['pos/activeTables/5'],
+               t5link: (s['pos/activeTables/5'] || {}).payLink || null,
                ledger: Object.keys(s).filter(k => k.indexOf('pos/ledgerEntries/') === 0).map(k => s[k]) };
     });
+    const offered = (pg) => pg.evaluate(() => ({
+      list: ((window._upiOffers || {}).list || []).map(o => ({ key: o.key, mine: o.mine, links: o.links })),
+      text: document.getElementById('upi-offers').textContent,
+      reveal: document.getElementById('upi-staff-reveal').textContent
+    }));
+    const openUPI = (pg, table, amount) => pg.evaluate(([t, a]) => {
+      window.checkoutTableID = t; window.getRandomUPI = () => 'other@okaxis';
+      window.payWithUPI(a == null ? null : a);
+    }, [table, amount == null ? null : amount]);
 
+    // ------------------------------------------ the link was paid; another table opens a QR
     {
       const { ctx, pg } = await open();
       await LINKED(pg, { sentMinsAgo: 5, paidMinsAgo: 3 });
-      await pg.evaluate(() => { window.checkoutTableID = '2'; window.getRandomUPI = () => 'other@okaxis'; window.payWithUPI(null); });
+      await openUPI(pg, '2');
       await sleep(1500);
       let r = await settled(pg);
       check('another table’s ₹450 QR does not take a ₹450 link payment',
             !r.claim && r.t2 && !r.ledger.some(e => /Table 2/.test(e.reason || '')), JSON.stringify(r));
-      await pg.evaluate(() => window.cancelUPI());
+      let o = await offered(pg);
+      check('but its staff panel lists it, with who paid and whose link it fits',
+            o.list.length === 1 && o.list[0].key === 'c1' && o.list[0].mine === false &&
+            /LINK PAYER/.test(o.text) && /Held for Table 5/.test(o.text), JSON.stringify(o));
+      check('and the Staff button says there is something to check', /1 to check/.test(o.reveal), o.reveal);
 
-      // the counter's own fallback, on the same other table
-      await pg.evaluate(() => { window.payWithUPI(null); window.confirmUPIPayment(); });
+      // marking Table 2 received by hand does not reach for it either
+      await pg.evaluate(() => window.confirmUPIPayment());
       await sleep(1500);
       r = await settled(pg);
       const t2Entry = r.ledger.find(e => /Table 2/.test(e.reason || ''));
       check('nor does marking that table received by hand — it books unverified and leaves the credit',
             !r.claim && !!t2Entry && t2Entry.state === 'unverified', JSON.stringify(r));
 
-      // and the late reconciler, with that unverified line sitting there
-      await pg.evaluate(() => {
-        const s = window.__getServer();
-        const map = {}; for (const k in s) if (k.indexOf('pos/ledgerEntries/') === 0) map[k.slice(18)] = s[k];
-        window.salesLedgerMap = map; window._reconCredits = s['payments/incoming'];
-        window._carryUnverified = {}; window._carryKnown = true;
-        reconcileLedgerVerification();
-      });
-      await sleep(300);
-      r = await settled(pg);
-      check('nor does the reconciler verify that line with it while Table 5’s link is out',
-            !r.claim && r.ledger.every(e => e.state !== 'verified'), JSON.stringify(r.ledger));
-
-      // and the web-order matcher
+      // the web-order matcher, with and without the link out
       const web = await pg.evaluate(() => {
         const now = Date.now();
         const order = { total: 450, upiId: 'first@okicici', billedAt: now - 10 * 60000, trackId: 'T1' };
@@ -433,17 +450,121 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
         window.activeTables = saved;
         return { withLink: withLink && withLink.ref, without: without && without.ref };
       });
-      check('nor does a pending web order of the same amount',
-            web.withLink === null, JSON.stringify(web));
+      check('nor does a pending web order of the same amount', web.withLink === null, JSON.stringify(web));
       check('which it would take with no link out — the control', web.without === 'c1', JSON.stringify(web));
 
-      // ...and the table it belongs to does take it
-      await pg.evaluate(() => { window.checkoutTableID = '5'; window.getRandomUPI = () => 'other@okaxis'; window.payWithUPI(null); });
+      // Table 5's own screen: offered, not taken — then used, deliberately
+      await openUPI(pg, '5');
+      await sleep(1500);
+      r = await settled(pg);
+      o = await offered(pg);
+      check('Table 5’s own UPI screen does not take it on its own either',
+            !r.claim && r.t5, JSON.stringify(r));
+      check('it offers it, as this table’s link payment',
+            o.list.length === 1 && o.list[0].mine === true && /this table/.test(o.text), JSON.stringify(o));
+      await pg.evaluate(() => window.useUPIOffer(0));
       await sleep(2000);
       r = await settled(pg);
       const t5Entry = r.ledger.find(e => /Table 5/.test(e.reason || ''));
-      check('Table 5’s own UPI screen claims it and closes the bill verified',
+      check('and one tap on Use claims it and closes the bill bank-verified',
             !!r.claim && !r.t5 && !!t5Entry && t5Entry.state === 'verified' && t5Entry.ref === 'c1', JSON.stringify(r));
+      await ctx.close();
+    }
+
+    // -------------------------------------- a walk-in's payment that happens to fit the link
+    //
+    // The case the reservation got backwards: the link is unpaid, a walk-in at Table 2 pays
+    // the same amount to the same account. Table 5's screen must not close on it.
+    {
+      const { ctx, pg } = await open();
+      await LINKED(pg, { sentMinsAgo: 5, paidMinsAgo: 1, payer: 'WALK IN' });
+      await openUPI(pg, '5');
+      await sleep(1500);
+      let r = await settled(pg);
+      check('the linked table’s screen does not close on a walk-in’s payment that fits its link',
+            !r.claim && r.t5, JSON.stringify(r));
+      await pg.evaluate(() => window.cancelUPI());
+      await openUPI(pg, '2');
+      await sleep(800);
+      await pg.evaluate(() => window.useUPIOffer(0));
+      await sleep(2000);
+      r = await settled(pg);
+      const t2Entry = r.ledger.find(e => /Table 2/.test(e.reason || ''));
+      check('the walk-in’s own table can use it, once someone says it is theirs',
+            !!r.claim && !r.t2 && !!t2Entry && t2Entry.state === 'verified', JSON.stringify(r));
+      check('and Table 5 is still open with its link still out', r.t5 && !!r.t5link, JSON.stringify(r));
+      await ctx.close();
+    }
+
+    // ------------------------------------------------- two links out for the same amount
+    {
+      const { ctx, pg } = await open();
+      await LINKED(pg, { sentMinsAgo: 5, paidMinsAgo: 3 });
+      await pg.evaluate(() => {
+        const t7 = { items: { Tea: { price: 150, qty: 3 } }, total: 450, paid: 0,
+                     payLink: { vpa: 'first@okicici', amount: 450, at: Date.now() - 6 * 60000,
+                                sent: [{ vpa: 'first@okicici', amount: 450, at: Date.now() - 6 * 60000 }] } };
+        window.__server['pos/activeTables/7'] = t7; window.activeTables['7'] = JSON.parse(JSON.stringify(t7));
+      });
+      await openUPI(pg, '7');
+      await sleep(1500);
+      const r = await settled(pg);
+      const o = await offered(pg);
+      check('with two ₹450 links out, neither table takes the payment on its own',
+            !r.claim && r.t5 && await pg.evaluate(() => !!window.__getServer()['pos/activeTables/7']), JSON.stringify(r));
+      check('and the offer says it fits both', o.list.length === 1 && /Table 5/.test(o.text), JSON.stringify(o));
+      await ctx.close();
+    }
+
+    // ------------------------------------- a paid link stops holding payments of its amount
+    {
+      const { ctx, pg } = await open();
+      await LINKED(pg, { sentMinsAgo: 5, paidMinsAgo: 3 });
+      await pg.evaluate(() => {
+        // a second ₹450 round went on the bill after the link was sent
+        const t5 = window.__server['pos/activeTables/5'];
+        t5.items.Latte.qty = 6; t5.total = 900;
+        window.activeTables['5'] = JSON.parse(JSON.stringify(t5));
+      });
+      await openUPI(pg, '5', 450);                 // the link payment taken as a ₹450 share
+      await sleep(800);
+      await pg.evaluate(() => window.useUPIOffer(0));
+      await sleep(2000);
+      const r = await settled(pg);
+      check('a link payment taken as a share leaves the table open with the rest due',
+            !!r.claim && r.t5, JSON.stringify(r));
+      check('and takes that link off the table, so it holds nothing more', r.t5link === null, JSON.stringify(r.t5link));
+      const owners = await pg.evaluate(() => {
+        window.activeTables['5'] = window.__getServer()['pos/activeTables/5'];
+        return window.linkTablesFor({ amount: 450, at: Date.now(), bank: 'icici' });
+      });
+      check('so the next ₹450 to that account is anybody’s again', owners.length === 0, JSON.stringify(owners));
+      await ctx.close();
+    }
+
+    // ----------------------------------------------------- a reminder after it was paid
+    {
+      const { ctx, pg } = await open();
+      await LINKED(pg, { sentMinsAgo: 10, paidMinsAgo: 5 });
+      const r = await pg.evaluate(() => {
+        const before = window.activeTables['5'].payLink.at;
+        window.checkoutTableID = '5'; window.sendBillPayLink();          // "did you get it?"
+        const after = window.__getServer()['pos/activeTables/5'].payLink;
+        window.activeTables['5'] = window.__getServer()['pos/activeTables/5'];
+        const sameAmount = window.linkTablesFor(window.__getServer()['payments/incoming'].c1);
+        // the bill grows and a new link goes out for the new total
+        const t5 = window.__server['pos/activeTables/5']; t5.items.Cake = { price: 150, qty: 1 }; t5.total = 600;
+        window.activeTables['5'] = JSON.parse(JSON.stringify(t5));
+        window.sendBillPayLink();
+        window.activeTables['5'] = window.__getServer()['pos/activeTables/5'];
+        const afterGrow = window.linkTablesFor(window.__getServer()['payments/incoming'].c1);
+        return { before, after: after.at, sameAmount, afterGrow, sent: window.activeTables['5'].payLink.sent.length };
+      });
+      check('a reminder for the same link keeps the time the first message went out',
+            r.after === r.before, JSON.stringify(r));
+      check('so a payment already made from it is still that link’s', r.sameAmount.join() === '5', JSON.stringify(r));
+      check('and a new link for a new total keeps the first one on the list too',
+            r.afterGrow.join() === '5' && r.sent === 2, JSON.stringify(r));
       await ctx.close();
     }
 
@@ -451,11 +572,11 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
     {
       const { ctx, pg } = await open();
       await LINKED(pg, { sentMinsAgo: 50, paidMinsAgo: 45 });
-      await pg.evaluate(() => { window.checkoutTableID = '5'; window.payWithUPI(null); });
-      await sleep(2000);
-      const r = await settled(pg);
-      check('a link paid 45 minutes ago is still taken by its own table — the link bounds it, not the clock',
-            !!r.claim && !r.t5, JSON.stringify(r));
+      await openUPI(pg, '5');
+      await sleep(1000);
+      const o = await offered(pg);
+      check('a link paid 45 minutes ago is still offered on its own table — the link bounds it, not the clock',
+            o.list.length === 1 && o.list[0].mine === true, JSON.stringify(o));
       await ctx.close();
     }
 
@@ -464,8 +585,38 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
       const { ctx, pg } = await open();
       await LINKED(pg, { sentMinsAgo: 10, paidMinsAgo: 20 });
       const owners = await pg.evaluate(() => window.linkTablesFor(window.__getServer()['payments/incoming'].c1));
-      check('a credit from before the link was sent is not reserved for it',
+      check('a credit from before the link was sent is not held for it',
             Array.isArray(owners) && owners.length === 0, JSON.stringify(owners));
+      await ctx.close();
+    }
+
+    // ------------------------------------------------------------- the late reconciler
+    //
+    // Its entry has to be recent, or ENTRY_AGE drops it before a credit is ever compared
+    // and the check passes with the guard gone. A control proves it would verify.
+    {
+      const { ctx, pg } = await open();
+      await LINKED(pg, { sentMinsAgo: 5, paidMinsAgo: 3 });
+      const r = await pg.evaluate(async () => {
+        const run = () => {
+          window.salesLedgerMap = { L1: { type: 'upi_income', state: 'unverified', amount: 450, ts: Date.now() - 60000,
+                                          reason: 'Table 2 (UPI)', payId: 'pay-L1' } };
+          window._reconCredits = window.__getServer()['payments/incoming'];
+          window._carryUnverified = {}; window._carryKnown = true;
+          reconcileLedgerVerification();
+          const s = window.__getServer();
+          return { state: s['pos/ledgerEntries/L1/state'] || null, claim: s['payments/claims/c1'] || null };
+        };
+        const withLink = run();
+        const saved = window.activeTables; window.activeTables = {};
+        await new Promise(r => setTimeout(r, 100));
+        const without = run();
+        window.activeTables = saved;
+        return { withLink, without };
+      });
+      check('the late reconciler does not verify another sale with a link payment',
+            r.withLink.state === null && r.withLink.claim === null, JSON.stringify(r));
+      check('which it would, with no link out — the control', r.without.state === 'verified', JSON.stringify(r));
       await ctx.close();
     }
 
