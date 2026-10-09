@@ -77,8 +77,10 @@ function pngSize(file) {
 //   removes the case where something else gets to choose.
 {
   const BRAND = manifest.theme_color;
+  // pay.html too: it is the page a customer opens from a pay link, on their own phone,
+  // under whatever dark setting that phone has.
   const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
-                 'chef.html', 'barista.html', 'inventory.html'];
+                 'chef.html', 'barista.html', 'inventory.html', 'pay.html'];
 
   check('the splash colour is the brand, not an off-white',
         manifest.background_color === BRAND,

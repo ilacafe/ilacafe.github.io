@@ -713,6 +713,9 @@
         .split-paid { }
 
         .staff-reveal { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 14px 16px; min-height: 44px; margin-top: 6px; cursor: pointer; }
+        .upi-offer { display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 0.85rem; line-height: 1.4; }
+        .upi-offer > div { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .upi-offer .btn { flex: 0 0 auto; width: auto; }
 
         /* Visual size unchanged, and the touch area is a 44px box centred on the button.
            It used to extend 8px above and below and nothing to either side — left:0;
@@ -1003,7 +1006,12 @@
             </div>
 
             <div class="modal-foot">
-                <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="10" style="margin:10px 0 12px;">
+                <!-- Room for any way of writing a number: at maxlength=10 the browser cut a
+                     typed 919876543210 to 9198765432 before anything could strip the prefix,
+                     and the pay link went to a stranger — and at 16, '+91 98 76 54 32 10' was
+                     cut the same way. The length is parseMobile's to judge, not the box's. -->
+                <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="32" style="margin:10px 0 8px;">
+                <button class="btn btn-secondary" style="width: 100%; margin-bottom: 12px;" onclick="sendBillPayLink()">Send Pay Link</button>
                 <div class="modal-buttons" style="margin: 0;">
                     <button class="btn btn-dark" onclick="openSplitBill()">Split</button>
                     <button class="btn btn-primary" onclick="payWithUPI(null)">UPI</button>
@@ -1093,6 +1101,9 @@
                  A matching bank credit still auto-confirms on its own; the manual override
                  lives behind the staff reveal below and is deliberately dull to find. -->
             <div id="upi-staff-actions" style="display:none;">
+                <!-- Payments that fit a pay link: never taken on their own, shown here with
+                     who paid and when, for a person to say whose they are. See linkTablesFor. -->
+                <div id="upi-offers"></div>
                 <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Settle without bank confirmation</button></div>
             </div>
             <button class="staff-reveal" id="upi-staff-reveal" onclick="window.revealStaffActions()">Staff</button>
@@ -1179,7 +1190,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-19.1"></script>
+    <script src="/build-check.js" data-build="2026-10-09.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -2067,6 +2078,59 @@
             } catch(e){ return false; }
         };
 
+        // WHOSE PAY LINK IS THIS CREDIT?
+        //
+        // A counter payment lands while its own QR is on screen, so the watcher behind that
+        // QR is there to claim it. A pay link's payment is not: the customer pays from their
+        // seat, or from home, and the credit sits unclaimed until somebody opens THAT table's
+        // UPI screen. Every other claimer matches on amount, bank and a time window, and none
+        // of those can tell a link payment from its own — so a walk-in shown a ₹450 QR on
+        // another table took Table 5's ₹450 link payment, closed as bank-verified before the
+        // walk-in had scanned anything, and left Table 5's diner, who had paid, unverifiable.
+        // The web-order sweep and the late reconciler would take it the same way.
+        //
+        // NOBODY TAKES IT ON THEIR OWN — NOT EVEN THE TABLE IT WAS SENT FOR. Amount, bank and
+        // time cannot say whose a ₹450 is, and that cuts both ways: a walk-in's ₹450 to the same
+        // account, paid while Table 5's link is out, fits Table 5's link exactly. Let Table 5's
+        // screen take whatever fits its link and it closes as bank-verified on the walk-in's
+        // money before its own diner has paid; let any table take it and the walk-in's QR takes
+        // the diner's. So a credit that fits a link is never claimed by a watcher, a manual
+        // confirm, the web sweep or the reconciler. The UPI screen lists it in the staff panel —
+        // who paid, when, which table's link it fits — and a person, who can ask, says whose it
+        // is with one tap. Everything that fits no link is matched exactly as before.
+        //
+        // Returns every open table whose link the credit fits. A table can have more than one
+        // link out (a resend after the bill changed): payLink.sent lists each, and each keeps
+        // its own send time, because a resend must not move the time the first message went
+        // out — a payment already made from it would fall outside its own link. A link that
+        // has been paid is taken off the list (settleTablePayment), and the rest go when the
+        // table closes.
+        window.linkEntries = function(pl){
+            if (!pl) return [];
+            const list = pl.sent ? Object.values(pl.sent) : [{ vpa: pl.vpa, amount: pl.amount, at: pl.at }];
+            return list.filter(e => e && e.vpa);
+        };
+        window.linkTablesFor = function(p, tables){
+            const out = [];
+            try {
+                if (!p) return out;
+                const amt = parseFloat(p.amount) || 0;
+                const paidAt = window.creditPaidAt(p);
+                const T = tables || window.activeTables || {};
+                for (const id in T){
+                    const fits = window.linkEntries(T[id] && T[id].payLink).some(e => {
+                        if (Math.abs((parseFloat(e.amount) || 0) - amt) >= 0.5) return false;
+                        if (!window.upiBankMatch(e.vpa, p)) return false;
+                        // paid before that link went out is not that link's
+                        const sent = parseFloat(e.at) || 0;
+                        return !(sent && paidAt && paidAt < sent - 2*60000);
+                    });
+                    if (fits) out.push(id);
+                }
+            } catch(e){}
+            return out;
+        };
+
         // ===== WEB ORDER PAYMENT VERIFICATION =====
         // Web orders are paid up-front on trust; now that bank credit emails land in
         // payments/incoming automatically, each pending web card shows a live badge:
@@ -2231,6 +2295,8 @@
                     // the customer cannot have paid before they were asked — see creditPaidAt
                     const at = window.creditPaidAt(p);
                     if (at < lo || at > nowMs + 60000) continue;
+                    // a table's pay link is waiting on it — see linkTablesFor
+                    if (window.linkTablesFor(p).length) continue;
                     if (!best || at > best.at) best = { ref: ref, at: at, p: p };
                 }
                 return best;
@@ -2490,12 +2556,10 @@
             // made the field on the checkout screen collect nothing. A web order already
             // carries its phone onto the bill for exactly this reason: once the table is
             // closed the number is otherwise unreachable, and Send Receipt needs it.
+            // parseMobile, not the last ten digits: the box takes any length now, and the last
+            // ten of a mistyped eleven is a stranger's number that Send Receipt would later use.
             let billPhone = null;
-            try {
-                const raw = (document.getElementById('checkout-phone') || {}).value || '';
-                const digits = raw.replace(/\D/g, '').slice(-10);
-                if (digits.length === 10) billPhone = digits;
-            } catch(e){}
+            try { billPhone = window.parseMobile((document.getElementById('checkout-phone') || {}).value); } catch(e){}
             const localBill = { 
                 id: Date.now(), 
                 table: tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID, 
@@ -4501,6 +4565,16 @@
 
                 cur.paid = Math.round(((parseFloat(cur.paid) || 0) + amt) * 100) / 100;
                 if (lastPay) cur._lastPay = lastPay;
+                // The pay link a bank-matched payment answered is answered — see linkTablesFor.
+                // Left on a part-paid table it would go on holding every later payment of its
+                // amount, and offering them here, for as long as the table stayed open.
+                const linkPaid = opts && opts.linkPaid;
+                if (linkPaid && cur.payLink){
+                    const left = window.linkEntries(cur.payLink).filter(e =>
+                        !(upiKey(e.vpa) === upiKey(linkPaid.vpa) && Math.abs((parseFloat(e.amount) || 0) - linkPaid.amount) < 0.5));
+                    if (!left.length) delete cur.payLink;
+                    else { const last = left[left.length - 1]; cur.payLink = { vpa: last.vpa, amount: last.amount, at: last.at, sent: left }; }
+                }
 
                 // The transaction body can run more than once (local value first, then the
                 // server's). Only the LAST run is the one that commits, so `closing` is
@@ -4601,7 +4675,12 @@
             // re-rolling the VPA, so attribution and the bank/account filter stay stable.
             window.upiBaseAmount = amountToPay;
             window.pendingTip = 0;
-            window.tableUPIVPA[window.checkoutTableID] = window.getRandomUPI();
+            // If a pay link already went out for this amount, the money is coming to ITS VPA —
+            // see sendBillPayLink. A fresh roll could land on another bank, and the watcher's
+            // bank filter would then turn away the very credit it is waiting for.
+            const sent = window.linkEntries(tableData.payLink).reverse()
+                .find(e => Math.abs((parseFloat(e.amount) || 0) - amountToPay) < LINE_EPS);
+            window.tableUPIVPA[window.checkoutTableID] = sent ? sent.vpa : window.getRandomUPI();
 
             // Generate BEFORE the modal is shown. Your original did this and I had reordered it,
             // which meant the previous table's code was on screen and scannable during the 0.3s
@@ -4611,6 +4690,93 @@
             window.renderUPIQR();
             closeModal('checkout-modal'); closeModal('split-bill-modal');
             openModal('upi-modal');
+        };
+
+        // ===== SEND PAY LINK (a bill, over WhatsApp) =====
+        // For a customer who is not at the till to scan it. The bill goes to their WhatsApp
+        // with a link to /pay.html, and the UPI ID and amount underneath as plain text.
+        //
+        // NOT a upi:// link, for two reasons that each sink it on their own. WhatsApp only
+        // makes http(s) links tappable, so a upi:// arrives as text nobody can tap. And opened
+        // any way at all, it is an NPCI Intent to a personal (non-merchant) VPA, which is
+        // refused after the PIN. What a personal VPA can take is a QR scan — including a QR
+        // saved to the phone and picked from the gallery inside the UPI app — so the link
+        // opens a page that shows the code and saves it. See pay.html.
+        //
+        // The VPA is written onto the table, not kept in this tab, so the UPI screen can reuse
+        // it from any till and after a reload (see payWithUPI). A resend reuses it too — the
+        // customer may pay from either message.
+        // An Indian mobile, typed any of the ways people give one: bare, 0-prefixed, or with
+        // 91 / +91 / 0091, spaced or not. Anything else is null rather than guessed at — the
+        // last ten digits of a mistyped eleven are somebody else's number. Both readers of the
+        // bill's phone box use this: the pay link, and the number kept for Send Receipt.
+        window.parseMobile = function(raw){
+            const m = /^(?:0{0,2}91|0)?([6-9]\d{9})$/.exec(String(raw == null ? '' : raw).replace(/\D/g, ''));
+            return m ? m[1] : null;
+        };
+
+        window.sendBillPayLink = function(){
+            const tableID = window.checkoutTableID;
+            const t = window.activeTables[tableID];
+            if (!t) return;
+            const phone = window.parseMobile(document.getElementById('checkout-phone').value);
+            if (!phone) { ilaToast("Enter the customer's 10-digit mobile number"); return; }
+            const total = parseFloat(t.total) || 0;
+            const paid = parseFloat(t.paid) || 0;
+            const due = tableDue(t);
+            if (!(due > 0)) { ilaToast('Nothing is due on this bill'); return; }
+            // A resend names the account the first message did — the customer may pay from
+            // either. tableUPIVPA covers a resend before the first write has come back. But
+            // only while the café still offers it: pay.html refuses a VPA that has left
+            // settings/upiList (a monthly cap, a retired account), so a resend naming one would
+            // be refused every time, for as long as the table stayed open.
+            const prev = (t.payLink && t.payLink.vpa) || window.tableUPIVPA[tableID] || null;
+            const offered = !!prev && (window.activeUPIs || []).concat([CAFE_UPI_ID]).some(v => upiKey(v) === upiKey(prev));
+            const vpa = offered ? prev : window.getRandomUPI();
+            window.tableUPIVPA[tableID] = vpa;
+
+            // The till is served from ila.cafe; anywhere else (a test, a local copy) the link
+            // still has to point at the real page, or the customer is sent nowhere.
+            const site = location.protocol === 'https:' ? location.origin : 'https://ila.cafe';
+            const link = site + '/pay.html?pa=' + encodeURIComponent(vpa) + '&am=' + due + '&t=' + encodeURIComponent(tableID);
+
+            let msg = 'ILA — ' + (tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID) + '\n\n';
+            for (const name in (t.items || {})) msg += t.items[name].qty + 'x ' + name + ' - ₹' + Math.round(lineTotal(t.items[name])) + '\n';
+            msg += '\nTotal: ₹' + total + '\n';
+            if (paid > 0) msg += 'Paid: ₹' + paid + '\nDue: ₹' + due + '\n';
+            msg += '\nPay ₹' + due + ' here:\n' + link;
+            // WhatsApp can leave a link inactive when it comes from a number the customer has
+            // never messaged, until they reply. Saying so costs a line; the ID below works anyway.
+            msg += '\n(Link not opening? Reply to this message, then tap it again.)';
+            msg += '\n\nOr pay ₹' + due + ' to UPI ID: ' + vpa;
+
+            // A transaction, not a write to .../payLink: if the bill was closed on another till
+            // a moment ago, a child write would bring the table back with nothing on it.
+            try {
+                db.ref('pos/activeTables/' + tableID).transaction(cur => {
+                    if (!cur) return;
+                    // Every link this table has been sent stays on the list until it is paid or the
+                    // table closes, each with the time IT went out — see linkTablesFor. A reminder
+                    // for the same VPA and amount is the same link and keeps its first time; moving
+                    // that time forward would put a payment already made outside its own link.
+                    const now = serverNow();
+                    const sent = window.linkEntries(cur.payLink);
+                    const same = sent.find(e => upiKey(e.vpa) === upiKey(vpa) && Math.abs((parseFloat(e.amount) || 0) - due) < 0.5);
+                    const list = same ? sent : sent.concat([{ vpa: vpa, amount: due, at: now }]).slice(-4);
+                    cur.payLink = { vpa: vpa, amount: due, at: same ? (same.at || now) : now, sent: list };
+                    return cur;
+                }, err => { if (err) console.error('payLink', err); }, false);
+            } catch(e){}
+            // Opened as a target=_blank link, the way the WhatsApp button on a web-order card
+            // opens. Not location.href: navigating the till away takes its screen, its socket and
+            // possibly the write above with it — the cash-up's hand-off had to be ordered around
+            // that. And not window.open with a fallback on its result: inside a home-screen app
+            // on an iPad, which is what the tills are, window.open is documented to return null,
+            // so the "fallback" would be the path every time.
+            const a = document.createElement('a');
+            a.href = 'https://wa.me/91' + phone + '?text=' + encodeURIComponent(msg);
+            a.target = '_blank'; a.rel = 'noopener';
+            document.body.appendChild(a); a.click(); a.remove();
         };
 
         // Rebuilds the QR for base+tip and restarts the watcher on the NEW amount. It has to be
@@ -4735,6 +4901,7 @@
         function stopUPIWatch(){
             window.upiWatchSession++;   // invalidates any handler still attached
             if (window.upiWatchRef){ try { window.upiWatchRef.q.off('value', window.upiWatchRef.handler); } catch(e){} window.upiWatchRef = null; }
+            renderUPIOffers([], null);  // the list belonged to that watch, its table and its amount
         }
         function startUPIWatch(amount){
             stopUPIWatch();
@@ -4759,15 +4926,29 @@
                 // it claimed with nothing booked against it.
                 if (window.checkoutTableID !== myTable || !window.activeTables[myTable]) return;
                 const now = serverNow();
-                const cands = [];
+                const cands = [], offers = [];
                 snap.forEach(ch => {
                     const p = ch.val(); if (!p) return;
                     if (Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5) return;   // amount must match
                     if (!window.upiBankCompatible(p)) return;                          // credit's bank/acct must match this table's VPA
                     const at = p.at || 0;
+                    // A credit that fits a pay link is never taken here — not for another table,
+                    // and not for the link's own table either: see linkTablesFor. It goes to the
+                    // staff panel with who paid. This table's own link payment is offered whatever
+                    // its age (the link's send time bounds it); anyone else's only inside the usual
+                    // 30 minutes.
+                    const links = window.linkTablesFor(p);
+                    if (links.length){
+                        const mine = links.indexOf(myTable) !== -1;
+                        if (!mine && at && at < now - 30*60000) return;
+                        if (window._wvClaims && window._wvClaims[ch.key]) return;      // already somebody's
+                        offers.push({ key: ch.key, p, at: window.creditPaidAt(p), links, mine });
+                        return;
+                    }
                     if (at && at < now - 30*60000) return;                             // ignore anything older than 30 min
                     cands.push({ key: ch.key, p, at });
                 });
+                renderUPIOffers(offers, mySession);
                 if (!cands.length) return;
                 cands.sort((a,b) => b.at - a.at);   // newest first
                 const tryNext = i => {
@@ -4784,6 +4965,46 @@
             q.on('value', handler, window.ilaRefused("incoming UPI credits"));
             window.upiWatchRef = { q, handler };
         }
+
+        // THE STAFF PANEL'S LIST OF PAY-LINK PAYMENTS. Behind the Staff reveal, because this
+        // screen is in the customer's hands; the reveal says when there is something in it.
+        // Each line says who paid, when, and whose link it fits, so whoever is at the till can
+        // ask the person in front of them — the one thing the matcher cannot do.
+        function renderUPIOffers(offers, session){
+            window._upiOffers = { list: offers || [], session: session };
+            const box = document.getElementById('upi-offers');
+            const reveal = document.getElementById('upi-staff-reveal');
+            if (reveal) reveal.textContent = (offers && offers.length) ? 'Staff · ' + offers.length + ' to check' : 'Staff';
+            if (!box) return;
+            const label = id => (id === 'Takeaway' ? 'Takeaway' : 'Table ' + id);
+            box.innerHTML = (offers || []).map((o, i) => {
+                const when = o.at ? new Date(o.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                const others = o.links.filter(id => id !== window.checkoutTableID).map(label);
+                const whose = o.mine
+                    ? ('Fits the pay link sent to this table' + (others.length ? ' — and ' + others.join(', ') + '’s' : ''))
+                    : ('Held for ' + others.join(', ') + '’s pay link');
+                return '<div class="upi-offer"><div>₹' + escapeHTML(String(o.p.amount)) + ' from <b>'
+                     + escapeHTML(o.p.payer || 'unknown payer') + '</b>' + (when ? ' at ' + escapeHTML(when) : '')
+                     + '<br><span style="font-size:0.78rem;">' + escapeHTML(whose) + '</span></div>'
+                     + '<button class="btn btn-secondary" onclick="window.useUPIOffer(' + i + ')">Use</button></div>';
+            }).join('');
+        }
+        window.useUPIOffer = async function(i){
+            const st = window._upiOffers || {};
+            const o = (st.list || [])[i];
+            if (!o || window.upiSettling || st.session !== window.upiWatchSession) return;
+            const table = window.checkoutTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + window.checkoutTableID;
+            const ok = await ilaAsk('Use this payment for ' + table + '?',
+                '₹' + o.p.amount + ' from ' + (o.p.payer || 'an unknown payer') + '. '
+                + (o.mine ? 'It fits the pay link this table was sent.' : 'It is being held for another table’s pay link — use it here only if this customer made it.'),
+                { ok: 'Use it', cancel: 'Cancel' });
+            if (!ok || window.upiSettling || st.session !== window.upiWatchSession) return;
+            claimPayment(o.key, o.p, won => {
+                if (st.session !== window.upiWatchSession) return;
+                if (won && !window.upiSettling) autoConfirmUPI({ ref: o.key, payer: o.p.payer || null, amount: o.p.amount, source: o.p.source || null });
+                else if (!won) ilaToast('That payment has already been used for another bill');
+            });
+        };
         function claimPayment(ref, p, cb, fixedToken){
             // fixedToken: a stable, order-derived token (web orders). If the tab dies between
             // winning the claim and writing the booking, the retry recognises its own claim
@@ -4859,6 +5080,7 @@
             settleTablePayment(tableID, billPart, "UPI", {
                 alloc: consumeSplitAllocation(),
                 lastPay: info ? Object.assign({ payId: payId }, info) : { payId: payId, ref: null },
+                linkPaid: (info && info.ref && vpa) ? { vpa: vpa, amount: amountToPay } : null,
                 expectSettle: (paid + billPart) >= total - LINE_EPS
             }, function(res){
                 if (res.closed || res.aborted) delete window.tableUPIVPA[tableID];
@@ -4895,7 +5117,16 @@
             const now = serverNow();
             db.ref('payments/incoming').orderByChild('at').limitToLast(60).once('value', snap => {
                 if (window.upiSettling) return;
-                const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5 && window.upiBankCompatible(p) && (!(p.at) || p.at >= now - 30*60000)) cand.push({ key:ch.key, p, at:p.at||0 }); });
+                // Same rules as the watcher: a credit that fits a pay link — this table's or any
+                // other's — is never taken here. It is in the staff panel, with who paid, to be
+                // used deliberately; see linkTablesFor.
+                const cand = []; snap.forEach(ch => {
+                    const p = ch.val();
+                    if (!p || Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5 || !window.upiBankCompatible(p)) return;
+                    if (window.linkTablesFor(p).length) return;
+                    if (p.at && p.at < now - 30*60000) return;
+                    cand.push({ key:ch.key, p, at:p.at||0 });
+                });
                 cand.sort((a,b) => b.at - a.at);
                 const tryNext = i => {
                     if (window.upiSettling) return;
@@ -5115,6 +5346,8 @@
                 for (const ref in credits){
                     if (usedRefs.has(String(ref))) continue;
                     const p = credits[ref]; if (!p) continue;
+                    // an open table's pay link is still waiting on it — see linkTablesFor
+                    if (window.linkTablesFor(p).length) continue;
                     if (ents.some(it => creditFits(g.tag, it.ts, p, it.win))) cands.push({ ref: ref, p: p, at: window.creditPaidAt(p) });
                 }
                 if (!cands.length) continue;
@@ -5720,6 +5953,14 @@
                 // Two bills split different ways cannot be one split, so the destination's
                 // own headcount wins and the source's is only used if it had none.
                 if (!dst.shares && src.shares) dst.shares = src.shares;
+                // A pay link out for the moved bill is still out, and its payment is still on
+                // its way to that VPA — see linkTablesFor. Only an amount match reuses it.
+                // Both tables' links, if both had one: either payment may still be on its way.
+                const links = window.linkEntries(dst.payLink).concat(window.linkEntries(src.payLink));
+                if (links.length){
+                    const top = dst.payLink || src.payLink;
+                    dst.payLink = { vpa: top.vpa, amount: top.amount, at: top.at, sent: links.slice(-6) };
+                }
                 return dst;
             }, function(err, committed){
                 if (err) return moveFailed("The bill is still on " + (oldTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + oldTableID) + ". Check the connection.");

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#8D6E52">
+    <meta name="robots" content="noindex">
+    <title>Pay ILA</title>
+    <link rel="icon" href="/icon-customer.png">
+    <link rel="apple-touch-icon" href="/icon-customer.png">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap"
+          rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap" rel="stylesheet"></noscript>
+    <!-- THE PAGE A PAY LINK OPENS.
+         The till's Send Pay Link puts this page's address in a WhatsApp message: an
+         https link is the only kind WhatsApp makes tappable. It carries the VPA, the
+         amount and the table, and this page turns them into a UPI code.
+
+         There is deliberately no "Pay with UPI app" button. A upi:// opened from a page
+         (or from a link) is an NPCI Intent, and the café's VPAs are personal, not
+         merchant, accounts: the app opens, the customer enters their PIN, and the
+         payment is refused. A QR is a different initiation mode and a personal VPA can
+         take it — including a QR saved to the phone and picked from the gallery inside
+         the UPI app. That is how a customer with one phone pays, so saving the code is
+         the main action here, and the UPI ID is the fallback for anyone who would rather
+         type it.
+
+         The VPA comes from the URL, which anybody can write. A link naming a VPA that is
+         not one of the café's is refused rather than shown, so this page can never be
+         used to put someone else's account under the café's name. -->
+    <style>
+        /* color-scheme, unconditionally, as on every other page: left unsaid, a phone's
+           own dark setting decides how the browser draws this one. */
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; color-scheme: dark; }
+        html { background-color: var(--brand-bg); }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif;
+               margin: 0; line-height: 1.5; display: flex; justify-content: center;
+               padding: calc(20px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom)); }
+        main { width: 100%; max-width: 400px; text-align: center; }
+        h1 { font-size: 1.5rem; letter-spacing: 6px; margin: 0 0 2px; }
+        .for { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; min-height: 1.3em; }
+        .amount { font-size: 2.4rem; font-weight: 700; line-height: 1.2; margin: 6px 0 14px; }
+        .state { font-size: 0.95rem; line-height: 1.5; padding: 16px; border: 1px dashed rgba(255,255,255,0.6); border-radius: 8px; }
+        .state.bad { border-style: solid; }
+        #pay-qr { display: block; width: 220px; height: 220px; margin: 0 auto; border-radius: 8px; background: #fff; }
+        .btn { display: block; width: 100%; padding: 13px 15px; min-height: 48px; border-radius: 6px; font-weight: 700; font-size: 0.95rem;
+               cursor: pointer; font-family: inherit; border: none; text-transform: uppercase; letter-spacing: 1px; box-sizing: border-box; }
+        .btn-primary { background-color: var(--brand-text); color: var(--brand-bg); }
+        .btn-secondary { background-color: transparent; color: var(--brand-text); border: 1px solid var(--brand-text); }
+        .btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+        #pay-save { margin-top: 16px; }
+        .how { text-align: left; font-size: 0.9rem; margin: 12px 0 0; padding-left: 22px; }
+        .how li { margin-bottom: 4px; }
+        .sub { font-size: 0.85rem; margin: 10px 0 0; }
+        .or { display: flex; align-items: center; gap: 10px; margin: 22px 0 12px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; }
+        .or::before, .or::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.5); }
+        .manual { text-align: left; border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; padding: 12px 14px; }
+        .manual-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; }
+        /* The ID gets the whole line — a VPA is wider than half a small phone. */
+        .vpa { display: block; font-weight: 700; font-size: 1.05rem; overflow-wrap: anywhere; margin: 2px 0 10px; }
+        .note { font-size: 0.85rem; margin-top: 10px; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>ILA</h1>
+    <div class="for" id="pay-for"></div>
+    <div class="amount" id="pay-amount-big" aria-live="polite"></div>
+
+    <div class="state" id="pay-state" role="status">Checking this link…</div>
+    <button class="btn btn-secondary" id="pay-retry" type="button" hidden style="margin-top:12px;">Try again</button>
+
+    <section id="pay-ready" hidden>
+        <img id="pay-qr" alt="">
+        <button class="btn btn-primary" id="pay-save" type="button">Save QR to your phone</button>
+        <ol class="how">
+            <li>Open GPay, PhonePe, Paytm or any UPI app</li>
+            <li>Tap <b>Scan</b>, then choose the saved QR from your gallery</li>
+        </ol>
+        <p class="sub">Or press and hold the code to save it. On another phone, just scan it.</p>
+
+        <div class="or">or pay to the UPI ID</div>
+        <div class="manual">
+            <div class="manual-label">UPI ID</div>
+            <span class="vpa" id="pay-vpa"></span>
+            <button class="btn btn-secondary" id="pay-copy" type="button">Copy UPI ID</button>
+            <div class="note">Send exactly <b>₹<span id="pay-amount"></span></b> — we match your payment by its amount.</div>
+        </div>
+    </section>
+</main>
+
+<script src="/qr.js"></script>
+<script>
+(function(){
+    // Same database and default VPA as the till and the ordering page. settings/ is
+    // world-readable, which is what lets this page check a VPA without signing anyone in.
+    const DB = 'https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app';
+    const CAFE_UPI_ID = 'sraveen.chirania-1@okaxis';
+
+    const q = new URLSearchParams(location.search);
+    const vpa = String(q.get('pa') || '').trim();
+    const amText = String(q.get('am') || '').trim();
+    const t = String(q.get('t') || '').trim().slice(0, 24);
+
+    const $ = id => document.getElementById(id);
+    const state = (msg, bad) => {
+        const el = $('pay-state');
+        el.hidden = false; el.textContent = msg; el.classList.toggle('bad', !!bad);
+    };
+
+    // Rupees, up to two decimals, and nothing else. The QR carries this text exactly,
+    // and the till matches the bank credit against it.
+    const amount = /^\d{1,6}(\.\d{1,2})?$/.test(amText) ? parseFloat(amText) : 0;
+    const shown = amount > 0 ? (Number.isInteger(amount) ? String(amount) : amount.toFixed(2)) : '';
+    if (t) $('pay-for').textContent = (t === 'Takeaway' ? 'Takeaway' : 'Table ' + t);
+    if (shown) $('pay-amount-big').textContent = '₹' + shown;
+
+    if (!vpa || !/^[A-Za-z0-9._-]{2,256}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(vpa) || !(amount > 0)) {
+        state('This payment link is incomplete. Ask ILA to send it again.', true);
+        return;
+    }
+
+    let saved = null;   // the PNG, made before any tap — a share has to start inside the tap
+
+    function show(){
+        $('pay-state').hidden = true; $('pay-retry').hidden = true;
+        $('pay-ready').hidden = false;
+        $('pay-vpa').textContent = vpa;
+        $('pay-amount').textContent = shown;
+        const payload = 'upi://pay?pa=' + vpa + '&pn=ILA&am=' + amText + '&cu=INR';
+
+        // On screen: an <img>, not a canvas, so press-and-hold offers to save it.
+        const c = document.createElement('canvas');
+        window.ilaQR.drawToCanvas(c, payload, 220);
+        const img = $('pay-qr');
+        img.src = c.toDataURL('image/png');
+        img.alt = 'UPI code to pay ₹' + shown + ' to ILA';
+
+        // The saved copy says what it is, so it can be found again in a gallery.
+        // The caption sits below the code's quiet zone and does not touch it.
+        const qr = document.createElement('canvas');
+        window.ilaQR.drawToCanvas(qr, payload, 600);
+        const out = document.createElement('canvas');
+        const w = qr.width, cap = Math.round(w * 0.22);
+        out.width = w; out.height = w + cap;
+        const ctx = out.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height);
+        ctx.drawImage(qr, 0, 0);
+        ctx.fillStyle = '#000'; ctx.textAlign = 'center';
+        ctx.font = '700 ' + Math.round(cap * 0.34) + 'px sans-serif';
+        ctx.fillText('ILA  ₹' + shown, w / 2, w + cap * 0.38);
+        ctx.font = Math.round(cap * 0.2) + 'px sans-serif';
+        ctx.fillText((t ? $('pay-for').textContent + ' · ' : '') + vpa, w / 2, w + cap * 0.72);
+        const name = 'ILA-pay-' + shown + '.png';
+        out.toBlob(b => { if (b) saved = { blob: b, file: new File([b], name, { type: 'image/png' }), name: name }; }, 'image/png');
+    }
+
+    // iPhone: the share sheet's "Save Image" is what puts it in Photos, which is where a
+    // UPI app's gallery picker looks. A download there lands in Files instead. Android:
+    // a download lands in the gallery's Downloads, so that is the predictable route.
+    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    $('pay-save').addEventListener('click', () => {
+        if (!saved) return;
+        try {
+            if (iOS && navigator.canShare && navigator.canShare({ files: [saved.file] })) {
+                navigator.share({ files: [saved.file] }).catch(() => {});
+                return;
+            }
+        } catch (e) {}
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(saved.blob); a.download = saved.name;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+        $('pay-save').textContent = 'Saved — now scan it from your gallery';
+    });
+
+    // Same as the ordering page's: clipboard where it is allowed, the textarea where it
+    // is not, and the button says so if neither worked — the ID is on screen either way.
+    $('pay-copy').addEventListener('click', () => {
+        const btn = $('pay-copy');
+        const ok = () => { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy UPI ID'; }, 2000); };
+        const fail = () => {
+            let copied = false;
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = vpa; ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed'; ta.style.top = '-1000px'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, vpa.length);
+                copied = document.execCommand('copy');
+                document.body.removeChild(ta);
+            } catch (e) { copied = false; }
+            if (copied) ok();
+            else { btn.textContent = 'Copy it from above'; setTimeout(() => { btn.textContent = 'Copy UPI ID'; }, 3000); }
+        };
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(vpa).then(ok).catch(fail);
+            else fail();
+        } catch (e) { fail(); }
+    });
+
+    // Only a VPA the café hands out may be shown. settings/upiList is the live routing
+    // list the till picks from; a VPA that has since left it (a monthly cap, a retired
+    // account) is refused, and the customer is told to ask for a new link rather than
+    // paying an account the café may no longer be watching.
+    function check(){
+        state('Checking this link…');
+        $('pay-retry').hidden = true;
+        fetch(DB + '/settings/upiList.json', { cache: 'no-store' })
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(list => {
+                const ids = Array.isArray(list) ? list : (list && typeof list === 'object' ? Object.values(list) : []);
+                const ours = [CAFE_UPI_ID].concat(ids).map(v => String(v || '').trim().toLowerCase());
+                if (ours.indexOf(vpa.toLowerCase()) === -1) {
+                    state('This is not a current ILA payment link, so don’t pay it. Ask us to send a new one.', true);
+                    return;
+                }
+                show();
+            })
+            .catch(() => {
+                state('Couldn’t check this link. Check your connection and try again.', true);
+                $('pay-retry').hidden = false;
+            });
+    }
+    $('pay-retry').addEventListener('click', check);
+    check();
+})();
+</script>
+</body>
+</html>

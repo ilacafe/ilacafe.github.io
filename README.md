@@ -70,10 +70,41 @@ is an NPCI *Intent* (initiation mode 04), and OC/76A bars mode 04/05 to a P2P
 payee — the app opens, the customer enters their PIN, and the payment is refused.
 No amount of rebuilding the string changes that. So no page here offers to open a
 UPI app on the device it is running on. Collection used to be handed to a WhatsApp
-pay link for exactly this reason (a link tapped inside a native app does complete),
-and in practice that failed for a different reason: WhatsApp renders a link from an
-unsaved number as dead text, and a first-time customer is an unsaved number. That
-route is gone. What is left is the one the counter has always used.
+message carrying a `upi://` link, on the theory that a link tapped inside a native
+app completes. It never could: WhatsApp only makes `http(s)` links tappable, so the
+`upi://` arrived as plain text, and opened any other way it is the same Intent to a
+personal (non-merchant) VPA and is refused all the same.
+
+What a personal VPA *can* take is a QR — and that includes a QR saved to the phone
+and picked from the gallery inside the UPI app, which is how a customer with one
+phone pays. So the till's bill screen has **Send Pay Link**, for a customer who is
+not at the counter: it sends the bill over WhatsApp with an `https://ila.cafe/pay.html`
+link, and the UPI ID and amount as plain text. WhatsApp makes an `https` link tappable,
+but it can leave one inactive when it comes from a number the customer has never
+messaged, until they reply — the message says so in a line, and the plain-text ID and
+amount are a complete way to pay regardless. `pay.html` shows the code,
+saves it to the phone in one tap, and offers the UPI ID to copy. It reads the VPA from
+the link, and refuses any VPA that is not in the café's own `settings/upiList`, so the
+page cannot be used to put somebody else's account under the café's name.
+
+The VPA the link names is written onto the table (`payLink`), and the till's UPI
+screen reuses it when opened for the same amount — otherwise a fresh pick could land
+on another bank and the watcher's bank filter would refuse the very credit the link
+produced. Web orders use the code in the customer's own app instead.
+
+**A payment that fits a pay link is taken by nothing on its own.** It is paid from
+wherever the customer is, so it lands with no QR on screen waiting for it, and every
+claimer matches on amount, bank and time — none of which can say whose a ₹450 is. Left to
+the matchers, the next ₹450 QR on another table took Table 5's link payment and closed as
+bank-verified; reserved for Table 5 instead, Table 5's own screen closed on a walk-in's
+₹450 that happened to fit its link. So `linkTablesFor` marks any credit that fits an open
+table's `payLink` (amount, bank, paid after that link went out), and no watcher, manual
+confirm, web-order sweep or reconciler claims a marked credit. The UPI screen lists it
+behind **Staff** — who paid, when, whose link it fits — and one tap on **Use** claims it
+for the bill on screen, after the person at the till has asked. A link stays on the table
+until a bank-matched payment answers it (then it is removed, so a part-paid table stops
+holding later payments of that amount) or the table closes. A reminder for the same link
+keeps its first send time; a new link for a new total is added alongside the old one.
 
 `qr.js` is the encoder both pages draw with — one implementation, because a wrong
 QR is worse than a missing one: it scans, and it pays the wrong thing or nothing.

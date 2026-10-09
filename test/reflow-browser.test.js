@@ -39,7 +39,7 @@ const { ROOT, readPage, suite } = require('./helpers');
 const { check, note, done } = suite('Every page — fits the phone, and says so honestly');
 
 const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
-               'barista.html', 'chef.html', 'inventory.html'];
+               'barista.html', 'chef.html', 'inventory.html', 'pay.html'];
 
 // ------------------------------------------------------------- the viewport meta
 {

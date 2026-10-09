@@ -42,6 +42,7 @@ const suites = [
   'client-errors-browser.test.js',
   'rolling-day-browser.test.js',
   'move-table-browser.test.js',
+  'pay-link-browser.test.js',
   'dialogs-browser.test.js',
   'till-dialogs-browser.test.js',
   'split-typing-browser.test.js',
