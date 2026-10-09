@@ -29,7 +29,9 @@
          not one of the café's is refused rather than shown, so this page can never be
          used to put someone else's account under the café's name. -->
     <style>
-        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; }
+        /* color-scheme, unconditionally, as on every other page: left unsaid, a phone's
+           own dark setting decides how the browser draws this one. */
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; color-scheme: dark; }
         html { background-color: var(--brand-bg); }
         body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif;
                margin: 0; line-height: 1.5; display: flex; justify-content: center;

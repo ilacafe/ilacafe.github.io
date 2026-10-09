@@ -1003,7 +1003,10 @@
             </div>
 
             <div class="modal-foot">
-                <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="10" style="margin:10px 0 8px;">
+                <!-- Room for +91 / 0 and spaces: at maxlength=10 the browser cut a typed
+                     919876543210 to 9198765432 before anything could strip the prefix, and
+                     the pay link went to a stranger. sendBillPayLink reads the number. -->
+                <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="16" style="margin:10px 0 8px;">
                 <button class="btn btn-secondary" style="width: 100%; margin-bottom: 12px;" onclick="sendBillPayLink()">Send Pay Link</button>
                 <div class="modal-buttons" style="margin: 0;">
                     <button class="btn btn-dark" onclick="openSplitBill()">Split</button>
@@ -2068,6 +2071,44 @@
             } catch(e){ return false; }
         };
 
+        // WHOSE PAY LINK IS THIS CREDIT?
+        //
+        // A counter payment lands while its own QR is on screen, so the watcher behind that
+        // QR is there to claim it. A pay link's payment is not: the customer pays from their
+        // seat, or from home, and the credit sits unclaimed until somebody opens THAT table's
+        // UPI screen. Every other claimer matches on amount, bank and a time window, and none
+        // of those can tell a link payment from its own — so a walk-in shown a ₹450 QR on
+        // another table took Table 5's ₹450 link payment, closed as bank-verified before the
+        // walk-in had scanned anything, and left Table 5's diner, who had paid, unverifiable.
+        // The web-order sweep and the late reconciler would take it the same way.
+        //
+        // The table records what it was sent (payLink: VPA, amount, when), so a credit that
+        // fits an open table's link is that table's. Returns every table it fits — more than
+        // one when two links of one amount are out to accounts the filter cannot separate —
+        // and the claimers skip a credit that fits a link unless it fits theirs. A genuine
+        // walk-in credit that collides then waits for a person, which is the safe direction.
+        // The reservation lasts as long as the table: settled or cleared, the link is gone.
+        window.linkTablesFor = function(p, tables){
+            const out = [];
+            try {
+                if (!p) return out;
+                const amt = parseFloat(p.amount) || 0;
+                const paidAt = window.creditPaidAt(p);
+                const T = tables || window.activeTables || {};
+                for (const id in T){
+                    const pl = T[id] && T[id].payLink;
+                    if (!pl || !pl.vpa) continue;
+                    if (Math.abs((parseFloat(pl.amount) || 0) - amt) >= 0.5) continue;
+                    if (!window.upiBankMatch(pl.vpa, p)) continue;
+                    // paid before the link went out is not the link's
+                    const sent = parseFloat(pl.at) || 0;
+                    if (sent && paidAt && paidAt < sent - 2*60000) continue;
+                    out.push(id);
+                }
+            } catch(e){}
+            return out;
+        };
+
         // ===== WEB ORDER PAYMENT VERIFICATION =====
         // Web orders are paid up-front on trust; now that bank credit emails land in
         // payments/incoming automatically, each pending web card shows a live badge:
@@ -2232,6 +2273,8 @@
                     // the customer cannot have paid before they were asked — see creditPaidAt
                     const at = window.creditPaidAt(p);
                     if (at < lo || at > nowMs + 60000) continue;
+                    // a table's pay link is waiting on it — see linkTablesFor
+                    if (window.linkTablesFor(p).length) continue;
                     if (!best || at > best.at) best = { ref: ref, at: at, p: p };
                 }
                 return best;
@@ -4638,13 +4681,24 @@
             const tableID = window.checkoutTableID;
             const t = window.activeTables[tableID];
             if (!t) return;
-            const phone = String(document.getElementById('checkout-phone').value || '').replace(/\D/g, '').slice(-10);
-            if (phone.length !== 10) { ilaToast("Enter the customer's 10-digit number first"); return; }
+            // An Indian mobile, typed any of the ways people give one: bare, 0-prefixed, or with
+            // 91 / +91, spaced or not. Anything else is refused rather than guessed at — taking
+            // the last ten digits of a mistyped eleven sends the bill to somebody else.
+            const m = /^(?:0?91|0)?([6-9]\d{9})$/.exec(String(document.getElementById('checkout-phone').value || '').replace(/\D/g, ''));
+            if (!m) { ilaToast("Enter the customer's 10-digit mobile number"); return; }
+            const phone = m[1];
             const total = parseFloat(t.total) || 0;
             const paid = parseFloat(t.paid) || 0;
             const due = tableDue(t);
             if (!(due > 0)) { ilaToast('Nothing is due on this bill'); return; }
-            const vpa = (t.payLink && t.payLink.vpa) || window.getRandomUPI();
+            // A resend names the account the first message did — the customer may pay from
+            // either. tableUPIVPA covers a resend before the first write has come back. But
+            // only while the café still offers it: pay.html refuses a VPA that has left
+            // settings/upiList (a monthly cap, a retired account), so a resend naming one would
+            // be refused every time, for as long as the table stayed open.
+            const prev = (t.payLink && t.payLink.vpa) || window.tableUPIVPA[tableID] || null;
+            const offered = !!prev && (window.activeUPIs || []).concat([CAFE_UPI_ID]).some(v => upiKey(v) === upiKey(prev));
+            const vpa = offered ? prev : window.getRandomUPI();
             window.tableUPIVPA[tableID] = vpa;
 
             // The till is served from ila.cafe; anywhere else (a test, a local copy) the link
@@ -4657,6 +4711,9 @@
             msg += '\nTotal: ₹' + total + '\n';
             if (paid > 0) msg += 'Paid: ₹' + paid + '\nDue: ₹' + due + '\n';
             msg += '\nPay ₹' + due + ' here:\n' + link;
+            // WhatsApp can leave a link inactive when it comes from a number the customer has
+            // never messaged, until they reply. Saying so costs a line; the ID below works anyway.
+            msg += '\n(Link not opening? Reply to this message, then tap it again.)';
             msg += '\n\nOr pay ₹' + due + ' to UPI ID: ' + vpa;
 
             // A transaction, not a write to .../payLink: if the bill was closed on another till
@@ -4668,11 +4725,16 @@
                     return cur;
                 }, err => { if (err) console.error('payLink', err); }, false);
             } catch(e){}
-            // window.open, not location.href: navigating this page away takes the socket, and
-            // the write above, with it — the cash-up's hand-off had to be ordered around that.
-            // Navigating is only the fallback for a browser that refuses the new window.
-            const url = 'https://wa.me/91' + phone + '?text=' + encodeURIComponent(msg);
-            if (!window.open(url, '_blank')) window.location.href = url;
+            // Opened as a target=_blank link, the way the WhatsApp button on a web-order card
+            // opens. Not location.href: navigating the till away takes its screen, its socket and
+            // possibly the write above with it — the cash-up's hand-off had to be ordered around
+            // that. And not window.open with a fallback on its result: inside a home-screen app
+            // on an iPad, which is what the tills are, window.open is documented to return null,
+            // so the "fallback" would be the path every time.
+            const a = document.createElement('a');
+            a.href = 'https://wa.me/91' + phone + '?text=' + encodeURIComponent(msg);
+            a.target = '_blank'; a.rel = 'noopener';
+            document.body.appendChild(a); a.click(); a.remove();
         };
 
         // Rebuilds the QR for base+tip and restarts the watcher on the NEW amount. It has to be
@@ -4826,8 +4888,15 @@
                     const p = ch.val(); if (!p) return;
                     if (Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5) return;   // amount must match
                     if (!window.upiBankCompatible(p)) return;                          // credit's bank/acct must match this table's VPA
+                    // Another table's pay link is waiting on this one — see linkTablesFor. And
+                    // this table's own link payment is still this table's after 30 minutes: it
+                    // was paid from wherever the customer was, not while the QR was up, and the
+                    // link's own send time already bounds it from below.
+                    const links = window.linkTablesFor(p);
+                    const mine = links.indexOf(myTable) !== -1;
+                    if (links.length && !mine) return;
                     const at = p.at || 0;
-                    if (at && at < now - 30*60000) return;                             // ignore anything older than 30 min
+                    if (!mine && at && at < now - 30*60000) return;                   // ignore anything older than 30 min
                     cands.push({ key: ch.key, p, at });
                 });
                 if (!cands.length) return;
@@ -4957,7 +5026,16 @@
             const now = serverNow();
             db.ref('payments/incoming').orderByChild('at').limitToLast(60).once('value', snap => {
                 if (window.upiSettling) return;
-                const cand = []; snap.forEach(ch => { const p = ch.val(); if (p && Math.abs((parseFloat(p.amount)||0) - amount) < 0.5 && window.upiBankCompatible(p) && (!(p.at) || p.at >= now - 30*60000)) cand.push({ key:ch.key, p, at:p.at||0 }); });
+                // Same rules as the watcher, pay links included — see linkTablesFor.
+                const me = window.checkoutTableID;
+                const cand = []; snap.forEach(ch => {
+                    const p = ch.val();
+                    if (!p || Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5 || !window.upiBankCompatible(p)) return;
+                    const links = window.linkTablesFor(p), mine = links.indexOf(me) !== -1;
+                    if (links.length && !mine) return;
+                    if (!mine && p.at && p.at < now - 30*60000) return;
+                    cand.push({ key:ch.key, p, at:p.at||0 });
+                });
                 cand.sort((a,b) => b.at - a.at);
                 const tryNext = i => {
                     if (window.upiSettling) return;
@@ -5177,6 +5255,8 @@
                 for (const ref in credits){
                     if (usedRefs.has(String(ref))) continue;
                     const p = credits[ref]; if (!p) continue;
+                    // an open table's pay link is still waiting on it — see linkTablesFor
+                    if (window.linkTablesFor(p).length) continue;
                     if (ents.some(it => creditFits(g.tag, it.ts, p, it.win))) cands.push({ ref: ref, p: p, at: window.creditPaidAt(p) });
                 }
                 if (!cands.length) continue;
@@ -5782,6 +5862,9 @@
                 // Two bills split different ways cannot be one split, so the destination's
                 // own headcount wins and the source's is only used if it had none.
                 if (!dst.shares && src.shares) dst.shares = src.shares;
+                // A pay link out for the moved bill is still out, and its payment is still on
+                // its way to that VPA — see linkTablesFor. Only an amount match reuses it.
+                if (!dst.payLink && src.payLink) dst.payLink = src.payLink;
                 return dst;
             }, function(err, committed){
                 if (err) return moveFailed("The bill is still on " + (oldTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + oldTableID) + ". Check the connection.");

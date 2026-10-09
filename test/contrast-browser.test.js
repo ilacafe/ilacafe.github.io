@@ -160,7 +160,7 @@ const AUDIT = () => {
 };
 
 const PAGES = ['index.html', 'pos.html', 'admin.html', 'analytics.html',
-               'barista.html', 'chef.html', 'inventory.html'];
+               'barista.html', 'chef.html', 'inventory.html', 'pay.html'];
 // Loaded by every page above, and every one of them paints text the same way these
 // do. dialogs.js was dimming a disabled control's own value to 3.24:1.
 const SHARED = ['dialogs.js', 'connection.js', 'auth-gate.js', 'qr.js', 'pin-mask.js', 'look2.js'];

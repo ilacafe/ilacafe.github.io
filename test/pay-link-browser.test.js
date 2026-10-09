@@ -41,7 +41,8 @@ const server = http.createServer((req, res) => {
 });
 
 // A database that holds state, so a transaction is applied to the CURRENT value and
-// returning undefined aborts — the same stub as move-table-browser.test.js.
+// returning undefined aborts — the stub from move-table-browser.test.js, with forEach
+// and distinct push keys, because the UPI watcher scans credits and the ledger pushes.
 const STUB = `
 (() => {
   window.__server = {};
@@ -53,7 +54,9 @@ const STUB = `
   const snapOf = (v, key) => ({ key: key == null ? null : key,
     val: () => (v === undefined ? null : v), exists: () => v != null,
     numChildren: () => (v && typeof v === 'object') ? Object.keys(v).length : 0,
-    hasChild: () => false, child: () => snapOf(null, null), forEach: () => {} });
+    hasChild: () => false, child: () => snapOf(null, null),
+    forEach: (fn) => { if (v && typeof v === 'object') for (const k of Object.keys(v)) { if (fn(snapOf(v[k], k)) === true) break; } } });
+  let pushed = 0;
 
   const mkRef = (p) => { const self = {
     key: p.split('/').filter(Boolean).pop() || null,
@@ -62,8 +65,8 @@ const STUB = `
     limitToFirst: () => self, startAt: () => self, endAt: () => self, equalTo: () => self,
     on: (e, cb) => { if (cb && (!e || e === 'value')) setTimeout(() => cb(snapOf(get(p), self.key)), 0); return cb; },
     off: () => {},
-    once: (_e, cb) => { const s = snapOf(get(p), self.key); if (cb) cb(s); return Promise.resolve(s); },
-    push: () => mkRef(p + '/-N'),
+    once: (_e, cb) => { const s = snapOf(get(p), self.key); if (typeof cb === 'function') cb(s); return Promise.resolve(s); },
+    push: (v) => { const r = mkRef(p + '/-N' + (++pushed)); if (v !== undefined) r.set(v); return r; },
     set: (v) => { put(p, v); return Promise.resolve(); },
     update: (v) => {
       if (p === '') { for (const k in v) put(k.replace(/^\\/+/, ''), v[k]); return Promise.resolve(); }
@@ -114,12 +117,21 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
     await pg.goto(base + '/pos.html', { waitUntil: 'domcontentloaded' });
     await pg.waitForTimeout(400);
     await pg.evaluate((table) => {
-      window.__told = []; window.__opened = [];
+      window.__told = []; window.__opened = []; window.__windowOpen = 0;
       window.ilaToast = (m) => { window.__told.push(String(m)); };
-      window.open = (u) => { window.__opened.push(String(u)); return {}; };
+      window.ilaAsk = () => Promise.resolve(true);
+      // The hand-off is a target=_blank link, as on a web-order card. window.open answers
+      // null, which is what it does inside a home-screen app on an iPad — the tills.
+      const click = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function(){
+        if (this.target === '_blank' && /wa\.me/.test(this.href)) { window.__opened.push(this.href); return; }
+        return click.call(this);
+      };
+      window.open = () => { window.__windowOpen++; return null; };
       window.__setServer({ 'pos/activeTables/5': table });
       window.activeTables = { '5': table };
       window.checkoutTableID = '5';
+      window.activeUPIs = ['first@okicici', 'other@okaxis'];
       // The weighted pick is random; pin it, so "reused" and "rolled again" are distinguishable.
       window.getRandomUPI = () => 'first@okicici';
     }, TABLE());
@@ -140,13 +152,16 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
         window.sendBillPayLink();
       });
       await sleep(100);
-      const r = await pg.evaluate(() => ({ opened: window.__opened, told: window.__told, server: window.__getServer() }));
+      const r = await pg.evaluate(() => ({ opened: window.__opened, told: window.__told, server: window.__getServer(), windowOpen: window.__windowOpen }));
       const url = r.opened[0] || '';
       const msg = messageOf(url);
       check('the bill screen has a Send Pay Link button',
             await pg.evaluate(() => !![...document.querySelectorAll('#checkout-modal button')].find(b => /send pay link/i.test(b.textContent))));
       check('it opens WhatsApp to the number typed on the bill',
             url.indexOf('https://wa.me/919876543210?') === 0, url || '(nothing opened)');
+      check('as a new window from a link — not by navigating the till, and not on window.open\'s answer',
+            r.windowOpen === 0 && await pg.evaluate(() => location.pathname === '/pos.html'),
+            'window.open called ' + r.windowOpen + ' time(s)');
       const link = (msg.match(/https:\/\/\S+\/pay\.html\?\S+/) || [''])[0];
       check('the message carries an https link to the pay page — the kind WhatsApp makes tappable',
             link.indexOf('https://ila.cafe/pay.html?') === 0, msg);
@@ -159,6 +174,8 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
             msg.indexOf('upi://') === -1, msg);
       check('and the UPI ID and amount are there as plain text too',
             msg.includes('Or pay \u20b9250 to UPI ID: first@okicici'), msg);
+      check('and it says what to do if WhatsApp has left the link inactive',
+            /reply to this message/i.test(msg), msg);
       check('and it is itemised, with what has been paid already',
             msg.includes('2x Latte - \u20b9200') && msg.includes('1x Cake - \u20b9150') && msg.includes('Paid: \u20b9100') && msg.includes('Due: \u20b9250'), msg);
 
@@ -244,6 +261,211 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
       await sleep(50);
       const r = await pg.evaluate(() => ({ opened: window.__opened, told: window.__told }));
       check('a bill with nothing due sends no request for money', r.opened.length === 0, r.opened.join(' '));
+      await ctx.close();
+    }
+
+    // ------------------------------------------------------- numbers as people give them
+    //
+    // The field was maxlength=10, so the browser cut a typed 919876543210 to 9198765432
+    // before anything could strip the prefix — a real-looking number, and a stranger got
+    // the bill. The cut is a typing-time thing, so it is checked on the attribute; the
+    // parsing is checked on what reaches the function.
+    {
+      const { ctx, pg } = await open();
+      const max = await pg.evaluate(() => parseInt(document.getElementById('checkout-phone').getAttribute('maxlength') || '0'));
+      check('the phone box has room for +91 and spaces, so a prefix is not cut off mid-number',
+            max >= 15, 'maxlength=' + max);
+      const sent = await pg.evaluate(() => {
+        const out = {};
+        for (const typed of ['+91 98765 43210', '919876543210', '09876543210', '98765-43210']) {
+          window.__opened = [];
+          document.getElementById('checkout-phone').value = typed;
+          window.sendBillPayLink();
+          out[typed] = (window.__opened[0] || '').split('?')[0];
+        }
+        for (const typed of ['98765432101', '1234567890', '9198765432101']) {
+          window.__opened = []; window.__told = [];
+          document.getElementById('checkout-phone').value = typed;
+          window.sendBillPayLink();
+          out[typed] = window.__opened.length ? window.__opened[0].split('?')[0] : 'refused:' + window.__told.join('|');
+        }
+        return out;
+      });
+      check('+91, 91, a leading 0 and dashes all reach the same customer',
+            ['+91 98765 43210', '919876543210', '09876543210', '98765-43210'].every(k => sent[k] === 'https://wa.me/919876543210'),
+            JSON.stringify(sent));
+      check('a number that is not a 10-digit mobile is refused, not guessed at',
+            ['98765432101', '1234567890', '9198765432101'].every(k => /^refused:/.test(sent[k])),
+            JSON.stringify(sent));
+      await ctx.close();
+    }
+
+    // ---------------------------------------- a resend after the VPA has left the list
+    //
+    // A monthly cap or a retired account takes a VPA out of settings/upiList, and pay.html
+    // then refuses a link naming it, telling the customer to ask for a new one. A resend
+    // that named the same VPA again could never succeed.
+    {
+      const { ctx, pg } = await open();
+      const r = await pg.evaluate(() => {
+        const t = JSON.parse(JSON.stringify(window.activeTables['5']));
+        t.payLink = { vpa: 'capped@okicici', amount: 250, at: Date.now() - 60000 };
+        window.__setServer({ 'pos/activeTables/5': t }); window.activeTables = { '5': t };
+        window.activeUPIs = ['live@okaxis']; window.getRandomUPI = () => 'live@okaxis';
+        document.getElementById('checkout-phone').value = '9876543210';
+        window.sendBillPayLink();
+        return { url: window.__opened[0] || '', stored: (window.__getServer()['pos/activeTables/5'] || {}).payLink };
+      });
+      const msg = messageOf(r.url);
+      check('a resend after the VPA left the list names one the café still offers',
+            msg.includes('pa=live%40okaxis') && msg.includes('UPI ID: live@okaxis') && !msg.includes('capped'), msg);
+      check('and the table now expects that one', !!r.stored && r.stored.vpa === 'live@okaxis', JSON.stringify(r.stored));
+      await ctx.close();
+    }
+
+    // -------------------------------- a resend before the first send's write has landed
+    //
+    // On café wifi the write can sit in the queue. The table on this screen has no payLink
+    // yet, but this tab already sent one — a second roll could name a different account,
+    // and the customer may pay from the first message.
+    {
+      const { ctx, pg } = await open();
+      const r = await pg.evaluate(() => {
+        window.tableUPIVPA['5'] = 'first@okicici';      // what this tab sent a moment ago
+        window.getRandomUPI = () => 'other@okaxis';
+        document.getElementById('checkout-phone').value = '9876543210';
+        window.sendBillPayLink();
+        return window.__opened[0] || '';
+      });
+      check('a resend before the first write lands names the VPA this tab already sent',
+            messageOf(r).includes('UPI ID: first@okicici'), messageOf(r));
+      await ctx.close();
+    }
+
+    // ------------------------------------------- merged into a table that is occupied
+    {
+      const { ctx, pg } = await open();
+      const dst = await pg.evaluate(async () => {
+        const t3 = { items: { Tea: { price: 100, qty: 3 } }, total: 300, paid: 0,
+                     payLink: { vpa: 'first@okicici', amount: 300, at: Date.now() - 60000 } };
+        const t5 = { items: { Cake: { price: 500, qty: 1 } }, total: 500, paid: 0 };
+        window.__setServer({ 'pos/activeTables/3': t3, 'pos/activeTables/5': t5 });
+        window.activeTables = { '3': t3, '5': t5 };
+        window.checkoutTableID = '3';
+        window.closeModal = () => {}; window.openCheckout = () => {};
+        await window.confirmMoveTable('5');
+        await new Promise(r => setTimeout(r, 300));
+        return window.__getServer()['pos/activeTables/5'] || {};
+      });
+      check('a bill with a pay link out, merged into an occupied table, keeps the link',
+            !!dst.payLink && dst.payLink.vpa === 'first@okicici' && dst.payLink.amount === 300, JSON.stringify(dst));
+      await ctx.close();
+    }
+
+    // ============================================== the link's payment is its table's
+    //
+    // The customer pays from their seat. Nothing is on screen waiting for that credit, and
+    // every claimer matches on amount, bank and time — so it used to go to whoever asked
+    // first: the next ₹450 QR on any table, the web-order sweep, the late reconciler.
+    // Table 2 closed as bank-verified on Table 5's money, and Table 5's diner, who had paid,
+    // could never be verified.
+    const LINKED = async (pg, opts) => pg.evaluate((o) => {
+      const now = Date.now();
+      const t5 = { items: { Latte: { price: 150, qty: 3 } }, total: 450, paid: 0 };
+      const t2 = { items: { Mocha: { price: 225, qty: 2 } }, total: 450, paid: 0 };
+      window.__setServer({ 'pos/activeTables/5': t5, 'pos/activeTables/2': t2, 'upiRouting/config': {} });
+      window.activeTables = { '5': t5, '2': t2 };
+      window.checkoutTableID = '5';
+      window.getRandomUPI = () => 'first@okicici';
+      document.getElementById('checkout-phone').value = '9876543210';
+      window.sendBillPayLink();
+      window.activeTables['5'] = window.__getServer()['pos/activeTables/5'];
+      if (o.sentMinsAgo) { window.activeTables['5'].payLink.at = now - o.sentMinsAgo * 60000;
+                           window.__server['pos/activeTables/5'].payLink.at = now - o.sentMinsAgo * 60000; }
+      window.__server['payments/incoming'] = { c1: { amount: 450, at: now - o.paidMinsAgo * 60000, payer: 'LINK PAYER', bank: 'icici' } };
+      return true;
+    }, opts);
+    const settled = (pg) => pg.evaluate(() => {
+      const s = window.__getServer();
+      return { claim: s['payments/claims/c1'] || null, t2: !!s['pos/activeTables/2'], t5: !!s['pos/activeTables/5'],
+               ledger: Object.keys(s).filter(k => k.indexOf('pos/ledgerEntries/') === 0).map(k => s[k]) };
+    });
+
+    {
+      const { ctx, pg } = await open();
+      await LINKED(pg, { sentMinsAgo: 5, paidMinsAgo: 3 });
+      await pg.evaluate(() => { window.checkoutTableID = '2'; window.getRandomUPI = () => 'other@okaxis'; window.payWithUPI(null); });
+      await sleep(1500);
+      let r = await settled(pg);
+      check('another table’s ₹450 QR does not take a ₹450 link payment',
+            !r.claim && r.t2 && !r.ledger.some(e => /Table 2/.test(e.reason || '')), JSON.stringify(r));
+      await pg.evaluate(() => window.cancelUPI());
+
+      // the counter's own fallback, on the same other table
+      await pg.evaluate(() => { window.payWithUPI(null); window.confirmUPIPayment(); });
+      await sleep(1500);
+      r = await settled(pg);
+      const t2Entry = r.ledger.find(e => /Table 2/.test(e.reason || ''));
+      check('nor does marking that table received by hand — it books unverified and leaves the credit',
+            !r.claim && !!t2Entry && t2Entry.state === 'unverified', JSON.stringify(r));
+
+      // and the late reconciler, with that unverified line sitting there
+      await pg.evaluate(() => {
+        const s = window.__getServer();
+        const map = {}; for (const k in s) if (k.indexOf('pos/ledgerEntries/') === 0) map[k.slice(18)] = s[k];
+        window.salesLedgerMap = map; window._reconCredits = s['payments/incoming'];
+        window._carryUnverified = {}; window._carryKnown = true;
+        reconcileLedgerVerification();
+      });
+      await sleep(300);
+      r = await settled(pg);
+      check('nor does the reconciler verify that line with it while Table 5’s link is out',
+            !r.claim && r.ledger.every(e => e.state !== 'verified'), JSON.stringify(r.ledger));
+
+      // and the web-order matcher
+      const web = await pg.evaluate(() => {
+        const now = Date.now();
+        const order = { total: 450, upiId: 'first@okicici', billedAt: now - 10 * 60000, trackId: 'T1' };
+        const credits = window.__getServer()['payments/incoming'];
+        const withLink = window.wvFindMatch(order, credits, {}, now);
+        const saved = window.activeTables; window.activeTables = {};
+        const without = window.wvFindMatch(order, credits, {}, now);
+        window.activeTables = saved;
+        return { withLink: withLink && withLink.ref, without: without && without.ref };
+      });
+      check('nor does a pending web order of the same amount',
+            web.withLink === null, JSON.stringify(web));
+      check('which it would take with no link out — the control', web.without === 'c1', JSON.stringify(web));
+
+      // ...and the table it belongs to does take it
+      await pg.evaluate(() => { window.checkoutTableID = '5'; window.getRandomUPI = () => 'other@okaxis'; window.payWithUPI(null); });
+      await sleep(2000);
+      r = await settled(pg);
+      const t5Entry = r.ledger.find(e => /Table 5/.test(e.reason || ''));
+      check('Table 5’s own UPI screen claims it and closes the bill verified',
+            !!r.claim && !r.t5 && !!t5Entry && t5Entry.state === 'verified' && t5Entry.ref === 'c1', JSON.stringify(r));
+      await ctx.close();
+    }
+
+    // ----------------------------------------- paid more than 30 minutes before anyone looked
+    {
+      const { ctx, pg } = await open();
+      await LINKED(pg, { sentMinsAgo: 50, paidMinsAgo: 45 });
+      await pg.evaluate(() => { window.checkoutTableID = '5'; window.payWithUPI(null); });
+      await sleep(2000);
+      const r = await settled(pg);
+      check('a link paid 45 minutes ago is still taken by its own table — the link bounds it, not the clock',
+            !!r.claim && !r.t5, JSON.stringify(r));
+      await ctx.close();
+    }
+
+    // ------------------------------------------------- paid before the link went out
+    {
+      const { ctx, pg } = await open();
+      await LINKED(pg, { sentMinsAgo: 10, paidMinsAgo: 20 });
+      const owners = await pg.evaluate(() => window.linkTablesFor(window.__getServer()['payments/incoming'].c1));
+      check('a credit from before the link was sent is not reserved for it',
+            Array.isArray(owners) && owners.length === 0, JSON.stringify(owners));
       await ctx.close();
     }
 

@@ -79,7 +79,10 @@ What a personal VPA *can* take is a QR — and that includes a QR saved to the p
 and picked from the gallery inside the UPI app, which is how a customer with one
 phone pays. So the till's bill screen has **Send Pay Link**, for a customer who is
 not at the counter: it sends the bill over WhatsApp with an `https://ila.cafe/pay.html`
-link (tappable), and the UPI ID and amount as plain text. `pay.html` shows the code,
+link, and the UPI ID and amount as plain text. WhatsApp makes an `https` link tappable,
+but it can leave one inactive when it comes from a number the customer has never
+messaged, until they reply — the message says so in a line, and the plain-text ID and
+amount are a complete way to pay regardless. `pay.html` shows the code,
 saves it to the phone in one tap, and offers the UPI ID to copy. It reads the VPA from
 the link, and refuses any VPA that is not in the café's own `settings/upiList`, so the
 page cannot be used to put somebody else's account under the café's name.
@@ -88,6 +91,16 @@ The VPA the link names is written onto the table (`payLink`), and the till's UPI
 screen reuses it when opened for the same amount — otherwise a fresh pick could land
 on another bank and the watcher's bank filter would refuse the very credit the link
 produced. Web orders use the code in the customer's own app instead.
+
+**A link's payment belongs to its table.** It is paid from wherever the customer is, so
+it lands with no QR on screen waiting for it, and every claimer matches on amount, bank
+and time — none of which can tell it from anyone else's. Left unowned, the next ₹450 QR
+on another table took Table 5's ₹450 link payment and closed as bank-verified before its
+own customer had paid. So `linkTablesFor` reserves a credit that fits an open table's
+`payLink` (amount, bank, paid after the link went out): the counter watcher and the manual
+confirm on any other table skip it, and so do the web-order sweep and the late
+reconciler. That table's own UPI screen takes it, past the usual 30-minute window. The
+reservation ends with the table.
 
 `qr.js` is the encoder both pages draw with — one implementation, because a wrong
 QR is worse than a missing one: it scans, and it pays the wrong thing or nothing.
