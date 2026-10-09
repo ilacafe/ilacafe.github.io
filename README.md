@@ -69,11 +69,19 @@ around it: **a `upi://` link fired from a web page cannot pay us.** From a page 
 is an NPCI *Intent* (initiation mode 04), and OC/76A bars mode 04/05 to a P2P
 payee — the app opens, the customer enters their PIN, and the payment is refused.
 No amount of rebuilding the string changes that. So no page here offers to open a
-UPI app on the device it is running on. Collection used to be handed to a WhatsApp
-pay link for exactly this reason (a link tapped inside a native app does complete),
-and in practice that failed for a different reason: WhatsApp renders a link from an
-unsaved number as dead text, and a first-time customer is an unsaved number. That
-route is gone. What is left is the one the counter has always used.
+UPI app on the device it is running on. Web-order collection used to be handed to a
+WhatsApp pay link for exactly this reason (a link tapped inside a native app does
+complete), and in practice that failed for a different reason: WhatsApp renders a
+link from an unsaved number as dead text, and a first-time customer is an unsaved
+number. Web orders no longer use it; they use the code in the customer's own app.
+
+The till's bill screen still has **Send Pay Link**, for a customer who is not at the
+counter to scan. It sends the bill over WhatsApp with the `upi://` link *and* the UPI
+ID and amount as plain text, because for an unsaved number the plain text is the
+only part that works. The VPA it sent is written onto the table (`payLink`), and the
+UPI screen reuses it when opened for the same amount — otherwise a fresh pick could
+land on another bank and the watcher's bank filter would refuse the very credit the
+link produced.
 
 `qr.js` is the encoder both pages draw with — one implementation, because a wrong
 QR is worse than a missing one: it scans, and it pays the wrong thing or nothing.

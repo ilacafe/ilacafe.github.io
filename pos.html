@@ -1003,7 +1003,8 @@
             </div>
 
             <div class="modal-foot">
-                <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="10" style="margin:10px 0 12px;">
+                <input type="tel" id="checkout-phone" class="remark-input" placeholder="Phone No." maxlength="10" style="margin:10px 0 8px;">
+                <button class="btn btn-secondary" style="width: 100%; margin-bottom: 12px;" onclick="sendBillPayLink()">Send Pay Link</button>
                 <div class="modal-buttons" style="margin: 0;">
                     <button class="btn btn-dark" onclick="openSplitBill()">Split</button>
                     <button class="btn btn-primary" onclick="payWithUPI(null)">UPI</button>
@@ -1179,7 +1180,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-09-19.1"></script>
+    <script src="/build-check.js" data-build="2026-10-09.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -4601,7 +4602,13 @@
             // re-rolling the VPA, so attribution and the bank/account filter stay stable.
             window.upiBaseAmount = amountToPay;
             window.pendingTip = 0;
-            window.tableUPIVPA[window.checkoutTableID] = window.getRandomUPI();
+            // If a pay link already went out for this amount, the money is coming to ITS VPA —
+            // see sendBillPayLink. A fresh roll could land on another bank, and the watcher's
+            // bank filter would then turn away the very credit it is waiting for.
+            const sent = tableData.payLink;
+            window.tableUPIVPA[window.checkoutTableID] =
+                (sent && sent.vpa && Math.abs((parseFloat(sent.amount) || 0) - amountToPay) < LINE_EPS)
+                    ? sent.vpa : window.getRandomUPI();
 
             // Generate BEFORE the modal is shown. Your original did this and I had reordered it,
             // which meant the previous table's code was on screen and scannable during the 0.3s
@@ -4611,6 +4618,55 @@
             window.renderUPIQR();
             closeModal('checkout-modal'); closeModal('split-bill-modal');
             openModal('upi-modal');
+        };
+
+        // ===== SEND PAY LINK (a bill, over WhatsApp) =====
+        // For a customer who is not at the till to scan it. The bill goes to their WhatsApp
+        // with a tap-to-pay link, and the UPI ID and amount underneath as plain text.
+        //
+        // The link is never opened from this page: a upi:// fired from a web page is an NPCI
+        // Intent and is refused for our payees after the PIN (README, "Taking money"). Tapped
+        // inside WhatsApp, a native app, it completes. WhatsApp shows a link from a number the
+        // customer has not saved as dead text, so the plain-text ID and amount are not a
+        // courtesy: for a first-time customer they are how they pay.
+        //
+        // The VPA is written onto the table, not kept in this tab, so the UPI screen can reuse
+        // it from any till and after a reload (see payWithUPI). A resend reuses it too — the
+        // customer may pay from either message.
+        window.sendBillPayLink = function(){
+            const tableID = window.checkoutTableID;
+            const t = window.activeTables[tableID];
+            if (!t) return;
+            const phone = String(document.getElementById('checkout-phone').value || '').replace(/\D/g, '').slice(-10);
+            if (phone.length !== 10) { ilaToast("Enter the customer's 10-digit number first"); return; }
+            const total = parseFloat(t.total) || 0;
+            const paid = parseFloat(t.paid) || 0;
+            const due = tableDue(t);
+            if (!(due > 0)) { ilaToast('Nothing is due on this bill'); return; }
+            const vpa = (t.payLink && t.payLink.vpa) || window.getRandomUPI();
+            window.tableUPIVPA[tableID] = vpa;
+
+            let msg = 'ILA\n\n';
+            for (const name in (t.items || {})) msg += t.items[name].qty + 'x ' + name + ' - ₹' + Math.round(lineTotal(t.items[name])) + '\n';
+            msg += '\nTotal: ₹' + total + '\n';
+            if (paid > 0) msg += 'Paid: ₹' + paid + '\nDue: ₹' + due + '\n';
+            msg += '\nTap to pay:\nupi://pay?pa=' + vpa + '&pn=ILA&am=' + due.toFixed(2) + '&cu=INR';
+            msg += '\n\nOr pay ₹' + due + ' to UPI ID: ' + vpa;
+
+            // A transaction, not a write to .../payLink: if the bill was closed on another till
+            // a moment ago, a child write would bring the table back with nothing on it.
+            try {
+                db.ref('pos/activeTables/' + tableID).transaction(cur => {
+                    if (!cur) return;
+                    cur.payLink = { vpa: vpa, amount: due, at: serverNow() };
+                    return cur;
+                }, err => { if (err) console.error('payLink', err); }, false);
+            } catch(e){}
+            // window.open, not location.href: navigating this page away takes the socket, and
+            // the write above, with it — the cash-up's hand-off had to be ordered around that.
+            // Navigating is only the fallback for a browser that refuses the new window.
+            const url = 'https://wa.me/91' + phone + '?text=' + encodeURIComponent(msg);
+            if (!window.open(url, '_blank')) window.location.href = url;
         };
 
         // Rebuilds the QR for base+tip and restarts the watcher on the NEW amount. It has to be
