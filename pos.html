@@ -4622,13 +4622,14 @@
 
         // ===== SEND PAY LINK (a bill, over WhatsApp) =====
         // For a customer who is not at the till to scan it. The bill goes to their WhatsApp
-        // with a tap-to-pay link, and the UPI ID and amount underneath as plain text.
+        // with a link to /pay.html, and the UPI ID and amount underneath as plain text.
         //
-        // The link is never opened from this page: a upi:// fired from a web page is an NPCI
-        // Intent and is refused for our payees after the PIN (README, "Taking money"). Tapped
-        // inside WhatsApp, a native app, it completes. WhatsApp shows a link from a number the
-        // customer has not saved as dead text, so the plain-text ID and amount are not a
-        // courtesy: for a first-time customer they are how they pay.
+        // NOT a upi:// link, for two reasons that each sink it on their own. WhatsApp only
+        // makes http(s) links tappable, so a upi:// arrives as text nobody can tap. And opened
+        // any way at all, it is an NPCI Intent to a personal (non-merchant) VPA, which is
+        // refused after the PIN. What a personal VPA can take is a QR scan — including a QR
+        // saved to the phone and picked from the gallery inside the UPI app — so the link
+        // opens a page that shows the code and saves it. See pay.html.
         //
         // The VPA is written onto the table, not kept in this tab, so the UPI screen can reuse
         // it from any till and after a reload (see payWithUPI). A resend reuses it too — the
@@ -4646,11 +4647,16 @@
             const vpa = (t.payLink && t.payLink.vpa) || window.getRandomUPI();
             window.tableUPIVPA[tableID] = vpa;
 
-            let msg = 'ILA\n\n';
+            // The till is served from ila.cafe; anywhere else (a test, a local copy) the link
+            // still has to point at the real page, or the customer is sent nowhere.
+            const site = location.protocol === 'https:' ? location.origin : 'https://ila.cafe';
+            const link = site + '/pay.html?pa=' + encodeURIComponent(vpa) + '&am=' + due + '&t=' + encodeURIComponent(tableID);
+
+            let msg = 'ILA — ' + (tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID) + '\n\n';
             for (const name in (t.items || {})) msg += t.items[name].qty + 'x ' + name + ' - ₹' + Math.round(lineTotal(t.items[name])) + '\n';
             msg += '\nTotal: ₹' + total + '\n';
             if (paid > 0) msg += 'Paid: ₹' + paid + '\nDue: ₹' + due + '\n';
-            msg += '\nTap to pay:\nupi://pay?pa=' + vpa + '&pn=ILA&am=' + due.toFixed(2) + '&cu=INR';
+            msg += '\nPay ₹' + due + ' here:\n' + link;
             msg += '\n\nOr pay ₹' + due + ' to UPI ID: ' + vpa;
 
             // A transaction, not a write to .../payLink: if the bill was closed on another till

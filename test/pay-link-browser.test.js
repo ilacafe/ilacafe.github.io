@@ -1,25 +1,30 @@
-// Sending a bill to a customer's WhatsApp, and getting the payment it produces verified.
+// Sending a bill to a customer's WhatsApp, and the page that link opens.
 //
 // The bill screen's Send Pay Link was taken out with the web-order one, and the Phone No.
 // box stayed behind sending nothing, so the till had no way left to bill a customer who
-// was not standing in front of it. It is back, and two things about it are what these
-// checks hold:
+// was not standing in front of it. Putting it back with a upi:// link did not work:
+// WhatsApp only makes http(s) links tappable, and a upi:// opened any way at all is an
+// Intent to a personal VPA, which is refused after the PIN. What these checks hold:
 //
-// THE MESSAGE HAS TO WORK WHEN THE LINK DOES NOT. WhatsApp shows a link from a number the
-// customer has not saved as dead text. The UPI ID and the amount go in as plain text so a
-// first-time customer can still pay.
+// THE MESSAGE CARRIES A LINK WHATSAPP WILL MAKE TAPPABLE — https, to /pay.html — and the
+// UPI ID and amount as plain text as well, and no upi:// at all.
 //
-// THE PAYMENT IT PRODUCES HAS TO BE ONE THE TILL WILL ACCEPT. The UPI screen rolled a
-// fresh VPA every time it opened, and its watcher only takes a credit from the bank that
-// VPA belongs to. A customer who paid from the link paid the VPA in the message; the roll
-// often named another one, and the credit was turned away. So the link's VPA is written
-// onto the table, and the UPI screen opened for that amount uses it.
+// THE PAGE SHOWS A CODE THAT IS EXACTLY THAT PAYMENT, saves it to the phone (a QR picked
+// from the gallery is a scan, which a personal VPA can take), and offers nothing that
+// would open a UPI app from the page. It refuses a link naming a VPA the café does not
+// use: the URL is written by whoever sends it.
+//
+// THE PAYMENT IT PRODUCES IS ONE THE TILL WILL ACCEPT. The UPI screen rolled a fresh VPA
+// every time it opened, and its watcher only takes a credit from the bank that VPA
+// belongs to. So the link's VPA is written onto the table, and the UPI screen opened for
+// that amount uses it.
 
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { chromium } = require('playwright');
 const { ROOT, suite } = require('./helpers');
+const jsQR = require('jsqr').default || require('jsqr');
 
 const { check, note, done } = suite('Sending a pay link from the bill');
 
@@ -121,7 +126,9 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
     return { ctx, pg };
   }
   const messageOf = (url) => {
-    try { return decodeURIComponent(new URL(url).searchParams.get('text') || ''); } catch (e) { return ''; }
+    // searchParams already undoes the one encodeURIComponent the till applied; a second
+    // decode would turn the link's own %40 back into @ and hide exactly what is checked.
+    try { return new URL(url).searchParams.get('text') || ''; } catch (e) { return ''; }
   };
 
   try {
@@ -140,13 +147,20 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
             await pg.evaluate(() => !![...document.querySelectorAll('#checkout-modal button')].find(b => /send pay link/i.test(b.textContent))));
       check('it opens WhatsApp to the number typed on the bill',
             url.indexOf('https://wa.me/919876543210?') === 0, url || '(nothing opened)');
-      check('the message carries a tap-to-pay link for what is still due',
-            msg.includes('upi://pay?pa=first@okicici&pn=ILA&am=250.00&cu=INR'), msg);
-      check('and the UPI ID and amount as plain text, for when WhatsApp will not let them tap it',
-            msg.includes('Or pay ₹250 to UPI ID: first@okicici'), msg);
+      const link = (msg.match(/https:\/\/\S+\/pay\.html\?\S+/) || [''])[0];
+      check('the message carries an https link to the pay page — the kind WhatsApp makes tappable',
+            link.indexOf('https://ila.cafe/pay.html?') === 0, msg);
+      const lp = link ? new URL(link).searchParams : new URLSearchParams();
+      check('and the link names this payment: the VPA, what is still due, and the table',
+            lp.get('pa') === 'first@okicici' && lp.get('am') === '250' && lp.get('t') === '5', link);
+      check('with the @ escaped, so WhatsApp does not end the link at it',
+            link.indexOf('@') === -1, link);
+      check('there is no upi:// in it — untappable in WhatsApp, refused to a personal VPA',
+            msg.indexOf('upi://') === -1, msg);
+      check('and the UPI ID and amount are there as plain text too',
+            msg.includes('Or pay \u20b9250 to UPI ID: first@okicici'), msg);
       check('and it is itemised, with what has been paid already',
-            msg.includes('2x Latte - ₹200') && msg.includes('1x Cake - ₹150') && msg.includes('Paid: ₹100') && msg.includes('Due: ₹250'), msg);
-      note('the till page itself never opens the upi:// — from a web page it is refused after the PIN');
+            msg.includes('2x Latte - \u20b9200') && msg.includes('1x Cake - \u20b9150') && msg.includes('Paid: \u20b9100') && msg.includes('Due: \u20b9250'), msg);
 
       const t = r.server['pos/activeTables/5'] || {};
       check('the VPA it sent is written onto the table, with the amount',
@@ -179,7 +193,7 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
       await sleep(50);
       const again = messageOf(await pg.evaluate(() => window.__opened[1] || ''));
       check('a resend names the same VPA, so a customer can pay from either message',
-            again.includes('pa=first@okicici') && !again.includes('other@okaxis'), again);
+            again.includes('UPI ID: first@okicici') && again.includes('pa=first%40okicici') && !again.includes('other@okaxis'), again);
       await ctx.close();
     }
 
@@ -230,6 +244,140 @@ const TABLE = () => ({ items: { Latte: { price: 100, qty: 2 }, Cake: { price: 15
       await sleep(50);
       const r = await pg.evaluate(() => ({ opened: window.__opened, told: window.__told }));
       check('a bill with nothing due sends no request for money', r.opened.length === 0, r.opened.join(' '));
+      await ctx.close();
+    }
+
+    // ======================================================= the page the link opens
+    //
+    // The café's VPA list is the public settings/upiList, read over REST. The test answers
+    // that request itself, so it can be a list, a refusal or a dead network.
+    const DB_LIST = 'https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app/settings/upiList.json';
+    async function openPay(query, answer) {
+      const ctx = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
+      const pg = await ctx.newPage();
+      pg.on('pageerror', e => pageErrors.push('pay.html: ' + String(e.message || e).split('\n')[0]));
+      await pg.route('**/*', r => {
+        const u = r.request().url();
+        if (u.indexOf(DB_LIST) === 0) {
+          if (answer === 'offline') return r.abort();
+          return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
+                             body: JSON.stringify(answer) });
+        }
+        return u.startsWith(base) ? r.continue() : r.abort();
+      });
+      await pg.goto(base + '/pay.html?' + query, { waitUntil: 'load' });
+      await pg.waitForTimeout(300);
+      return { ctx, pg };
+    }
+    const decodeImg = (pg, sel) => pg.evaluate(async (sel) => {
+      const img = document.querySelector(sel);
+      if (!img || !img.complete || !img.naturalWidth) return null;
+      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+      return { w: c.width, h: c.height, data: Array.from(ctx.getImageData(0, 0, c.width, c.height).data) };
+    }, sel);
+
+    // ---------------------------------------------------------------- a real link
+    {
+      const LIST = ['first@okicici', 'first@okicici', 'other@okaxis'];
+      const { ctx, pg } = await openPay('pa=first%40okicici&am=250&t=5', LIST);
+      const r = await pg.evaluate(() => ({
+        ready: !document.getElementById('pay-ready').hidden,
+        vpa: document.getElementById('pay-vpa').textContent,
+        amt: document.getElementById('pay-amount').textContent,
+        big: document.getElementById('pay-amount-big').textContent,
+        forWhat: document.getElementById('pay-for').textContent,
+        upiLinks: [...document.querySelectorAll('a[href], [onclick], form[action]')].filter(e => /upi:/i.test(e.outerHTML)).length
+      }));
+      check('a link naming one of the café’s VPAs shows the payment', r.ready, JSON.stringify(r));
+      check('with the amount and the table it is for',
+            r.big === '₹250' && r.forWhat === 'Table 5', JSON.stringify({ big: r.big, forWhat: r.forWhat }));
+      const shot = await decodeImg(pg, '#pay-qr');
+      const out = shot && jsQR(new Uint8ClampedArray(shot.data), shot.w, shot.h);
+      check('the code on screen is exactly that payment',
+            !!out && out.data === 'upi://pay?pa=first@okicici&pn=ILA&am=250&cu=INR',
+            out ? 'got ' + JSON.stringify(out.data) : 'no code found');
+      check('and the UPI ID and amount beside it are the same payment',
+            r.vpa === 'first@okicici' && r.amt === '250', JSON.stringify(r));
+      check('nothing on the page offers to open a UPI app — that is refused for a personal VPA',
+            r.upiLinks === 0, r.upiLinks + ' element(s)');
+
+      // Saving the code is the one-phone route: it is scanned from the gallery.
+      const [dl] = await Promise.all([
+        pg.waitForEvent('download', { timeout: 5000 }).catch(() => null),
+        pg.click('#pay-save')
+      ]);
+      check('Save puts the code on the phone as an image', !!dl && /\.png$/.test(dl.suggestedFilename()),
+            dl ? dl.suggestedFilename() : 'no download');
+      if (dl) {
+        const file = await dl.path();
+        const b64 = fs.readFileSync(file).toString('base64');
+        const saved = await pg.evaluate(async (b64) => {
+          const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode();
+          const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+          const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+          return { w: c.width, h: c.height, data: Array.from(ctx.getImageData(0, 0, c.width, c.height).data) };
+        }, b64);
+        const got = jsQR(new Uint8ClampedArray(saved.data), saved.w, saved.h);
+        check('and the saved image scans to the same payment, caption and all',
+              !!got && got.data === 'upi://pay?pa=first@okicici&pn=ILA&am=250&cu=INR',
+              got ? 'got ' + JSON.stringify(got.data) : 'no code found in the saved image');
+      }
+      await ctx.close();
+    }
+
+    // -------------------------------------------- a fractional amount, and Takeaway
+    {
+      const { ctx, pg } = await openPay('pa=first%40okicici&am=1250.5&t=Takeaway', ['first@okicici']);
+      const shot = await decodeImg(pg, '#pay-qr');
+      const out = shot && jsQR(new Uint8ClampedArray(shot.data), shot.w, shot.h);
+      check('a part-rupee amount goes into the code exactly as the till sent it',
+            !!out && out.data === 'upi://pay?pa=first@okicici&pn=ILA&am=1250.5&cu=INR', out ? out.data : 'no code');
+      check('and Takeaway is called Takeaway, not "Table Takeaway"',
+            await pg.evaluate(() => document.getElementById('pay-for').textContent) === 'Takeaway');
+      await ctx.close();
+    }
+
+    // ------------------------------------------------- a VPA that is not the café's
+    //
+    // Anyone can write this URL. A page on the café's own domain showing somebody
+    // else's account under the café's name is the thing that must not happen.
+    {
+      const { ctx, pg } = await openPay('pa=someone%40ybl&am=500&t=5', ['first@okicici', 'other@okaxis']);
+      const r = await pg.evaluate(() => ({
+        ready: !document.getElementById('pay-ready').hidden,
+        img: document.getElementById('pay-qr').getAttribute('src'),
+        text: document.body.innerText
+      }));
+      check('a link naming a VPA the café does not use shows no code', !r.ready && !r.img, JSON.stringify({ ready: r.ready }));
+      check('and does not print that VPA anywhere', r.text.indexOf('someone@ybl') === -1, r.text);
+      check('and tells the customer not to pay it', /don.t pay/i.test(r.text), r.text);
+      await ctx.close();
+    }
+
+    // ------------------------------------------------- the café's fallback VPA
+    {
+      const { ctx, pg } = await openPay('pa=sraveen.chirania-1%40okaxis&am=90&t=2', null);
+      check('with no routing list set, the café’s own default VPA is still accepted',
+            await pg.evaluate(() => !document.getElementById('pay-ready').hidden));
+      await ctx.close();
+    }
+
+    // ------------------------------------------------------- broken and offline links
+    {
+      const { ctx, pg } = await openPay('pa=first%40okicici&am=abc&t=5', ['first@okicici']);
+      const r = await pg.evaluate(() => ({ ready: !document.getElementById('pay-ready').hidden, text: document.body.innerText }));
+      check('a link with no usable amount shows no code, and says it is incomplete',
+            !r.ready && /incomplete/i.test(r.text), r.text);
+      await ctx.close();
+    }
+    {
+      const { ctx, pg } = await openPay('pa=first%40okicici&am=250&t=5', 'offline');
+      const r = await pg.evaluate(() => ({ ready: !document.getElementById('pay-ready').hidden,
+                                           retry: !document.getElementById('pay-retry').hidden, text: document.body.innerText }));
+      check('when the link cannot be checked, no code is shown — it is not assumed to be ours',
+            !r.ready, r.text);
+      check('and there is a way to try again', r.retry && /connection/i.test(r.text), r.text);
       await ctx.close();
     }
 

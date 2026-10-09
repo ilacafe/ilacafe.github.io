@@ -69,19 +69,25 @@ around it: **a `upi://` link fired from a web page cannot pay us.** From a page 
 is an NPCI *Intent* (initiation mode 04), and OC/76A bars mode 04/05 to a P2P
 payee — the app opens, the customer enters their PIN, and the payment is refused.
 No amount of rebuilding the string changes that. So no page here offers to open a
-UPI app on the device it is running on. Web-order collection used to be handed to a
-WhatsApp pay link for exactly this reason (a link tapped inside a native app does
-complete), and in practice that failed for a different reason: WhatsApp renders a
-link from an unsaved number as dead text, and a first-time customer is an unsaved
-number. Web orders no longer use it; they use the code in the customer's own app.
+UPI app on the device it is running on. Collection used to be handed to a WhatsApp
+message carrying a `upi://` link, on the theory that a link tapped inside a native
+app completes. It never could: WhatsApp only makes `http(s)` links tappable, so the
+`upi://` arrived as plain text, and opened any other way it is the same Intent to a
+personal (non-merchant) VPA and is refused all the same.
 
-The till's bill screen still has **Send Pay Link**, for a customer who is not at the
-counter to scan. It sends the bill over WhatsApp with the `upi://` link *and* the UPI
-ID and amount as plain text, because for an unsaved number the plain text is the
-only part that works. The VPA it sent is written onto the table (`payLink`), and the
-UPI screen reuses it when opened for the same amount — otherwise a fresh pick could
-land on another bank and the watcher's bank filter would refuse the very credit the
-link produced.
+What a personal VPA *can* take is a QR — and that includes a QR saved to the phone
+and picked from the gallery inside the UPI app, which is how a customer with one
+phone pays. So the till's bill screen has **Send Pay Link**, for a customer who is
+not at the counter: it sends the bill over WhatsApp with an `https://ila.cafe/pay.html`
+link (tappable), and the UPI ID and amount as plain text. `pay.html` shows the code,
+saves it to the phone in one tap, and offers the UPI ID to copy. It reads the VPA from
+the link, and refuses any VPA that is not in the café's own `settings/upiList`, so the
+page cannot be used to put somebody else's account under the café's name.
+
+The VPA the link names is written onto the table (`payLink`), and the till's UPI
+screen reuses it when opened for the same amount — otherwise a fresh pick could land
+on another bank and the watcher's bank filter would refuse the very credit the link
+produced. Web orders use the code in the customer's own app instead.
 
 `qr.js` is the encoder both pages draw with — one implementation, because a wrong
 QR is worse than a missing one: it scans, and it pays the wrong thing or nothing.
