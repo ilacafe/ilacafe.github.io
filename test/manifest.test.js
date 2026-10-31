@@ -33,9 +33,8 @@ function pngSize(file) {
   }
   // SEAMLESS, NOT MERELY CONSISTENT.
   //
-  // On the iPhone this app already runs to the edges — that is
-  // apple-mobile-web-app-status-bar-style: black-translucent, which lets the page
-  // draw under the status bar, and iOS ignores this field entirely. Android never
+  // On the iPhone iOS ignores this field entirely and goes by its own meta tags (see the
+  // status-bar check below for why the page no longer draws under the clock). Android never
   // matched it. Standalone hands Android a system navigation bar the page cannot
   // reach and the web platform cannot colour: there is no manifest member or meta
   // for it, and Chrome paints it light or dark from the scheme. So the home bar was
@@ -52,6 +51,18 @@ function pngSize(file) {
         'display is ' + manifest.display);
   note('standalone still leaves Android a system bar; only fullscreen takes it away');
   check('and starts at the ordering page', manifest.start_url === '/');
+
+  // NOT UNDER THE STATUS BAR. black-translucent let the page run up beneath the clock, and
+  // on iOS 26 an installed app drawn that way gets a system blur across the top of the
+  // page that nothing in CSS can switch off — on the till it sat over the category strip,
+  // reported as the header "fading". Without the tag the status bar is opaque and the page
+  // starts below it, clear of the blur. Put back, it would come back.
+  {
+    const under = ['index.html', 'pos.html', 'admin.html', 'analytics.html', 'chef.html', 'barista.html', 'inventory.html', 'pay.html']
+      .filter(p => /<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">/.test(readPage(p)));
+    check('no page asks iOS to draw it under the status bar, where iOS 26 blurs it',
+          under.length === 0, under.join(', '));
+  }
 
   check('theme_color matches the meta tag the page already had',
         manifest.theme_color === (/<meta name="theme-color" content="([^"]+)"/.exec(idx) || [])[1],
