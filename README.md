@@ -92,19 +92,31 @@ screen reuses it when opened for the same amount — otherwise a fresh pick coul
 on another bank and the watcher's bank filter would refuse the very credit the link
 produced. Web orders use the code in the customer's own app instead.
 
-**A payment that fits a pay link is taken by nothing on its own.** It is paid from
-wherever the customer is, so it lands with no QR on screen waiting for it, and every
-claimer matches on amount, bank and time — none of which can say whose a ₹450 is. Left to
-the matchers, the next ₹450 QR on another table took Table 5's link payment and closed as
-bank-verified; reserved for Table 5 instead, Table 5's own screen closed on a walk-in's
-₹450 that happened to fit its link. So `linkTablesFor` marks any credit that fits an open
-table's `payLink` (amount, bank, paid after that link went out), and no watcher, manual
-confirm, web-order sweep or reconciler claims a marked credit. The UPI screen lists it
-behind **Staff** — who paid, when, whose link it fits — and one tap on **Use** claims it
-for the bill on screen, after the person at the till has asked. A link stays on the table
-until a bank-matched payment answers it (then it is removed, so a part-paid table stops
-holding later payments of that amount) or the table closes. A reminder for the same link
-keeps its first send time; a new link for a new total is added alongside the old one.
+**A link's amount is its name.** A bank credit carries no order id, so the till matches
+on amount, bank and time — and none of those can say whose a ₹450 is. A counter payment
+gets away with it because it lands while its own QR is on screen; a link's lands with
+nothing waiting for it. Both earlier designs for deciding whose it was (reserve it for its
+table; have staff confirm it) sent somebody's money to the wrong bill in some ordinary
+sequence. So a link asks for the bill **less 1–49 paise**, unique among the links
+that are out — ₹449.63 for a ₹450 bill — and bank alerts keep paise, so the credit says
+exactly which link it answers. The café gives up at most 49 paise a link.
+
+- `sweepPayLinks` books such a credit to its table the moment it lands, on whichever till
+  hears it first (an exclusive claim, then the table's own transaction, which also refuses a
+  link already answered), and the bill closes or is paid down by itself. A table closed in
+  the meantime gives the claim back.
+- `amountFits` is the rule every matcher now uses: a whole-rupee credit fits within 50 paise
+  as it always has, but a credit with paise fits **only its exact amount** — nobody scanning a
+  ₹450 code pays ₹449.63. That alone keeps a link's payment away from every counter QR, web
+  order and the reconciler, and it stays theirs-to-ignore after its table has closed.
+- "Settle without bank confirmation" on a bill with a link out says the link books itself.
+  If staff settle by hand anyway, the ledger line records the link's amount (`linkAmounts`),
+  and the reconciler may pair the link's late alert with that line and no other.
+- A reminder for the same bill is the same link (same amount, first send time); a new link
+  after the bill changed gets its own amount, alongside the old one.
+
+A customer who ignores the paise and types a rounded amount by hand is matched like any
+other payment, which is how every payment was matched before pay links existed.
 
 `qr.js` is the encoder both pages draw with — one implementation, because a wrong
 QR is worse than a missing one: it scans, and it pays the wrong thing or nothing.
