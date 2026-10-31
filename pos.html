@@ -1184,7 +1184,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-10-31.1"></script>
+    <script src="/build-check.js" data-build="2026-10-31.2"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -3706,23 +3706,44 @@
         }
         (function(){
             let ticking = false, lockUntil = 0;
+            let tappedCat = null;                  // the chip tapped, until the page leaves the bottom
             function spy(){
                 ticking = false;
                 if (Date.now() < lockUntil) return;   // a smooth scroll is in flight; don't fight it
                 const heads = catHeads();
                 if (!heads.length) return;
-                // At the bottom of the page the last heading never reaches the line, so it could
-                // never be highlighted — tapping the last category lit up the wrong one.
+                // A FEW PIXELS OF GIVE. A jump lands its heading ON this line — scroll-margin-top
+                // is this same number — and layout rounds: on a phone the heading came to rest at
+                // 67.19 against a line of 67, which read as "not reached yet". The lock hid it for
+                // 900ms, and then the first scroll event of any kind ran this and moved the mark to
+                // the category above: the page shifting when OFFLINE MODE came or went in the
+                // header, a finger resting on the glass, iOS settling a smooth scroll. The
+                // underline faded out of the chip just tapped and into the one before it. Within
+                // SLACK of the line, a heading has been reached.
+                const SLACK = 4;
+                const line = catStripOffset() + SLACK;
+                let reached = 0;
+                heads.forEach((h, i) => { if (h.getBoundingClientRect().top <= line) reached = i; });
+                // AT THE BOTTOM, the headings below the line can never reach it — there is no more
+                // page to scroll. Marking the last one there is what lets the last category be
+                // marked at all. But on an iPad the last screenful holds several categories, and
+                // tapping any of them but the last landed here too: the first scroll event after
+                // the tap moved the mark onto the last category. So a category TAPPED stays marked
+                // if it is the heading at the line or one of those below it. Scrolled down to the
+                // bottom without a tap, the last one is marked, as before.
                 const atBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 4);
-                if (atBottom){ setActiveChip(heads[heads.length - 1].id); return; }
-                const line = catStripOffset();
-                let current = heads[0].id;
-                heads.forEach(h => { if (h.getBoundingClientRect().top <= line) current = h.id; });
-                setActiveChip(current);
+                if (atBottom){
+                    const t = heads.findIndex(h => h.id === tappedCat);
+                    setActiveChip(t >= reached ? tappedCat : heads[heads.length - 1].id);
+                    return;
+                }
+                tappedCat = null;
+                setActiveChip(heads[reached].id);
             }
             window.jumpToCategory = function(id){
                 const el = document.getElementById(id); if (!el) return;
                 setActiveChip(id);
+                tappedCat = id;
                 lockUntil = Date.now() + 900;         // hold it while the animation runs
                 el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             };
