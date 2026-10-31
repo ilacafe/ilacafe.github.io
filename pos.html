@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#8D6E52">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- NO apple-mobile-web-app-status-bar-style. It was black-translucent, so the page ran up
+         under the status bar. On iOS 26 an installed web app drawn that way gets a system
+         "scroll edge" blur over the top of the page, and there is no CSS or meta switch to
+         turn it off: on the till it sat across the category strip, which read as the
+         header fading. A solid band under the status bar does not stop it (others tried
+         that, on a device), and nor does pinning a header. Without the tag the status bar
+         is opaque and the page starts below it, which is where the blur is not. iOS reads
+         this tag only when the app is added to the Home Screen: an existing install keeps
+         the old look until it is removed and added again, which is why the safe-area band
+         and padding stay. -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="ILA POS">
@@ -15,7 +24,7 @@
          An installed home-screen app on iOS shows a launch image while the page loads.
          Android builds one from the manifest's background_color and icon; iOS does not
          — it wants these, one per device size and orientation, and with none of them
-         present it shows black. With black-translucent above, very black.
+         present it shows black.
          So all seven apps opened onto a black rectangle for as long as startup took,
          which is what the café called "black screen, then the app". Startup being
          quicker is a separate job; this is what is on screen while it happens.
@@ -1184,7 +1193,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-10-31.2"></script>
+    <script src="/build-check.js" data-build="2026-10-31.3"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
