@@ -713,9 +713,6 @@
         .split-paid { }
 
         .staff-reveal { background: transparent; border: none; color: var(--brand-text); font-family: 'Quicksand', sans-serif; font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; padding: 14px 16px; min-height: 44px; margin-top: 6px; cursor: pointer; }
-        .upi-offer { display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 0.85rem; line-height: 1.4; }
-        .upi-offer > div { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-        .upi-offer .btn { flex: 0 0 auto; width: auto; }
 
         /* Visual size unchanged, and the touch area is a 44px box centred on the button.
            It used to extend 8px above and below and nothing to either side — left:0;
@@ -1101,9 +1098,6 @@
                  A matching bank credit still auto-confirms on its own; the manual override
                  lives behind the staff reveal below and is deliberately dull to find. -->
             <div id="upi-staff-actions" style="display:none;">
-                <!-- Payments that fit a pay link: never taken on their own, shown here with
-                     who paid and when, for a person to say whose they are. See linkTablesFor. -->
-                <div id="upi-offers"></div>
                 <div class="modal-buttons"><button class="btn btn-primary" style="width: 100%;" onclick="confirmUPIPayment()">Settle without bank confirmation</button></div>
             </div>
             <button class="staff-reveal" id="upi-staff-reveal" onclick="window.revealStaffActions()">Staff</button>
@@ -1190,7 +1184,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-10-09.1"></script>
+    <script src="/build-check.js" data-build="2026-10-31.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1767,6 +1761,7 @@
                 window.tablesFromCacheAt = 0;
                 try { localStorage.setItem(TABLE_CACHE_KEY, packTables(window.activeTables, Date.now())); } catch(e){}
                 updateDashboards(); refreshActiveModals(); try { renderSideRail(); } catch(e){}
+                try { sweepPayLinks(); } catch(e){}
             }, window.ilaRefused("pos/activeTables"));
             db.ref('pos/cashDrawer').on('value', snap => { window.cashDrawer = parseFloat(snap.val()) || 0; updateDashboards(); }, window.ilaRefused("pos/cashDrawer"));
             db.ref('pos/upiTotal').on('value', snap => { window.upiTotal = parseFloat(snap.val()) || 0; updateDashboards(); }, window.ilaRefused("pos/upiTotal"));
@@ -2078,39 +2073,44 @@
             } catch(e){ return false; }
         };
 
-        // WHOSE PAY LINK IS THIS CREDIT?
+        // ===== PAY LINKS: EXACT AMOUNTS =====
         //
-        // A counter payment lands while its own QR is on screen, so the watcher behind that
-        // QR is there to claim it. A pay link's payment is not: the customer pays from their
-        // seat, or from home, and the credit sits unclaimed until somebody opens THAT table's
-        // UPI screen. Every other claimer matches on amount, bank and a time window, and none
-        // of those can tell a link payment from its own — so a walk-in shown a ₹450 QR on
-        // another table took Table 5's ₹450 link payment, closed as bank-verified before the
-        // walk-in had scanned anything, and left Table 5's diner, who had paid, unverifiable.
-        // The web-order sweep and the late reconciler would take it the same way.
+        // A bank credit carries no order id, so everything here matches on amount, bank and
+        // time — and none of those can say whose a ₹450 is. A counter payment gets away with it
+        // because it lands while its own QR is on screen. A pay link's does not: the customer
+        // pays from their seat or from home, and three rounds of rules for deciding whose it was
+        // each sent somebody's money to the wrong bill (another table's QR took it; the linked
+        // table took a walk-in's; a web order was held behind it).
         //
-        // NOBODY TAKES IT ON THEIR OWN — NOT EVEN THE TABLE IT WAS SENT FOR. Amount, bank and
-        // time cannot say whose a ₹450 is, and that cuts both ways: a walk-in's ₹450 to the same
-        // account, paid while Table 5's link is out, fits Table 5's link exactly. Let Table 5's
-        // screen take whatever fits its link and it closes as bank-verified on the walk-in's
-        // money before its own diner has paid; let any table take it and the walk-in's QR takes
-        // the diner's. So a credit that fits a link is never claimed by a watcher, a manual
-        // confirm, the web sweep or the reconciler. The UPI screen lists it in the staff panel —
-        // who paid, when, which table's link it fits — and a person, who can ask, says whose it
-        // is with one tap. Everything that fits no link is matched exactly as before.
+        // So a link asks for an amount nothing else asks for: the bill less a few paise, unique
+        // among the links that are out — ₹449.63 for a ₹450 bill. Bank alerts keep paise, so the
+        // credit says which link it answers, exactly, and sweepPayLinks books it to that table
+        // with nobody having to decide anything. The café gives up at most 49 paise a link.
         //
-        // Returns every open table whose link the credit fits. A table can have more than one
-        // link out (a resend after the bill changed): payLink.sent lists each, and each keeps
-        // its own send time, because a resend must not move the time the first message went
-        // out — a payment already made from it would fall outside its own link. A link that
-        // has been paid is taken off the list (settleTablePayment), and the rest go when the
-        // table closes.
+        // AND A QR PAYS EXACTLY WHAT IT SAYS. Every matcher allows 50 paise either way, which is
+        // what let a link's ₹449.63 look like anyone's ₹450. amountFits keeps the tolerance for a
+        // whole-rupee credit — nothing about that changes — but a credit with paise in it fits
+        // only the exact amount: nobody scanning a ₹450 code pays ₹449.63. That one rule keeps a
+        // link's payment away from every QR, every web order and the reconciler, and it is what
+        // keeps a link's payment from being anyone else's after its table has closed, too.
+        window.amountFits = function(credit, target){
+            const c = parseFloat(credit) || 0, t = parseFloat(target) || 0;
+            const d = Math.abs(c - t);
+            if (d >= 0.5) return false;
+            if (Math.round(c * 100) % 100 !== 0 && d >= 0.005) return false;
+            return true;
+        };
+        // The links a table has out. A table can have more than one (a new link after the bill
+        // changed); each keeps its own amount, VPA and the time IT went out.
         window.linkEntries = function(pl){
             if (!pl) return [];
             const list = pl.sent ? Object.values(pl.sent) : [{ vpa: pl.vpa, amount: pl.amount, at: pl.at }];
             return list.filter(e => e && e.vpa);
         };
-        window.linkTablesFor = function(p, tables){
+        // Every open link this credit answers: the exact amount, a bank that fits the link's VPA,
+        // and paid no earlier than the link went out. Amounts are unique among open links, so
+        // this is one hit or none; two means something went wrong, and nothing is booked on it.
+        window.linkHits = function(p, tables){
             const out = [];
             try {
                 if (!p) return out;
@@ -2118,18 +2118,23 @@
                 const paidAt = window.creditPaidAt(p);
                 const T = tables || window.activeTables || {};
                 for (const id in T){
-                    const fits = window.linkEntries(T[id] && T[id].payLink).some(e => {
-                        if (Math.abs((parseFloat(e.amount) || 0) - amt) >= 0.5) return false;
-                        if (!window.upiBankMatch(e.vpa, p)) return false;
-                        // paid before that link went out is not that link's
+                    for (const e of window.linkEntries(T[id] && T[id].payLink)){
+                        // Only a link whose amount carries paise names its payment. A whole-rupee
+                        // link — sent before amounts were unique, or for a bill under ₹1 — is
+                        // anybody's ₹450, and is left to be matched the ordinary way.
+                        const ea = parseFloat(e.amount) || 0;
+                        if (Math.round(ea * 100) % 100 === 0) continue;
+                        if (Math.abs(ea - amt) >= 0.005) continue;
+                        if (!window.upiBankMatch(e.vpa, p)) continue;
                         const sent = parseFloat(e.at) || 0;
-                        return !(sent && paidAt && paidAt < sent - 2*60000);
-                    });
-                    if (fits) out.push(id);
+                        if (sent && paidAt && paidAt < sent - 2*60000) continue;
+                        out.push({ table: id, entry: e });
+                    }
                 }
             } catch(e){}
             return out;
         };
+        window.linkTablesFor = function(p, tables){ return window.linkHits(p, tables).map(h => h.table); };
 
         // ===== WEB ORDER PAYMENT VERIFICATION =====
         // Web orders are paid up-front on trust; now that bank credit emails land in
@@ -2176,6 +2181,7 @@
                         const v = s.val();
                         if (v == null) delete window._wvClaims[ref]; else window._wvClaims[ref] = v;
                         try { sweepWebPayments(); } catch(e){}
+                        try { sweepPayLinks(); } catch(e){}
                     };
                     r.on('value', handler, window.ilaRefused("a web order’s payment claim"));
                     window._wvClaimWatch[ref] = { ref: r, handler: handler };
@@ -2190,6 +2196,66 @@
         // It also BOOKS the money at the moment the credit is matched, not at Accept, so what
         // happens to the order afterwards can never make a real payment disappear.
         window._wvBooking = {};
+        // ===== PAY-LINK SWEEP =====
+        // A pay link's credit is booked to its table the moment it lands, by whichever till
+        // hears it first. Its amount names the link (see amountFits), so there is nothing for
+        // anyone to decide, and a bill paid from the customer's seat closes itself the way one
+        // paid at the counter does — or is paid down, if more was ordered after the link went.
+        //
+        // The claim is a fresh token per attempt, so exactly one till wins it. The table's own
+        // transaction is what books; the ledger line goes only once that has committed, and a
+        // table that closed in the meantime gives the claim back rather than keeping money it
+        // booked nowhere — an unclaimed credit with paise in it is one nothing else will take,
+        // and it is there to be seen.
+        window._linkBooking = {};
+        function sweepPayLinks(){
+            try {
+                const credits = window._wvCredits || {};
+                const claims = window._wvClaims || {};
+                for (const ref in credits){
+                    const p = credits[ref]; if (!p) continue;
+                    if (claims[ref] || window._linkBooking[ref]) continue;
+                    const hits = window.linkHits(p);
+                    if (hits.length !== 1) continue;        // none — or two, which unique amounts should never allow
+                    bookLinkPayment(ref, p, hits[0].table, hits[0].entry);
+                }
+            } catch(e){ console.error('sweepPayLinks', e); }
+        }
+        function bookLinkPayment(ref, p, tableID, entry){
+            window._linkBooking[ref] = true;
+            const token = 'link-' + tableID + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+            const claim = db.ref('payments/claims/' + ref);
+            const release = () => { try { claim.transaction(c => (c === token ? null : undefined)); } catch(e){} };
+            claim.transaction(c => (c === null ? token : undefined), (err, committed, snap) => {
+                if (err || !committed || !snap || snap.val() !== token){ delete window._linkBooking[ref]; return; }
+                const amount = Math.round((parseFloat(p.amount) || 0) * 100) / 100;
+                const payId = 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+                settleTablePayment(tableID, amount, 'UPI', {
+                    lastPay: { payId: payId, ref: ref, payer: p.payer || null, amount: p.amount, source: p.source || null },
+                    linkPaid: { vpa: entry.vpa, amount: parseFloat(entry.amount) || amount, exact: true },
+                    requireLink: { vpa: entry.vpa, amount: parseFloat(entry.amount) || amount },
+                    phone: entry.phone || null
+                }, res => {
+                    // Closed in between, or that link already answered: give the claim back. A
+                    // second payment of the same link is then a credit nothing will take — which
+                    // is right, it is a double payment to be seen and refunded.
+                    if (res.aborted || res.failed){ release(); delete window._linkBooking[ref]; return; }
+                    const label = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
+                    const cfg = window._upiCfgCache || {};
+                    const bankTag = (cfg[upiKey(entry.vpa)] && cfg[upiKey(entry.vpa)].bank) || null;
+                    addLedgerEntry('upi_income', amount, label + ' (UPI · pay link)', { payId: payId, state: 'verified', ref: ref, bankTag: bankTag });
+                    try { window.upiRecordPayment(entry.vpa, amount); } catch(e){}
+                    // This till may have that bill's QR up, waiting for a counter payment that is
+                    // no longer owed.
+                    if (res.closed && window.checkoutTableID === tableID){
+                        try { stopUPIWatch(); clearQR(); closeModal('upi-modal'); } catch(e){}
+                    }
+                    ilaToast(label + ' paid ₹' + amount + ' by pay link' + (p.payer ? ' — ' + p.payer : '') + (res.closed ? '. Bill closed.' : '.'));
+                    delete window._linkBooking[ref];
+                });
+            });
+        }
+
         function sweepWebPayments(){
             try {
                 const now = Date.now();
@@ -2290,13 +2356,11 @@
                     const p = credits[ref]; if (!p) continue;
                     // a credit claimed by THIS order is still ours — see claimPayment(fixedToken)
                     if (claims && claims[ref] && !(myTok && claims[ref] === myTok)) continue;
-                    if (Math.abs((parseFloat(p.amount) || 0) - total) >= 0.5) continue;
+                    if (!window.amountFits(p.amount, total)) continue;      // a pay link's paise are not this order's
                     if (!window.upiBankMatch((order && order.upiId) || null, p)) continue;
                     // the customer cannot have paid before they were asked — see creditPaidAt
                     const at = window.creditPaidAt(p);
                     if (at < lo || at > nowMs + 60000) continue;
-                    // a table's pay link is waiting on it — see linkTablesFor
-                    if (window.linkTablesFor(p).length) continue;
                     if (!best || at > best.at) best = { ref: ref, at: at, p: p };
                 }
                 return best;
@@ -2550,7 +2614,7 @@
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
         }
 
-        function archivePOSTable(tableID, tableData, method) {
+        function archivePOSTable(tableID, tableData, method, phone) {
             // The number typed on the bill, if one was. It used to be read by one function —
             // the WhatsApp bill — and thrown away when that function went, which would have
             // made the field on the checkout screen collect nothing. A web order already
@@ -2558,8 +2622,12 @@
             // closed the number is otherwise unreachable, and Send Receipt needs it.
             // parseMobile, not the last ten digits: the box takes any length now, and the last
             // ten of a mistyped eleven is a stranger's number that Send Receipt would later use.
+            // A bill closed by the pay-link sweep was never on this screen: the box holds
+            // whatever was last typed for some other bill. That caller hands in the number the
+            // link went to instead (null for none), and the box is read only when it does not.
             let billPhone = null;
-            try { billPhone = window.parseMobile((document.getElementById('checkout-phone') || {}).value); } catch(e){}
+            if (phone !== undefined) billPhone = phone || null;
+            else try { billPhone = window.parseMobile((document.getElementById('checkout-phone') || {}).value); } catch(e){}
             const localBill = { 
                 id: Date.now(), 
                 table: tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID, 
@@ -4549,6 +4617,12 @@
 
             db.ref('pos/activeTables/' + tableID).transaction(function(cur){
                 if (!cur) return;                              // already closed elsewhere — abort
+                // The sweep books a link only while the SERVER's copy still has it out: a link
+                // answered already — by another till, or settled by hand — is not paid twice,
+                // whatever the claims say. See bookLinkPayment.
+                const need = opts && opts.requireLink;
+                if (need && !window.linkEntries(cur.payLink).some(e =>
+                        upiKey(e.vpa) === upiKey(need.vpa) && Math.abs((parseFloat(e.amount) || 0) - need.amount) < 0.005)) return;
                 if (!cur.items) cur.items = {};
 
                 if (alloc){
@@ -4568,10 +4642,13 @@
                 // The pay link a bank-matched payment answered is answered — see linkTablesFor.
                 // Left on a part-paid table it would go on holding every later payment of its
                 // amount, and offering them here, for as long as the table stayed open.
+                // exact: the sweep booked that link's own credit; otherwise any link within 50
+                // paise of what was taken (the customer paid at the counter, or by hand).
                 const linkPaid = opts && opts.linkPaid;
                 if (linkPaid && cur.payLink){
+                    const tol = linkPaid.exact ? 0.005 : 0.5;
                     const left = window.linkEntries(cur.payLink).filter(e =>
-                        !(upiKey(e.vpa) === upiKey(linkPaid.vpa) && Math.abs((parseFloat(e.amount) || 0) - linkPaid.amount) < 0.5));
+                        !(upiKey(e.vpa) === upiKey(linkPaid.vpa) && Math.abs((parseFloat(e.amount) || 0) - linkPaid.amount) < tol));
                     if (!left.length) delete cur.payLink;
                     else { const last = left[left.length - 1]; cur.payLink = { vpa: last.vpa, amount: last.amount, at: last.at, sent: left }; }
                 }
@@ -4593,7 +4670,7 @@
                     res.aborted = true;                         // another device closed it first
                 } else if (closing){
                     res.closed = true;
-                    archivePOSTable(tableID, closing, method);
+                    archivePOSTable(tableID, closing, method, opts ? opts.phone : undefined);
                 } else {
                     const t = (snap && snap.val()) || null;
                     res.stillOpen = true;
@@ -4735,20 +4812,39 @@
             const vpa = offered ? prev : window.getRandomUPI();
             window.tableUPIVPA[tableID] = vpa;
 
+            // THE AMOUNT IS THE LINK'S NAME — see amountFits. A reminder for the same bill is the
+            // same link, at the same amount and with the time it first went out: the customer may
+            // pay from either message. Otherwise the bill less 1–49 paise, unused by any link
+            // that is out on any table, so the bank's alert says which link it answers.
+            const same = window.linkEntries(t.payLink).find(e =>
+                upiKey(e.vpa) === upiKey(vpa) && Math.abs((parseFloat(e.due) || 0) - due) < 0.005);
+            let amount = same ? (parseFloat(same.amount) || due) : due;
+            if (!same && due >= 1){
+                const taken = {};
+                for (const id in (window.activeTables || {}))
+                    for (const e of window.linkEntries(window.activeTables[id] && window.activeTables[id].payLink))
+                        taken[Math.round((parseFloat(e.amount) || 0) * 100)] = true;
+                const free = [];
+                for (let ps = 1; ps <= 49; ps++) if (!taken[Math.round(due * 100) - ps]) free.push(ps);
+                if (free.length) amount = Math.round(due * 100 - free[Math.floor(Math.random() * free.length)]) / 100;
+            }
+            const shown = amount.toFixed(2);
+
             // The till is served from ila.cafe; anywhere else (a test, a local copy) the link
             // still has to point at the real page, or the customer is sent nowhere.
             const site = location.protocol === 'https:' ? location.origin : 'https://ila.cafe';
-            const link = site + '/pay.html?pa=' + encodeURIComponent(vpa) + '&am=' + due + '&t=' + encodeURIComponent(tableID);
+            const link = site + '/pay.html?pa=' + encodeURIComponent(vpa) + '&am=' + shown + '&t=' + encodeURIComponent(tableID);
 
             let msg = 'ILA — ' + (tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID) + '\n\n';
             for (const name in (t.items || {})) msg += t.items[name].qty + 'x ' + name + ' - ₹' + Math.round(lineTotal(t.items[name])) + '\n';
             msg += '\nTotal: ₹' + total + '\n';
             if (paid > 0) msg += 'Paid: ₹' + paid + '\nDue: ₹' + due + '\n';
-            msg += '\nPay ₹' + due + ' here:\n' + link;
+            msg += '\nPay ₹' + shown + ' here:\n' + link;
             // WhatsApp can leave a link inactive when it comes from a number the customer has
             // never messaged, until they reply. Saying so costs a line; the ID below works anyway.
             msg += '\n(Link not opening? Reply to this message, then tap it again.)';
-            msg += '\n\nOr pay ₹' + due + ' to UPI ID: ' + vpa;
+            msg += '\n\nOr pay exactly ₹' + shown + ' to UPI ID: ' + vpa;
+            if (amount !== due) msg += '\n(A few paise off your bill — that is how we know the payment is yours.)';
 
             // A transaction, not a write to .../payLink: if the bill was closed on another till
             // a moment ago, a child write would bring the table back with nothing on it.
@@ -4756,14 +4852,12 @@
                 db.ref('pos/activeTables/' + tableID).transaction(cur => {
                     if (!cur) return;
                     // Every link this table has been sent stays on the list until it is paid or the
-                    // table closes, each with the time IT went out — see linkTablesFor. A reminder
-                    // for the same VPA and amount is the same link and keeps its first time; moving
-                    // that time forward would put a payment already made outside its own link.
-                    const now = serverNow();
+                    // table closes — see linkHits. The reminder case changes nothing.
                     const sent = window.linkEntries(cur.payLink);
-                    const same = sent.find(e => upiKey(e.vpa) === upiKey(vpa) && Math.abs((parseFloat(e.amount) || 0) - due) < 0.5);
-                    const list = same ? sent : sent.concat([{ vpa: vpa, amount: due, at: now }]).slice(-4);
-                    cur.payLink = { vpa: vpa, amount: due, at: same ? (same.at || now) : now, sent: list };
+                    const has = sent.find(e => upiKey(e.vpa) === upiKey(vpa) && Math.abs((parseFloat(e.amount) || 0) - amount) < 0.005);
+                    const list = has ? sent : sent.concat([{ vpa: vpa, amount: amount, due: due, at: serverNow(), phone: phone }]).slice(-4);
+                    const top = list[list.length - 1];
+                    cur.payLink = { vpa: top.vpa, amount: top.amount, at: top.at, sent: list };
                     return cur;
                 }, err => { if (err) console.error('payLink', err); }, false);
             } catch(e){}
@@ -4901,7 +4995,6 @@
         function stopUPIWatch(){
             window.upiWatchSession++;   // invalidates any handler still attached
             if (window.upiWatchRef){ try { window.upiWatchRef.q.off('value', window.upiWatchRef.handler); } catch(e){} window.upiWatchRef = null; }
-            renderUPIOffers([], null);  // the list belonged to that watch, its table and its amount
         }
         function startUPIWatch(amount){
             stopUPIWatch();
@@ -4926,29 +5019,16 @@
                 // it claimed with nothing booked against it.
                 if (window.checkoutTableID !== myTable || !window.activeTables[myTable]) return;
                 const now = serverNow();
-                const cands = [], offers = [];
+                const cands = [];
                 snap.forEach(ch => {
                     const p = ch.val(); if (!p) return;
-                    if (Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5) return;   // amount must match
+                    if (!window.amountFits(p.amount, amount)) return;                  // amount must match — see amountFits
                     if (!window.upiBankCompatible(p)) return;                          // credit's bank/acct must match this table's VPA
+                    if (window.linkHits(p).length) return;                             // a pay link's: sweepPayLinks books it
                     const at = p.at || 0;
-                    // A credit that fits a pay link is never taken here — not for another table,
-                    // and not for the link's own table either: see linkTablesFor. It goes to the
-                    // staff panel with who paid. This table's own link payment is offered whatever
-                    // its age (the link's send time bounds it); anyone else's only inside the usual
-                    // 30 minutes.
-                    const links = window.linkTablesFor(p);
-                    if (links.length){
-                        const mine = links.indexOf(myTable) !== -1;
-                        if (!mine && at && at < now - 30*60000) return;
-                        if (window._wvClaims && window._wvClaims[ch.key]) return;      // already somebody's
-                        offers.push({ key: ch.key, p, at: window.creditPaidAt(p), links, mine });
-                        return;
-                    }
                     if (at && at < now - 30*60000) return;                             // ignore anything older than 30 min
                     cands.push({ key: ch.key, p, at });
                 });
-                renderUPIOffers(offers, mySession);
                 if (!cands.length) return;
                 cands.sort((a,b) => b.at - a.at);   // newest first
                 const tryNext = i => {
@@ -4966,45 +5046,6 @@
             window.upiWatchRef = { q, handler };
         }
 
-        // THE STAFF PANEL'S LIST OF PAY-LINK PAYMENTS. Behind the Staff reveal, because this
-        // screen is in the customer's hands; the reveal says when there is something in it.
-        // Each line says who paid, when, and whose link it fits, so whoever is at the till can
-        // ask the person in front of them — the one thing the matcher cannot do.
-        function renderUPIOffers(offers, session){
-            window._upiOffers = { list: offers || [], session: session };
-            const box = document.getElementById('upi-offers');
-            const reveal = document.getElementById('upi-staff-reveal');
-            if (reveal) reveal.textContent = (offers && offers.length) ? 'Staff · ' + offers.length + ' to check' : 'Staff';
-            if (!box) return;
-            const label = id => (id === 'Takeaway' ? 'Takeaway' : 'Table ' + id);
-            box.innerHTML = (offers || []).map((o, i) => {
-                const when = o.at ? new Date(o.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-                const others = o.links.filter(id => id !== window.checkoutTableID).map(label);
-                const whose = o.mine
-                    ? ('Fits the pay link sent to this table' + (others.length ? ' — and ' + others.join(', ') + '’s' : ''))
-                    : ('Held for ' + others.join(', ') + '’s pay link');
-                return '<div class="upi-offer"><div>₹' + escapeHTML(String(o.p.amount)) + ' from <b>'
-                     + escapeHTML(o.p.payer || 'unknown payer') + '</b>' + (when ? ' at ' + escapeHTML(when) : '')
-                     + '<br><span style="font-size:0.78rem;">' + escapeHTML(whose) + '</span></div>'
-                     + '<button class="btn btn-secondary" onclick="window.useUPIOffer(' + i + ')">Use</button></div>';
-            }).join('');
-        }
-        window.useUPIOffer = async function(i){
-            const st = window._upiOffers || {};
-            const o = (st.list || [])[i];
-            if (!o || window.upiSettling || st.session !== window.upiWatchSession) return;
-            const table = window.checkoutTableID === 'Takeaway' ? 'Takeaway' : 'Table ' + window.checkoutTableID;
-            const ok = await ilaAsk('Use this payment for ' + table + '?',
-                '₹' + o.p.amount + ' from ' + (o.p.payer || 'an unknown payer') + '. '
-                + (o.mine ? 'It fits the pay link this table was sent.' : 'It is being held for another table’s pay link — use it here only if this customer made it.'),
-                { ok: 'Use it', cancel: 'Cancel' });
-            if (!ok || window.upiSettling || st.session !== window.upiWatchSession) return;
-            claimPayment(o.key, o.p, won => {
-                if (st.session !== window.upiWatchSession) return;
-                if (won && !window.upiSettling) autoConfirmUPI({ ref: o.key, payer: o.p.payer || null, amount: o.p.amount, source: o.p.source || null });
-                else if (!won) ilaToast('That payment has already been used for another bill');
-            });
-        };
         function claimPayment(ref, p, cb, fixedToken){
             // fixedToken: a stable, order-derived token (web orders). If the tab dies between
             // winning the claim and writing the booking, the retry recognises its own claim
@@ -5049,6 +5090,12 @@
             const vpa = window.tableUPIVPA[tableID] || null;
             const bankTag = (vpa && window._upiCfgCache && window._upiCfgCache[upiKey(vpa)] && window._upiCfgCache[upiKey(vpa)].bank) || null;
             const tip = parseFloat(window.pendingTip) || 0;
+            // A pay link out for this amount is answered by this payment, whichever way it came:
+            // taken off the table so the sweep does not book it a second time, and — when this
+            // is settled by hand — written on the line, so the link's own late alert (₹449.63
+            // against this ₹450) can still verify it. See amountFits and creditFits.
+            const answered = window.linkEntries(tableData.payLink)
+                .filter(e => upiKey(e.vpa) === upiKey(vpa) && Math.abs((parseFloat(e.amount) || 0) - amountToPay) < 0.5);
             // The entry records the FULL amount received — that is what the bank credit will say,
             // and the matcher compares them exactly. The tip is a field on it, not a second entry.
             addLedgerEntry('upi_income', amountToPay, reason + (tip > 0 ? ' + \u20b9' + tip + ' tip' : ''), {
@@ -5056,7 +5103,8 @@
                 state: (info && info.ref) ? 'verified' : 'unverified',   // matched a bank credit at the counter → verified
                 ref: (info && info.ref) || null,
                 bankTag: bankTag,
-                tip: tip
+                tip: tip,
+                linkAmounts: (info && info.ref) ? null : answered.map(e => parseFloat(e.amount) || 0)
             });
             try { window.upiRecordPayment(vpa, amountToPay); } catch(e){}
             if (tip > 0){
@@ -5080,7 +5128,7 @@
             settleTablePayment(tableID, billPart, "UPI", {
                 alloc: consumeSplitAllocation(),
                 lastPay: info ? Object.assign({ payId: payId }, info) : { payId: payId, ref: null },
-                linkPaid: (info && info.ref && vpa) ? { vpa: vpa, amount: amountToPay } : null,
+                linkPaid: (vpa && answered.length) ? { vpa: vpa, amount: amountToPay } : null,
                 expectSettle: (paid + billPart) >= total - LINE_EPS
             }, function(res){
                 if (res.closed || res.aborted) delete window.tableUPIVPA[tableID];
@@ -5113,17 +5161,28 @@
             // Say plainly what this does. If a credit has already matched, the watcher would
             // have settled it automatically — so reaching this button almost always means
             // vouching for money the system cannot see yet.
-            if (!await ilaAsk('Mark \u20b9' + Math.round(amount) + ' as received?', 'No bank credit has matched this payment yet. It will show as unverified until one does.', { ok: 'Mark received', cancel: 'Cancel' })) return;
+            // A pay link out for this amount books itself the moment its bank alert lands (see
+            // sweepPayLinks), so "the customer says they paid the link" is the one case where
+            // settling by hand is the wrong move. Say so, and let them go ahead if it is not that.
+            const t = window.activeTables[window.checkoutTableID];
+            const link = window.linkEntries(t && t.payLink).find(e => {
+                const ea = parseFloat(e.amount) || 0;
+                return Math.round(ea * 100) % 100 !== 0 && Math.abs(ea - amount) < 0.5;   // only a link that books itself
+            });
+            const ok = link
+                ? await ilaAsk('A pay link for ₹' + link.amount + ' is out for this bill',
+                    'If the customer paid it, it will book itself as soon as the bank’s alert arrives — there is nothing to do. Mark ₹' + Math.round(amount) + ' as received only if they paid some other way.',
+                    { ok: 'Mark received', cancel: 'Wait for it' })
+                : await ilaAsk('Mark ₹' + Math.round(amount) + ' as received?', 'No bank credit has matched this payment yet. It will show as unverified until one does.', { ok: 'Mark received', cancel: 'Cancel' });
+            if (!ok) return;
             const now = serverNow();
             db.ref('payments/incoming').orderByChild('at').limitToLast(60).once('value', snap => {
                 if (window.upiSettling) return;
-                // Same rules as the watcher: a credit that fits a pay link — this table's or any
-                // other's — is never taken here. It is in the staff panel, with who paid, to be
-                // used deliberately; see linkTablesFor.
+                // Same rules as the watcher — see amountFits; a pay link's is sweepPayLinks'.
                 const cand = []; snap.forEach(ch => {
                     const p = ch.val();
-                    if (!p || Math.abs((parseFloat(p.amount)||0) - amount) >= 0.5 || !window.upiBankCompatible(p)) return;
-                    if (window.linkTablesFor(p).length) return;
+                    if (!p || !window.amountFits(p.amount, amount) || !window.upiBankCompatible(p)) return;
+                    if (window.linkHits(p).length) return;
                     if (p.at && p.at < now - 30*60000) return;
                     cand.push({ key:ch.key, p, at:p.at||0 });
                 });
@@ -5159,6 +5218,7 @@
                 if (meta.ref) entry.ref = meta.ref;                     // matched bank credit ref
                 if (meta.bankTag) entry.bankTag = meta.bankTag;         // VPA's admin bank tag, e.g. "yes 8020"
                 if (meta.tip) entry.tip = parseFloat(meta.tip) || 0;    // part of amount, not extra revenue
+                if (meta.linkAmounts && meta.linkAmounts.length) entry.linkAmounts = meta.linkAmounts;   // pay links out when settled by hand
             }
 
             // The line and the total it moves go in ONE write. They used to be two, and
@@ -5240,6 +5300,7 @@
                     // sweep would read as free
                     try { watchClaimsFor(newest); } catch(e){}
                     try { sweepWebPayments(); } catch(e){}
+                    try { sweepPayLinks(); } catch(e){}
                     try { reconcileLedgerVerification(); } catch(e){}
                 }, window.ilaRefused("payments/incoming"));
             } catch(e){}
@@ -5281,7 +5342,7 @@
                 const e = ledger[k];
                 if (!e || e.type !== 'upi_income' || e.state !== 'unverified') continue;
                 if (e.ts && e.ts < now - ENTRY_AGE) continue;
-                pending.push({ key: k, e: e, ts: e.ts || 0, src: 'ledger', win: PROXIMITY });
+                pending.push({ key: k, e: e, ts: e.ts || 0, src: 'ledger', win: PROXIMITY, links: e.linkAmounts || null });
             }
             // parked at EOD — these outlive the ledger they came from
             const carry = window._carryUnverified || {};
@@ -5299,15 +5360,20 @@
                 if (c.ref) usedRefs.add(String(c.ref));
                 if (c.state === 'verified') continue;
                 if (c.ts && c.ts < now - CARRY_AGE) continue;
-                pending.push({ key: pid, ts: c.ts || 0, src: 'carry', win: PROXIMITY,
+                pending.push({ key: pid, ts: c.ts || 0, src: 'carry', win: PROXIMITY, links: c.linkAmounts || null,
                                e: { type: 'upi_income', state: 'unverified', amount: c.amount, bankTag: c.bankTag || null } });
             }
             if (!pending.length) return;
 
             function tagOf(e){ const t = e.bankTag || null; if (!t) return { bankTag:null, acctTag:null, raw:null }; const parts = String(t).trim().toLowerCase().split(/\s+/); return { bankTag: parts[0], acctTag: parts[1] || null, raw: String(t).trim().toLowerCase() }; }
-            function creditFits(entryTag, entryTs, p, win){
+            // A credit with paise fits only its exact amount (amountFits) — or a pay link this
+            // sale was settled by hand while it was out: the late alert for that link's ₹449.63
+            // is the ₹450 line's payment. linkAmounts is written by settleUPI for exactly that.
+            function creditFits(entryTag, entryTs, p, win, links){
                 win = win || PROXIMITY;
-                if (Math.abs((parseFloat(p.amount)||0) - (parseFloat(entryTag.amt)||0)) >= 0.5) return false;
+                const amt = parseFloat(p.amount) || 0;
+                const linkPaid = !!links && Object.values(links).some(a => Math.abs((parseFloat(a) || 0) - amt) < 0.005);
+                if (!window.amountFits(amt, entryTag.amt) && !(linkPaid && Math.abs(amt - (parseFloat(entryTag.amt) || 0)) < 0.5)) return false;
                 if (entryTag.bankTag && p.bank && entryTag.bankTag !== String(p.bank).trim().toLowerCase()) return false;
                 if (entryTag.acctTag && p.acct && String(entryTag.acctTag) !== String(p.acct)) return false;
                 // This is the whole reason bankTime exists: PROXIMITY is what makes a match
@@ -5346,9 +5412,9 @@
                 for (const ref in credits){
                     if (usedRefs.has(String(ref))) continue;
                     const p = credits[ref]; if (!p) continue;
-                    // an open table's pay link is still waiting on it — see linkTablesFor
-                    if (window.linkTablesFor(p).length) continue;
-                    if (ents.some(it => creditFits(g.tag, it.ts, p, it.win))) cands.push({ ref: ref, p: p, at: window.creditPaidAt(p) });
+                    // an open table's pay link: sweepPayLinks books it to that table
+                    if (window.linkHits(p).length) continue;
+                    if (ents.some(it => creditFits(g.tag, it.ts, p, it.win, it.links))) cands.push({ ref: ref, p: p, at: window.creditPaidAt(p) });
                 }
                 if (!cands.length) continue;
                 // counts must line up — 2 entries and 1 credit stays ambiguous, as does 1 and 2
@@ -5358,7 +5424,7 @@
                 // every pairing must still stand on its own proximity check
                 let ok = true;
                 for (let i = 0; i < ents.length; i++){
-                    if (!creditFits(g.tag, ents[i].ts, cands[i].p, ents[i].win)) { ok = false; break; }
+                    if (!creditFits(g.tag, ents[i].ts, cands[i].p, ents[i].win, ents[i].links)) { ok = false; break; }
                 }
                 if (!ok) continue;
 
@@ -5846,6 +5912,7 @@
                             ts: e.ts || 0, bankTag: e.bankTag || null,
                             day: todayKey, state: 'unverified'
                         };
+                        if (e.linkAmounts) carry[e.payId].linkAmounts = e.linkAmounts;   // see creditFits
                     });
                     if (Object.keys(carry).length) await eodStep(db.ref('pos/unverified').update(carry));
                 } catch(e){ console.error('EOD carry-forward', e); }
