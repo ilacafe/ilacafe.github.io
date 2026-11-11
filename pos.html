@@ -1193,7 +1193,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-10-31.3"></script>
+    <script src="/build-check.js" data-build="2026-11-11.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1779,8 +1779,10 @@
             db.ref('pos/tips/lastHeads').on('value', s => { window.lastTipHeads = parseInt(s.val()) || 0; renderTipPool(); }, window.ilaRefused("pos/tips/lastHeads"));
             startTipFeed();
             startVerificationReconciler();
+            window.ledgerAsked = true;      // from here "empty" means nothing yet, until it answers
             db.ref('pos/ledgerEntries').on('value', snap => {
                 window.ledgerDenied = false;
+                window.ledgerLoaded = true;
                 const data = snap.val() || {};
                 window.salesLedgerMap = data;   // keep keyed form for reconciliation
                 window.salesLedger = Object.values(data).sort((a, b) => (b.ts || 0) - (a.ts || 0));
@@ -1794,6 +1796,7 @@
                 // morning, and nobody told the café either: it took a phone at the
                 // counter showing an empty day to find out.
                 window.ledgerDenied = true;
+                window.ledgerLoaded = false;
                 renderLedger();
             });
             db.ref('pos/bills').on('value', snap => {
@@ -2286,17 +2289,82 @@
                     const m = found[id];
                     if ((want[m.ref] || []).length !== 1){ delete window._wvMatch[id]; continue; }
                     const o = window.pendingWebOrders[id]; if (!o) continue;
+                    // The till that wins the atomic claim is the one that books it. THAT IS
+                    // ONLY TRUE IF THE CLAIM NAMES THE TILL — see webClaimToken.
+                    const mine = window.webClaimToken(o);
+                    const held = window._wvClaims[m.ref] || null;
+                    let expect = null;
+                    if (held && mine && held !== mine){
+                        // This order's claim, in another till's hands. That till writes the
+                        // booking in the same tick it wins the claim, so the marker is
+                        // normally here before this line is. Only a claim still standing with
+                        // nothing booked behind it, a good while later, is taken over.
+                        expect = webClaimTakeover(id, held, now);
+                        if (!expect) continue;
+                    }
                     window._wvBooking[id] = true;
-                    // the device that wins the atomic claim is the one that books it — same lock
-                    // the counter QR uses, so two POS devices can't write the entry twice
-                    const tok = o.trackId ? ('web-' + o.trackId) : null;
                     claimPayment(m.ref, m.p, won => {
-                        if (!won){ delete window._wvBooking[id]; return; }
+                        // Lost: somebody holds it. Whatever told this till so arrived while
+                        // the attempt was in flight, when this order was being skipped as
+                        // "write in flight" — so nothing is left to wake the sweep, and it
+                        // has to look again itself to see whose claim it is.
+                        if (!won){ delete window._wvBooking[id]; webSweepSoon(300); return; }
                         bookWebPayment(id, o, m);
-                    }, tok);
+                    }, mine, expect);
                 }
                 renderWebVerifyBadges();
             } catch(e){}
+        }
+        // One pending wake-up at a time, however many things ask for one.
+        function webSweepSoon(ms){
+            if (window._wvSweepTimer) return;
+            window._wvSweepTimer = setTimeout(function(){
+                window._wvSweepTimer = null;
+                try { sweepWebPayments(); } catch(e){}
+            }, ms);
+        }
+        // ===== ONE PAYMENT, ONE TILL =====
+        // A web order's credit is claimed under a token that names the order, so that a
+        // booking interrupted between the claim and the write can be finished rather than
+        // lost. For a while the token named ONLY the order — 'web-{trackId}', the same
+        // string on every till — and claimPayment, correctly, lets a caller re-commit its
+        // own token. So with two tills open, which is every day here, both heard the same
+        // bank credit in the same instant, both "won" the same claim, and both booked it:
+        // two identical lines in the cash-up and the payment in the day's UPI total twice.
+        // The in-flight flag that was supposed to stop a second booking is a variable in
+        // one till's memory. The other till has its own.
+        //
+        // The token names the order AND this till now — this page load, in fact, so two
+        // tabs are two tills. Exactly one of them can create the claim; the other's
+        // transaction is re-run against the winner's value and aborts.
+        //
+        // What that would cost is the thing the order-derived token was for: a till that
+        // dies holding the claim. So a claim that names this order and some other till is
+        // still this order's (wvFindMatch keeps offering it the credit), and if nothing
+        // has been booked behind it after WEB_CLAIM_GRACE_MS it is taken over — by
+        // compare-and-swap on the exact value seen, so of several tills only one gets it.
+        // A live holder needs one tick to book, not twenty seconds.
+        window._tillId = Math.random().toString(36).slice(2, 10);
+        const WEB_CLAIM_GRACE_MS = 20000;
+        window.webClaimToken = function(order){
+            return (order && order.trackId) ? ('web-' + order.trackId + '~' + window._tillId) : null;
+        };
+        // 'web-{trackId}' alone is what a till on the build before this one writes.
+        window.webClaimIsFor = function(order, tok){
+            if (!order || !order.trackId || !tok) return false;
+            const base = 'web-' + order.trackId;
+            tok = String(tok);
+            return tok === base || tok.indexOf(base + '~') === 0;
+        };
+        window._wvForeign = {};
+        function webClaimTakeover(id, held, now){
+            let f = window._wvForeign[id];
+            if (!f || f.tok !== held) f = window._wvForeign[id] = { tok: held, since: now, timer: null };
+            const left = WEB_CLAIM_GRACE_MS - (now - f.since);
+            if (left <= 0) return held;
+            // Nothing else is guaranteed to wake the sweep when the grace runs out.
+            if (!f.timer) f.timer = setTimeout(function(){ f.timer = null; try { sweepWebPayments(); } catch(e){} }, left + 50);
+            return null;
         }
         function bookWebPayment(id, order, m){
             try {
@@ -2308,34 +2376,57 @@
                 } catch(e){}
                 const payId = 'web_' + (order.trackId || id);
                 const amount = parseFloat(m.p.amount) || parseFloat(order.total) || 0;
-                // persist onto the ORDER: survives a reload and the claim, and is what the badge
-                // reads. Without this the paid state lives only in memory and reverts on refresh.
+                // THE MARKER ON THE ORDER AND THE LINE IN THE LEDGER ARE ONE WRITE.
                 //
-                // THE IN-FLIGHT FLAG HAS TO OUTLIVE THIS WRITE, and it used to be dropped the
-                // moment this function returned. What re-entry costs here is not a wasted pass:
-                // addLedgerEntry increments pos/upiTotal, so booking twice adds the payment to
-                // the day's takings twice. The only thing that stops a second pass is the
-                // `o.payment.ref` test at the top of sweepWebPayments, and that reads the ORDER
-                // — which does not carry the field until this write comes back. Every sweep in
-                // between saw an unbooked order, and now that claimPayment honours its own token
-                // (it did not, which is the bug above) it would also win the claim and book
-                // again. The flag is released only if the marker did NOT land, so a real failure
-                // still gets another go and a success is booked exactly once.
-                db.ref('orders/pendingWeb/' + id + '/payment').set({
-                    ref: m.ref, amount: amount, at: m.p.at || Date.now(), payId: payId, bankTag: bankTag || null
-                }).then(function(){
-                    // landed: the order says booked now, and the sweep skips it on that.
-                }).catch(function(){
-                    delete window._wvBooking[id];
-                });
+                // The marker is what says "booked": it survives a reload, it is what the
+                // badge reads, and it is the test at the top of the sweep that stops a
+                // second pass. It used to be a write of its own, sent beside the ledger
+                // line, and the two could part company. The marker refused while the line
+                // landed meant the order still read as unbooked, the in-flight flag was
+                // released "so a real failure gets another go", and the next sweep booked
+                // the same money again. And the marker is refused in an ordinary case: the
+                // order was accepted or rejected a moment ago, and the rules will not have
+                // a payment written onto an order that is no longer there.
+                //
+                // In one multi-path update they land together or not at all, so "another
+                // go" is always safe — and an order that has gone takes its booking with
+                // it, which is right: whoever accepted it by hand has already written its
+                // line, and the reconciler gives that line this credit.
+                //
+                // The in-flight flag outlives the write for the same reason it always had
+                // to: until the marker is back, every sweep sees an unbooked order.
+                const marker = { ref: m.ref, amount: amount, at: m.p.at || Date.now(), payId: payId };
+                if (bankTag) marker.bankTag = bankTag;
                 addLedgerEntry('upi_income', amount, 'Web: ' + (order.tableOrAddress || 'order'), {
                     payId: payId, state: 'verified', ref: m.ref, bankTag: bankTag
+                }, {
+                    webOrder: { id: id, payment: marker },
+                    // An order that is no longer pending is not a failure to tell anyone about.
+                    quiet: function(){ return !(window.pendingWebOrders || {})[id] || !!window._wvBookFailed[id]; },
+                    done: function(err){
+                        if (err){
+                            // Nothing landed. Leave the claim where it is: it is this
+                            // order's, and the next sweep on this till re-commits it.
+                            // A few goes on its own, in case the refusal was a passing
+                            // one; after that it waits for the next thing that wakes it.
+                            const stillHere = !!(window.pendingWebOrders || {})[id];
+                            const tries = stillHere ? ((window._wvBookFailed[id] || 0) + 1) : 0;
+                            if (stillHere) window._wvBookFailed[id] = tries;
+                            delete window._wvBooking[id]; delete window._wvMatch[id];
+                            try { renderWebVerifyBadges(); } catch(e){}
+                            if (stillHere && tries <= 3) webSweepSoon(5000);
+                            return;
+                        }
+                        delete window._wvBookFailed[id];
+                        // Only now is it true, so only now is anyone told.
+                        if (order.upiId) { try { window.upiRecordPayment(order.upiId, amount); } catch(e){} }
+                        if (order.trackId) { try { db.ref('orders/track/' + order.trackId + '/paymentVerified').set(true); } catch(e){} }
+                    }
                 });
-                if (order.upiId) { try { window.upiRecordPayment(order.upiId, amount); } catch(e){} }
-                if (order.trackId) { try { db.ref('orders/track/' + order.trackId + '/paymentVerified').set(true); } catch(e){} }
                 window._wvMatch[id] = m.ref;
             } catch(e){ console.error('bookWebPayment', e); delete window._wvBooking[id]; }
         }
+        window._wvBookFailed = {};
         // pure matcher: newest unclaimed credit fitting amount + VPA bank/acct + time window
         window.wvFindMatch = function(order, credits, claims, nowMs){
             try {
@@ -2357,14 +2448,14 @@
                 // browser writes this field, so without this an order billed to a stranger's own
                 // VPA would take the next credit of its amount from whoever really paid it.
                 if (!window.upiIsOurs(vpa)) return null;
-                const myTok = (order && order.trackId) ? ('web-' + order.trackId) : null;
                 // and it cannot have been paid before the customer was asked
                 const lo = sentAt - 2*60000;
                 let best = null;
                 for (const ref in (credits || {})){
                     const p = credits[ref]; if (!p) continue;
-                    // a credit claimed by THIS order is still ours — see claimPayment(fixedToken)
-                    if (claims && claims[ref] && !(myTok && claims[ref] === myTok)) continue;
+                    // a credit claimed for THIS order is still the order's, whichever till
+                    // holds the claim — see webClaimToken
+                    if (claims && claims[ref] && !window.webClaimIsFor(order, claims[ref])) continue;
                     if (!window.amountFits(p.amount, total)) continue;      // a pay link's paise are not this order's
                     if (!window.upiBankMatch((order && order.upiId) || null, p)) continue;
                     // the customer cannot have paid before they were asked — see creditPaidAt
@@ -2826,6 +2917,54 @@
             return lines.join('\n');
         }
 
+        // ===== A WEB ORDER IS TAKEN ONCE =====
+        // Accept and Reject both end by deleting the order from the queue, and both used
+        // to do everything else first: send the ticket, add the items to the table, write
+        // the ledger line, write the bill, record the refund owed — and only then remove
+        // the order, with a plain remove() that succeeds whether or not the order is
+        // still there. The guard against doing it twice (_webActing) is a variable in one
+        // till's memory.
+        //
+        // There are two tills, and a new web order chimes on both. Accepted on both —
+        // two people reaching for the same card — the kitchen got the ticket twice, a
+        // dine-in table got every item twice and a bill of double the order, a takeaway
+        // confirmed by hand got two lines in the cash-up, and History got two bills.
+        // Rejected on both, a paid order was written into Refunds Due twice.
+        //
+        // So the order is TAKEN first, in a transaction on its own node: the till whose
+        // transaction removes it goes on, and any other finds it gone and is told so.
+        // Nothing reaches the kitchen or the books until the server has said which till
+        // that is.
+        //
+        // It also hands back the order AS THE SERVER HAD IT at that instant, and that is
+        // the copy whose payment state is trusted. The copy on this screen can be a
+        // moment behind: a credit matched and booked (by this till's sweep or the other's)
+        // while Accept was being tapped used to get a second, unverified line from here,
+        // and one that landed while the Reject question was up was rejected as unpaid —
+        // the customer's money in the account and no refund owed to anybody.
+        function takeWebOrder(id){
+            return new Promise(resolve => {
+                let had = null;
+                try {
+                    db.ref('orders/pendingWeb/' + id).transaction(function(cur){
+                        // Runs more than once; only the last run commits, so `had` is
+                        // set or cleared on every pass.
+                        if (!cur){ had = null; return; }
+                        had = cur;
+                        return null;
+                    }, function(err, committed){
+                        if (err) resolve({ ok: false, failed: true });
+                        else if (!committed || !had) resolve({ ok: false, gone: true });
+                        else resolve({ ok: true, order: JSON.parse(JSON.stringify(had)) });
+                    });
+                } catch(e){ resolve({ ok: false, failed: true }); }
+            });
+        }
+        function webOrderNotTaken(taken, verb){
+            if (taken.gone) ilaToast('That order has already been dealt with on another till');
+            else ilaTell('The order was not ' + verb, 'It could not be taken off the queue, so nothing was sent or recorded. Check the connection and try again.');
+        }
+
         window.acceptWebOrder = async function(id) {
             const submitted = window.pendingWebOrders[id];
             if (!submitted) return;
@@ -2878,6 +3017,17 @@
                 return;
             }
 
+            // Take it — see takeWebOrder. From here on this till is the only one acting on
+            // this order, and what the SERVER says about its payment is what is believed.
+            const taken = await takeWebOrder(id);
+            if (!taken.ok){
+                delete window._webActing[id];
+                webOrderNotTaken(taken, 'accepted');
+                return;
+            }
+            order.payment = taken.order.payment || null;
+            order.manualPaid = taken.order.manualPaid || null;
+
             try {
                 dispatchToKitchen(order.items, order.tableOrAddress, order.notes || "", "Web App", order.trackId || null);
             } catch(e) { console.error("Kitchen dispatch error", e); }
@@ -2894,7 +3044,6 @@
                 }
                 db.ref('pos/activeTables/' + tid + '/total').set(firebase.database.ServerValue.increment(parseFloat(order.total) || 0));
                 if (order.notes) db.ref('pos/activeTables/' + tid + '/notes').transaction(c => c ? c + " | " + order.notes : order.notes);
-                db.ref('orders/pendingWeb/' + id).remove();
                 closeModal('web-orders-modal');
                 return;
             }
@@ -3017,7 +3166,6 @@
                 items: order.items
             };
             db.ref('orders/history/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)).set(archivePacket);
-            db.ref('orders/pendingWeb/' + id).remove();
             closeModal('web-orders-modal');
         };
 
@@ -3033,14 +3181,26 @@
             // moment the credit matched, so it is safely in the ledger either way — what
             // rejecting adds is a DEBT. Record it as a task with everything needed to pay it
             // back, instead of deleting the order and losing the trail.
-            const paid = (order.payment && order.payment.ref) ? order.payment : null;
-            const amt = paid ? (parseFloat(paid.amount) || parseFloat(order.total) || 0) : 0;
+            const seenPaid = (order.payment && order.payment.ref) ? order.payment : null;
+            const seenAmt = seenPaid ? (parseFloat(seenPaid.amount) || parseFloat(order.total) || 0) : 0;
             const where = order.tableOrAddress || 'Web order';
 
-            const msg = paid
-                ? '\u26a0 THIS ORDER HAS BEEN PAID \u2014 \u20b9' + Math.round(amt) + '.\n\nRejecting it means you owe the customer a refund. It will be added to Refunds Due in Admin.\n\nReject anyway?'
+            const msg = seenPaid
+                ? '\u26a0 THIS ORDER HAS BEEN PAID \u2014 \u20b9' + Math.round(seenAmt) + '.\n\nRejecting it means you owe the customer a refund. It will be added to Refunds Due in Admin.\n\nReject anyway?'
                 : 'Reject this web order?';
             if (!await ilaAsk("Reject this order?", msg, { ok: "Reject", cancel: "Keep" })) return;
+
+            // Take it — see takeWebOrder — and believe the server about the money. The
+            // question above was answered against the copy on this screen, and a credit
+            // can have been matched and booked while it was up.
+            const taken = await takeWebOrder(id);
+            if (!taken.ok){ webOrderNotTaken(taken, 'rejected'); return; }
+            const paid = (taken.order.payment && taken.order.payment.ref) ? taken.order.payment : null;
+            const amt = paid ? (parseFloat(paid.amount) || parseFloat(order.total) || 0) : 0;
+            if (paid && !seenPaid){
+                showToast('That order had just been PAID \u2014 \u20b9' + Math.round(amt),
+                          where + ' was paid while it was being rejected. The refund has been added to Refunds Due in Admin.');
+            }
 
             // tell the customer their order was declined (otherwise their app waits forever)
             if (order.trackId) {
@@ -3078,7 +3238,6 @@
                 });
             } catch(e){}
 
-            db.ref('orders/pendingWeb/' + id).remove();
             delete window.pendingWebOrders[id];
             if(Object.keys(window.pendingWebOrders).length === 0) closeModal('web-orders-modal');
             else window.openWebOrders();
@@ -3298,6 +3457,26 @@
                 else renderCheckoutReceipt(window.checkoutTableID);
             }
             if(document.getElementById('table-modal').classList.contains('active')) openTableModal();
+            // A BILL SETTLED ON THE OTHER TILL TAKES ITS PAYMENT SCREENS DOWN HERE TOO.
+            //
+            // Only the checkout was closed when its table went. The split screen and the
+            // UPI code stayed up — and a code left on screen is still a code: the customer
+            // scans it and pays a bill that was closed a minute ago at the other till.
+            // That is their money twice, and a credit nothing here will ever match,
+            // because the watcher (rightly) will not claim for a table that has gone.
+            //
+            // Not while this till is itself settling it: its own payment closes the table
+            // in this till's copy first, and afterSettle takes the screens down then.
+            const tid = window.checkoutTableID;
+            if (tid && !window.activeTables[tid]){
+                const split = document.getElementById('split-bill-modal');
+                if (split && split.classList.contains('active')){ window.splitFlow = false; closeModal('split-bill-modal'); }
+                const upi = document.getElementById('upi-modal');
+                if (upi && upi.classList.contains('active') && !window.upiSettling){
+                    try { window.cancelUPI(); } catch(e){}
+                    try { ilaToast((tid === 'Takeaway' ? 'Takeaway' : 'Table ' + tid) + ' has been settled \u2014 its payment code has been taken down'); } catch(e){}
+                }
+            }
         }
 
         let currentMenuData = {}; let liveCategoryOrder = []; window.currentItemOrder = {};
@@ -4639,14 +4818,37 @@
         // and the caller is told, instead of the new items being archived away as paid.
         //
         // opts: { alloc, lastPay, expectSettle }.  done({ closed, stillOpen, grew, due, aborted })
+        //
+        // AND IT CAN BE SENT AGAIN. A payment in flight when the wifi blinks comes back as
+        // an error — the SDK cancels a transaction it has sent and not heard about — and
+        // that error cannot say whether the server applied it. Both answers used to be
+        // wrong: "recorded, re-open the bill" led to it being taken twice, and "not
+        // recorded" loses the sale if it did land. So every payment is stamped onto the
+        // table under its own id (_pays), which makes sending it again safe — a table
+        // that already carries the stamp is left as it is and reported as paid — and an
+        // attempt that errors is simply made again. A payment that CLOSES the table
+        // leaves no table to carry a stamp; whether it was this one that closed it is
+        // read off the day's bills instead (see closedElsewhere).
+        //
+        // opts.onUnsure() is called once, when the first attempt errors and another is
+        // about to be made; res.retried says the answer took more than one.
         function settleTablePayment(tableID, amount, method, opts, done){
+            // Each try is only spent when the connection is cut with the payment in the air:
+            // while it is simply down, the SDK holds the transaction and sends it later.
+            const SETTLE_TRIES = 30;
             const alloc   = (opts && opts.alloc) || null;      // line name -> rupees, from a split share
             const lastPay = (opts && opts.lastPay) || null;
             const amt     = Math.round((parseFloat(amount) || 0) * 100) / 100;
+            const payId   = (lastPay && lastPay.payId) || ('pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7));
+            const started = Date.now();
             let closing   = null;      // the SERVER's copy of the table, when this payment closed it
+            let cutOff    = null;      // ...as an attempt that errored would have closed it
+            let tries     = 0;
 
-            db.ref('pos/activeTables/' + tableID).transaction(function(cur){
+            const body = function(cur){
                 if (!cur) return;                              // already closed elsewhere — abort
+                // An earlier attempt at this same payment landed after all. Nothing to add.
+                if (cur._pays && cur._pays[payId] != null){ closing = null; return cur; }
                 // The sweep books a link only while the SERVER's copy still has it out: a link
                 // answered already — by another till, or settled by hand — is not paid twice,
                 // whatever the claims say. See bookLinkPayment.
@@ -4669,6 +4871,8 @@
 
                 cur.paid = Math.round(((parseFloat(cur.paid) || 0) + amt) * 100) / 100;
                 if (lastPay) cur._lastPay = lastPay;
+                if (!cur._pays) cur._pays = {};
+                cur._pays[payId] = amt;                        // this payment is on this table: see above
                 // The pay link a bank-matched payment answered is answered — see linkTablesFor.
                 // Left on a part-paid table it would go on holding every later payment of its
                 // amount, and offering them here, for as long as the table stayed open.
@@ -4692,35 +4896,133 @@
                 }
                 closing = null;
                 return cur;
-            }, function(err, committed, snap){
-                const res = { closed: false, stillOpen: false, grew: false, due: 0, aborted: false, failed: false };
-                if (err){
-                    res.failed = true;                          // write never landed — say so
-                } else if (!committed){
-                    res.aborted = true;                         // another device closed it first
-                } else if (closing){
-                    res.closed = true;
-                    archivePOSTable(tableID, closing, method, opts ? opts.phone : undefined);
-                } else {
-                    const t = (snap && snap.val()) || null;
-                    res.stillOpen = true;
-                    res.due = t ? tableDue(t) : 0;
-                    // The cashier was told this payment would clear the bill and it did not:
-                    // the table grew between the checkout screen opening and the money landing.
-                    res.grew = !!(opts && opts.expectSettle);
-                }
-                if (typeof done === 'function') done(res);
-            });
+            };
+
+            const attempt = function(){
+                tries++;
+                closing = null;
+                db.ref('pos/activeTables/' + tableID).transaction(body, function(err, committed, snap){
+                    const res = { closed: false, stillOpen: false, grew: false, due: 0, aborted: false, failed: false };
+                    if (err){
+                        // It may have landed. Refused outright is the one error that says it
+                        // did not, and is not worth asking again; anything else is.
+                        if (closing) cutOff = closing;
+                        const refused = /permission/i.test(String((err && (err.code || err.message)) || err));
+                        if (!refused && tries < SETTLE_TRIES){
+                            if (tries === 1 && opts && typeof opts.onUnsure === 'function'){ try { opts.onUnsure(); } catch(e){} }
+                            setTimeout(attempt, Math.min(5000, 400 * tries));
+                            return;
+                        }
+                        res.failed = true;                      // not on the table, as far as can be told
+                        res.unsure = !refused;                  // ...but it kept being cut off, so not for certain
+                    } else if (!committed && cutOff){
+                        // The table has gone, and an attempt of this payment's own was cut off
+                        // while it was closing it. Was that what closed it, or did the other
+                        // till? The other till's close wrote a bill; ours wrote nothing. Ask
+                        // only after one more round trip to the server, so that this till's
+                        // copy of the day's bills is as new as the news that the table went.
+                        const snapshot = cutOff;
+                        db.ref('pos/activeTables/' + tableID).transaction(function(c){ return c; }, function(){
+                            if (closedElsewhere(tableID, snapshot, started)){
+                                res.aborted = true;
+                            } else {
+                                res.closed = true;              // it was ours: finish what it started
+                                archivePOSTable(tableID, snapshot, method, opts ? opts.phone : undefined);
+                            }
+                            res.retried = true;
+                            if (typeof done === 'function') done(res);
+                        });
+                        return;
+                    } else if (!committed){
+                        res.aborted = true;                     // another device closed it first
+                    } else if (closing){
+                        res.closed = true;
+                        archivePOSTable(tableID, closing, method, opts ? opts.phone : undefined);
+                    } else {
+                        const t = (snap && snap.val()) || null;
+                        res.stillOpen = true;
+                        res.due = t ? tableDue(t) : 0;
+                        // The cashier was told this payment would clear the bill and it did not:
+                        // the table grew between the checkout screen opening and the money landing.
+                        res.grew = !!(opts && opts.expectSettle);
+                    }
+                    res.retried = tries > 1;
+                    if (typeof done === 'function') done(res);
+                });
+            };
+            attempt();
+        }
+        // Did some other till close this table? Its close writes a bill — ours, cut off,
+        // wrote nothing — so a bill for this table and this total, made since this payment
+        // started (with room for two clocks to disagree), is somebody else's.
+        function closedElsewhere(tableID, snapshot, since){
+            try {
+                const label = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
+                const total = parseFloat(snapshot && snapshot.total) || 0;
+                return (window.pastBills || []).some(b => b && b.table === label &&
+                    Math.abs((parseFloat(b.total) || 0) - total) < 0.5 && (parseFloat(b.id) || 0) >= since - 120000);
+            } catch(e){ return false; }
+        }
+
+        // THE LEDGER LINE IS WRITTEN WHEN THE TABLE HAS TAKEN THE PAYMENT, AND NOT BEFORE.
+        //
+        // It used to go first, "unconditionally: the cash is physically in the drawer
+        // whatever the table node then does". What the table node then did was the
+        // problem. There are two tills. A bill open on both and settled on both — a tap
+        // on each, or one of them a few seconds behind on bad wifi — closed the table
+        // once and booked the money twice: two identical lines in the cash-up, the
+        // drawer over by the bill, and no message, because a table "already closed
+        // elsewhere" just shut the screen. And when the table write FAILED, the toast
+        // said the payment was recorded and to re-open the bill, where the only thing
+        // on offer was to take the payment again. That is a second line too.
+        //
+        // The table's transaction is the one place two tills cannot both win. So it
+        // decides, the way it already does for a pay link (bookLinkPayment): the line
+        // is written by the till whose payment the table accepted, and a payment the
+        // table turned away is not on the books — which is then said, out loud, to the
+        // person holding the money.
+        //
+        // what: { amount, how } — the money in the cashier's hand, for the sentence.
+        function settleRefused(tableID, res, what){
+            const label = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
+            const amt = '\u20b9' + Math.round(what.amount);
+            if (res.failed && res.unsure){
+                // Every attempt was cut off in the air, so nothing here can say whether one
+                // of them landed. The bill can: it is the server's, once the till is back.
+                showToast('NOT CONFIRMED \u2014 ' + amt + ' ' + what.how,
+                          'The connection kept dropping while ' + label + ' was being settled, so this is not in the cash-up. When the till is back online, open the bill: if it still shows this amount as due, take it again. If it does not, tell the owner \u2014 the payment reached the table but not the books.');
+            } else if (res.failed){
+                showToast('NOT RECORDED \u2014 ' + amt + ' ' + what.how,
+                          label + ' could not be updated, so this payment is not on the books and the bill is unchanged. Check the connection and take it again.');
+            } else if (window.tablesFromCacheAt){
+                // The floor on screen is this till's memory of it, not the database: the
+                // till was reopened with no connection and has not heard back since. Nothing
+                // can be settled against a bill the server has not been asked about.
+                showToast('NOT RECORDED \u2014 ' + amt + ' ' + what.how,
+                          'This till has not reconnected since it was reopened, so ' + label + ' could not be settled. Take the payment again once it is back online.');
+            } else {
+                showToast(label + ' was already settled',
+                          'Another till closed this bill first. This ' + amt + ' ' + what.how + ' was NOT recorded \u2014 if you took money for it, it is a second payment for the same bill.');
+            }
+        }
+
+        // The first attempt was cut off and the till is asking again. Said at once, because
+        // the bill is back on screen looking unpaid and the obvious thing is to take it again.
+        function settleUnsure(tableID, amount, how){
+            const label = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
+            showToast('Checking \u2014 \u20b9' + Math.round(amount) + ' ' + how,
+                      'The connection dropped while ' + label + ' was being settled. The till is finding out whether it went through and will say so here. Do not take it again yet.', 12000);
+        }
+        function settleConfirmed(tableID, amount, how){
+            const label = tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID;
+            showToast('Recorded \u2014 \u20b9' + Math.round(amount) + ' ' + how, label + ' went through. It is in the cash-up once.', 8000);
         }
 
         // One place decides what the screen does once the server has ruled on a payment.
         function afterSettle(tableID, res){
             closeModal('upi-modal');
             if (res.failed){
-                // The money is already on the ledger; the table is not updated. Leave the bill
-                // on screen so the cashier can see what is still owing and retry.
-                showToast('Table not updated',
-                          'The payment is recorded but this table could not be updated \u2014 check the connection and re-open the bill.', 0);
+                // Nothing was written anywhere. Leave the bill on screen to be taken again.
                 afterPartial(tableID);
                 return;
             }
@@ -4756,20 +5058,31 @@
             const tableID = window.checkoutTableID;
             const reason = tableID === 'Takeaway' ? 'Takeaway (Cash)' : `Table ${tableID} (Cash)`;
 
-            // Booked before the table is touched, and unconditionally: the cash is physically in
-            // the drawer whatever the table node then does.
-            addLedgerEntry('cash_income', amountToPay, reason);
             closeModal('split-bill-modal');
 
+            // Booked once the table has taken it — see settleRefused. A bill with nothing
+            // left on it (everything on it was complimentary) still closes this way, but
+            // ₹0 changing hands is not a line in the cash-up.
             settleTablePayment(tableID, amountToPay, "Cash", {
                 alloc: consumeSplitAllocation(),
-                expectSettle: (paid + amountToPay) >= total - LINE_EPS
-            }, function(res){ afterSettle(tableID, res); });
+                expectSettle: (paid + amountToPay) >= total - LINE_EPS,
+                onUnsure: function(){ settleUnsure(tableID, amountToPay, 'cash'); }
+            }, function(res){
+                if (res.aborted || res.failed) settleRefused(tableID, res, { amount: amountToPay, how: 'cash' });
+                else {
+                    if (amountToPay > 0) addLedgerEntry('cash_income', amountToPay, reason);
+                    if (res.retried) settleConfirmed(tableID, amountToPay, 'cash');
+                }
+                afterSettle(tableID, res);
+            });
         };
 
         window.payWithUPI = function(customAmount = null) {
             window.currentPaymentMethod = "UPI";
             const tableData = window.activeTables[window.checkoutTableID];
+            // Closed on the other till since this screen was drawn: there is no bill to
+            // draw a code for. (Cash has always checked; this threw instead.)
+            if (!tableData) { closeModal('checkout-modal'); closeModal('split-bill-modal'); return; }
             
             let total = parseFloat(tableData.total) || 0;
             let paid = parseFloat(tableData.paid) || 0;
@@ -4986,12 +5299,15 @@
         }
 
         window.setTip = async function(v){
+            // A payment has matched and is being booked. The amount is no longer open.
+            if (window.upiSettling) return;
             const cur = parseFloat(window.pendingTip) || 0;
             if (v === 'custom'){
                 const raw = await ilaAskText('Tip amount', '', { inputmode: 'decimal', value: cur ? String(cur) : '', placeholder: '\u20b90' });
                 if (raw === null) return;
                 const n = parseFloat(raw);
                 if (isNaN(n) || n < 0) return ilaToast('Enter a valid amount');
+                if (window.upiSettling) return;     // it matched while the box was open
                 window.pendingTip = n;
             } else if (v === 0){
                 window.pendingTip = 0;
@@ -5064,9 +5380,15 @@
                 const tryNext = i => {
                     if (mySession !== window.upiWatchSession) return;
                     if (window.upiSettling || i >= cands.length) return;
-                    claimPayment(cands[i].key, cands[i].p, won => {
-                        if (mySession !== window.upiWatchSession) return;
-                        if (won && !window.upiSettling) autoConfirmUPI({ ref:cands[i].key, payer:cands[i].p.payer||null, amount:cands[i].p.amount, source:cands[i].p.source||null });
+                    claimPayment(cands[i].key, cands[i].p, (won, tok) => {
+                        // A claim that lands after its watch is over is a claim nothing will
+                        // ever book — the QR was cancelled, or another chain got there first.
+                        // It used to be kept, and that credit could then never verify anything.
+                        if (mySession !== window.upiWatchSession || (won && window.upiSettling)){
+                            if (won) releaseClaim(cands[i].key, tok);
+                            return;
+                        }
+                        if (won) autoConfirmUPI({ ref:cands[i].key, payer:cands[i].p.payer||null, amount:cands[i].p.amount, source:cands[i].p.source||null }, tok);
                         else tryNext(i+1);
                     });
                 };
@@ -5076,7 +5398,7 @@
             window.upiWatchRef = { q, handler };
         }
 
-        function claimPayment(ref, p, cb, fixedToken){
+        function claimPayment(ref, p, cb, fixedToken, expect){
             // fixedToken: a stable, order-derived token (web orders). If the tab dies between
             // winning the claim and writing the booking, the retry recognises its own claim
             // instead of treating the credit as taken by someone else and losing the money.
@@ -5085,7 +5407,7 @@
             // undefined` aborts on ANY value already there, its own included, so the retry the
             // comment describes was refused by its own claim: cb(false), and sweepWebPayments
             // gave up on a credit it had already won. wvFindMatch goes on offering that credit
-            // to the same order for as long as it is in the window — see the myTok test there —
+            // to the same order for as long as it is in the window — see the claim test there —
             // so the order retried every sweep and was told no every time. The customer had
             // paid, the money was in the account, and the order sat "unpaid" on the till
             // permanently, waiting for somebody to confirm by hand a payment the system had
@@ -5094,79 +5416,130 @@
             // A claim held by this same token is this order's claim. Re-committing it is a
             // no-op on the value and returns committed, which is what lets the booking finish.
             // Anyone else's token still aborts, which is the whole job of the node.
+            //
+            // `expect` is the one other value this may replace: a claim this caller has
+            // watched go stale in somebody else's hands (see webClaimTakeover). It is a
+            // compare-and-swap — if the value is anything else by the time the server
+            // looks, the transaction aborts — so of several tills taking the same stale
+            // claim over, one gets it.
+            //
+            // The token comes back with the answer, for a caller that may have to give
+            // the claim up again.
             const token = fixedToken || ('pos-' + (window.checkoutTableID||'?') + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,6));
             db.ref('payments/claims/' + ref).transaction(
-                curr => ((curr === null || curr === token) ? token : undefined),   // unclaimed, or already ours
-                (err, committed, snap) => { cb(!err && committed && snap && snap.val() === token); }
+                curr => ((curr === null || curr === token || (expect && curr === expect)) ? token : undefined),   // unclaimed, already ours, or the stale one named
+                (err, committed, snap) => { cb(!err && committed && snap && snap.val() === token, token); }
             );
         }
-        function autoConfirmUPI(info){
+        // Gives a claim back, if it is still this caller's. For a credit that was claimed
+        // for a payment the table then turned away: left claimed it is money nothing can
+        // ever be matched to again.
+        function releaseClaim(ref, token){
+            if (!ref || !token) return;
+            try { db.ref('payments/claims/' + ref).transaction(c => (c === token ? null : undefined)); } catch(e){}
+        }
+        // WHAT IS BEING SETTLED IS DECIDED AT THE MOMENT THE MONEY IS MATCHED.
+        //
+        // settleUPI runs 900ms after the match, so the cashier sees the tick. It used to
+        // look up the table, the amount and the tip when it RAN — out of globals the
+        // screen in front of it goes on changing. That screen is in the customer's hand,
+        // with four tip buttons on it: a tap in that 900ms re-drew the QR, restarted the
+        // watcher (which cleared the settling flag), and the payment that had just been
+        // matched at ₹450 was booked at ₹460 with a ₹10 tip nobody paid. Cancel in the
+        // same window zeroed the tip and booked a real one as bill money; opening another
+        // bill booked the payment to that table instead.
+        //
+        // The three are read once, here, and handed over.
+        function upiPending(){
+            return { tableID: window.checkoutTableID, amount: parseFloat(window.pendingUPIAmount) || 0, tip: parseFloat(window.pendingTip) || 0 };
+        }
+        function autoConfirmUPI(info, claimTok){
             if (window.upiSettling) return;
             window.upiSettling = true; stopUPIWatch();
             window.upiMatchedInfo = info;
+            const what = upiPending();
             setUPIStatus('verified', info);
             if (navigator.vibrate) navigator.vibrate([60,40,120]);
-            setTimeout(() => settleUPI(info), 900);   // let the cashier see the tick before the modal closes
+            setTimeout(() => settleUPI(info, what, claimTok), 900);   // let the cashier see the tick before the modal closes
         }
-        function settleUPI(info){
-            const tableID = window.checkoutTableID;
+        function settleUPI(info, what, claimTok){
+            what = what || upiPending();
+            const tableID = what.tableID;
             const tableData = window.activeTables[tableID];
-            if (!tableData){ closeModal('upi-modal'); return; }
-            const amountToPay = parseFloat(window.pendingUPIAmount) || 0;
+            // The bill went while the tick was on screen. The credit is real money that
+            // belongs to whatever closed it — give it back so that line can verify.
+            if (!tableData){ if (info && info.ref) releaseClaim(info.ref, claimTok); closeModal('upi-modal'); return; }
+            const amountToPay = what.amount;
             const total = parseFloat(tableData.total) || 0;
             const paid = parseFloat(tableData.paid) || 0;
             const reason = tableID === 'Takeaway' ? 'Takeaway (UPI)' : `Table ${tableID} (UPI)`;
             const payId = 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
             const vpa = window.tableUPIVPA[tableID] || null;
             const bankTag = (vpa && window._upiCfgCache && window._upiCfgCache[upiKey(vpa)] && window._upiCfgCache[upiKey(vpa)].bank) || null;
-            const tip = parseFloat(window.pendingTip) || 0;
+            const tip = Math.min(what.tip, amountToPay);
             // A pay link out for this amount is answered by this payment, whichever way it came:
             // taken off the table so the sweep does not book it a second time, and — when this
             // is settled by hand — written on the line, so the link's own late alert (₹449.63
             // against this ₹450) can still verify it. See amountFits and creditFits.
             const answered = window.linkEntries(tableData.payLink)
                 .filter(e => upiKey(e.vpa) === upiKey(vpa) && Math.abs((parseFloat(e.amount) || 0) - amountToPay) < 0.5);
-            // The entry records the FULL amount received — that is what the bank credit will say,
-            // and the matcher compares them exactly. The tip is a field on it, not a second entry.
-            addLedgerEntry('upi_income', amountToPay, reason + (tip > 0 ? ' + \u20b9' + tip + ' tip' : ''), {
-                payId: payId,
-                state: (info && info.ref) ? 'verified' : 'unverified',   // matched a bank credit at the counter → verified
-                ref: (info && info.ref) || null,
-                bankTag: bankTag,
-                tip: tip,
-                linkAmounts: (info && info.ref) ? null : answered.map(e => parseFloat(e.amount) || 0)
-            });
-            try { window.upiRecordPayment(vpa, amountToPay); } catch(e){}
-            if (tip > 0){
-                // Accrues as a liability. Survives EOD deliberately — the payout may lag the day.
-                const dk = new Date().toISOString().slice(0, 10);
-                try {
-                    db.ref('pos/tips/' + dk + '/accrued').set(firebase.database.ServerValue.increment(tip));
-                    db.ref('pos/tips/' + dk + '/entries').push({
-                        amount: tip, table: (tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID),
-                        by: (window.currentStaff && window.currentStaff.name) || 'staff',
-                        at: firebase.database.ServerValue.TIMESTAMP
-                    });
-                } catch(e){}
-            }
             // Only the BILL portion pays the table down — otherwise a tip on a part-payment
             // would understate what is still due on a split bill.
             const billPart = Math.round((amountToPay - tip) * 100) / 100;
             window.pendingTip = 0;   // consumed
             clearQR();
 
+            // The table rules first, and the books follow it — see settleRefused.
             settleTablePayment(tableID, billPart, "UPI", {
                 alloc: consumeSplitAllocation(),
                 lastPay: info ? Object.assign({ payId: payId }, info) : { payId: payId, ref: null },
                 linkPaid: (vpa && answered.length) ? { vpa: vpa, amount: amountToPay } : null,
-                expectSettle: (paid + billPart) >= total - LINE_EPS
+                expectSettle: (paid + billPart) >= total - LINE_EPS,
+                onUnsure: function(){ settleUnsure(tableID, amountToPay, 'UPI'); }
             }, function(res){
+                if (res.aborted || res.failed){
+                    // Not booked, so the credit it was matched to is not spent either. Given
+                    // back, it is there for whatever did close the bill — a line settled by
+                    // hand on the other till verifies against it — or for the next attempt.
+                    if (info && info.ref) releaseClaim(info.ref, claimTok);
+                    settleRefused(tableID, res, { amount: amountToPay, how: 'UPI' });
+                } else {
+                    // The entry records the FULL amount received — that is what the bank credit will say,
+                    // and the matcher compares them exactly. The tip is a field on it, not a second entry.
+                    addLedgerEntry('upi_income', amountToPay, reason + (tip > 0 ? ' + \u20b9' + tip + ' tip' : ''), {
+                        payId: payId,
+                        state: (info && info.ref) ? 'verified' : 'unverified',   // matched a bank credit at the counter → verified
+                        ref: (info && info.ref) || null,
+                        bankTag: bankTag,
+                        tip: tip,
+                        linkAmounts: (info && info.ref) ? null : answered.map(e => parseFloat(e.amount) || 0)
+                    });
+                    try { window.upiRecordPayment(vpa, amountToPay); } catch(e){}
+                    if (tip > 0){
+                        // Accrues as a liability. Survives EOD deliberately — the payout may lag the day.
+                        const dk = new Date().toISOString().slice(0, 10);
+                        try {
+                            db.ref('pos/tips/' + dk + '/accrued').set(firebase.database.ServerValue.increment(tip));
+                            db.ref('pos/tips/' + dk + '/entries').push({
+                                amount: tip, table: (tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID),
+                                by: (window.currentStaff && window.currentStaff.name) || 'staff',
+                                at: firebase.database.ServerValue.TIMESTAMP
+                            });
+                        } catch(e){}
+                    }
+                    if (res.retried) settleConfirmed(tableID, amountToPay, 'UPI');
+                }
                 if (res.closed || res.aborted) delete window.tableUPIVPA[tableID];
                 afterSettle(tableID, res);
             });
         }
         window.cancelUPI = function(){
-            stopUPIWatch(); window.upiSettling = false; window.pendingTip = 0; setUPIStatus(null);
+            // Once a payment has matched there is nothing left to cancel: the money is in
+            // and settleUPI is already on its way. Closing the screen is all this does then.
+            const matched = window.upiSettling;
+            stopUPIWatch();
+            if (!matched){ window.upiSettling = false; window.pendingTip = 0; }
+            setUPIStatus(null);
             clearQR();                     // so the next table can never inherit this code
             closeModal('upi-modal');
         };
@@ -5205,6 +5578,11 @@
                     { ok: 'Mark received', cancel: 'Wait for it' })
                 : await ilaAsk('Mark ₹' + Math.round(amount) + ' as received?', 'No bank credit has matched this payment yet. It will show as unverified until one does.', { ok: 'Mark received', cancel: 'Cancel' });
             if (!ok) return;
+            // The question was up for as long as it took to answer, and the watcher was
+            // live behind it: it may have settled this already, or the bill may have gone.
+            if (window.upiSettling) return;
+            const what = upiPending();          // this bill, this amount, this tip — see autoConfirmUPI
+            if (!window.activeTables[what.tableID] || Math.abs(what.amount - amount) >= 0.005) return;
             const now = serverNow();
             db.ref('payments/incoming').orderByChild('at').limitToLast(60).once('value', snap => {
                 if (window.upiSettling) return;
@@ -5219,9 +5597,10 @@
                 cand.sort((a,b) => b.at - a.at);
                 const tryNext = i => {
                     if (window.upiSettling) return;
-                    if (i >= cand.length){ window.upiSettling = true; stopUPIWatch(); settleUPI(null); return; }   // nothing claimable → manual unverified
-                    claimPayment(cand[i].key, cand[i].p, won => {
-                        if (won && !window.upiSettling){ window.upiSettling = true; stopUPIWatch(); const p = cand[i].p; settleUPI({ ref:cand[i].key, payer:p.payer||null, amount:p.amount, source:p.source||null }); }
+                    if (i >= cand.length){ window.upiSettling = true; stopUPIWatch(); settleUPI(null, what); return; }   // nothing claimable → manual unverified
+                    claimPayment(cand[i].key, cand[i].p, (won, tok) => {
+                        if (won && !window.upiSettling){ window.upiSettling = true; stopUPIWatch(); const p = cand[i].p; settleUPI({ ref:cand[i].key, payer:p.payer||null, amount:p.amount, source:p.source||null }, what, tok); }
+                        else if (won) releaseClaim(cand[i].key, tok);   // the watcher settled it first: this claim books nothing
                         else tryNext(i+1);
                     });
                 };
@@ -5229,7 +5608,12 @@
             });
         };
 
-        function addLedgerEntry(type, amount, reason, meta) {
+        // opts.webOrder — { id, payment }: the "booked" marker for a web order, which must
+        //                 land WITH the line or not at all. It rides in the same multi-path
+        //                 update, so if either is refused neither is written.
+        // opts.done     — called once the server has answered: done(null) or done(error).
+        // opts.quiet    — a function asked, on a failure, whether to say nothing about it.
+        function addLedgerEntry(type, amount, reason, meta, opts) {
             const parsedAmount = parseFloat(amount) || 0;
             const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
@@ -5276,14 +5660,25 @@
             // end of it swallows a rejected write whole: the cashier taps Confirm, the modal
             // closes, and the sale is simply not there. This is the one message that has to
             // survive a busy counter, so it does not dismiss itself.
-            db.ref().update(updates).catch(function(e){
+            // Spelled out as a path rather than passed in as one, so the access map — which
+            // is derived from this source — can see which node this writes.
+            if (opts && opts.webOrder) updates['orders/pendingWeb/' + opts.webOrder.id + '/payment'] = opts.webOrder.payment;
+            const done = (opts && typeof opts.done === 'function') ? opts.done : null;
+            db.ref().update(updates).then(function(){
+                if (done) { try { done(null); } catch(e){ console.error(e); } }
+            }, function(e){
                 console.error('ledger write failed', e);
-                try {
-                    showToast('NOT RECORDED \u2014 \u20b9' + Math.round(Math.abs(parsedAmount)),
-                              (reason || type) + ' did not save. Check the connection and enter it again.');
-                } catch(_){
-                    ilaTell('That entry did not save', 'Check the connection and enter it again.');
+                let quiet = false;
+                try { quiet = !!(opts && typeof opts.quiet === 'function' && opts.quiet(e)); } catch(_){}
+                if (!quiet){
+                    try {
+                        showToast('NOT RECORDED \u2014 \u20b9' + Math.round(Math.abs(parsedAmount)),
+                                  (reason || type) + ' did not save. Check the connection and enter it again.');
+                    } catch(_){
+                        ilaTell('That entry did not save', 'Check the connection and enter it again.');
+                    }
                 }
+                if (done) { try { done(e); } catch(_){ console.error(_); } }
             });
             return key;
         }
@@ -5515,7 +5910,7 @@
             }
             if (window.salesLedger.length === 0) { list.innerHTML = "<p>No logs.</p>"; return; }
             window.salesLedger.forEach(entry => {
-                let colorClass = 'ledger-out'; let sign = '-'; let typeTag = '';
+                let colorClass = 'ledger-out'; let sign = '\u2212'; let typeTag = '';
                 if (entry.type === 'cash_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'CASH: '; } 
                 else if (entry.type === 'upi_income') { colorClass = 'ledger-income'; sign = '+'; typeTag = 'UPI: '; }
                 else if (entry.type === 'void_upi' || entry.type === 'void_cash') { colorClass = 'ledger-out'; sign = '−'; typeTag = 'VOID: '; }
@@ -5541,7 +5936,14 @@
                         tick = '<span title="Awaiting verification" style="color:#ffd54f; margin-left:6px;">⏳</span>';
                     }
                 }
-                rows += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${escapeHTML(entry.reason)}</span>${tick}<span class="ledger-meta">${entry.date}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
+                // The reason of a void, a refund and a write-off already begins with its
+                // own label — it is written that way so the archive and the owner's report
+                // read on their own — and the tag in front of it made every one of them
+                // "VOID: VOID: Table 4 …" on this screen. One label.
+                let reasonText = String(entry.reason == null ? '' : entry.reason);
+                const tagWord = typeTag.trim();
+                if (tagWord && reasonText.toUpperCase().indexOf(tagWord.toUpperCase()) === 0) reasonText = reasonText.slice(tagWord.length).trim();
+                rows += `<div class="ledger-item"><div><span style="font-weight:bold;">${typeTag}</span><span>${escapeHTML(reasonText)}</span>${tick}<span class="ledger-meta">${escapeHTML(entry.date)}</span></div><div class="${colorClass}">${sign}₹${Math.round(safeAmount)}</div></div>`;
             });
             list.innerHTML = rows;
         }
@@ -5657,22 +6059,34 @@
             // round leaves tips the staff are owed recorded as already handed over.
             if (window._payingOutTips) return;
             window._payingOutTips = true;
-            const paid = await posCashOut('tip_payout', due, 'Tips \u00b7 ' + heads + ' \u00d7 \u20b9' + each, pinStr);
+            // THIS PAYOUT HAS A NAME, AND IT IS THE SAME ON EVERY TILL.
+            //
+            // "The payout that takes this day's pool from ₹X paid to ₹X+due." paidOut only
+            // ever goes up, so no two different payouts share that description — and every
+            // retry of this one does, from this till or the other. The Worker records a
+            // name once, so a payout that timed out and was tapped again, or was tapped on
+            // both tills, is one TIPS OUT line and one movement of the drawer.
+            const before = Math.round((parseFloat(pool.paidOut) || 0) * 100) / 100;
+            const rid = ('tip-' + settleDay + '-' + Math.round(before * 100) + '-' + Math.round(due * 100)).replace(/[^A-Za-z0-9_-]/g, '');
+            const paid = await posCashOut('tip_payout', due, 'Tips \u00b7 ' + heads + ' \u00d7 \u20b9' + each, pinStr, rid);
             window._payingOutTips = false;
-            if (!paid.ok) return ilaTell("Payout not recorded", paid.why);
+            if (!paid.ok) return ilaTell(paid.unsure ? "Payout not confirmed" : "Payout not recorded", paid.why);
             const staffName = paid.by;
+            // And the pool is marked the same way: moved TO what this payout makes it, not
+            // BY the amount. An increment here was the other half of the double — two
+            // tills that each heard "recorded" for the one payout would each have added it,
+            // and the pool would have read as paid for tips nobody had been handed.
+            const after = Math.round((before + due) * 100) / 100;
             try {
-                db.ref('pos/tips/' + settleDay).update({
-                    paidOut: firebase.database.ServerValue.increment(due),
-                    lastPayout: { amount: due, heads: heads, each: each, by: staffName, at: firebase.database.ServerValue.TIMESTAMP }
-                });
+                db.ref('pos/tips/' + settleDay + '/paidOut').transaction(cur => Math.max(parseFloat(cur) || 0, after));
+                db.ref('pos/tips/' + settleDay + '/lastPayout').set({ amount: due, heads: heads, each: each, by: staffName, at: firebase.database.ServerValue.TIMESTAMP });
             } catch(e){}
         };
 
         // .active FIRST: renderLedger() now no-ops while the Ledger is closed, so rendering
         // before showing would have left it empty until the next data change.
         window.openCashManagement = function() { openModal('cash-modal'); renderLedger(); renderTipPool(); };
-        window.openTransactionModal = function(type) { window.currentTransactionType = type; document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; if (window.ilaPin) window.ilaPin.clear(document.getElementById('transaction-pin')); else document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); openModal('transaction-modal'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
+        window.openTransactionModal = function(type) { window.currentTransactionType = type; window._cashoutNonce = cashoutNonce(); document.getElementById('transaction-title').innerText = type === 'expense' ? 'Expense' : 'Withdrawal'; document.getElementById('transaction-amount').value = ""; document.getElementById('transaction-reason').value = ""; if (window.ilaPin) window.ilaPin.clear(document.getElementById('transaction-pin')); else document.getElementById('transaction-pin').value = ""; closeModal('cash-modal'); openModal('transaction-modal'); setTimeout(() => { document.getElementById('transaction-amount').focus(); }, 100); };
         window.closeTransactionModal = function() { closeModal('transaction-modal'); window.openCashManagement(); };
 
         window.confirmTransaction = async function() {
@@ -5681,7 +6095,10 @@
             // element covers the case where that script never arrived — the field is a
             // plain text input, so its own value is still exactly what was typed.
             const pinStr = (window.ilaPin ? window.ilaPin.value(_pinEl) : (_pinEl.value || '')).trim();
-            if (isNaN(amount) || amount <= 0 || reasonStr === "") return;
+            // Confirm used to do nothing at all on any of these, and say nothing either.
+            if (isNaN(amount) || amount <= 0) return ilaToast('Enter the amount');
+            if (reasonStr === "") return ilaToast('Enter a reason \u2014 it goes on the cash-up');
+            if (!pinStr) return ilaToast('Enter your staff PIN');
             // The PIN is checked by the Worker now, which is the only place a check
             // cannot be skipped. This page neither looks it up nor writes the entry —
             // the rules refuse these three types from here.
@@ -5691,9 +6108,12 @@
             const btn = document.getElementById('transaction-confirm-btn');
             if (btn && btn.disabled) return;
             if (btn){ btn.disabled = true; btn.innerText = 'Recording\u2026'; }
-            const r = await posCashOut(window.currentTransactionType, amount, reasonStr, pinStr);
+            if (!window._cashoutNonce) window._cashoutNonce = cashoutNonce();
+            const r = await posCashOut(window.currentTransactionType, amount, reasonStr, pinStr,
+                                       cashoutRequestId(window._cashoutNonce, window.currentTransactionType, amount, reasonStr));
             if (btn){ btn.disabled = false; btn.innerText = 'Confirm'; }
-            if (!r.ok) return ilaTell("Not recorded", r.why);
+            if (!r.ok) return ilaTell(r.unsure ? "Not confirmed" : "Not recorded", r.why);
+            window._cashoutNonce = null;          // recorded: the next one is a new request
             window.closeTransactionModal();
         };
 
@@ -5723,6 +6143,20 @@
         // been received, so the answer is to CHECK rather than to do it again. Doing it
         // again is how one withdrawal becomes two.
         const WORKER_TIMEOUT_MS = 15000;
+        // ===== NAMING A CASH-OUT =====
+        // One name per thing a person confirmed, the same on every retry of it. The nonce
+        // is minted when the form opens, so the next expense is a different request even
+        // if it is for the same amount and reason; the rest is what was typed, so editing
+        // the form after a failure is a different request too, not a repeat of the old one.
+        function cashoutNonce(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+        // Has this till ever seen the Worker record an entry under the name it was sent?
+        function workerNamesRequests(){ try { return localStorage.getItem('ila_worker_named') === '1'; } catch(e){ return false; } }
+        function cashoutRequestId(nonce, type, amount, reason){
+            const text = [type, Math.round((parseFloat(amount) || 0) * 100), String(reason || '')].join('|');
+            let h = 5381;
+            for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+            return (String(nonce || 'x') + '-' + h.toString(36)).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+        }
         function ilaWorkerFetch(url, body){
             const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
             const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch(e){} }, WORKER_TIMEOUT_MS);
@@ -5744,7 +6178,11 @@
         //
         // It returns the reason it failed rather than a boolean, because "wrong PIN" and
         // "the till cannot reach the Worker" need different things done about them.
-        async function posCashOut(type, amount, reason, pin){
+        //
+        // requestId names the request, and the Worker records a name once: sending the
+        // same one again — after a timeout, which cannot say whether the first arrived —
+        // is answered with the entry already written instead of writing a second.
+        async function posCashOut(type, amount, reason, pin, requestId){
             if (!ALERT_WORKER_URL) return { ok:false, why:'The till is not configured to record this.' };
             let token = null;
             try { const u = firebase.auth().currentUser; token = u ? await u.getIdToken() : null; } catch(e){}
@@ -5753,14 +6191,27 @@
             try {
                 res = await ilaWorkerFetch(ALERT_WORKER_URL,
                     JSON.stringify({ action:'cashout', token: token, pin: pin,
-                                     type: type, amount: amount, reason: reason }));
+                                     type: type, amount: amount, reason: reason,
+                                     requestId: requestId || null }));
             } catch(e){
                 const timedOut = e && e.name === 'AbortError';
-                return { ok:false, why: timedOut
-                    ? 'The till service did not answer. It may or may not have recorded this \u2014 check the cash-up before trying again, so one withdrawal does not become two.'
+                // With a request id, trying again is safe and is the right thing to do: the
+                // Worker answers a request it has already recorded without recording it again.
+                // But that is the WORKER's promise, and the Worker deploys separately from
+                // this page — so the till only says it once it has seen this Worker keep it
+                // (see workerNamesRequests). Until then it gives the old, cautious advice.
+                const safe = !!requestId && workerNamesRequests();
+                return { ok:false, unsure: timedOut, why: timedOut
+                    ? (safe
+                        ? 'The till service did not answer, so it is not known whether this was recorded.\n\nTry again now \u2014 the same entry is never recorded twice. If you stop here instead, check the cash-up before entering it afresh.'
+                        : 'The till service did not answer. It may or may not have recorded this \u2014 check the cash-up before trying again, so one withdrawal does not become two.')
                     : 'Could not reach the till service. Nothing was recorded \u2014 check the connection and try again.' };
             }
             let body = null; try { body = await res.json(); } catch(e){}
+            // A Worker that honours request ids writes the entry under the id it was sent.
+            if (res.ok && body && body.ok && requestId && body.key === 'co-' + requestId) {
+                try { localStorage.setItem('ila_worker_named', '1'); } catch(e){}
+            }
             if (res.ok && body && body.ok) return { ok:true, by: body.by };
             if (res.status === 403 && body && body.error === 'invalid pin') return { ok:false, why:'Invalid PIN.' };
             return { ok:false, why:'Could not record it: ' + ((body && body.error) || ('error ' + res.status)) + '\nNothing was changed.' };
@@ -5792,6 +6243,25 @@
         }
 
         window.promptEOD = async function() {
+            // A DAY THIS TILL CANNOT SEE IS NOT A DAY IT MAY CLOSE.
+            //
+            // Closing archives window.salesLedger and then deletes pos/ledgerEntries. The
+            // delete needs only a staff role; the ledger is readable by the counter and the
+            // owner alone. So a barista signed in on a phone — which is how the "No logs."
+            // bug above was found — saw an empty cash-up, and End Day from that screen
+            // archived exactly what it showed: a day with no ledger. Then it wiped the real
+            // one. Every cash and UPI line of the day gone, the unverified payments never
+            // parked for their late credits, and a report to the owner reading "EXPENSES:
+            // None." The same is true, for a second or two, of a till that has only just
+            // opened: empty because the ledger has not arrived is not empty.
+            if (window.ledgerDenied){
+                return ilaTell('This sign-in cannot close the day',
+                    'The cash-up is only shown to the counter and the owner, so today\u2019s sales are not on this screen \u2014 closing from here would archive an empty day and clear the real one.\n\nClose the day from the counter\u2019s till.');
+            }
+            if (window.ledgerAsked && !window.ledgerLoaded){
+                return ilaTell('Today\u2019s sales have not loaded yet',
+                    'The till is still waiting for the cash-up from the database. Nothing has been closed \u2014 check the connection and try again in a moment.');
+            }
             const pinStr = await ilaAskText("Staff PIN", "Closing the day is recorded against you.", { mask: true, inputmode: "numeric" }); if (!pinStr) return;
             const staffName = window.staffPins[await hashPin(pinStr)]; if (!staffName) return ilaTell("Invalid PIN", "Nothing has been closed.");
             // Open tables used to be deleted outright at EOD — so a table that walked out unpaid
@@ -5826,6 +6296,12 @@
                 try { await posSendPush({ title: '\u26a0\ufe0f Unpaid bills written off', body: '\u20b9' + Math.round(totalShort) + ' across ' + openShort.length + ' table(s) \u00b7 ' + staffName + ' \u2014 ' + reason.trim(), tag: 'unpaid-' + Date.now(), url: '/admin.html' }); } catch(e){}
             } else if (Object.keys(window.activeTables).length > 0) {
                 if(!await ilaAsk("Tables still open", "They are all settled. End the day?", { ok: "End day", cancel: "Cancel" })) return;
+            } else if (!(window.salesLedger || []).length && !(window.pastBills || []).length && !(parseFloat(window.upiTotal) > 0)) {
+                // Nothing rung up, nothing open, nothing in the UPI total: this is the till
+                // just after a close — usually the other till's, a minute ago. Closing again
+                // writes a second, empty closing for the day and sends the owner a second
+                // report of zeros.
+                if(!await ilaAsk("Nothing to close", "Nothing has been rung up since the day was last closed. If the other till has just closed it, there is nothing more to do.\n\nClose the day again anyway?", { ok: "Close again", cancel: "Cancel" })) return;
             }
             const _tipDue = Math.max(0, ((window.tipPool && window.tipPool.accrued) || 0) - ((window.tipPool && window.tipPool.paidOut) || 0));
             if (_tipDue > 0 && !await ilaAsk('Tips not paid out', '\u20b9' + Math.round(_tipDue) + ' of tips has not been paid out yet.\n\nIt stays owed and will still be there tomorrow.', { ok: 'Close anyway', cancel: 'Cancel' })) return;

@@ -301,6 +301,124 @@ async function exercise(base) {
   return { out, errors };
 }
 
+// ------------------------------------------------------- two tills, one database
+// Every "exactly one till books this" guarantee in pos.html comes down to a
+// transaction that two clients run against the same node at the same moment. The
+// two-till suite checks the page's logic against a stand-in database; this checks
+// that the real SDK and a real server behave the way that stand-in assumes — with
+// two separate browser contexts, so two separate SDK instances, sockets and caches.
+async function race(base) {
+  const PREBUILT = '/opt/pw-browsers/chromium';
+  const browser = await chromium.launch(fs.existsSync(PREBUILT) ? { executablePath: PREBUILT } : {});
+  const open = async () => {
+    const ctx = await browser.newContext();
+    const pg = await ctx.newPage();
+    await pg.goto(base, { waitUntil: 'load' });
+    await pg.evaluate(([port]) => {
+      firebase.initializeApp({ apiKey: 'demo', authDomain: 'demo-ila.firebaseapp.com',
+        databaseURL: 'http://127.0.0.1:' + port + '?ns=demo-ila-default-rtdb', projectId: 'demo-ila' });
+      window.db = firebase.database();
+      window.db.useEmulator('127.0.0.1', port);
+      // The shapes pos.html uses, by name.
+      window.claim = (path, token, expect) => window.db.ref(path).transaction(
+        c => ((c === null || c === token || (expect && c === expect)) ? token : undefined))
+        .then(r => r.committed && r.snapshot.val() === token);
+      window.take = (path) => { let had = null; return window.db.ref(path).transaction(
+        c => { if (!c) { had = null; return; } had = c; return null; })
+        .then(r => !!(r.committed && had)); };
+      window.settle = (path, amt) => { let closing = null; return window.db.ref(path).transaction(
+        c => { if (!c) return; c.paid = (c.paid || 0) + amt; if (c.paid >= c.total) { closing = c; return null; } closing = null; return c; })
+        .then(r => (r.committed ? (closing ? 'closed' : 'open') : 'aborted')); };
+    }, [PORT]);
+    return pg;
+  };
+  const A = await open(), B = await open();
+  const both = (fn, argsA, argsB) => Promise.all([A.evaluate(fn, argsA), B.evaluate(fn, argsB || argsA)]);
+  const read = (path) => A.evaluate((p) => window.db.ref(p).once('value').then(s => s.val()), path);
+  const out = {};
+
+  // both tills listening to the node first, the way the till's claim watcher is
+  const watch = (path) => both((p) => new Promise(r => window.db.ref(p).on('value', () => r(true))), path);
+
+  // --- one claim, a token per till: exactly one wins
+  await watch('r/claims/c1');
+  out.perTill = await Promise.all([
+    A.evaluate(() => window.claim('r/claims/c1', 'web-tk1~tillA')),
+    B.evaluate(() => window.claim('r/claims/c1', 'web-tk1~tillB'))]);
+  out.perTillValue = await read('r/claims/c1');
+
+  // --- one claim, the SAME token on both: both are told they won. This is the bug.
+  await watch('r/claims/c2');
+  out.sameToken = await both(() => window.claim('r/claims/c2', 'web-tk2'));
+
+  // --- a stale claim taken over by compare-and-swap: one till gets it
+  await A.evaluate(() => window.db.ref('r/claims/c3').set('web-tk3~deadtill'));
+  await watch('r/claims/c3');
+  out.takeover = await Promise.all([
+    A.evaluate(() => window.claim('r/claims/c3', 'web-tk3~tillA', 'web-tk3~deadtill')),
+    B.evaluate(() => window.claim('r/claims/c3', 'web-tk3~tillB', 'web-tk3~deadtill'))]);
+  out.takeoverValue = await read('r/claims/c3');
+
+  // --- one web order, taken by both: one till gets it
+  await A.evaluate(() => window.db.ref('r/pendingWeb/o1').set({ items: { Coffee: { qty: 1, price: 120 } }, total: 120, orderType: 'Takeaway' }));
+  await watch('r/pendingWeb/o1');
+  out.taken = await both(() => window.take('r/pendingWeb/o1'));
+  out.takenLeft = await read('r/pendingWeb/o1');
+
+  // --- one table, settled in full on both: one closes it, the other is turned away
+  await A.evaluate(() => window.db.ref('r/tables/5').set({ total: 240, items: { Coffee: { qty: 2, price: 120 } } }));
+  await watch('r/tables/5');
+  out.settled = await both(() => window.settle('r/tables/5', 240));
+  out.settledLeft = await read('r/tables/5');
+
+  // --- one table, two half shares at once: both stand, and the second closes it
+  await A.evaluate(() => window.db.ref('r/tables/6').set({ total: 240, items: { Coffee: { qty: 2, price: 120 } } }));
+  await watch('r/tables/6');
+  out.shares = await both(() => window.settle('r/tables/6', 120));
+  out.sharesLeft = await read('r/tables/6');
+
+  // --- the wifi blinks. A transaction started while the connection is DOWN is held and
+  //     sent when it returns; one that is in the air when the connection is CUT is
+  //     cancelled with an error, and that error does not say whether it landed.
+  out.heldWhileDown = await A.evaluate(async () => {
+    await window.db.ref('r/held').set({ paid: 0 });
+    window.db.goOffline();
+    const p = window.db.ref('r/held').transaction(c => { if (!c) return c; c.paid = (c.paid || 0) + 100; return c; });
+    setTimeout(() => window.db.goOnline(), 400);
+    const r = await p.then(x => (x.committed ? 'committed' : 'aborted'), e => 'error:' + (e && e.message));
+    return { result: r, paid: (await window.db.ref('r/held/paid').once('value')).val() };
+  });
+  // The settlement's answer to that: stamp the payment onto the table under its own
+  // id, and make it again. Whichever way the cut went, the payment is there once.
+  out.cut = await A.evaluate(async () => {
+    const results = [];
+    for (let round = 0; round < 6; round++) {
+      const path = 'r/cut/' + round;
+      await window.db.ref(path).set({ paid: 0, total: 500 });
+      // Listened to, as every open table is on the till. Without a listener the SDK
+      // keeps no copy, the first run sees null, and `if (!c) return` aborts on the
+      // spot without asking the server — which is its own lesson, and pos.html's
+      // settleRefused has a sentence for it (a till reopened with no connection).
+      await new Promise(r => window.db.ref(path).on('value', () => r()));
+      const pay = (c) => { if (!c) return; if (c._pays && c._pays.p1 != null) return c;
+                           c.paid = (c.paid || 0) + 100; c._pays = { p1: 100 }; return c; };
+      const first = window.db.ref(path).transaction(pay).then(x => (x.committed ? 'committed' : 'aborted'), e => 'error:' + (e && e.message));
+      // cut it at a different moment each round, so some land and some do not
+      await new Promise(r => setTimeout(r, round * 2));
+      window.db.goOffline();
+      const how = await first;
+      window.db.goOnline();
+      let again = 'not needed';
+      if (how !== 'committed') again = await window.db.ref(path).transaction(pay).then(x => (x.committed ? 'committed' : 'aborted'), e => 'error:' + (e && e.message));
+      results.push({ how: how, again: again, paid: (await window.db.ref(path + '/paid').once('value')).val() });
+    }
+    return results;
+  });
+
+  await browser.close();
+  return out;
+}
+
 (async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const base = 'http://127.0.0.1:' + server.address().port;
@@ -375,6 +493,42 @@ async function exercise(base) {
         out.survivesReload === true);
   note('a till is signed in once and left for weeks; if that stopped surviving a');
   note('reload, every build banner would turn into a sign-in at the counter');
+
+  // ------------------------------------------------------------- two clients
+  let two = null;
+  try { two = await race(base); }
+  catch (e) { check('two SDK clients can be raced against one database', false, String(e.message || e).split('\n')[0]); }
+  if (two) {
+    const wins = (a) => a.filter(Boolean).length;
+    check('two tills claiming one credit under their own tokens: exactly one wins',
+          wins(two.perTill) === 1 && /^web-tk1~till[AB]$/.test(String(two.perTillValue)),
+          JSON.stringify(two.perTill) + ' → ' + two.perTillValue);
+    note('the loser’s transaction is re-run against the winner’s value and aborts');
+    check('and under one shared token, BOTH are told they won',
+          wins(two.sameToken) === 2, JSON.stringify(two.sameToken));
+    note('which is why a claim has to name the till — pos.html booked every web order twice on this');
+    check('a stale claim taken over by compare-and-swap goes to one till',
+          wins(two.takeover) === 1 && /^web-tk3~till[AB]$/.test(String(two.takeoverValue)),
+          JSON.stringify(two.takeover) + ' → ' + two.takeoverValue);
+    check('a web order taken on both tills is taken by one',
+          wins(two.taken) === 1 && two.takenLeft === null, JSON.stringify(two.taken));
+    check('a table settled in full on both tills closes once, and the other is turned away',
+          two.settled.slice().sort().join(',') === 'aborted,closed' && two.settledLeft === null,
+          JSON.stringify(two.settled));
+    check('but two half shares paid at once both stand, and close it between them',
+          two.shares.slice().sort().join(',') === 'closed,open' && two.sharesLeft === null,
+          JSON.stringify(two.shares));
+
+    check('a transaction started while the connection is down is held, and lands when it returns',
+          two.heldWhileDown.result === 'committed' && two.heldWhileDown.paid === 100, JSON.stringify(two.heldWhileDown));
+    const shapes = two.cut.map(r => r.how);
+    check('one cut off in the air either commits or errors — it never aborts cleanly',
+          shapes.every(h => h === 'committed' || /^error:/.test(h)), JSON.stringify(shapes));
+    note('how each of six was cut: ' + shapes.join(', '));
+    check('and a payment stamped with its own id, made again after the cut, is on the table once',
+          two.cut.every(r => r.paid === 100), JSON.stringify(two.cut));
+    note('that is what lets pos.html make a settlement again instead of guessing whether it landed');
+  }
 
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });

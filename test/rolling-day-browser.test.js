@@ -99,7 +99,8 @@ const STUB = (nowIso) => `
     set: (v) => { window.__writes.push({ op: 'set', path: p }); return Promise.resolve(); },
     update: (v) => { window.__writes.push({ op: 'update', path: p, value: v }); return Promise.resolve(); },
     remove: () => Promise.resolve(),
-    transaction: (f, cb) => { const s = snapOf(null, self.key); if (cb) cb(null, true, s);
+    transaction: (f, cb) => { window.__writes.push({ op: 'transaction', path: p });
+                              const s = snapOf(null, self.key); if (cb) cb(null, true, s);
                               return Promise.resolve({ committed: true, snapshot: s }); }
   }; return self; };
   const db = { ref: (p) => mkRef(String(p == null ? '' : p).replace(/^\\/+|\\/+$/g, '')),
@@ -230,11 +231,16 @@ const only = (list, prefix) => list.filter(p => p.indexOf(prefix) === 0);
         return window.__writes.filter(w => w.path.indexOf('pos/tips/2') === 0);
       }, AT_DAY2);
 
+      // The pool is marked in a transaction on paidOut — moved TO what the payout
+      // makes it rather than BY the amount, so a payout that two tills each hear was
+      // recorded marks it once (test/two-tills-browser.test.js). Which day it lands
+      // on is this suite's question, and it is asked of every write the payout makes.
+      const under = (w, day) => w.path === 'pos/tips/' + day || w.path.indexOf('pos/tips/' + day + '/') === 0;
       check('the payout is recorded against the day the tips were collected',
-            wrote.length === 1 && wrote[0].path === 'pos/tips/' + DAY1,
-            JSON.stringify(wrote.map(w => w.path)));
+            wrote.some(w => w.path === 'pos/tips/' + DAY1 + '/paidOut') && wrote.every(w => under(w, DAY1)),
+            JSON.stringify(wrote.map(w => w.op + ' ' + w.path)));
       check('and not against the day it happened to finish on',
-            !wrote.some(w => w.path === 'pos/tips/' + DAY2),
+            !wrote.some(w => under(w, DAY2)),
             'yesterday’s liability would still be owing and today marked settled');
       await ctx.close();
     }

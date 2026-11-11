@@ -97,6 +97,7 @@ const STUB = `
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     if (url.indexOf('workers.dev') !== -1) {
       window.__stalled++;
+      try { (window.__sent = window.__sent || []).push(JSON.parse(String(init && init.body))); } catch (e) {}
       return new Promise((_resolve, reject) => {
         const sig = init && init.signal;
         if (!sig) return;                       // no abort signal: this never settles
@@ -150,7 +151,10 @@ const STUB = `
         window.cashDrawer = 5000;
         document.getElementById('transaction-amount').value = '400';
         document.getElementById('transaction-reason').value = 'Milk run';
-        document.getElementById('transaction-pin').value = '4821';
+        // Typed, not assigned: the box shows bullets and the digits live in
+        // pin-mask.js, which only hears about them through the input event.
+        const pin = document.getElementById('transaction-pin');
+        pin.value = '4821'; pin.dispatchEvent(new Event('input', { bubbles: true }));
         window.currentTransactionType = 'expense';
         window.__done = false;
         window.confirmTransaction().then(() => { window.__done = true; });
@@ -182,6 +186,51 @@ const STUB = `
       check('and told to CHECK rather than to try again',
             /check/i.test(after.told) && !/try again/i.test(after.told), after.told);
       note('a withdrawal the Worker may already have recorded must not be entered twice');
+      note('that is the advice until this till has SEEN the Worker record a named request once');
+
+      // THE REQUEST HAS A NAME, AND A SECOND CONFIRM SENDS THE SAME ONE.
+      //
+      // "Check before trying again" is advice for a counter with a queue at it. What
+      // makes trying again safe is that the Worker records a name once — so the till
+      // has to send the same name for the same entry, and a different one for the next.
+      await page.evaluate(() => { window.__done = false; window.confirmTransaction().then(() => { window.__done = true; }); });
+      await page.waitForTimeout(400);
+      const ids = await page.evaluate(() => (window.__sent || []).map(b => b.requestId));
+      check('the cash-out is sent with a request id', ids.length === 2 && /^[A-Za-z0-9_-]{8,64}$/.test(String(ids[0])),
+            JSON.stringify(ids));
+      check('and confirming the same entry again sends the same one', ids.length === 2 && ids[0] === ids[1],
+            JSON.stringify(ids));
+      note('the Worker answers a name it has already recorded without recording it again');
+      await page.waitForTimeout(budget + 1200);
+      await page.evaluate(() => {
+        document.getElementById('transaction-amount').value = '450';       // a different entry now
+        window.__done = false; window.confirmTransaction().then(() => { window.__done = true; });
+      });
+      await page.waitForTimeout(400);
+      const ids2 = await page.evaluate(() => (window.__sent || []).map(b => b.requestId));
+      check('but an entry that was edited is a different request', ids2.length === 3 && ids2[2] !== ids2[0],
+            JSON.stringify(ids2));
+      await ctx.close();
+    }
+
+    // ------------------------------------- a till that knows the Worker keeps names
+    {
+      const budget = timeoutIn('pos.html');
+      const { ctx, page } = await open('pos.html');
+      await page.evaluate(() => {
+        localStorage.setItem('ila_worker_named', '1');     // set by a recorded cash-out the Worker keyed by its id
+        window.cashDrawer = 5000;
+        document.getElementById('transaction-amount').value = '400';
+        document.getElementById('transaction-reason').value = 'Milk run';
+        const pin = document.getElementById('transaction-pin');
+        pin.value = '4821'; pin.dispatchEvent(new Event('input', { bubbles: true }));
+        window.currentTransactionType = 'expense';
+        window.confirmTransaction();
+      });
+      await page.waitForTimeout(budget + 1500);
+      const told = await page.evaluate(() => window.__told.join(' | '));
+      check('once the Worker is known to record a named request once, the till says to try again',
+            /did not answer/i.test(told) && /try again now/i.test(told) && /never recorded twice/i.test(told), told || '(said nothing)');
       await ctx.close();
     }
 

@@ -341,6 +341,69 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       await ctx.close();
     }
 
+    // ------------------------------------------ 6. a day this till cannot see
+    //
+    // Closing archives window.salesLedger and then deletes pos/ledgerEntries. The
+    // delete needs only a staff role; READING the ledger takes the counter's or the
+    // owner's. So a barista signed in on a phone saw an empty cash-up — and End Day
+    // from that screen archived what it showed and wiped what it could not see.
+    {
+      const { ctx, page, seen } = await freshTill([]);
+      await page.evaluate(() => { window.ledgerAsked = true; window.ledgerDenied = true; window.ledgerLoaded = false; window.salesLedger = []; });
+      await startEOD(page);
+      await settle(seen, 3000);
+      check('a sign-in that is refused the ledger cannot close the day',
+            seen.ops.length === 0 && seen.handoffs.length === 0, trail(seen));
+      note('it archived a day with no ledger in it, then deleted the real one');
+      check('it is told why, and where the day can be closed from',
+            /cannot close the day/i.test(alerts(seen)) && /counter/i.test(alerts(seen)), alerts(seen) || '(silent)');
+      check('and is not even asked for a PIN first',
+            !seen.dialogs.some(d => d.kind === 'asktext'), seen.dialogs.map(d => d.kind).join(', '));
+      await ctx.close();
+    }
+    {
+      // The same emptiness, for a second or two, on any till that has just opened.
+      const { ctx, page, seen } = await freshTill([]);
+      await page.evaluate(() => { window.ledgerAsked = true; window.ledgerDenied = false; window.ledgerLoaded = false; window.salesLedger = []; });
+      await startEOD(page);
+      await settle(seen, 3000);
+      check('nor can a till whose ledger has not arrived yet',
+            seen.ops.length === 0 && seen.handoffs.length === 0, trail(seen));
+      check('which says it is still loading, not that there is nothing',
+            /not loaded yet/i.test(alerts(seen)), alerts(seen) || '(silent)');
+
+      // ...and once it has arrived, the same till closes the day as usual.
+      await page.evaluate((seed) => { (0, eval)(seed); window.ledgerLoaded = true; }, SEED);
+      seen.dialogs.length = 0;
+      await startEOD(page);
+      await settle(seen);
+      check('and once the ledger is in, it closes the day as it always did',
+            resets(seen).length === 1 && seen.handoffs.length === 1, trail(seen));
+      await ctx.close();
+    }
+
+    // ------------------------------------------------- 7. the day, closed twice
+    //
+    // The other till closed the day a minute ago. This one has nothing rung up,
+    // nothing open and a UPI total of zero — and End Day here used to write a second,
+    // empty closing and send the owner a second report of zeros.
+    {
+      const { ctx, page, seen } = await freshTill([]);
+      await page.evaluate(() => {
+        window.salesLedger = []; window.pastBills = []; window.upiTotal = 0; window.activeTables = {};
+        window.__asked = [];
+        const yes = window.ilaAsk;
+        window.ilaAsk = (t, d) => { window.__asked.push(String(t)); return /Nothing to close/.test(String(t)) ? Promise.resolve(false) : yes(t, d); };
+      });
+      await startEOD(page);
+      await sleep(900);
+      const asked = await page.evaluate(() => window.__asked);
+      check('closing a day that has already been closed asks before doing it again',
+            asked.some(t => /Nothing to close/.test(t)), JSON.stringify(asked));
+      check('and "no" writes nothing', seen.ops.length === 0 && seen.handoffs.length === 0, trail(seen));
+      await ctx.close();
+    }
+
     check('the page threw no errors while any of that ran', pageErrors.length === 0,
           pageErrors.slice(0, 3).join(' | '));
   } finally {

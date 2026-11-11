@@ -82,6 +82,36 @@ const src = readPage('pos.html');
   check('and a cashier on a quiet morning still gets "No logs."',
         /No logs/.test(boxes['ledger-list'].innerHTML), boxes['ledger-list'].innerHTML);
   note('the two states have to look different, which was the entire problem');
+
+  // ------------------------------------------------------- one label, not two
+  //
+  // A void, a refund and a write-off are written with their label already on the
+  // front of the reason — 'VOID: Table 4 — wrong order (Asha)' — so the archive and
+  // the owner's report read on their own. The cash-up put its own tag in front of
+  // that, and every one of them read "VOID: VOID: Table 4 …".
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const real = buildModule([extractFunction(src, 'renderLedger')],
+    { document, window: global, Math, Date, Object, parseInt, parseFloat, String, escapeHTML: esc },
+    ['renderLedger']);
+  global.salesLedger = [
+    { type: 'void_cash', amount: -240, reason: 'VOID: Table 4 \u2014 wrong order (Asha)', date: '08:10 pm' },
+    { type: 'refund_upi', amount: -420, reason: 'REFUND: Takeaway \u2014 Anil (Asha)', date: '08:20 pm' },
+    { type: 'unpaid_writeoff', amount: 180, reason: 'UNPAID: Table 7 \u2014 walked out (Priya)', date: '10:55 pm' },
+    { type: 'cash_income', amount: 240, reason: 'Table 5 (Cash)', date: '<img src=x onerror=alert(1)>' },
+    { type: 'expense', amount: 450, reason: 'Void: the old milk order', date: '07:00 pm' },
+  ];
+  real.renderLedger();
+  const html = boxes['ledger-list'].innerHTML;
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  check('a void is labelled once', /VOID: Table 4/.test(text) && !/VOID:\s*VOID:/i.test(text), text);
+  check('and so are a refund and a write-off',
+        !/REFUND:\s*REFUND:/i.test(text) && !/UNPAID:\s*UNPAID:/i.test(text) &&
+        /REFUND: Takeaway/.test(text) && /UNPAID: Table 7/.test(text), text);
+  check('a reason that merely starts with a similar word is left as it was written',
+        /Void: the old milk order/.test(text), text);
+  note('only the tag this screen is about to add is taken off the front');
+  check('and the time on a line is escaped like the rest of it — it comes from the database too',
+        !/<img/i.test(html) && /&lt;img/.test(html), html.slice(0, 400));
 }
 
 done();

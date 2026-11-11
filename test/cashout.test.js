@@ -36,13 +36,28 @@ const hashOf = (pin) => crypto.createHash('sha256').update(SALT + pin).digest('h
 const STAFF = { [hashOf('4821')]: 'Priya', [hashOf('9090')]: 'Sam' };
 const RECIPES = { 'Cold Brew Concentrate': { 'Coffee Beans': 0.2, 'Water': 1.5 } };
 
-let calls, staffNode, patchOk;
+// `ledger` is the one piece of the database this fake keeps: the entries a PATCH has
+// written, so a second request can find out what the first one did. patchLands is the
+// case a timeout hides — the write went through and the answer never came back.
+let calls, staffNode, patchOk, ledger, ledgerReadable, patchLands;
 function makeApi() {
-  calls = [];
+  calls = []; ledger = {}; ledgerReadable = true; patchLands = false;
   const fakeFetch = async (url, init) => {
-    calls.push({ url: String(url), method: (init && init.method) || 'GET', body: init && init.body });
+    const method = (init && init.method) || 'GET';
+    calls.push({ url: String(url), method: method, body: init && init.body });
     if (String(url).includes('/staff.json')) {
       return { ok: staffNode !== null, json: async () => staffNode };
+    }
+    const entry = /\/pos\/ledgerEntries\/([^/.]+)\.json/.exec(String(url));
+    if (entry && method === 'GET') {
+      return { ok: ledgerReadable, json: async () => (ledger[entry[1]] || null) };
+    }
+    if (method === 'PATCH' && String(url).includes('/.json')) {
+      if (patchOk || patchLands) {
+        const sent = JSON.parse(init.body);
+        Object.keys(sent).forEach(k => { if (k.indexOf('pos/ledgerEntries/') === 0) ledger[k.slice(18)] = sent[k]; });
+      }
+      return { ok: patchOk, json: async () => ({}) };
     }
     if (String(url).includes('/inventory/recipes/')) {
       const name = decodeURIComponent(String(url).split('/inventory/recipes/')[1].split('.json')[0]);
@@ -158,6 +173,75 @@ const good = (over) => Object.assign({ type: 'expense', amount: 450, reason: 'mi
     r = await api.handleCashout(good(), CLAIMS);
     check('a write the database refuses is reported, not swallowed',
           r.status === 502 && r.body.ok !== true, JSON.stringify(r.body));
+  }
+
+  // ------------------------------------------------- the same request, sent twice
+  //
+  // The till stops waiting after fifteen seconds and cannot know whether the Worker
+  // recorded the cash-out or never heard of it. Its only move is to send it again. A
+  // key minted here from this clock made that second attempt a second entry, every
+  // time: the withdrawal in the cash-up twice, the drawer down by double.
+  {
+    staffNode = STAFF; patchOk = true;
+    const api = makeApi();
+    const patches = () => calls.filter(c => c.method === 'PATCH').length;
+    const named = (over) => good(Object.assign({ requestId: 'lz4k2a9xq1-1f3k9' }, over));
+
+    const first = await api.handleCashout(named(), CLAIMS);
+    const second = await api.handleCashout(named(), CLAIMS);
+    check('a request sent twice is answered as a success both times',
+          first.status === 200 && second.status === 200 && second.body.ok === true,
+          JSON.stringify([first.body, second.body]));
+    check('and is written once', patches() === 1, patches() + ' write(s)');
+    note('one write is one ledger line and one movement of the drawer');
+    check('and the second answer says it was a repeat, and who the entry names',
+          second.body.repeat === true && second.body.by === 'Priya' && second.body.key === first.body.key,
+          JSON.stringify(second.body));
+
+    const other = await api.handleCashout(named({ requestId: 'lz4k2b7tt0-9aa21' }), CLAIMS);
+    check('a different request for the same amount and reason is a second entry',
+          other.status === 200 && patches() === 2 && other.body.key !== first.body.key,
+          patches() + ' write(s)');
+    note('two withdrawals of ₹450 for milk on one day are two withdrawals');
+
+    const reused = await api.handleCashout(named({ amount: 900 }), CLAIMS);
+    check('a name already used for a different amount is refused, not answered as done',
+          reused.status === 409 && patches() === 2, reused.status + ' / ' + patches() + ' write(s)');
+
+    const wrongPin = await api.handleCashout(named({ pin: '0000' }), CLAIMS);
+    check('a repeat still has to carry a valid PIN',
+          wrongPin.status === 403, String(wrongPin.status));
+
+    ledgerReadable = false;
+    const blind = await api.handleCashout(named({ requestId: 'lz4k2c1mm5-77b0c' }), CLAIMS);
+    check('if the ledger cannot be read, nothing is written on a guess',
+          blind.status === 502 && patches() === 2, blind.status + ' / ' + patches() + ' write(s)');
+    note('"could not tell" is not "not there" — writing on it is how one becomes two');
+    ledgerReadable = true;
+
+    // The write lands and the answer is lost on the way back.
+    patchOk = false; patchLands = true;
+    const lost = await api.handleCashout(named({ requestId: 'lz4k2d3pp8-0c1de' }), CLAIMS);
+    check('a write that landed but reported failure is found and reported as done',
+          lost.status === 200 && lost.body.ok === true, JSON.stringify(lost.body));
+    patchLands = false;
+    const dead = await api.handleCashout(named({ requestId: 'lz4k2e5rr2-4d2ef' }), CLAIMS);
+    check('and one that really did not land is still a failure',
+          dead.status === 502, JSON.stringify(dead.body));
+    patchOk = true;
+
+    const before = patches();
+    const a = await api.handleCashout(good(), CLAIMS);
+    const b = await api.handleCashout(good(), CLAIMS);
+    check('a till on an older build, which sends no name, behaves as it always did',
+          a.status === 200 && b.status === 200 && patches() === before + 2 && a.body.key !== b.body.key,
+          (patches() - before) + ' write(s)');
+
+    const odd = await api.handleCashout(named({ requestId: '../../staff' }), CLAIMS);
+    const sentKeys = Object.keys(JSON.parse(calls.filter(c => c.method === 'PATCH').pop().body));
+    check('a name that is not a plain token is not used as a path',
+          odd.status === 200 && sentKeys.every(k => k.indexOf('..') < 0 && !/staff/.test(k)),
+          sentKeys.join(', '));
   }
 
   // ------------------------------------------------------------------ the clock

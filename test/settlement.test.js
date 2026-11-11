@@ -22,10 +22,11 @@ const sources = [
   extractFunction(src, 'tableDue'),
   extractFunction(src, 'consumeSplitAllocation'),
   extractFunction(src, 'settleTablePayment'),
+  extractFunction(src, 'closedElsewhere'),
 ];
 
 const PATH = 'pos/activeTables/4';
-let server, local, onFirstPass, archived, forceError;
+let server, local, onFirstPass, archived, forceError, cut;
 
 const clone = v => (v === null || v === undefined) ? v : JSON.parse(JSON.stringify(v));
 
@@ -33,6 +34,21 @@ function makeRef() {
   return {
     transaction(fn, cb) {
       if (forceError) { cb(new Error('permission denied'), false, null); return; }
+
+      // The wifi blinks with the payment in the air. The SDK cancels a transaction it
+      // has sent and not heard back about, with Error('disconnect') — and that error is
+      // the same whether the server applied the write ('landed') or never saw it
+      // ('lost'). Each entry in `cut` spends one attempt.
+      if (cut && cut.length) {
+        const how = cut.shift();
+        const out0 = fn(clone(local[PATH]));
+        if (how === 'landed' && out0 !== undefined) {
+          if (out0 === null) delete server[PATH]; else server[PATH] = clone(out0);
+        }
+        local[PATH] = clone(server[PATH]);       // what the till sees once it is back
+        cb(new Error('disconnect'), false, null);
+        return;
+      }
 
       let input = clone(local[PATH]);
       let out = fn(input);
@@ -64,7 +80,8 @@ const API = buildModule(sources, {
 }, ['settleTablePayment', 'consumeSplitAllocation', 'tableDue']);
 
 function reset(table) {
-  server = {}; local = {}; archived = []; onFirstPass = null; forceError = false;
+  server = {}; local = {}; archived = []; onFirstPass = null; forceError = false; cut = null;
+  win.pastBills = [];
   if (table) { server[PATH] = clone(table); local[PATH] = clone(table); }
   win.pendingSplitAlloc = null; win.splitSel = {}; win.splitOther = 0;
 }
@@ -169,7 +186,7 @@ const { check, note, done } = suite('Settlement — transaction on the table nod
   check('an error surfaces as failed', res.failed === true);
   check('an error is not reported as closed', res.closed === false);
   check('nothing is archived on error', archived.length === 0);
-  note('the ledger entry is written before this point, so the money is on the books either way');
+  note('the ledger line is written only once the table has taken the payment, so nothing is on the books');
 }
 
 // ---- a tip rides on top of the bill, it does not pay the bill down
@@ -179,6 +196,16 @@ const { check, note, done } = suite('Settlement — transaction on the table nod
   API.settleTablePayment('4', 400, 'UPI', { expectSettle: false }, r => { res = r; });
   check('only the bill portion pays the table down', server[PATH].paid === 400);
   check('the balance ignores the tip', res.due === 100, 'due=' + res.due);
+}
+
+// ---- every payment is stamped onto the table it paid
+{
+  reset(TABLE());
+  API.settleTablePayment('4', 200, 'Cash', { expectSettle: false }, () => {});
+  const pays = server[PATH]._pays || {};
+  check('a payment leaves its own id on the table, against what it paid',
+        Object.keys(pays).length === 1 && Object.values(pays)[0] === 200, JSON.stringify(pays));
+  note('that stamp is what makes sending the same payment again safe');
 }
 
 // ---- local split state is handed over and cleared
@@ -192,4 +219,80 @@ const { check, note, done } = suite('Settlement — transaction on the table nod
   check('splitOther is cleared', win.splitOther === 0);
 }
 
-done();
+// =========================================================== the wifi blinks
+//
+// A payment in flight when the connection is cut comes back as an error that cannot
+// say whether the server applied it. The table transaction is made again, and what
+// has to hold is that the payment ends up on the table — and reported — exactly once,
+// whichever way the first attempt went.
+const settle = (amount, opts) => new Promise(resolve => {
+  let unsure = 0;
+  API.settleTablePayment('4', amount, 'Cash',
+    Object.assign({ onUnsure: () => { unsure++; } }, opts || {}),
+    r => resolve({ res: r, unsure }));
+});
+
+(async () => {
+  // ---- a part payment that landed, and was reported as an error
+  {
+    reset(TABLE()); cut = ['landed'];
+    const { res, unsure } = await settle(200, { expectSettle: false });
+    check('a part payment cut off AFTER it landed is found on the table, not added again',
+          server[PATH].paid === 200, 'paid=' + server[PATH].paid);
+    note('added again, the table would read ₹400 paid for ₹200 taken');
+    check('and is reported as taken, so its ledger line is written', res.stillOpen === true && res.failed === false, JSON.stringify(res));
+    check('the share is counted once', server[PATH].shares.paid === 1, 'shares.paid=' + server[PATH].shares.paid);
+    check('and the cashier was told the till was checking', unsure === 1 && res.retried === true, 'onUnsure x' + unsure);
+  }
+
+  // ---- a part payment that never arrived
+  {
+    reset(TABLE()); cut = ['lost'];
+    const { res } = await settle(200, { expectSettle: false });
+    check('a part payment cut off BEFORE it landed is made again, once',
+          server[PATH].paid === 200 && res.stillOpen === true, 'paid=' + server[PATH].paid);
+  }
+
+  // ---- the payment that closes the table, landed and unheard
+  {
+    reset(TABLE()); cut = ['landed'];
+    const { res } = await settle(500, { expectSettle: true });
+    check('a closing payment cut off after it landed is recognised as the one that closed the table',
+          res.closed === true && res.aborted === false, JSON.stringify(res));
+    note('"another till closed it — not recorded" here is a sale with no ledger line and no bill');
+    check('and the bill it closed is archived, once', archived.length === 1 && archived[0].data.total === 500, archived.length + ' archived');
+    check('with the table gone', server[PATH] === undefined);
+  }
+
+  // ---- the same, but the OTHER till closed it while this one was cut off
+  {
+    reset(TABLE()); cut = ['lost'];
+    // this till's attempt never arrived; in the meantime the other till took the money,
+    // closed the table and wrote its bill
+    onFirstPass = null;
+    const p = settle(500, { expectSettle: true });
+    delete server[PATH]; local[PATH] = undefined;
+    win.pastBills = [{ id: Date.now(), table: 'Table 4', total: 500 }];
+    const { res } = await p;
+    check('a table the other till closed in the meantime is not claimed as this till’s close',
+          res.aborted === true && res.closed === false, JSON.stringify(res));
+    check('and nothing is archived a second time', archived.length === 0, archived.length + ' archived');
+  }
+
+  // ---- cut off twice, then through
+  {
+    reset(TABLE()); cut = ['lost', 'landed'];
+    const { res } = await settle(500, { expectSettle: true });
+    check('a payment cut off more than once still ends as one close',
+          res.closed === true && archived.length === 1, JSON.stringify(res) + ' / ' + archived.length + ' archived');
+  }
+
+  // ---- refused is not "try again"
+  {
+    reset(TABLE()); forceError = true;
+    const { res, unsure } = await settle(500, { expectSettle: true });
+    check('a write the rules refuse is not retried', res.failed === true && unsure === 0 && !res.unsure, JSON.stringify(res));
+  }
+
+  done();
+})();
