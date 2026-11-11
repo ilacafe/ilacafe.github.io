@@ -200,7 +200,8 @@ The check lives here now, where a browser cannot skip it:
 
 ```json
 { "action": "cashout", "token": "<firebase idToken>", "pin": "4821",
-  "type": "expense", "amount": 450, "reason": "milk" }
+  "type": "expense", "amount": 450, "reason": "milk",
+  "requestId": "lz4k2a9xq1-1f3k9" }
 ```
 
 It verifies the token, refuses an anonymous sign-in, requires `users/{uid}.role`,
@@ -212,6 +213,17 @@ which a PIN cannot forge).
 The rules refuse those three types from anybody but the robot. That is the half
 that turns the prompt into a gate — without it this is just a longer way to write
 the same entry.
+
+**The same request, sent twice, is recorded once.** The till stops waiting after
+fifteen seconds and cannot tell a request that was never heard from one whose answer
+was lost; all it can do is send again. `requestId` names the request — the same on
+every retry of one confirmed cash-out, new for the next — and the entry is written at
+`pos/ledgerEntries/co-{requestId}`. A request whose entry is already there is answered
+`{ ok: true, repeat: true }` with nothing written; one whose name was used for a
+different type or amount is a `409`. The PIN is checked first either way. If the ledger
+cannot be read to find out, nothing is written (`502`) — "could not tell" is not "not
+there". A till on an older build sends no `requestId` and gets the old behaviour: a
+fresh key per request.
 
 **Three types, not four.** `unpaid_writeoff` moves no cash — it records a bill that
 was never paid — and it happens inside end-of-day, which has to be completable when

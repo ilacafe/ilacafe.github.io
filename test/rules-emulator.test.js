@@ -788,6 +788,41 @@ const SAMPLES = {
           !(await canWrite('orders/pendingWeb/staffside/manualPaid', 'cashier', { at: Date.now(), via: 'pos' })) &&
           !(await canWrite('orders/pendingWeb/staffside/manualPaid', 'cashier', { by: '', at: Date.now() })) &&
           !(await canWrite('orders/pendingWeb/staffside/manualPaid', 'cashier', true)));
+
+    // THE TILL'S BOOKING LEANS ON THIS ONE, so it is asked by name.
+    //
+    // A matched web payment is booked in ONE multi-path write: the marker on the order,
+    // the ledger line, and the UPI total. What stops that write landing on top of an
+    // order somebody accepted by hand a moment ago — and so writing a second line for
+    // the same money — is not anything in the page. It is the order's own .validate:
+    // a child write is judged against the whole record, and a record that is only a
+    // payment is not an order. One refused path refuses the write, and the ledger line
+    // goes down with it. If this ever stops being true, pos.html double-books again.
+    const mark = { ref: '512345678901', amount: 250, at: Date.now(), payId: 'web_tk1' };
+    const peek = async (path) => {
+      const r = await fetch(BASE + '/' + path + '.json?ns=' + NS, { headers: { Authorization: 'Bearer owner' } });
+      return r.json();
+    };
+    check('a payment cannot be written onto an order that has gone',
+          !(await canWrite('orders/pendingWeb/goneAlready/payment', 'cashier', mark)) &&
+          (await peek('orders/pendingWeb/goneAlready')) === null);
+    const booking = (id, line) => ({
+      ['orders/pendingWeb/' + id + '/payment']: mark,
+      ['pos/ledgerEntries/' + line]: { date: '08:10 pm', type: 'upi_income', amount: 250, reason: 'Web: probe', ts: { '.sv': 'timestamp' }, state: 'verified', ref: mark.ref },
+      'pos/upiTotal': { '.sv': { increment: 250 } }
+    });
+    const upiBefore = (await peek('pos/upiTotal')) || 0;
+    const goneStatus = await call('PATCH', '', 'cashier', booking('goneAlready', 'probeGone'));
+    check('and the ledger line sent in the same write is refused with it',
+          goneStatus !== 200 && (await peek('pos/ledgerEntries/probeGone')) === null &&
+          ((await peek('pos/upiTotal')) || 0) === upiBefore,
+          'status ' + goneStatus);
+    note('one write, all or nothing: an order that has gone takes its booking with it');
+    const hereStatus = await call('PATCH', '', 'cashier', booking('staffside', 'probeHere'));
+    check('while the same write against an order that is still there lands whole',
+          hereStatus === 200 && (await peek('pos/ledgerEntries/probeHere')) !== null &&
+          ((await peek('pos/upiTotal')) || 0) === upiBefore + 250,
+          'status ' + hereStatus);
   }
 
   // ------------------------------------------- one order, not the whole history

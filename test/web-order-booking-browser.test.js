@@ -28,6 +28,22 @@
 // the way Firebase's does: a claim held by this order books it, a claim held by
 // anyone else does not, and a sweep driven repeatedly across the in-flight write
 // books exactly once.
+//
+// AND THEN THE FIX TURNED OUT TO BE THE NEXT BUG. 'web-{trackId}' names the order and
+// nothing else, so it is the same string on both of the café's tills — and a claim a
+// caller may re-commit is a claim BOTH of them may re-commit. Each heard the same
+// credit, each "won", each booked: every prepaid web order in the cash-up twice
+// (test/two-tills-browser.test.js holds that, with two pages on one database).
+//
+// The token names the till as well now. What this suite has to keep true through
+// that is the thing the order-derived token was for:
+//
+//   this till's own claim      is still re-committed and booked at once — the retry
+//   another till's claim       on THIS order is not an immediate win any more, but it
+//                              is not somebody else's money either: left a moment for
+//                              its holder to book, then taken over and booked once
+//   the marker and the line    are one write, so a booking cannot half-land and be
+//                              tried again on top of itself
 
 const fs = require('fs');
 const path = require('path');
@@ -73,7 +89,7 @@ const ORDER = {
 // A database that keeps the claims node, runs transactions against it the way
 // Firebase does, and reports every write out of the page.
 //
-// __holdPayment makes the orders/pendingWeb/{id}/payment write hang, which is the
+// __holdPayment makes the write that carries orders/pendingWeb/{id}/payment hang, which is the
 // window the double-booking guard lives in: the write is away, the order does not
 // carry the marker yet, and the sweep can be driven again in the meantime.
 const STUB = `
@@ -146,14 +162,19 @@ const STUB = `
       off: (_e, cb) => { for (let i = listeners.length - 1; i >= 0; i--) if (listeners[i].cb === cb) listeners.splice(i, 1); },
       once: (_e, cb) => { const s = snapOf(valueAt(p, q)); if (cb) cb(s); return Promise.resolve(s); },
       push: (v) => { if (v !== undefined) record('push', p, v); return mkRef(p + '/-Nstub', {}); },
-      set: (v) => {
-        record('set', p, v);
-        if (/^orders\\/pendingWeb\\/[^/]+\\/payment$/.test(p) && window.__holdPayment) {
-          return new Promise(() => {});          // away, and not back yet
-        }
+      set: (v) => { record('set', p, v); return Promise.resolve(); },
+      // The booking is ONE root update — the ledger line, the total and the marker on
+      // the order — so that is the write to hold away.
+      update: (v) => {
+        record('update', p, v);
+        const marks = Object.keys(v || {}).some(k => /^orders\\/pendingWeb\\/[^/]+\\/payment$/.test(k));
+        if (marks && window.__holdPayment) return new Promise(() => {});   // away, and not back yet
+        if (marks) Object.keys(v).forEach(k => {
+          const m = /^orders\\/pendingWeb\\/([^/]+)\\/payment$/.exec(k);
+          if (m && window.pendingWebOrders && window.pendingWebOrders[m[1]]) window.pendingWebOrders[m[1]].payment = v[k];
+        });
         return Promise.resolve();
       },
-      update: (v) => { record('update', p, v); return Promise.resolve(); },
       remove: () => { record('remove', p, null); return Promise.resolve(); },
       // The real thing: run the update function against what is there, write what it
       // returns, abort on undefined, and hand the caller back the resulting value.
@@ -225,6 +246,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     await page.goto(base + '/pos.html', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(300);
     await page.evaluate(([cl, order, hold]) => {
+      // '@mine' is the claim THIS till would write: only the page knows its own id.
+      for (const k of Object.keys(cl)) if (cl[k] === '@mine') cl[k] = window.webClaimToken(order);
       window.__DATA['payments/claims'] = cl;
       window.__holdPayment = !!hold;
       window.salesLedger = []; window.activeTables = {}; window.pastBills = [];
@@ -246,17 +269,24 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     });
     return out;
   };
-  const paymentMarkers = (seen) =>
-    seen.ops.filter(o => o.op === 'set' && /^orders\/pendingWeb\/[^/]+\/payment$/.test(o.path));
+  // The marker rides in the same update as the line it marks.
+  const paymentMarkers = (seen) => {
+    const out = [];
+    seen.ops.forEach(o => {
+      if (o.op !== 'update' || !o.value || typeof o.value !== 'object') return;
+      Object.keys(o.value).forEach(k => { if (/^orders\/pendingWeb\/[^/]+\/payment$/.test(k)) out.push({ value: o.value[k], withLine: Object.keys(o.value).some(x => x.indexOf('pos/ledgerEntries/') === 0) }); });
+    });
+    return out;
+  };
   const trail = (seen) => seen.ops.map(o => o.op + ' ' + o.path).join(', ') || '(nothing written)';
 
   try {
-    // ------------------------------------ a credit this order already claimed, and dropped
+    // ------------------------------------ a credit this till already claimed, and dropped
     {
-      const { ctx, seen } = await till({ [REF]: 'web-' + TRACK });
+      const { ctx, seen } = await till({ [REF]: '@mine' });
       const lines = ledgerLines(seen);
       const markers = paymentMarkers(seen);
-      check('a credit already claimed under this order’s own token is still booked',
+      check('a credit already claimed under this till’s own token is still booked',
             lines.length === 1, lines.length + ' ledger line(s) — ' + trail(seen));
       check('and it is booked as verified, against that credit',
             lines.length === 1 && lines[0].state === 'verified' && String(lines[0].ref) === REF,
@@ -264,7 +294,36 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       check('and the order is marked paid so a reload does not lose it',
             markers.length === 1 && markers[0].value && String(markers[0].value.ref) === REF,
             JSON.stringify(markers.map(m => m.value)));
-      note('the fixed token exists precisely so an interrupted booking can be finished');
+      check('in the same write as the ledger line, so neither can land without the other',
+            markers.length === 1 && markers[0].withLine === true, trail(seen));
+      note('the token names the order precisely so an interrupted booking can be finished');
+      await ctx.close();
+    }
+
+    // ------------------------------- the same order's claim, in another till's hands
+    //
+    // 'web-{trackId}' on its own is what a till on the previous build writes; with a
+    // '~' and an id after it, it is another till on this one. Either way it is this
+    // order's money and somebody else is — or was — in the middle of booking it.
+    for (const held of ['web-' + TRACK, 'web-' + TRACK + '~othertill']) {
+      const { ctx, page, seen } = await till({ [REF]: held });
+      check('a claim held for this order by another till (' + held + ') is not booked on sight',
+            ledgerLines(seen).length === 0, ledgerLines(seen).length + ' ledger line(s) — ' + trail(seen));
+      note('that was the double: both tills re-committed the one token and both booked');
+
+      const waiting = await page.evaluate(() => Object.keys(window._wvForeign || {}).length);
+      check('but it is remembered, and timed', waiting === 1, waiting + ' order(s) being waited on');
+
+      // Twenty seconds on, with nothing booked behind that claim.
+      await page.evaluate(() => { for (const id in window._wvForeign) window._wvForeign[id].since -= 60000; sweepWebPayments(); });
+      await sleep(300);
+      const lines = ledgerLines(seen);
+      check('and once its holder has plainly gone, the payment is booked after all',
+            lines.length === 1 && lines[0].state === 'verified' && String(lines[0].ref) === REF,
+            lines.length + ' ledger line(s) — ' + trail(seen));
+      const now = await page.evaluate((ref) => [window.__DATA['payments/claims'][ref], window.webClaimToken(window.pendingWebOrders.o1 || { trackId: 'tk-anil' })], REF);
+      check('under this till’s own claim, so the next till to look leaves it alone',
+            now[0] === now[1], JSON.stringify(now));
       await ctx.close();
     }
 
@@ -295,6 +354,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       await sleep(250);
 
       const lines = ledgerLines(seen);
+      const claim = await page.evaluate((ref) => String(window.__DATA['payments/claims'][ref] || ''), REF);
+      check('an unclaimed credit is claimed under a token that names this till',
+            claim.indexOf('web-' + TRACK + '~') === 0 && claim.length > ('web-' + TRACK + '~').length, claim);
       check('an unclaimed credit is booked', lines.length >= 1,
             lines.length + ' ledger line(s) — ' + trail(seen));
       check('and driving the sweep again while that write is in flight books it once',

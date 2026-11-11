@@ -76,7 +76,27 @@ const STUB = `
       set: (v) => record('set', p, v),
       update: (v) => record('update', p, v),
       remove: () => record('remove', p, null),
-      transaction: (_fn, cb) => { const s = snapOf(null); if (cb) cb(null, false, s); return Promise.resolve({ committed: false, snapshot: s }); }
+      // Accept and Reject TAKE the order first, in a transaction on its own node, and
+      // go no further unless it commits (see takeWebOrder). The queue here is the one
+      // each case seeds onto the page, so that is what the transaction is run against;
+      // taking the order is recorded as the removal it is. Anything else aborts, as
+      // it always did in this stub.
+      transaction: (fn, cb) => {
+        const m = /^orders\\/pendingWeb\\/([^/]+)$/.exec(p);
+        const cur = (m && window.pendingWebOrders && window.pendingWebOrders[m[1]]) || null;
+        let next;
+        if (cur) { try { next = fn(JSON.parse(JSON.stringify(cur))); } catch (e) { next = undefined; } }
+        if (!cur || next === undefined) {
+          const s = snapOf(cur);
+          if (cb) cb(null, false, s);
+          return Promise.resolve({ committed: false, snapshot: s });
+        }
+        if (next === null) { delete window.pendingWebOrders[m[1]]; record('remove', p, null); }
+        else { window.pendingWebOrders[m[1]] = next; record('txn', p, next); }
+        const s = snapOf(next);
+        if (cb) cb(null, true, s);
+        return Promise.resolve({ committed: true, snapshot: s });
+      }
     };
     return self;
   };

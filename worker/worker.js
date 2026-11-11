@@ -2041,11 +2041,52 @@ async function handleCashout(data, claims){
   const name = await pinToName(data && data.pin, token);
   if (!name) return { status: 403, body: { error: 'invalid pin' } };
 
+  // THE SAME REQUEST, SENT TWICE, IS RECORDED ONCE.
+  //
+  // The till gives up waiting after fifteen seconds and says, truthfully, that it
+  // does not know whether this was recorded. What it could not do was find out: the
+  // entry's key was minted here, from this clock, so a second attempt was a second
+  // entry by construction — the withdrawal in the cash-up twice and the drawer down
+  // by double. The advice on the till was to go and look before trying again, at the
+  // counter, mid-service.
+  //
+  // So the till names the request (requestId: the same for every retry of one
+  // confirmed cash-out, new for the next one) and the entry is written under that
+  // name. A request whose entry is already there is answered as the success it was.
+  // The PIN has been checked by now either way, so this tells a caller nothing they
+  // could not have written themselves.
+  //
+  // Not a lock: two copies of one request that are BOTH still in flight would both
+  // pass the look-up. They write the same key, so that is one line — but the drawer
+  // would move twice. The till cannot produce it (one Confirm at a time, and it has
+  // stopped listening to the first before it sends a second), and the alternative, a
+  // conditional write, means splitting the line from the drawer movement below.
+  const now = Date.now();
+  const rid = String((data && data.requestId) == null ? '' : data.requestId);
+  const named = /^[A-Za-z0-9_-]{8,64}$/.test(rid);
+  const key = named ? ('co-' + rid) : ('co-' + now + '-' + Math.random().toString(36).slice(2, 8));
+  // The entry if it is there, null if it is not, undefined if that could not be told.
+  const recorded = async () => {
+    try {
+      const res = await fetch(DB_URL + '/pos/ledgerEntries/' + key + '.json?auth=' + token);
+      if (!res.ok) return undefined;
+      const e = await res.json();
+      return (e && typeof e === 'object' && e.type) ? e : null;
+    } catch (e) { return undefined; }
+  };
+  const again = (e) => (e.type === type && Number(e.amount) === amount)
+    ? { status: 200, body: { ok: true, key: key, by: e.by || name, type: type, amount: amount, repeat: true } }
+    : { status: 409, body: { error: 'that request was already used for a different entry' } };
+  if (named) {
+    const prior = await recorded();
+    // Not knowing is not "no". Writing on a failed look-up is how one becomes two.
+    if (prior === undefined) return { status: 502, body: { error: 'could not check the ledger' } };
+    if (prior) return again(prior);
+  }
+
   // One write, not two. The ledger line and the drawer move together or not at
   // all — a line with no drawer movement, or the reverse, is a till that cannot be
   // reconciled against the cash actually in it.
-  const now = Date.now();
-  const key = 'co-' + now + '-' + Math.random().toString(36).slice(2, 8);
   const updates = {};
   updates['pos/ledgerEntries/' + key] = {
     date: istClock(now),
@@ -2058,12 +2099,19 @@ async function handleCashout(data, claims){
   };
   updates['pos/cashDrawer'] = { '.sv': { increment: -amount } };
 
+  let wrote = false;
   try {
     const res = await fetch(DB_URL + '/.json?auth=' + token, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates)
     });
-    if (!res.ok) return { status: 502, body: { error: 'could not record the entry' } };
-  } catch (e) { return { status: 502, body: { error: 'could not record the entry' } }; }
+    wrote = !!res.ok;
+  } catch (e) { wrote = false; }
+  if (!wrote) {
+    // A write that errored on the way back may still have landed. With a name to
+    // look it up by, say what actually happened instead of guessing.
+    if (named) { const landed = await recorded(); if (landed) return again(landed); }
+    return { status: 502, body: { error: 'could not record the entry' } };
+  }
 
   return { status: 200, body: { ok: true, key: key, by: name, type: type, amount: amount } };
 }

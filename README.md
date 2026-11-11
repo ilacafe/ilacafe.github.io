@@ -706,6 +706,68 @@ costs money:
   field until the write comes back. Driven with that write held away, the sweep books
   once; without the guard it books over and over, because the claim it re-commits is a
   change to `payments/claims`, and that is one of the things that wakes the sweep.
+- **two tills, one cash-up** — and that fix was the next bug. `web-{trackId}` names the
+  order and nothing else, so it is the same string on both of the café's tills, and a
+  claim a caller may re-commit is a claim *both* may re-commit: each heard the same bank
+  credit, each "won", each booked. Every prepaid web order was in the cash-up twice and
+  in the day's UPI total twice, for as long as two tills were open. It was not the only
+  place. Every guard against doing a thing twice was a variable in one till's memory —
+  `_webActing`, `_wvBooking`, `_settlingCash` — and no suite could see past that,
+  because each gave its page a database of its own. `two-tills-browser` puts two real
+  pages on **one** database (`test/shared-db.js`: writes show locally first, and a
+  transaction is re-run against the server's value until it commits or aborts) and asks
+  what happens to money both tills hear about:
+  - *a web order's payment* — the claim names the order **and the till** now, so one
+    till creates it and the other aborts. A claim left by a till that died is still the
+    order's: it is taken over after twenty seconds, by compare-and-swap, so one of the
+    tills that notice gets it. The marker on the order and the ledger line are one
+    multi-path write, so a booking cannot half-land and be retried on top of itself —
+    and a booking that arrives after the order was accepted by hand is refused whole,
+    by the order's own `.validate` (the emulator suite asks that by name).
+  - *accepting or rejecting a web order* — the order is **taken** first, in a
+    transaction on its own node, and nothing reaches the kitchen or the books unless
+    that commits. Accepted on both tills it was two tickets, a dine-in table with every
+    item on it twice, two bills; rejected on both, two rows in Refunds Due for one
+    payment. The take also hands back the order as the *server* had it, which is the
+    copy whose payment state is believed: an order paid while "Reject?" was on screen
+    used to be rejected as unpaid, with the money in the account and no refund owed.
+  - *cash and UPI at the counter* — the ledger line used to be written before the table
+    was asked, "unconditionally". A bill open on both tills and settled on both closed
+    once and was booked twice, and the till that lost said nothing. The table's
+    transaction is the one place two tills cannot both win, so it decides: the line is
+    written by the till whose payment the table accepted, and one it turned away — or
+    could not record — is said out loud as NOT RECORDED instead of "recorded, re-open
+    the bill", which only ever offered taking the payment again. Two half shares paid
+    at two tills at once are still two payments, and both stand.
+  - *the wifi blinking with a payment in the air* — the SDK cancels a transaction it
+    has sent and not heard back about, with an error that is the same whether the
+    server applied it or never saw it (`test:compat` cuts six and gets both). "Recorded"
+    was how a payment got taken twice; "not recorded" loses the sale when it did land.
+    So every payment is stamped onto the table under its own id (`_pays`), which makes
+    making it again safe, and an attempt that errors is simply made again: a table that
+    already carries the stamp is left as it is and reported as paid. A payment that
+    *closed* the table leaves no table to carry a stamp; whether it was this one that
+    closed it is read off the day's bills — the other till's close wrote one, a close
+    that was cut off wrote nothing. The cashier is told the till is checking, and not
+    to take it again, and then what the answer was.
+  - *the payment screens* — a bill settled on the other till takes its UPI code down
+    here too; left up, the customer scans it and pays a closed bill. And what a matched
+    payment books is fixed at the moment it matches: the tick stays up for 900ms on a
+    screen that is in the customer's hand, and a tip tapped in that window used to
+    book ₹460 against a ₹450 credit.
+  - *tips out, and a cash-out that timed out* — see "cash out of the drawer" below.
+
+  `test:compat` then races two real SDK clients against the emulator over the same
+  primitives — including the shared token, where both are told they won — so the
+  stand-in database is held to what the real one does.
+- **closing a day this till cannot see** — End Day archives the ledger the till is
+  showing and then deletes `pos/ledgerEntries`. The delete needs any staff role; reading
+  the ledger needs the counter's or the owner's. So a sign-in that saw "the cash-up is
+  only shown to the counter and the owner" could still close the day, and archived
+  exactly what it saw — nothing — before wiping the real thing. It is refused now, as
+  is a till whose ledger has not arrived yet, and a second close of a day with nothing
+  rung up asks first. On the same screen, a void, a refund and a write-off each read
+  `VOID: VOID: …`: the reason already carries its label and the list added another.
 - **a credit is spent once** — the ledger reconciler works out which credits are
   already spoken for before it verifies anything, from the live ledger and from the
   rows EOD parks in `pos/unverified`. Two things were wrong with the parked half.
@@ -793,7 +855,17 @@ costs money:
   half that makes the prompt a gate. Everything else in the ledger is still the
   till's to write — a sale has to be recordable when the Worker is unreachable — and
   each of those now moves its line and its running total in one write, and says so on
-  screen if that write is refused rather than swallowing it.
+  screen if that write is refused rather than swallowing it. **And the same request,
+  sent twice, is recorded once.** The till gives up on the Worker after fifteen seconds
+  and cannot know whether it was heard; its only move is to send again, and an entry
+  keyed off the Worker's clock made that a second withdrawal every time. The till now
+  names each cash-out (`requestId`: the same on every retry of one confirmed entry, new
+  for the next) and the Worker writes the entry under that name and answers a name it
+  has already recorded with the entry that is there. A tip payout's name is the same on
+  *both* tills — "the payout that takes this day's pool from ₹X paid to ₹X+due" — and
+  the pool is moved *to* that figure rather than *by* the amount, so the tips paid out
+  on two tills at once are one TIPS OUT line, one movement of the drawer, and a pool
+  that reads as paid once.
 - **stock on and off the shelf** — `inventory/stock` and `inventory/logs` are written
   by the Worker and by nothing else, so a prep or a delivery cannot be recorded without
   a PIN and cannot happen without a log line. The prompt used to be advice twice over:
