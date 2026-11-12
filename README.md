@@ -459,6 +459,28 @@ costs money:
   just painted over now, and the spy still has the last word on the next scroll. The
   suite drives the page's own renderer and the page's own jump handler and asks the
   strip what it is showing, at the moment the two used to collide.
+- **nothing to read sits in iOS 26's blur** — the same strip, reported a third and a
+  fourth time: soft and blurred, on the installed till. That one is not ours. iOS 26
+  draws a blur of its own over the top of a home-screen web app that runs under the
+  status bar — across the status bar and fading out 32 to 40pt below it, by the
+  measurements of the projects that hit it first — and the strip is pinned exactly there.
+  No CSS property or meta tag turns it off, and a solid band under the status bar does
+  not stop it. The first fix removed `black-translucent` so the page would start below
+  an opaque status bar instead; it was right, and it reached nobody, because iOS reads
+  that tag when an app is *added* to the Home Screen and every till was already
+  installed. So the pages stopped waiting to be reinstalled. `--top-edge` is where
+  content may begin: the safe-area inset plus `--blur-clear`, which is 36px in exactly
+  one situation — an iOS home-screen app (`navigator.standalone`) whose page is under
+  the status bar (the inset is not zero) — and 0 everywhere else, including an app
+  installed since, a browser tab and Android. The strip, the live-order rail, the
+  toasts and the offline bar all hang off it, and the band over the status bar runs
+  down to meet the strip so that what the blur falls on is flat brown. The band also
+  takes hits now: WebKit decides whether to blur the top edge at all by hit-testing
+  for a fixed, full-width, plainly coloured box there, and `pointer-events: none` is
+  a box a hit test does not find. **No browser here draws that blur**, so the suite
+  cannot see "sharp"; `top-edge-browser` holds the geometry instead — with a real
+  safe-area inset asked for from Chromium — in all three situations, and the
+  hit-test rule as WebKit's source states it.
 - **the connection, said out loud** — every device here is on café wifi: two tills, two
   kitchen boards, the stock tablet, and a customer's phone at a table. Not one page had
   a line about losing that connection — no listener, nothing, on any of the seven. The

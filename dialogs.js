@@ -66,7 +66,8 @@
     function host() {
         if (toastHost && toastHost.parentNode) return toastHost;
         toastHost = css(document.createElement('div'),
-            'position:fixed;top:calc(12px + env(safe-area-inset-top));left:50%;' +
+            // --top-edge where the page defines one: below iOS 26's blur, not in it.
+            'position:fixed;top:calc(12px + var(--top-edge, env(safe-area-inset-top)));left:50%;' +
             'transform:translateX(-50%);width:92%;max-width:360px;z-index:' + Z + ';' +
             'display:flex;flex-direction:column;gap:8px;pointer-events:none');
         document.body.appendChild(toastHost);

@@ -14,7 +14,19 @@
          is opaque and the page starts below it, which is where the blur is not. iOS reads
          this tag only when the app is added to the Home Screen: an existing install keeps
          the old look until it is removed and added again, which is why the safe-area band
-         and padding stay. -->
+         and padding stay.
+
+         AND AN EXISTING INSTALL IS EVERY INSTALL THERE WAS. Taking the tag out fixed the
+         devices that were removed from the Home Screen and added back, which is to say
+         none of them: the till went on blurring its category strip. So the page no longer
+         waits for that. Inside an iOS home-screen app that still runs under the status
+         bar, everything that has to be READ starts below the blur — see top-edge in
+         the stylesheet, and the script just below, which is what tells it where it is. -->
+    <script>
+        /* An iOS home-screen app, said to the stylesheet before anything is painted.
+           navigator.standalone exists on iOS and nowhere else. */
+        if (window.navigator.standalone === true) document.documentElement.classList.add('ios-app');
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="ILA POS">
@@ -249,7 +261,41 @@
         input[type="checkbox"], input[type="radio"], input[type="range"], progress {
             accent-color: var(--brand-text);
         }
-        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
+        /* ===== WHERE THE FIRST THING ANYONE READS MAY START =====
+           iOS 26 draws a blur of its own over the top of an installed web app that runs
+           under the status bar: across the status bar, and fading out somewhere between
+           32 and 40pt below it (measured off devices by the projects that hit it first,
+           who do not agree; nothing documents it, so this is sized for the larger).
+           No CSS property and no meta tag turns it off. A solid band under the status
+           bar does not stop it either — the blur is drawn over the page, band and all —
+           and that is what the category strip was sitting in: pinned at the bottom
+           edge of the status bar, every name on it inside the fade.
+
+           So nothing that has to be read is put there. --top-edge is where content may
+           begin: the safe-area inset, plus --blur-clear. Everything that used to read
+           env(safe-area-inset-top) reads --top-edge instead, and the band that keeps the
+           menu out of the status bar grows to cover the gap, so what the blur falls on
+           is flat brown — and a blurred flat colour is the same flat colour.
+
+           --blur-clear is 36px in exactly one place: an iOS home-screen app (html.ios-app,
+           set from navigator.standalone before first paint) whose page is under the
+           status bar (the inset is not zero). The strip's own padding puts its text
+           another 11px down, which clears the 40. Everywhere else it is 0 and nothing
+           moves: a browser tab, Android, and an app added to the Home Screen since the
+           translucent status bar went — there the page starts below an opaque bar, the
+           inset is 0, and clamp() below comes to 0 with it.
+
+           The @supports block is the same rule with no script to rely on: only iOS
+           WebKit knows -webkit-touch-callout. The manifest says fullscreen, which iOS
+           runs as standalone, so both are named. */
+        :root { --blur-clear: 0px; --top-edge: calc(env(safe-area-inset-top, 0px) + var(--blur-clear)); }
+        html.ios-app { --blur-clear: clamp(0px, calc(env(safe-area-inset-top, 0px) * 100), 36px); }
+        @supports (-webkit-touch-callout: none) {
+            @media (display-mode: standalone), (display-mode: fullscreen) {
+                :root { --blur-clear: clamp(0px, calc(env(safe-area-inset-top, 0px) * 100), 36px); }
+            }
+        }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: var(--top-edge) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         /* 90% of 320 is 288, plus 40 of padding, is 328 inside a 320px viewport.
            border-box folds the padding into the width instead of adding to it. */
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
@@ -262,7 +308,9 @@
             body { padding-bottom: 40px; }
             .pos-panes { display: flex; align-items: flex-start; gap: 26px; }
             .pane-menu { flex: 1 1 auto; min-width: 0; }
-            .pane-cart { display: block; flex: 0 0 330px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+            /* Pinned below --top-edge, not at a bare 16px: under a translucent status bar that
+               put the top of CURRENT ORDER behind the clock. */
+            .pane-cart { display: block; flex: 0 0 330px; position: sticky; top: calc(var(--top-edge) + 16px); max-height: calc(100vh - 32px - var(--top-edge)); overflow-y: auto; }
             .rail-card { border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 16px; margin-bottom: 14px; text-align: left; }
             .rail-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px dashed rgba(255,255,255,0.15); font-size: 0.9rem; }
             .rail-row:last-child { border-bottom: none; }
@@ -298,7 +346,9 @@
         /* WRAPS — a horizontal scroller hid half the categories, which is the opposite of the
            point. Every category is visible and one tap away.
            top: uses the safe-area inset because the status bar is translucent: at top:0 the strip
-           slid under the clock and network icons on a notched iPhone. */
+           slid under the clock and network icons on a notched iPhone. And then --top-edge
+           rather than the bare inset, because the first 40pt below a translucent status bar
+           are blurred by iOS 26 and this strip is made of small type — see --top-edge. */
         /* Navigation, not a second set of headings. The section h2s already name the categories,
            so this recedes: no pill outlines, no drop shadow competing with the h2's own rule —
            just quiet labels, with the one you are currently in lit up. */
@@ -330,7 +380,7 @@
            overhang by the scrollbar's width. Not a till and not a customer's phone, both
            of which have overlay scrollbars, and no suite here can see it either: headless
            Chromium reports a scrollbar width of 0. Stated rather than hidden. */
-        .cat-strip { position: sticky; top: env(safe-area-inset-top); z-index: 900; display: flex; flex-wrap: wrap;
+        .cat-strip { position: sticky; top: var(--top-edge); z-index: 900; display: flex; flex-wrap: wrap;
                      justify-content: center; gap: 2px 4px; margin: 0 calc(50% - 50vw) 2px; padding: 6px 0; background: var(--brand-bg);
                      border-bottom: 1px solid rgba(255,255,255,0.14); }
         /* AND IT STOPS BLEEDING ONCE THERE ARE TWO PANES. Full bleed is right for a phone,
@@ -394,9 +444,22 @@
            again. admin.html keeps its body::before because its <body> is not flex, which is
            the whole of why it works; the suite fails the moment any page has both. What the
            suite can check directly it does — that the band covers the inset and outranks
-           whatever scrolls under it. */
-        .notch-cover { position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top);
-                       background: var(--brand-bg); z-index: 950; pointer-events: none; }
+           whatever scrolls under it.
+
+           IT RUNS DOWN TO --top-edge, so it also fills the gap left under the status bar
+           for iOS 26's blur: flat brown is all there is for the blur to fall on.
+
+           AND IT TAKES HITS. It carried pointer-events: none, on the reasoning that nothing
+           under the status bar is tappable anyway — which is also why it does not need it.
+           What it cost: WebKit decides whether the top edge is "a bar" by hit-testing 4px
+           below the middle of it and walking up to a fixed or sticky box at least 90% of
+           the viewport wide with a plain background-colour, and a box that ignores the
+           pointer is not found. Found, WebKit extends the box's colour instead of
+           blurring. Whether it takes that path under a translucent status bar is not
+           something anyone has confirmed on a device, so the gap above does not depend on
+           it. But this is the box it would have to find, and now it can. */
+        .notch-cover { position: fixed; top: 0; left: 0; right: 0; height: var(--top-edge);
+                       background: var(--brand-bg); z-index: 950; }
 
         .dashboard-bar { border: 1px solid rgba(255, 255, 255, 0.2); padding: 15px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .dash-stat { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex: 1 1 0; min-width: 0; transition: opacity 0.2s; }
@@ -504,7 +567,7 @@
         .cart-clear { font-size: 0.75rem; letter-spacing: 0.5px; text-transform: uppercase; }
         .checkout-btn { background-color: var(--brand-bg); color: var(--brand-text); border: none; padding: 14px 20px; min-height: 44px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; font-family: 'Quicksand', sans-serif; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;}
 
-        #notification-area { position: fixed; top: calc(15px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; z-index: 3000; pointer-events: none; }
+        #notification-area { position: fixed; top: calc(15px + var(--top-edge)); left: 50%; transform: translateX(-50%); width: 90%; max-width: 350px; z-index: 3000; pointer-events: none; }
         
         .toast-card { background: var(--brand-bg); color: #fff; padding: 20px; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); margin-bottom: 10px; font-family: 'Quicksand', sans-serif; display: flex; flex-direction: column; pointer-events: auto; animation: slideDown 0.3s ease-out; border-left: 5px solid #fff; }
         .toast-header { font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
@@ -603,7 +666,7 @@
            again, which keeps CANCEL and the pay buttons reachable. */
         body.short-viewport .modal-content.modal-stack { display: block; overflow-y: auto; }
         body.short-viewport .modal-stack > .modal-scroll { overflow: visible; min-height: 0; }
-        body.short-viewport .modal-overlay { padding-top: calc(10px + env(safe-area-inset-top)); }
+        body.short-viewport .modal-overlay { padding-top: calc(10px + var(--top-edge)); }
         .modal-stack > .modal-head, .modal-stack > .modal-foot { flex: 0 0 auto; }
         .modal-stack > .modal-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
         .modal-foot { border-top: 1px solid rgba(255,255,255,0.12); margin-top: 12px; padding-top: 6px; }
@@ -1193,7 +1256,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-11-11.1"></script>
+    <script src="/build-check.js" data-build="2026-11-12.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
