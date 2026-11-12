@@ -38,6 +38,7 @@ const suites = [
   'inside-parent-browser.test.js',
   'cat-strip-browser.test.js',
   'reflow-browser.test.js',
+  'top-edge-browser.test.js',
   'state-visible-browser.test.js',
   'connection-browser.test.js',
   'client-errors-browser.test.js',

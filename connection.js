@@ -160,7 +160,7 @@
         // Recomputed every time rather than fixed when the bar was built: the offline
         // bar can arrive after this one, and a stale offset would stack them.
         var above = document.getElementById('ila-offline-bar');
-        refusedBar.style.top = 'calc(env(safe-area-inset-top) + ' +
+        refusedBar.style.top = 'calc(var(--top-edge, env(safe-area-inset-top)) + ' +
             (above ? above.offsetHeight + 'px' : '0px') + ')';
         // Named, because "something failed" sends somebody hunting and a path does not.
         refusedBar.textContent = names.length === 1
@@ -392,7 +392,9 @@
         // the kitchen boards already spend red on a late ticket.
         bar.style.cssText = [
             'position:fixed',
-            'top:env(safe-area-inset-top)',
+            // --top-edge where the page defines one (see pos.html): under a translucent
+            // status bar, iOS 26 blurs the first 40pt or so below it, and this bar is a sentence.
+            'top:var(--top-edge, env(safe-area-inset-top))',
             'left:0', 'right:0',
             'z-index:' + Z,
             'background:var(--brand-text,#ffffff)',

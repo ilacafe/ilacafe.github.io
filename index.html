@@ -14,7 +14,19 @@
          is opaque and the page starts below it, which is where the blur is not. iOS reads
          this tag only when the app is added to the Home Screen: an existing install keeps
          the old look until it is removed and added again, which is why the safe-area band
-         and padding stay. -->
+         and padding stay.
+
+         AND AN EXISTING INSTALL IS EVERY INSTALL THERE WAS. Taking the tag out fixed the
+         devices that were removed from the Home Screen and added back, which is to say
+         none of them: the till went on blurring its category strip. So the page no longer
+         waits for that. Inside an iOS home-screen app that still runs under the status
+         bar, everything that has to be READ starts below the blur — see top-edge in
+         the stylesheet, and the script just below, which is what tells it where it is. -->
+    <script>
+        /* An iOS home-screen app, said to the stylesheet before anything is painted.
+           navigator.standalone exists on iOS and nowhere else. */
+        if (window.navigator.standalone === true) document.documentElement.classList.add('ios-app');
+    </script>
     <title>Café Ila — order ahead</title>
     <meta name="description" content="Order ahead from Café Ila. Browse the menu, see how long the kitchen is running, and pay by UPI.">
 
@@ -206,7 +218,40 @@
         input[type="checkbox"], input[type="radio"], input[type="range"], progress {
             accent-color: var(--brand-text);
         }
-        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: env(safe-area-inset-top) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
+        /* ===== WHERE THE FIRST THING ANYONE READS MAY START =====
+           iOS 26 draws a blur of its own over the top of an installed web app that runs
+           under the status bar: across the status bar, and fading out somewhere between
+           32 and 40pt below it (measured off devices by the projects that hit it first,
+           who do not agree; nothing documents it, so this is sized for the larger).
+           No CSS property and no meta tag turns it off. A solid band under the status
+           bar does not stop it either — the blur is drawn over the page, band and all —
+           and on the till that is what the category strip was sitting in. Here it is the
+           top of the page.
+
+           So nothing that has to be read is put there. --top-edge is where content may
+           begin: the safe-area inset, plus --blur-clear. Everything that used to read
+           env(safe-area-inset-top) reads --top-edge instead, and the band that keeps the
+           menu out of the status bar grows to cover the gap, so what the blur falls on
+           is flat brown — and a blurred flat colour is the same flat colour.
+
+           --blur-clear is 36px in exactly one place: an iOS home-screen app (html.ios-app,
+           set from navigator.standalone before first paint) whose page is under the
+           status bar (the inset is not zero). Everywhere else it is 0 and nothing
+           moves: a browser tab, Android, and an app added to the Home Screen since the
+           translucent status bar went — there the page starts below an opaque bar, the
+           inset is 0, and clamp() below comes to 0 with it.
+
+           The @supports block is the same rule with no script to rely on: only iOS
+           WebKit knows -webkit-touch-callout. The manifest says fullscreen, which iOS
+           runs as standalone, so both are named. */
+        :root { --blur-clear: 0px; --top-edge: calc(env(safe-area-inset-top, 0px) + var(--blur-clear)); }
+        html.ios-app { --blur-clear: clamp(0px, calc(env(safe-area-inset-top, 0px) * 100), 36px); }
+        @supports (-webkit-touch-callout: none) {
+            @media (display-mode: standalone), (display-mode: fullscreen) {
+                :root { --blur-clear: clamp(0px, calc(env(safe-area-inset-top, 0px) * 100), 36px); }
+            }
+        }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: 'Quicksand', sans-serif; margin: 0; padding: var(--top-edge) 0 0 0; line-height: 1.6; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
         /* 90% of 320 is 288, plus 40 of padding, is 328 inside a 320px viewport.
            border-box folds the padding into the width instead of adding to it. */
         .container { width: 90%; max-width: 600px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
@@ -788,7 +833,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-11-11.1"></script>
+    <script src="/build-check.js" data-build="2026-11-12.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
