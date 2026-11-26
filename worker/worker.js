@@ -2635,8 +2635,9 @@ async function gstSendMonth(token, settings, month, how, by, nowMs){
 // ops/cronFailure and pushes the owner — at most once in twenty hours.
 async function runGstMonthlyMail(nowMs){
   const token = await getRobotToken();
-  const settings = await monLoad(token, '/gst/settings');
-  if (!settings || !settings.autoMail) return { skipped: 'off' };
+  // The registration's details under whatever the owner saved — see effective() in gst.js.
+  const settings = IlaGST.effective(await monLoad(token, '/gst/settings'));
+  if (!settings.autoMail) return { skipped: 'off' };
   const month = IlaGST.prevMonth(nowMs);
   const prevRes = await fetch(DB_URL + '/gst/mailLog/' + month + '.json?auth=' + token);
   const prev = prevRes.ok ? await prevRes.json() : null;
@@ -2653,9 +2654,8 @@ async function handleGstMail(data, claims){
   const month = String((data && data.month) || '');
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return { status: 400, body: { error: 'not a month' } };
   let token, settings;
-  try { token = await getRobotToken(); settings = await monLoad(token, '/gst/settings'); }
+  try { token = await getRobotToken(); settings = IlaGST.effective(await monLoad(token, '/gst/settings')); }
   catch (e){ return { status: 502, body: { error: 'could not read the settings' } }; }
-  if (!settings) return { status: 409, body: { error: 'GST invoicing is not set up' } };
   let who = null;
   try {
     const res = await fetch(DB_URL + '/users/' + encodeURIComponent(claims.sub) + '/name.json?auth=' + token);

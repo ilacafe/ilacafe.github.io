@@ -59,6 +59,25 @@ const { check, note, done } = suite('GST invoices — tax in a price, serials, G
   check('an unknown state code is refused', !G.validGSTIN('00CPEPP3821F1Z' + G.gstinCheckChar('00CPEPP3821F1Z')));
 }
 
+// ------------------------------------------------------------------ the registration
+{
+  const e = G.effective(null);
+  check('with nothing saved, the registration certificate\'s details are the settings',
+        e.legalName === 'PRIYANSHU' && e.tradeName === 'ILA' && e.gstin === '05CPEPP3821F1Z4' &&
+        /Almora, Uttarakhand 263601$/.test(e.address), JSON.stringify(e));
+  check('and they are enough to issue an invoice', G.settingsProblems(e).length === 0);
+  check('the place of supply they give is Uttarakhand', G.sellerOf(e).state === 'Uttarakhand');
+  check('the default is to invoice UPI paid into the ticked accounts, and mail the CA monthly',
+        e.mode === 'accounts' && e.autoMail === true && e.rate === 5 && e.sac === '996331');
+  const o = G.effective({ address: 'Somewhere else', mode: 'all', autoMail: false, legalName: '' });
+  check('whatever is saved in Admin is laid over them', o.address === 'Somewhere else' && o.mode === 'all' && o.autoMail === false);
+  check('but an emptied field falls back rather than printing nothing', o.legalName === 'PRIYANSHU');
+  check('and the defaults themselves are not changed by it', G.effective(null).address !== 'Somewhere else');
+  check('every page reads the settings through it',
+        /IlaGST\.effective\(s\.val\(\)\)/.test(readPage('pos.html')) && /IlaGST\.effective\(s\.val\(\)\)/.test(readPage('admin.html')) &&
+        (readPage('worker/worker.js').match(/IlaGST\.effective\(await monLoad\(token, '\/gst\/settings'\)\)/g) || []).length === 2);
+}
+
 // ------------------------------------------------------------------ the draft
 const SETTINGS = { legalName: 'Legal Name Of Proprietor', tradeName: 'ILA', address: 'Rajpur Road\nDehradun',
                    gstin: '05CPEPP3821F1Z4', rate: 5, sac: '996331', prefix: 'ILA' };

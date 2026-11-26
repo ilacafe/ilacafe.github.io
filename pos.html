@@ -6156,7 +6156,8 @@
         window.gstSettings = null;
         window.gstSettingsRefused = false;
         try {
-            db.ref('gst/settings').on('value', s => { window.gstSettings = s.val() || null; window.gstSettingsRefused = false; },
+            // The certificate's details under whatever was saved — see effective() in gst.js.
+            db.ref('gst/settings').on('value', s => { window.gstSettings = IlaGST.effective(s.val()); window.gstSettingsRefused = false; },
                 function(err){ window.gstSettingsRefused = true; window.ilaRefused.quiet('gst/settings')(err); });
         } catch(e){}
 

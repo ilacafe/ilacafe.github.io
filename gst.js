@@ -40,6 +40,33 @@
   var DEFAULT_RATE = 5;
   var DEFAULT_PREFIX = 'ILA';
 
+  // ILA's registration, as its certificate states it (Form GST REG-06, issued 10/11/2026:
+  // Regular, Proprietorship, principal place of business in Almora). None of it is
+  // private — the GST portal shows it to anyone who searches the GSTIN, and it is printed
+  // on every invoice — so it is what an empty setting means, and invoices can be issued
+  // the moment the rules are live without anybody typing it in. Anything saved in
+  // Admin → GST Invoices is laid over it.
+  var DEFAULT_SETTINGS = {
+    legalName: 'PRIYANSHU',
+    tradeName: 'ILA',
+    address: 'Kasar Devi, Almora Range, Almora, Uttarakhand 263601',
+    gstin: '05CPEPP3821F1Z4',
+    prefix: DEFAULT_PREFIX, sac: DEFAULT_SAC, rate: DEFAULT_RATE,
+    mode: 'accounts',      // invoice the UPI payments into the ticked accounts
+    autoMail: true         // and mail the month to the CA on the 1st
+  };
+  function effective(settings) {
+    var out = {}, k;
+    for (k in DEFAULT_SETTINGS) out[k] = DEFAULT_SETTINGS[k];
+    if (settings && typeof settings === 'object') {
+      for (k in settings) {
+        var v = settings[k];
+        if (v !== undefined && v !== null && v !== '') out[k] = v;
+      }
+    }
+    return out;
+  }
+
   var IST_MS = 5.5 * 3600 * 1000;
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -490,6 +517,7 @@
     prevMonth: prevMonth, monthLabel: monthLabel, dateText: dateText, dateTimeText: dateTimeText,
     cleanPrefix: cleanPrefix, invoiceNo: invoiceNo,
     normGSTIN: normGSTIN, validGSTIN: validGSTIN, gstinCheckChar: gstinCheckChar, stateOf: stateOf,
+    DEFAULT_SETTINGS: DEFAULT_SETTINGS, effective: effective,
     taxSplit: taxSplit, linesOf: linesOf, sellerOf: sellerOf, settingsProblems: settingsProblems,
     buyerProblems: buyerProblems, draft: draft, token: token, publicCopy: publicCopy, words: words,
     render: render, summary: summary, book: book, csv: csv

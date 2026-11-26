@@ -2550,11 +2550,13 @@
         // gst/settings" across the top of the page says less than the card can.
         window.gstCfg = null;
         let gstRefused = false, gstMailLog = {}, gstRegRows = [], gstRegMonth = null, gstBills = [], gstBillSel = null;
-        const GST_DEFAULT_GSTIN = '05CPEPP3821F1Z4';
         function gstWho(){ return (window.currentAdmin && window.currentAdmin.name) || 'admin'; }
         function loadGST(){
             db.ref('gst/settings').on('value', s => {
-                window.gstCfg = s.val() || {}; gstRefused = false;
+                // What is saved, laid over the registration certificate's details (see
+                // effective() in gst.js) — so the card, the till and the Worker all mean
+                // the same thing by a field nobody has filled in.
+                window.gstCfg = IlaGST.effective(s.val()); gstRefused = false;
                 renderGSTSettings(); renderGSTAccounts(); renderGSTHealth(); renderUPIRouting();
             }, function(err){ gstRefused = true; window.ilaRefused.quiet('gst/settings')(err); renderGSTHealth(); });
             db.ref('gst/mailLog').limitToLast(12).on('value', s => { gstMailLog = s.val() || {}; renderGSTMailLog(); },
@@ -2610,7 +2612,7 @@
         function renderGSTSettings(){
             const s = window.gstCfg || {};
             gstFill('gst-legal', s.legalName); gstFill('gst-trade', s.tradeName); gstFill('gst-address', s.address);
-            gstFill('gst-gstin', s.gstin || GST_DEFAULT_GSTIN); gstFill('gst-prefix', s.prefix);
+            gstFill('gst-gstin', s.gstin); gstFill('gst-prefix', s.prefix);
             gstFill('gst-phone', s.phone); gstFill('gst-email', s.email);
             gstFill('gst-sac', s.sac); gstFill('gst-rate', s.rate != null ? s.rate : '');
             gstFill('gst-ca-email', s.caEmail);
