@@ -122,13 +122,25 @@ function readRules() {
   ).rules;
 }
 
-async function status(p) {
+// 429 is Firebase saying "not so fast" to unauthenticated reads, and it says nothing
+// about the rules. Two runs close together — a deploy whose check failed, and the
+// restore that follows it, probe the same forty paths within seconds — drew it on
+// every other request, which read as a failed deploy and rolled a correct one back.
+// So a 429 is asked again, after the wait the server names or a growing one. Every
+// other status means exactly what it did.
+const RATE_LIMIT_TRIES = 5;
+async function status(p, wait) {
   // shallow=true keeps the response to a list of keys rather than the node, and
   // the body is cancelled either way — only the status matters here.
   const url = DB + '/' + p + '.json?shallow=true';
-  const res = await fetch(url, { redirect: 'follow' });
-  try { await res.body?.cancel(); } catch (e) {}
-  return res.status;
+  const pause = wait || ((ms) => new Promise(r => setTimeout(r, ms)));
+  for (let i = 1; ; i++) {
+    const res = await fetch(url, { redirect: 'follow' });
+    try { await res.body?.cancel(); } catch (e) {}
+    if (res.status !== 429 || i >= RATE_LIMIT_TRIES) return res.status;
+    const after = parseFloat((res.headers && res.headers.get && res.headers.get('retry-after')) || '');
+    await pause(Math.min(10000, after > 0 ? after * 1000 : 1000 * i));
+  }
 }
 
 // How a path is written in the report: the rule path, and what was actually asked
@@ -213,7 +225,7 @@ async function main() {
 
 // Required by the offline suite, which checks the paths this would ask for without
 // asking for them. Only the command line makes requests.
-module.exports = { MUST_BE_DENIED, PROBE_KEY, toDbPath, publicPaths, ancestorsOf, readRules };
+module.exports = { MUST_BE_DENIED, PROBE_KEY, toDbPath, publicPaths, ancestorsOf, readRules, status };
 
 if (require.main === module) {
   main().catch((e) => { console.error(String(e.message || e)); process.exit(1); });

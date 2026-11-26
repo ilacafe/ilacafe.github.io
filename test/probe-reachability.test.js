@@ -47,8 +47,11 @@ function dbPath(url) {
 // harness announced itself the first time.
 function serve(answer) {
   const server = http.createServer((req, res) => {
-    const code = answer(dbPath(req.url));
-    res.writeHead(code, { 'Content-Type': 'application/json', 'Connection': 'close' });
+    // An answer is a status, or { code, headers } for a reply that needs one.
+    const a = answer(dbPath(req.url));
+    const code = typeof a === 'object' ? a.code : a;
+    res.writeHead(code, Object.assign({ 'Content-Type': 'application/json', 'Connection': 'close' },
+                                      (typeof a === 'object' && a.headers) || {}));
     res.end(code === 200 ? 'null' : '{"error":"Permission denied"}');
   });
   server.keepAliveTimeout = 1;
@@ -144,6 +147,29 @@ function runProbe(base) {
     check('and the deny list is still checked',
           /what a stranger cannot/i.test(out), 'the deny list was skipped');
     note('the control only trips when NOT ONE public path answered');
+  }
+
+  // ------------------------------- Firebase saying "not so fast"
+  // A failed deploy and the restore that follows it probe the same paths seconds
+  // apart, and Firebase answered every other request with 429. Read as "neither
+  // allowed nor denied", that rolled back a deploy that was correct.
+  {
+    const seen = new Set();
+    const truth = p => (open.includes(p) ? 200 : 401);
+    const { code, out } = await withStub(p => {
+      if (!seen.has(p)) { seen.add(p); return { code: 429, headers: { 'Retry-After': '0.01' } }; }
+      return truth(p);
+    }, runProbe);
+    check('a path that answers 429 once is asked again, and the run passes on the real answer',
+          code === 0 && !/FAIL/.test(out), 'exit ' + code + ': ' + out.slice(-300));
+  }
+  {
+    const stuck = denied[1];
+    const { code, out } = await withStub(p => (p === stuck ? { code: 429, headers: { 'Retry-After': '0.01' } }
+                                                            : (open.includes(p) ? 200 : 401)), runProbe);
+    check('but one that never stops saying 429 is still not counted as refused',
+          code === 1 && new RegExp('answered 429, neither allowed nor denied').test(out), 'exit ' + code);
+    note('a retry is for being told to wait, not a way round an answer');
   }
 
   done();
