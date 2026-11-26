@@ -53,6 +53,7 @@ const suites = [
   'upi-yearly-cap.test.js',
   'gst.test.js',
   'gst-mail.test.js',
+  'gst-mail-setup.test.js',
 ];
 
 let failed = [];

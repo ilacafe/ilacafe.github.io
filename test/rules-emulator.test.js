@@ -444,6 +444,7 @@ const TOGETHER = {};
       'gst/byBill':          ['cashier', 'admin'],
       'gst/public':          [],                          // one by its token, below; never the list
       'gst/mailLog':         ['admin', 'robot'],
+      'gst/mailSetup':       ['admin'],
     };
     const wrong = [];
     for (const [path, expected] of Object.entries(EXPECTED_READERS)) {

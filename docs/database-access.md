@@ -161,6 +161,7 @@ customers' names and GSTINs, so everything under it is the counter's and the own
 | `gst/byBill/{bill}` | the counter, the owner | created once; removed by the owner only, to invoice a bill again |
 | `gst/public/{token}` | **anyone with the token** — never the list | created with its invoice, carrying the same number; cancelled by the owner |
 | `gst/mailLog` | the owner, the Worker | the Worker |
+| `gst/mailSetup` | the owner | `.github/workflows/gst-mail-setup.yml`, with the service account — no rule grants it to anyone |
 
 `npm run test:rules` issues, races and cancels invoices against these in the emulator,
 including each of the ways round the numbering, and the deploy probe checks that `gst`,

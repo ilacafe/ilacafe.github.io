@@ -124,6 +124,8 @@ note(paths.length + ' paths across the pages and the Worker, ' +
   const NOTHING_WRITES_THESE = {
     // Written by a person, in the Firebase console or by hand.
     'staff': 'PIN hashes, set up by the owner rather than by any page',
+    'gst/mailSetup': 'written by .github/workflows/gst-mail-setup.yml (tools/gst-mail-setup.js) with ' +
+                     'the service account: how far the CA\u2019s address has got with Email Routing',
   };
 
   const unfed = [];

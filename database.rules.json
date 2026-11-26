@@ -154,6 +154,12 @@
       "mailLog": {
         ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      },
+      // What tools/gst-mail-setup.js found: the domain the mail is sent from and how far
+      // the CA's address has got with Email Routing — states, never the address. Written
+      // by that job with the service account, which no rule governs; read by the owner.
+      "mailSetup": {
+        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
       }
     },
     "orders": {

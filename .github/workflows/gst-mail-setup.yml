@@ -1,0 +1,54 @@
+name: gst mail setup
+
+# Gets the monthly GST email to the accountant ready, with nobody at the Cloudflare
+# dashboard: finds the domain Email Routing runs on and points the Worker's
+# GST_MAIL_FROM at it, and registers the CA's address (typed once in Admin, read here
+# from the database, never printed) as an Email Routing destination — which is what
+# makes Cloudflare send the CA the link to confirm it. Writes what it found to
+# gst/mailSetup, which the owner's GST card shows. See tools/gst-mail-setup.js.
+#
+# Every three hours, so an address saved in Admin is registered the same morning.
+# Each run is a few small reads when there is nothing left to do.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '27 */3 * * *'
+  push:
+    branches: [main]
+    paths: ['tools/gst-mail-setup.js', '.github/workflows/gst-mail-setup.yml']
+
+jobs:
+  setup:
+    name: sending domain and the CA's address
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: find the domain, register the CA's address, report to the owner's card
+        id: setup
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node tools/gst-mail-setup.js
+
+      # The address is the café's own (invoices@ the Email Routing domain), not a secret,
+      # but the Worker reads it as a binding and a deploy does not carry one — so it is
+      # put once, and again only if the domain ever changes.
+      - name: point the Worker's GST mail at that domain
+        if: steps.setup.outputs.from_changed == 'true'
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FROM: ${{ steps.setup.outputs.from }}
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          printf '%s' "$FROM" | npx wrangler secret put GST_MAIL_FROM
+          cd .. && node tools/gst-mail-setup.js --mark-from "$FROM"

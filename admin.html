@@ -741,6 +741,7 @@
                 <button class="btn btn-secondary" style="flex: 1;" id="gst-mail-now" onclick="gstMailNow()">Email this month now</button>
             </div>
             <div id="gst-mail-status" role="status" class="item-meta"></div>
+            <div id="gst-mail-setup" role="status" class="item-meta" style="margin-top:6px;"></div>
             <div id="gst-mail-log" style="margin-top: 8px;"></div>
             <p class="rec-note">Goes out on the 1st at about 10am, for the month just ended: a summary in the email, the register as a spreadsheet (CSV), and every invoice in one printable file. Cancelled invoices are included and marked, so the serial numbers have no gaps.</p>
 
@@ -2549,7 +2550,7 @@
         // for gst/ are deployed every one of these is refused, and "Could not load
         // gst/settings" across the top of the page says less than the card can.
         window.gstCfg = null;
-        let gstRefused = false, gstMailLog = {}, gstRegRows = [], gstRegMonth = null, gstBills = [], gstBillSel = null;
+        let gstRefused = false, gstMailLog = {}, gstMailSetup = null, gstRegRows = [], gstRegMonth = null, gstBills = [], gstBillSel = null;
         function gstWho(){ return (window.currentAdmin && window.currentAdmin.name) || 'admin'; }
         function loadGST(){
             db.ref('gst/settings').on('value', s => {
@@ -2557,10 +2558,12 @@
                 // effective() in gst.js) — so the card, the till and the Worker all mean
                 // the same thing by a field nobody has filled in.
                 window.gstCfg = IlaGST.effective(s.val()); gstRefused = false;
-                renderGSTSettings(); renderGSTAccounts(); renderGSTHealth(); renderUPIRouting();
+                renderGSTSettings(); renderGSTAccounts(); renderGSTHealth(); renderUPIRouting(); renderGSTMailSetup();
             }, function(err){ gstRefused = true; window.ilaRefused.quiet('gst/settings')(err); renderGSTHealth(); });
             db.ref('gst/mailLog').limitToLast(12).on('value', s => { gstMailLog = s.val() || {}; renderGSTMailLog(); },
                 window.ilaRefused.quiet('gst/mailLog'));
+            db.ref('gst/mailSetup').on('value', s => { gstMailSetup = s.val() || null; renderGSTMailSetup(); },
+                window.ilaRefused.quiet('gst/mailSetup'));
             const mm = document.getElementById('gst-mail-month'); if (mm && !mm.value) mm.value = IlaGST.prevMonth(Date.now());
             const rm = document.getElementById('gst-reg-month'); if (rm && !rm.value) rm.value = IlaGST.monthOf(Date.now());
             const rd = document.getElementById('gst-register-details');
@@ -2700,6 +2703,27 @@
                 html += '<tr><td style="white-space:nowrap;"><strong>' + escapeHTML(IlaGST.monthLabel(m)) + '</strong></td><td>' + escapeHTML(what) + (r.how === 'asked' ? ' · by hand' : '') + '</td></tr>';
             });
             box.innerHTML = html + '</tbody></table>';
+        }
+        // How far the email is from being able to go out, as .github/workflows/
+        // gst-mail-setup.yml last found it: the domain it is sent from, and whether
+        // Cloudflare has the CA's address as a confirmed destination. That job reads the
+        // address saved above and registers it, so the only step left to a person is the
+        // CA clicking the link Cloudflare sends them.
+        function renderGSTMailSetup(){
+            const el = document.getElementById('gst-mail-setup'); if (!el) return;
+            const v = gstMailSetup, s = window.gstCfg || {};
+            if (!v){ el.textContent = s.caEmail ? 'The CA\u2019s address will be registered with Cloudflare within three hours; Cloudflare then emails them a link to confirm it.' : ''; return; }
+            const say = [];
+            if (!v.domain) say.push('Cloudflare Email Routing was not found on ila.cafe or cafeila.app, so there is no address to send from.');
+            if (v.routing === 'no-permission') say.push('The Cloudflare token this repository deploys with cannot register the CA\u2019s address: it needs Account \u2192 Email Routing Addresses \u2192 Edit.');
+            else if (v.routing !== 'ok') say.push('Cloudflare Email Routing could not be checked (' + (v.routingError || v.routing) + ').');
+            else if (v.ca === 'verified') say.push('The CA\u2019s address is confirmed with Cloudflare' + (v.from ? ' \u2014 mail goes from ' + v.from : '') + '.');
+            else if (v.ca === 'added' || v.ca === 'pending') say.push('Cloudflare has emailed the CA a link to confirm their address. The monthly mail can go once they click it.');
+            else if (v.ca === 'refused') say.push('Cloudflare refused to register the CA\u2019s address (' + (v.caError || '') + ').');
+            else say.push(s.caEmail ? 'The CA\u2019s address will be registered with Cloudflare within three hours; Cloudflare then emails them a link to confirm it.'
+                                    : 'Enter the CA\u2019s email above. Within three hours Cloudflare emails them a link to confirm it.');
+            if (v.at) say.push('Checked ' + IlaGST.dateTimeText(v.at) + '.');
+            el.textContent = say.join(' ');
         }
         // The Worker sends it: it is the only thing here that can send email, and the
         // only thing that runs when nobody has this page open, which is what the 1st of

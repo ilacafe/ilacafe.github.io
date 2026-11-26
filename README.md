@@ -248,8 +248,11 @@ printed and not their phone, who issued it, or which of the café's accounts was
 month just ended to the CA's address in the settings: the sums in the body, the
 register as a CSV, every invoice in one printable file. **Email this month now** sends
 any month on demand. It goes through Cloudflare Email Routing, which only delivers to
-verified addresses — see [`worker/README.md`](worker/README.md#gst-invoices-to-the-accountant)
-for the one-time setup. `gst/mailLog` records what went, and the owner's card shows it.
+verified addresses; `.github/workflows/gst-mail-setup.yml` registers the CA's address
+(typed once in Admin, never printed — the repository is public) so that Cloudflare emails
+them a link to confirm it, and sets the Worker's sending address. See
+[`worker/README.md`](worker/README.md#gst-invoices-to-the-accountant). `gst/mailLog`
+records what went, `gst/mailSetup` how far the setup has got, and the owner's card shows both.
 
 Everything under `gst/` is the cashier's and the owner's, as the ledger is: the bar,
 the kitchen and the stock screen cannot read the café's turnover or its customers'

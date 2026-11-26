@@ -353,22 +353,30 @@ A failure is also pushed to the owner, through the same `ops/cronFailure` record
 every scheduled job uses. **Email this month now** in Admin sends any month at any
 time, as the signed-in owner (`action: gst-mail`, admin token only).
 
-### Setting it up, once
+### How it is set up — by itself
 
 It goes out through Cloudflare Email Routing, which this Worker already receives
 bank alerts through, so there is no mail service to sign up for. Email Routing only
-delivers to **verified** addresses:
+delivers **from** an address on the domain it runs on, and only **to** an address
+verified as a destination. Both are handled by `.github/workflows/gst-mail-setup.yml`
+(`tools/gst-mail-setup.js`), every three hours:
 
-1. **Cloudflare → the domain Email Routing runs on → Email → Email Routing →
-   Destination addresses → Add**: the accountant's address. Cloudflare mails them a
-   link; until they click it, every send is refused, and Admin → GST Invoices says so.
-2. `npx wrangler secret put GST_MAIL_FROM` — an address on that same domain, e.g.
-   `invoices@` it. Mail from any other domain is refused.
-3. The `GST_MAIL` binding is already in `wrangler.toml`; the next deploy creates it.
-4. Admin → GST Invoices: the CA's email (the same address as step 1), switch on the
-   monthly email, and press **Email this month now** once to see it arrive.
+- it finds the domain by its MX records (public DNS) and puts `GST_MAIL_FROM` =
+  `invoices@` that domain on this Worker, once;
+- it reads the CA's address from `gst/settings/caEmail` with the service account and
+  registers it as a destination, which makes Cloudflare email the CA a link to confirm
+  it. The repository and its Actions logs are public and the owner chose to keep the
+  address private, so it is masked as soon as it is read and is never printed;
+- it writes what it found to `gst/mailSetup`, which Admin → GST Invoices shows.
 
-Changing the accountant later means verifying the new address in step 1 first.
+The one step left to a person is the CA clicking Cloudflare's link. Changing the
+accountant is the same: save the new address in Admin, and they get a link.
+
+Registering a destination needs the repository's `CLOUDFLARE_API_TOKEN` to carry
+**Account → Email Routing Addresses → Edit** as well as the Workers permissions it
+deploys with. Without it the job says so in its log and on the Admin card.
+
+The `GST_MAIL` binding is in `wrangler.toml`; a deploy creates it.
 
 ## Who may send a push
 
