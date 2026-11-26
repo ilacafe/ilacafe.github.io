@@ -169,6 +169,51 @@ const SAMPLES = {
   },
 };
 
+// ---------------------------------------------------------------- written together
+//
+// A GST invoice is four paths in one update — the year's counter, the invoice, the
+// bill's index and the customer's copy — and the rules hold each to the others: the
+// counter may only move to a number an invoice is being written at, the invoice must
+// be at the number the counter is moving to, and the customer's copy must carry the
+// invoice's number. Any one of them PUT on its own is refused, which is the point.
+// So the coverage loop below asks about these paths the way the pages write them.
+const TS = { '.sv': 'timestamp' };
+function gstInvoice(fy, seq, tok, extra) {
+  return Object.assign({
+    no: 'ILA/' + fy.slice(2) + '/' + String(seq).padStart(4, '0'), seq, fy, at: TS,
+    total: 450, taxable: 428.58, cgst: 10.71, sgst: 10.71, token: tok, status: 'issued',
+    items: [{ n: 'Latte', q: 1, r: 450, a: 450 }]
+  }, extra || {});
+}
+function gstIssueBody(fy, seq, tok, bill, extra) {
+  const inv = gstInvoice(fy, seq, tok, extra);
+  const body = {};
+  body['gst/counter/' + fy] = seq;
+  body['gst/invoices/' + fy + '/' + seq] = inv;
+  body['gst/byBill/' + bill] = fy + '/' + seq;
+  body['gst/public/' + tok] = { no: inv.no, total: inv.total, status: 'issued', at: TS, items: inv.items };
+  return body;
+}
+const patchRoot = async (who, body) => (await call('PATCH', '', who, body)) === 200;
+let gstProbe = 0;
+const gstTok = () => 'tok' + String(++gstProbe).padStart(4, '0') + 'abcdefghijklmnop';
+const TOGETHER = {};
+['gst/counter/$key', 'gst/invoices/$key', 'gst/invoices/$key/$key', 'gst/byBill/$key', 'gst/public/$key'].forEach(p => {
+  TOGETHER[p] = (role) => patchRoot(role, gstIssueBody('cov-' + role + '-' + (++gstProbe), 1, gstTok(), 'covbill' + gstProbe));
+});
+// Cancelling is a change to an invoice that exists, so it is asked about on one: the
+// owner (seeding, past the rules) issues it, and the role being asked cancels it.
+['status', 'cancelledAt', 'cancelledBy', 'cancelReason'].forEach(f => {
+  const cancel = (where) => async (role) => {
+    const fy = 'cov-c-' + (++gstProbe), tok = gstTok();
+    await call('PATCH', '', OWNER, gstIssueBody(fy, 1, tok, 'covbill' + gstProbe));
+    const at = where === 'invoice' ? 'gst/invoices/' + fy + '/1' : 'gst/public/' + tok;
+    return (await call('PATCH', at, role, { status: 'cancelled', cancelledAt: 1, cancelReason: 'probe', cancelledBy: 'probe' })) === 200;
+  };
+  TOGETHER['gst/invoices/$key/$key/' + f] = cancel('invoice');
+  TOGETHER['gst/public/$key/' + f] = cancel('public');
+});
+
 (async () => {
   const { check, note, done } = suite('Database rules — run in the emulator');
 
@@ -230,7 +275,9 @@ const SAMPLES = {
         const sample = SAMPLES[path];
         // A path with a .validate is written with a real payload; anything else gets a
         // throwaway child, which walks the same permission chain without clobbering the node.
-        const ok = sample
+        const ok = TOGETHER[path]
+          ? await TOGETHER[path](role)
+          : sample
           ? await canWrite(at(role, 'write'), role, sample)
           : await canWrite(path.endsWith('$key') ? at(role, 'write')
                                                  : at(role, 'write') + '/__probe' + (++probe), role);
@@ -276,6 +323,13 @@ const SAMPLES = {
       'pos/unverified':
         'last night\'s carried-over payments, same gate as the ledger. Nothing renders ' +
         'them directly; the reconciler treats a denial as nothing to carry.',
+      'gst/settings':
+        'whether this bill is to be invoiced. The till reads it with a quiet refusal: a ' +
+        'screen that cannot read it issues nothing automatically and says so only when ' +
+        'somebody asks for an invoice.',
+      'gst/counter/$key':  'the next invoice number — issued by the cashier, so theirs.',
+      'gst/byBill/$key':   'whether a bill already has an invoice. Same gate as issuing one.',
+      'gst/invoices/$key': 'an invoice, to show again (read by its fy/seq). Same gate as issuing one.',
     };
 
     const surprises = [], stale = new Set(Object.keys(NARROWED));
@@ -383,6 +437,13 @@ const SAMPLES = {
       'ops/clientErrors':    ['admin', 'robot'],
       'eta/recalMeta':       ['admin', 'robot'],
       'eta/modelPrevious':   ['admin', 'robot'],
+      'gst':                 [],
+      'gst/settings':        ['cashier', 'admin', 'robot'],
+      'gst/invoices':        ['cashier', 'admin', 'robot'],
+      'gst/counter':         ['cashier', 'admin'],
+      'gst/byBill':          ['cashier', 'admin'],
+      'gst/public':          [],                          // one by its token, below; never the list
+      'gst/mailLog':         ['admin', 'robot'],
     };
     const wrong = [];
     for (const [path, expected] of Object.entries(EXPECTED_READERS)) {
@@ -872,7 +933,8 @@ const SAMPLES = {
   // answering, which is a different question from what the file says.
   {
     const PUBLIC = ['menu', 'settings', 'eta/model', 'eta/live',
-                    'orders/track/someoneElse', 'orders/tableIndex/Table 4'];
+                    'orders/track/someoneElse', 'orders/tableIndex/Table 4',
+                    'gst/public/someoneElsesTokenXYZ'];
     const shut = [];
     for (const p of PUBLIC) if (!(await canRead(p, 'nobody'))) shut.push(p);
     check('exactly the documented public surface is readable by a stranger',
@@ -880,11 +942,83 @@ const SAMPLES = {
 
     // and nothing above or beside it
     const NOT_PUBLIC = ['eta', 'orders', 'eta/recalMeta', 'eta/modelPrevious', 'ops', 'payments',
-                        'orders/track', 'orders/tableIndex'];
+                        'orders/track', 'orders/tableIndex',
+                        'gst', 'gst/public', 'gst/invoices', 'gst/settings', 'gst/counter'];
     const open = [];
     for (const p of NOT_PUBLIC) if (await canRead(p, 'nobody')) open.push(p);
     check('and nothing above or beside it is', open.length === 0, 'open: ' + open.join(', '));
     note('rules cascade: a .read on a parent grants everything beneath it');
+  }
+
+  // ------------------------------------------ GST invoices: one number, once, in order
+  {
+    await seed();
+    const FY = '2026-27';
+    check('the till can issue the first invoice of the year',
+          await patchRoot('cashier', gstIssueBody(FY, 1, 'firstTokenAAAAAAAAAA', 'billA')));
+    check('and not issue number 1 again',
+          !(await patchRoot('cashier', gstIssueBody(FY, 1, 'otherTokenBBBBBBBBBB', 'billB'))));
+    check('nor skip to number 3',
+          !(await patchRoot('cashier', gstIssueBody(FY, 3, 'otherTokenCCCCCCCCCC', 'billC'))));
+    check('and number 2 is the one it can issue next',
+          await patchRoot('cashier', gstIssueBody(FY, 2, 'secondTokenDDDDDDDDD', 'billD')));
+
+    check('the counter cannot move without an invoice being written at its number',
+          !(await canWrite('gst/counter/' + FY, 'cashier', 3)));
+    check('nor be set back', !(await canWrite('gst/counter/' + FY, 'admin', 1)));
+    check('nor removed, even by the owner', !(await canWrite('gst/counter/' + FY, 'admin', null)));
+    check('an invoice cannot be written without moving the counter to it',
+          !(await canWrite('gst/invoices/' + FY + '/3', 'cashier', gstInvoice(FY, 3, 'loneTokenEEEEEEEEEEEE'))));
+    {
+      const b = gstIssueBody(FY, 3, 'keyTokenFFFFFFFFFFFF', 'billF');
+      b['gst/invoices/' + FY + '/4'] = b['gst/invoices/' + FY + '/3']; delete b['gst/invoices/' + FY + '/3'];
+      check('nor written under a key that is not its number', !(await patchRoot('cashier', b)));
+    }
+    check('nor dated by the tablet rather than the server',
+          !(await patchRoot('cashier', gstIssueBody(FY, 3, 'clockTokenGGGGGGGGGG', 'billG', { at: 1700000000000 }))));
+    {
+      const b = gstIssueBody(FY, 3, 'copyTokenHHHHHHHHHHH', 'billH');
+      b['gst/public/copyTokenHHHHHHHHHHH'].no = 'ILA/26-27/9999';
+      check('and the customer\'s copy must carry the invoice\'s own number', !(await patchRoot('cashier', b)));
+    }
+    check('a bill already invoiced cannot be invoiced again by the till',
+          !(await patchRoot('cashier', gstIssueBody(FY, 3, 'againTokenIIIIIIIIIII', 'billA'))));
+    check('a customer cannot issue one',
+          !(await patchRoot('anon', gstIssueBody(FY, 3, 'anonTokenJJJJJJJJJJJJ', 'billJ'))));
+    check('nor the bar or the kitchen',
+          !(await patchRoot('barista', gstIssueBody(FY, 3, 'barTokenKKKKKKKKKKKKK', 'billK'))) &&
+          !(await patchRoot('chef', gstIssueBody(FY, 3, 'chefTokenLLLLLLLLLLLL', 'billL'))));
+    check('the owner can issue the next one too',
+          await patchRoot('admin', gstIssueBody(FY, 3, 'ownerTokenMMMMMMMMMM', 'billM')));
+    check('and a new financial year starts again at 1',
+          await patchRoot('cashier', gstIssueBody('2027-28', 1, 'newYearTokenNNNNNNNN', 'billN')));
+
+    const inv1 = 'gst/invoices/' + FY + '/1';
+    check('the till cannot cancel an invoice', (await call('PATCH', inv1, 'cashier', { status: 'cancelled' })) !== 200);
+    check('the owner can', (await call('PATCH', inv1, 'admin', { status: 'cancelled', cancelReason: 'wrong bill', cancelledAt: 1 })) === 200);
+    check('but not change what it charged', (await call('PATCH', inv1, 'admin', { total: 1 })) !== 200);
+    check('nor its number', (await call('PATCH', inv1, 'admin', { no: 'ILA/26-27/0099' })) !== 200);
+    check('nor its date', (await call('PATCH', inv1, 'admin', { at: 1 })) !== 200);
+    check('nor remove it', !(await canWrite(inv1, 'admin', null)));
+    check('nor give it a status other than issued or cancelled', (await call('PATCH', inv1, 'admin', { status: 'void' })) !== 200);
+    check('the owner can mark the customer\'s copy cancelled',
+          (await call('PATCH', 'gst/public/firstTokenAAAAAAAAAA', 'admin', { status: 'cancelled' })) === 200);
+    check('but the till cannot', (await call('PATCH', 'gst/public/secondTokenDDDDDDDDD', 'cashier', { status: 'cancelled' })) !== 200);
+    check('the owner can free a cancelled invoice\'s bill to be invoiced again', await canWrite('gst/byBill/billA', 'admin', null));
+    check('the till cannot', !(await canWrite('gst/byBill/billD', 'cashier', null)));
+
+    check('a stranger with the token can read that one invoice', await canRead('gst/public/secondTokenDDDDDDDDD', 'nobody'));
+    check('but cannot list them', !(await canRead('gst/public', 'nobody')) && !(await canRead('gst/public', 'anon')));
+    check('nor read the register', !(await canRead('gst/invoices/' + FY, 'anon')));
+    check('the Worker can read the register by date, which needs the index',
+          (await fetch(BASE + '/gst/invoices/' + FY + '.json?ns=' + NS + '&orderBy=%22at%22&startAt=0&auth=' + WHO.robot)).status === 200);
+    check('only the Worker writes the mail log',
+          await canWrite('gst/mailLog/2026-11', 'robot', { at: 1, ok: true }) &&
+          !(await canWrite('gst/mailLog/2026-11', 'admin', { at: 1, ok: true })) &&
+          !(await canWrite('gst/mailLog/2026-11', 'cashier', { at: 1, ok: true })));
+    check('only the owner changes the settings',
+          await canWrite('gst/settings/mode', 'admin', 'accounts') && !(await canWrite('gst/settings/mode', 'cashier', 'all')));
+    note('the counter is the whole of the numbering: these are the ways round it, each refused');
   }
 
   // ------------------------------------------ the requests the deploy probe makes

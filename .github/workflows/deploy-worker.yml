@@ -6,11 +6,13 @@ name: deploy worker
 # and nothing outside the Cloudflare dashboard can tell the difference.
 #
 # Only worker/ changes trigger it — a page edit has no business redeploying this.
+# The one page-side file it does depend on is gst.js, which it bundles: the invoice
+# arithmetic the till prints and the accountant's monthly email must be the same code.
 
 on:
   push:
     branches: [main]
-    paths: ['worker/**', '.github/workflows/deploy-worker.yml']
+    paths: ['worker/**', 'gst.js', '.github/workflows/deploy-worker.yml']
   workflow_dispatch:        # and a button, for deploying without a code change
 
 jobs:

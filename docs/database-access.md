@@ -150,6 +150,22 @@ the café's alerts go to, and whether they are arriving) and `upiRouting/totals`
 it needs the running total for the account it is about to charge — it just cannot
 list every month.
 
+`gst` was written this way from the start. Invoices are the café's turnover and its
+customers' names and GSTINs, so everything under it is the counter's and the owner's:
+
+| node | who reads | who writes |
+|---|---|---|
+| `gst/settings` | the counter, the owner, the Worker | the owner |
+| `gst/counter/{fy}` | the counter, the owner | the counter and the owner, **up by one, never back, never removed**, and only with an invoice at that number in the same write |
+| `gst/invoices/{fy}/{seq}` | the counter, the owner, the Worker | created once by the counter or the owner at the counter's new number, dated by the server; after that the owner only, to cancel — number, date, money and token fixed |
+| `gst/byBill/{bill}` | the counter, the owner | created once; removed by the owner only, to invoice a bill again |
+| `gst/public/{token}` | **anyone with the token** — never the list | created with its invoice, carrying the same number; cancelled by the owner |
+| `gst/mailLog` | the owner, the Worker | the Worker |
+
+`npm run test:rules` issues, races and cancels invoices against these in the emulator,
+including each of the ways round the numbering, and the deploy probe checks that `gst`,
+`gst/settings`, `gst/invoices`, `gst/public` and `gst/mailLog` refuse a stranger.
+
 **`admin.html` and `analytics.html` check the role themselves, in a browser the
 holder controls.** That is advice until the rules say the same thing, and now they
 do: `npm run test:rules` walks everything those two pages show and fails if any

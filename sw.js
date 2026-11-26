@@ -44,7 +44,7 @@ const CACHE = 'ila-shell-v2';
 // person is actually looking at. The page they ARE looking at is handled below,
 // which gets the same result for the one page that matters without the other six.
 const PRECACHE = ['/auth-gate.js', '/pin-mask.js', '/build-check.js',
-                  '/dialogs.js', '/connection.js', '/qr.js', '/logo.png'];
+                  '/dialogs.js', '/connection.js', '/qr.js', '/gst.js', '/logo.png'];
 
 // AND THE SDK, WHICH IS THE BIGGEST THING ANY OF THESE PAGES DOWNLOADS
 //

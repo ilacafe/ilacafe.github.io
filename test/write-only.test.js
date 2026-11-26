@@ -43,6 +43,26 @@ for (const [p, v] of worker) {
   if (v.write) { rec.write = true; rec.who = rec.who.concat('the Worker'); }
   all.set(p, rec);
 }
+// The pages a customer opens from a link — pay.html from a pay link, invoice.html from
+// a GST invoice link — read over REST without signing in, so they are not among the
+// apps the map is derived from. What they read is derived from their own source here
+// rather than listed, so a page that stops reading a path stops counting for it.
+const LINK_PAGES = ['pay.html', 'invoice.html'];
+const linkReads = [];
+for (const page of LINK_PAGES) {
+  const src = fs.readFileSync(path.join(ROOT, page), 'utf8');
+  for (const m of src.matchAll(/fetch\(\s*DB\s*\+\s*'\/([^']+)'(\s*\+)?/g)) {
+    let p = m[1];
+    if (p.includes('.json')) p = p.slice(0, p.indexOf('.json'));
+    else if (m[2]) p = p.replace(/\/+$/, '') + '/$key';
+    p = p.replace(/^\/+|\/+$/g, '');
+    if (!p) continue;
+    linkReads.push(page + ' reads ' + p);
+    const rec = all.get(p) || { read: false, write: false, who: [] };
+    rec.read = true;
+    all.set(p, rec);
+  }
+}
 const paths = [...all.keys()];
 
 // $key stands for a segment the deriver could not resolve — an id, or a variable
@@ -91,6 +111,8 @@ check('every path an app writes is read back somewhere',
       orphans.join('; '));
 orphans.forEach(o => note('nothing can see: ' + o));
 
+check('the pages opened from a link are read for what they read', linkReads.length >= 2, linkReads.join('; '));
+note(linkReads.join('; '));
 note(paths.length + ' paths across the pages and the Worker, ' +
      readable.length + ' read by something, ' + written.length + ' written by something');
 

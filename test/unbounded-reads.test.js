@@ -63,6 +63,8 @@ const BOUNDED = {
   'staff':                  'one key per member of staff',
   'users':                  'one key per staff account',
   'upiRouting/config':      'one key per bank account',
+  'gst/settings':           'one object: the business as printed on an invoice, the mode, ' +
+                            'one key per ticked UPI account, the CA\u2019s address',
   'pushSubscriptions':      'one key per device that accepted notifications',
   'customers/_stats':       'the repeat-customer panel\u2019s rollup: two counts and the ' +
                             'current top ten, so a few hundred bytes whatever the caf\u00e9\u2019s ' +

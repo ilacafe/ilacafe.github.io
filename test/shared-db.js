@@ -113,7 +113,14 @@ function createServer(seed, opts) {
   async function handle(client, req) {
     if (srv.gate) await srv.gate(req, client);
     if (req.op === 'hello') { client.live = true; return { root: clone(srv.root), now: srv.now() }; }
-    if (req.op === 'write') return commit(req.writes, client.name);
+    if (req.op === 'write') {
+      const r = commit(req.writes, client.name);
+      // Refused: say what the server holds at those paths, which is what the SDK puts
+      // back. Rolling back to the page's own copy from before the write would undo any
+      // other till's commit that reached this page in the meantime.
+      if (!r.ok) r.current = req.writes.map(w => ({ path: w.path, value: clone(getAt(srv.root, w.path)) }));
+      return r;
+    }
     if (req.op === 'txn') {
       const cur = clone(getAt(srv.root, req.path));
       if (JSON.stringify(cur) !== req.base) return { ok: false, retry: true, current: cur };
@@ -149,6 +156,23 @@ function createServer(seed, opts) {
   return srv;
 }
 
+// Firebase stores an array as an object keyed "0", "1", … and hands it back as an
+// ARRAY when every key is an integer and more than half the slots from 0 to the
+// largest are filled. The pages lean on that (settings/categoryOrder, an invoice's
+// lines), so a snapshot here does the same — without it a page that writes an array
+// reads back {"0": …} and every .filter on it throws, which no real database does.
+function fbArrays(v) {
+  if (!v || typeof v !== 'object') return v;
+  const keys = Object.keys(v);
+  for (const k of keys) v[k] = fbArrays(v[k]);
+  if (Array.isArray(v) || !keys.length || !keys.every(k => /^(0|[1-9][0-9]*)$/.test(k))) return v;
+  const max = Math.max.apply(null, keys.map(Number));
+  if (!(keys.length > (max + 1) / 2)) return v;
+  const a = [];
+  for (const k of keys) a[Number(k)] = v[k];
+  return a;
+}
+
 // The page's side: window.firebase, backed by the server above.
 const CLIENT = `
 (() => {
@@ -159,6 +183,7 @@ const CLIENT = `
   ${prune.toString()}
   ${setAt.toString()}
   ${resolveSV.toString()}
+  ${fbArrays.toString()}
 
   const local = {};                 // this till's copy of the database
   const listeners = [];
@@ -184,7 +209,7 @@ const CLIENT = `
       ? keys.reduce((o, k) => { o[k] = v[k]; return o; }, {}) : v;
     return {
       key: key,
-      val: () => clone(shaped),
+      val: () => fbArrays(clone(shaped)),
       exists: () => shaped !== null,
       numChildren: () => keys.length,
       hasChild: (c) => !!(shaped && typeof shaped === 'object' && shaped[c] != null),
@@ -233,7 +258,7 @@ const CLIENT = `
       fire(writes.map(w => w.path));
       window.__rpc({ op: 'write', writes: writes }).then(r => {
         if (r.ok) return resolve();
-        for (const b of before.reverse()) setAt(local, b.path, b.value);
+        for (const b of (r.current || before.reverse())) setAt(local, b.path, b.value);
         fire(before.map(b => b.path));
         reject(denied(r.error));
       });
@@ -350,4 +375,4 @@ const CLIENT = `
 })();
 `;
 
-module.exports = { createServer, getAt, setAt, clone };
+module.exports = { createServer, getAt, setAt, clone, fbArrays };

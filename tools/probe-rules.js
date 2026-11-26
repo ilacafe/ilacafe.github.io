@@ -62,6 +62,11 @@ const MUST_BE_DENIED = [
   'orders/completed',
   'orders/track',        // one order by its id, yes. every order the café has taken, no.
   'orders/tableIndex',   // one table's trackIds, yes. every table's in one request, no.
+  'gst',                 // invoices: the business's whole turnover, and buyers' names
+  'gst/settings',
+  'gst/invoices',
+  'gst/public',          // one invoice by its token, yes. every customer's in one request, no.
+  'gst/mailLog',
 ];
 
 // A key that cannot exist. A public read declared on a $wildcard has to be asked

@@ -40,6 +40,14 @@ crons = [
   "0 * * * *"     # hourly — UPI verification monitor (+ weekly digest on Mondays 04:00 UTC)
 ]
 
+# The monthly GST email to the accountant goes out through Email Routing, which this
+# Worker already receives bank alerts through. The binding can only send to addresses
+# verified as destinations on the account, which is the safeguard: nothing in the code
+# can mail the café's invoices anywhere the owner has not verified. See README.md,
+# "GST invoices to the accountant".
+[[send_email]]
+name = "GST_MAIL"
+
 # Public by design. All three already appear in the site's own page source, so
 # committing them here leaks nothing that ila.cafe does not already serve.
 [vars]

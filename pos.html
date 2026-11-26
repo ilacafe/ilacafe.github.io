@@ -187,6 +187,7 @@
     <link rel="preload" as="script" href="/dialogs.js">
     <link rel="preload" as="script" href="/connection.js">
     <link rel="preload" as="script" href="/qr.js">
+    <link rel="preload" as="script" href="/gst.js">
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff;
@@ -1053,7 +1054,31 @@
             <div id="past-bill-receipt" class="bill-receipt"></div>
             <input type="tel" id="past-bill-phone" class="remark-input" placeholder="Phone No." maxlength="10">
             <button class="btn btn-secondary" style="width: 100%; margin-top: 5px;" onclick="sendPastBillWhatsApp()">Send Receipt</button>
+            <button class="btn btn-secondary" style="width: 100%; margin-top: 5px;" onclick="openGstInvoice()">GST Invoice</button>
             <button class="close-modal" onclick="closeModal('view-past-bill-modal')">✖ CLOSE</button>
+        </div>
+    </div>
+
+    <!-- A GST invoice for a bill, when a customer asks for one. A bill that already has
+         one (issued automatically, or asked for before) shows it rather than issuing a
+         second: a supply is invoiced once. -->
+    <div id="gst-invoice-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="gst-inv-title">
+        <div class="modal-content">
+            <h3 id="gst-inv-title">GST Invoice</h3>
+            <p id="gst-inv-for" style="font-size: 0.85rem; margin-top: -10px; margin-bottom: 12px;"></p>
+            <div id="gst-inv-status" role="status" style="font-size: 0.9rem; margin-bottom: 12px;"></div>
+            <div id="gst-inv-form" hidden>
+                <input type="text" id="gst-buyer-name" class="remark-input" placeholder="Name or business (optional)" aria-label="Customer or business name, optional" maxlength="120">
+                <input type="text" id="gst-buyer-gstin" class="remark-input" placeholder="Their GSTIN (optional)" aria-label="Customer GSTIN, optional" maxlength="15" autocapitalize="characters" autocomplete="off" spellcheck="false">
+                <input type="text" id="gst-buyer-address" class="remark-input" placeholder="Address (optional)" aria-label="Customer address, optional" maxlength="300">
+                <button class="btn btn-primary" id="gst-issue-btn" style="width: 100%; margin-top: 5px;" onclick="gstIssueFromHistory()">Issue Invoice</button>
+            </div>
+            <div id="gst-inv-done" hidden>
+                <input type="tel" id="gst-inv-phone" class="remark-input" placeholder="Phone No." aria-label="Customer phone number for WhatsApp" maxlength="10">
+                <button class="btn btn-primary" style="width: 100%; margin-top: 5px;" onclick="gstSendInvoice()">Send on WhatsApp</button>
+                <button class="btn btn-secondary" style="width: 100%; margin-top: 5px;" onclick="gstOpenInvoice()">Open / Print</button>
+            </div>
+            <button class="close-modal" onclick="closeModal('gst-invoice-modal')">✖ CLOSE</button>
         </div>
     </div>
 
@@ -1256,7 +1281,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-11-12.1"></script>
+    <script src="/build-check.js" data-build="2026-11-26.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -1267,6 +1292,10 @@
     <!-- The payment QR, drawn on this device rather than fetched. Shared with the
          customer app, which now shows the same code on the customer's own phone. -->
     <script src="/qr.js"></script>
+    <!-- GST invoices: the tax in a bill, the serial number and the document. One
+         implementation for the till, the owner's screen, the customer's copy and the
+         accountant's monthly email. See /gst.js. -->
+    <script src="/gst.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -2009,26 +2038,77 @@
         // UPI per month, keeps the weighted list in sync, and alerts at 80% / 100% of a cap.
         function upiKey(vpa){ return String(vpa || '').trim().toLowerCase().replace(/[.#$\[\]\/]/g, '_'); }
         function upiMonthKey(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
-        function upiComputeWeights(config, totals){
-            const entries = Object.keys(config || {}).map(k => { const c = config[k] || {}; return { key: k, id: c.id, label: c.label || c.id, cap: parseFloat(c.monthlyCap) || 0, active: c.active !== false, total: parseFloat((totals || {})[k]) || 0 }; }).filter(e => e.active && e.id);
+        // THE YEAR A YEARLY CAP COUNTS IS THE FINANCIAL YEAR, 1 April to 31 March.
+        //
+        // Every limit a bank or the tax office holds an account to runs on it, so a cap
+        // counted Jan-Dec would reset three months away from the limit it is guarding.
+        // There is no yearly total stored anywhere: it is the sum of the monthly totals
+        // already kept under upiRouting/totals/{YYYY-MM}, so an "adjust" on a month is
+        // also an adjustment to its year, and nothing can drift between the two.
+        function upiFYStart(d){ d = d || new Date(); return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; }
+        function upiFYLabel(d){ const y = upiFYStart(d); return y + '-' + String((y + 1) % 100).padStart(2, '0'); }
+        // The months of this financial year so far, current month last.
+        function upiFYMonths(d){
+            d = d || new Date();
+            const y = upiFYStart(d), out = [];
+            for (let i = 0; i < 12; i++){
+                const yy = y + Math.floor((3 + i) / 12), mm = (3 + i) % 12;
+                out.push(yy + '-' + String(mm + 1).padStart(2, '0'));
+                if (yy === d.getFullYear() && mm === d.getMonth()) break;
+            }
+            return out;
+        }
+        // Months left in the year, this one included: November leaves five (Nov-Mar).
+        function upiFYMonthsLeft(d){ return 13 - upiFYMonths(d).length; }
+        // byMonth: { 'YYYY-MM': { key: rupees } } -> { key: rupees this financial year }
+        function upiYearTotals(byMonth, d){
+            const out = {};
+            upiFYMonths(d).forEach(m => { const t = (byMonth || {})[m] || {}; Object.keys(t).forEach(k => { out[k] = (out[k] || 0) + (parseFloat(t[k]) || 0); }); });
+            return out;
+        }
+        // totals: this month, per key. yearTotals: this financial year INCLUDING this month.
+        //
+        // A monthly cap is a hard stop until the 1st, as it always was. A yearly cap is a
+        // hard stop until 1 April, and before that it is PACED: what is left of the year
+        // is shared evenly over the months left of it, and that share is the account's
+        // headroom for this month. Weighted on the raw yearly headroom instead, an account
+        // with ₹12 lakh a year would out-pull one with ₹1 lakh a month twelve to one, eat
+        // its year by summer and drop out for the rest of it. An account that has run
+        // ahead of its pace stays open, just at the back of the queue.
+        function upiComputeWeights(config, totals, yearTotals, monthsLeft){
+            monthsLeft = Math.max(1, parseInt(monthsLeft) || 1);
+            const entries = Object.keys(config || {}).map(k => { const c = config[k] || {}; const total = parseFloat((totals || {})[k]) || 0; return { key: k, id: c.id, label: c.label || c.id, cap: parseFloat(c.monthlyCap) || 0, ycap: parseFloat(c.yearlyCap) || 0, active: c.active !== false, total: total, ytotal: Math.max(total, parseFloat((yearTotals || {})[k]) || 0) }; }).filter(e => e.active && e.id);
             if (!entries.length) return [];
-            const caps = entries.filter(e => e.cap > 0).map(e => e.cap);
+            // A yearly cap stands in for a monthly one at a twelfth of itself, so an
+            // uncapped account is weighed against something of the same size.
+            const caps = entries.map(e => e.cap > 0 ? e.cap : (e.ycap > 0 ? e.ycap / 12 : 0)).filter(c => c > 0);
             const maxCap = caps.length ? Math.max.apply(null, caps) : 0;
             const maxTotal = Math.max.apply(null, entries.map(e => e.total).concat([0]));
             const elig = [];
             for (const e of entries){
-                if (e.cap > 0){ const hr = e.cap - e.total; if (hr > 0) elig.push({ e: e, w: hr }); }
+                if (e.cap > 0 || e.ycap > 0){
+                    const hm = e.cap > 0 ? e.cap - e.total : Infinity;
+                    const hy = e.ycap > 0 ? e.ycap - e.ytotal : Infinity;
+                    if (hm <= 0 || hy <= 0) continue;
+                    const pace = e.ycap > 0 ? (e.ycap - (e.ytotal - e.total)) / monthsLeft - e.total : Infinity;
+                    let w = Math.min(hm, pace);
+                    if (!(w > 0)) w = Math.min(hm, hy, Math.max(1, (maxCap || 1000) * 0.02));
+                    elig.push({ e: e, w: w });
+                }
                 else { const w = maxCap > 0 ? Math.max(maxCap - e.total, maxCap * 0.1) : (maxTotal - e.total + 1000); elig.push({ e: e, w: w }); }
             }
             if (!elig.length){
                 let best = null;
-                for (const e of entries){ const over = e.total - e.cap; if (!best || over < best.over) best = { e: e, over: over }; }
+                for (const e of entries){
+                    const over = Math.max(e.cap > 0 ? e.total - e.cap : -Infinity, e.ycap > 0 ? e.ytotal - e.ycap : -Infinity);
+                    if (!best || over < best.over) best = { e: e, over: over };
+                }
                 return best ? [{ e: best.e, w: 1 }] : [];
             }
             return elig;
         }
-        function upiWeightedList(config, totals){
-            const elig = upiComputeWeights(config, totals);
+        function upiWeightedList(config, totals, yearTotals, monthsLeft){
+            const elig = upiComputeWeights(config, totals, yearTotals, monthsLeft);
             if (!elig.length) return null;
             if (elig.length === 1) return [elig[0].e.id];
             const sum = elig.reduce((a, x) => a + x.w, 0) || 1;
@@ -2054,12 +2134,34 @@
                     if (beforeV < cap && afterV >= cap) posSendPush({ title: '\ud83d\udd34 UPI cap hit \u2014 ' + label, body: inr(afterV) + ' of ' + inr(cap) + ' this month. Removed from rotation until the 1st.', tag: 'upi-cap-' + key, url: '/admin.html' });
                     else if (beforeV < cap * 0.8 && afterV >= cap * 0.8) posSendPush({ title: '\u26a0\ufe0f UPI at 80% \u2014 ' + label, body: inr(afterV) + ' of ' + inr(cap) + ' this month.', tag: 'upi-80-' + key, url: '/admin.html' });
                 }
-                const list = upiWeightedList(config, totals);
+                // The year, only when some account has a yearly cap to hold it to. It is the
+                // months of this financial year added up — each one a node of a handful of
+                // keys — so a payment costs up to eleven more small reads, and none at all on
+                // a setup that only uses monthly caps.
+                let yearTotals = null;
+                if (Object.keys(config).some(k => parseFloat((config[k] || {}).yearlyCap) > 0)){
+                    const months = upiFYMonths();
+                    const snaps = await Promise.all(months.slice(0, -1).map(m => db.ref('upiRouting/totals/' + m).once('value')));
+                    const byMonth = {}; snaps.forEach((s, i) => { byMonth[months[i]] = s.val() || {}; });
+                    byMonth[mk] = totals;
+                    yearTotals = upiYearTotals(byMonth);
+                }
+                if (c && parseFloat(c.yearlyCap) > 0 && yearTotals){
+                    const ycap = parseFloat(c.yearlyCap), label = c.label || c.id;
+                    const yAfter = yearTotals[key] || 0, yBefore = yAfter - amount;
+                    if (yBefore < ycap && yAfter >= ycap) posSendPush({ title: '\ud83d\udd34 UPI yearly cap hit \u2014 ' + label, body: inr(yAfter) + ' of ' + inr(ycap) + ' in FY ' + upiFYLabel() + '. Removed from rotation until 1 April.', tag: 'upi-ycap-' + key, url: '/admin.html' });
+                    else if (yBefore < ycap * 0.8 && yAfter >= ycap * 0.8) posSendPush({ title: '\u26a0\ufe0f UPI at 80% of its year \u2014 ' + label, body: inr(yAfter) + ' of ' + inr(ycap) + ' in FY ' + upiFYLabel() + '.', tag: 'upi-y80-' + key, url: '/admin.html' });
+                }
+                const list = upiWeightedList(config, totals, yearTotals, upiFYMonthsLeft());
                 if (list && list.length){
                     if (JSON.stringify(list) !== JSON.stringify(window.activeUPIs || [])) await db.ref('settings/upiList').set(list);
                     let allCapped = false;
-                    if (list.length === 1){ const oc = config[upiKey(list[0])]; allCapped = !!(oc && parseFloat(oc.monthlyCap) > 0 && (totals[upiKey(list[0])] || 0) >= parseFloat(oc.monthlyCap)); }
-                    if (allCapped && !window._upiAllCapAlerted){ window._upiAllCapAlerted = true; posSendPush({ title: '\ud83d\udea8 All UPI IDs at cap', body: 'Every UPI hit its monthly cap. Routing to the least-over one \u2014 raise a cap in Admin.', tag: 'upi-allcap', url: '/admin.html' }); }
+                    if (list.length === 1){
+                        const k1 = upiKey(list[0]), oc = config[k1];
+                        allCapped = !!(oc && ((parseFloat(oc.monthlyCap) > 0 && (totals[k1] || 0) >= parseFloat(oc.monthlyCap)) ||
+                                              (parseFloat(oc.yearlyCap) > 0 && yearTotals && (yearTotals[k1] || 0) >= parseFloat(oc.yearlyCap))));
+                    }
+                    if (allCapped && !window._upiAllCapAlerted){ window._upiAllCapAlerted = true; posSendPush({ title: '\ud83d\udea8 All UPI IDs at cap', body: 'Every UPI hit its monthly or yearly cap. Routing to the least-over one \u2014 raise a cap in Admin.', tag: 'upi-allcap', url: '/admin.html' }); }
                     if (!allCapped) window._upiAllCapAlerted = false;
                 }
             } catch(e){ console.error('upiRecordPayment', e); }
@@ -2309,6 +2411,7 @@
                     lastPay: { payId: payId, ref: ref, payer: p.payer || null, amount: p.amount, source: p.source || null },
                     linkPaid: { vpa: entry.vpa, amount: parseFloat(entry.amount) || amount, exact: true },
                     requireLink: { vpa: entry.vpa, amount: parseFloat(entry.amount) || amount },
+                    via: entry.vpa,
                     phone: entry.phone || null
                 }, res => {
                     // Closed in between, or that link already answered: give the claim back. A
@@ -2791,14 +2894,23 @@
             let billPhone = null;
             if (phone !== undefined) billPhone = phone || null;
             else try { billPhone = window.parseMobile((document.getElementById('checkout-phone') || {}).value); } catch(e){}
+            // One key names this bill everywhere: its orders/history record, its line in the
+            // day's bills, and its GST invoice (gst/byBill), so an invoice asked for from
+            // History tomorrow finds the one issued tonight instead of issuing a second.
+            const billKey = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+            const vpas = gstVPAsOf(tableData);
+            const payLabel = gstPayLabel(tableData, method);
             const localBill = { 
                 id: Date.now(), 
+                key: billKey,
                 table: tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID, 
                 date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), 
                 items: JSON.parse(JSON.stringify(tableData.items)), 
                 total: tableData.total, 
                 notes: tableData.notes || "",
-                phone: billPhone
+                phone: billPhone,
+                method: payLabel,
+                upi: vpas.length ? vpas : null
             };
             db.ref('pos/bills').push(localBill);
 
@@ -2808,11 +2920,13 @@
                 orderType: tableID === 'Takeaway' ? 'Takeaway' : 'Dine-in',
                 tableOrAddress: tableID === 'Takeaway' ? 'Takeaway' : 'Table ' + tableID,
                 notes: tableData.notes || "",
-                payment: { method: method, total: tableData.total, verified: !!(tableData._lastPay), ref: (tableData._lastPay && tableData._lastPay.ref) || null, payer: (tableData._lastPay && tableData._lastPay.payer) || null },
+                payment: { method: method, total: tableData.total, verified: !!(tableData._lastPay), ref: (tableData._lastPay && tableData._lastPay.ref) || null, payer: (tableData._lastPay && tableData._lastPay.payer) || null, upi: vpas.length ? vpas : null },
                 items: tableData.items
             };
-            db.ref('orders/history/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)).set(archivePacket);
+            db.ref('orders/history/' + billKey).set(archivePacket);
             calculateDailyCups();
+            gstAutoIssue({ key: billKey, label: localBill.table, source: 'pos', at: localBill.id,
+                           items: tableData.items, total: tableData.total, method: payLabel, vpas: vpas, phone: billPhone });
         }
 
         window.openWebOrders = function() {
@@ -3142,14 +3256,19 @@
             // phone travels onto the bill: once the pendingWeb record is removed the number would
             // otherwise be unreachable, and it's needed again to say "your takeaway is ready"
             // and to send the receipt without retyping it.
+            const billKey = Date.now() + '-' + Math.random().toString(36).slice(2, 7);   // see archivePOSTable
+            const webVPAs = order.upiId ? [String(order.upiId)] : [];
             const localBill = { 
                 id: Date.now(), 
+                key: billKey,
                 table: "Web: " + order.tableOrAddress, 
                 date: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + new Date().toLocaleDateString(), 
                 items: JSON.parse(JSON.stringify(order.items)), 
                 total: order.total, 
                 notes: order.notes || "",
-                phone: order.phone || null
+                phone: order.phone || null,
+                method: 'UPI',
+                upi: webVPAs.length ? webVPAs : null
             };
             db.ref('pos/bills').push(localBill);
             calculateDailyCups();
@@ -3225,10 +3344,12 @@
                 tableOrAddress: order.tableOrAddress,
                 notes: order.notes || "",
                 phone: order.phone || null,
-                payment: { method: "UPI", total: order.total, verified: !!(order.payment && order.payment.ref), ref: (order.payment && order.payment.ref) || null },
+                payment: { method: "UPI", total: order.total, verified: !!(order.payment && order.payment.ref), ref: (order.payment && order.payment.ref) || null, upi: webVPAs.length ? webVPAs : null },
                 items: order.items
             };
-            db.ref('orders/history/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)).set(archivePacket);
+            db.ref('orders/history/' + billKey).set(archivePacket);
+            gstAutoIssue({ key: billKey, label: localBill.table, source: 'web', at: localBill.id,
+                           items: order.items, total: order.total, method: 'UPI', vpas: webVPAs, phone: order.phone || null });
             closeModal('web-orders-modal');
         };
 
@@ -4936,6 +5057,14 @@
                 if (lastPay) cur._lastPay = lastPay;
                 if (!cur._pays) cur._pays = {};
                 cur._pays[payId] = amt;                        // this payment is on this table: see above
+                // ...and, for UPI, which of the café's accounts it went to. A bill is closed by
+                // whichever till takes its LAST payment, and that till may never have seen the
+                // QR for the first one — so the account travels with the bill, and the close
+                // can tell whether any of it was paid into an account that issues GST invoices.
+                if (opts && opts.via){
+                    if (!cur._via) cur._via = {};
+                    cur._via[payId] = String(opts.via).slice(0, 120);
+                }
                 // The pay link a bank-matched payment answered is answered — see linkTablesFor.
                 // Left on a part-paid table it would go on holding every later payment of its
                 // amount, and offering them here, for as long as the table stayed open.
@@ -5557,6 +5686,7 @@
                 alloc: consumeSplitAllocation(),
                 lastPay: info ? Object.assign({ payId: payId }, info) : { payId: payId, ref: null },
                 linkPaid: (vpa && answered.length) ? { vpa: vpa, amount: amountToPay } : null,
+                via: vpa,
                 expectSettle: (paid + billPart) >= total - LINE_EPS,
                 onUnsure: function(){ settleUnsure(tableID, amountToPay, 'UPI'); }
             }, function(res){
@@ -6010,6 +6140,206 @@
             });
             list.innerHTML = rows;
         }
+
+        // ===== GST INVOICES =====
+        // gst/settings/mode decides which bills are invoiced without anybody asking:
+        //   'accounts'  a bill any part of which was paid by UPI into an account ticked
+        //               in Admin (ILA's current account) — the default
+        //   'all'       every bill, however it was paid
+        //   'off'       none
+        // Whatever the mode, a customer who asks gets one: History → GST Invoice.
+        //
+        // Read with a QUIET refusal. Until the rules that cover gst/ are deployed the read
+        // is refused, and a red bar across the till for a feature nobody has switched on
+        // yet would be a bar everybody learns to ignore. A till that cannot read the
+        // settings simply issues nothing automatically, and says why when asked for one.
+        window.gstSettings = null;
+        window.gstSettingsRefused = false;
+        try {
+            db.ref('gst/settings').on('value', s => { window.gstSettings = s.val() || null; window.gstSettingsRefused = false; },
+                function(err){ window.gstSettingsRefused = true; window.ilaRefused.quiet('gst/settings')(err); });
+        } catch(e){}
+
+        function gstVPAsOf(tableData){
+            const via = (tableData && tableData._via) || {};
+            return Array.from(new Set(Object.keys(via).map(k => via[k]).filter(Boolean)));
+        }
+        // The two ways a till takes money are cash and UPI. A bill with UPI payments on
+        // only some of its shares was split between them.
+        function gstPayLabel(tableData, method){
+            const nUPI = Object.keys((tableData && tableData._via) || {}).length;
+            const nPays = Object.keys((tableData && tableData._pays) || {}).length;
+            if (nUPI) return nUPI < nPays ? 'UPI + Cash' : 'UPI';
+            return method === 'UPI' ? 'UPI' : 'Cash';
+        }
+        // Is this bill one the settings say to invoice by itself? A bill is invoiced
+        // WHOLE: an invoice is for a supply, and the supply is the bill, so one paid half
+        // into the current account and half in cash is invoiced for all of it.
+        function gstWants(vpas){
+            const s = window.gstSettings;
+            if (!s || IlaGST.settingsProblems(s).length) return false;
+            const mode = s.mode || 'accounts';
+            if (mode === 'all') return true;
+            if (mode !== 'accounts') return false;
+            const acc = s.accounts || {};
+            return (vpas || []).some(v => acc[upiKey(v)]);
+        }
+        function gstDraftFor(bill, buyer, how){
+            const acc = (window.gstSettings && window.gstSettings.accounts) || {};
+            const vpas = bill.vpas || [];
+            return IlaGST.draft({
+                settings: window.gstSettings, items: bill.items, total: bill.total,
+                bill: { key: bill.key, label: bill.label, source: bill.source, at: bill.at },
+                pay: { method: bill.method || '', vpa: vpas.find(v => acc[upiKey(v)]) || vpas[0] || null },
+                buyer: buyer, how: how,
+                by: (window.currentStaff && window.currentStaff.name) || 'till'
+            });
+        }
+        // At the close of a bill, on the one till that closed it. Not awaited: the bill is
+        // closed and the cashier is on to the next customer whatever happens here. If it
+        // fails the bill is still in History, and the owner's screen lists any bill paid
+        // into an invoicing account that has no invoice, with a button to issue it.
+        function gstAutoIssue(bill){
+            try {
+                if (!(parseFloat(bill.total) > 0) || !gstWants(bill.vpas)) return;
+                gstIssue(gstDraftFor(bill, bill.phone ? { phone: bill.phone } : null, 'auto'), bill.key, window.gstSettings)
+                    .catch(function(e){
+                        console.error('gstAutoIssue', e);
+                        try { window.ilaOops && window.ilaOops('GST invoice not issued for ' + bill.label + ': ' + ((e && e.message) || e), 'gstAutoIssue'); } catch(_){}
+                        showToast('GST invoice not issued', bill.label + ' was settled, but its invoice could not be issued. Issue it from History → GST Invoice.', 9000);
+                    });
+            } catch(e){ console.error('gstAutoIssue', e); }
+        }
+
+        // ISSUING AN INVOICE. The same function on the till and on the owner's screen.
+        //
+        // One update writes the year's counter, the invoice at that number, the bill's
+        // index and the customer's copy, and the rules refuse it unless the counter moves
+        // up by exactly one to the number the invoice is written at, the invoice is dated
+        // by the server, and the bill has no invoice yet. So two screens issuing at the
+        // same moment cannot share a number or leave a gap: the second is refused, reads
+        // the counter again and takes the next one. A bill that already has an invoice is
+        // answered with it, which is what makes asking twice harmless.
+        //
+        // Resolves { ref, no, token } for a new invoice, { existing: true, ref } for a
+        // bill that had one; rejects when it could not issue at all.
+        async function gstIssue(draft, billKey, settings){
+            const fy = IlaGST.fyOf(Date.now());
+            const prefix = IlaGST.cleanPrefix(settings && settings.prefix);
+            const prior = (await db.ref('gst/byBill/' + billKey).once('value')).val();
+            if (prior) return { existing: true, ref: prior };
+            // floor: the number a refusal says is already taken. A screen's copy of the
+            // counter can lag the server's for a moment after somebody else's invoice, and
+            // reading it again would ask for the same taken number; asking past the one
+            // refused cannot leave a gap, because the rules take only the next one.
+            let lastErr = null, floor = 0;
+            for (let tries = 0; tries < 10; tries++){
+                const cur = parseInt((await db.ref('gst/counter/' + fy).once('value')).val()) || 0;
+                const seq = Math.max(cur, floor) + 1, token = IlaGST.token(), no = IlaGST.invoiceNo(prefix, fy, seq);
+                const inv = Object.assign({}, draft, { no: no, seq: seq, fy: fy, token: token,
+                                                       at: firebase.database.ServerValue.TIMESTAMP });
+                const updates = {};
+                updates['gst/counter/' + fy] = seq;
+                updates['gst/invoices/' + fy + '/' + seq] = inv;
+                updates['gst/byBill/' + billKey] = fy + '/' + seq;
+                updates['gst/public/' + token] = IlaGST.publicCopy(inv);
+                try {
+                    await db.ref().update(updates);
+                    return { ref: fy + '/' + seq, no: no, token: token };
+                } catch (e) {
+                    lastErr = e;
+                    // Refused: somebody took this number, or invoiced this bill, first.
+                    const again = (await db.ref('gst/byBill/' + billKey).once('value')).val();
+                    if (again) return { existing: true, ref: again };
+                    floor = seq;
+                    await new Promise(r => setTimeout(r, 200 + Math.random() * 400));
+                }
+            }
+            throw lastErr || new Error('No invoice number could be taken');
+        }
+
+        // ---- asked for, from History
+        window.gstForBill = null;     // the bill the dialog is about
+        window.gstShown = null;       // the invoice it is showing: { no, token, total, status }
+        function gstStatus(msg){ const el = document.getElementById('gst-inv-status'); if (el) el.textContent = msg || ''; }
+        function gstShowForm(){
+            document.getElementById('gst-inv-form').hidden = false;
+            document.getElementById('gst-inv-done').hidden = true;
+        }
+        async function gstShowIssued(ref){
+            document.getElementById('gst-inv-form').hidden = true;
+            const inv = (await db.ref('gst/invoices/' + ref).once('value')).val();
+            if (!inv){ gstStatus('This bill has invoice ' + ref + ', but it could not be read.'); return; }
+            window.gstShown = { no: inv.no, token: inv.token, total: inv.total, status: inv.status };
+            gstStatus(inv.no + ' · ' + IlaGST.inr(inv.total) + (inv.status === 'cancelled' ? ' · CANCELLED' : '') +
+                      (inv.buyer && inv.buyer.gstin ? ' · GSTIN ' + inv.buyer.gstin : ''));
+            document.getElementById('gst-inv-done').hidden = false;
+            const ph = document.getElementById('gst-inv-phone');
+            if (ph && !ph.value) ph.value = (window.gstForBill && window.gstForBill.phone) || '';
+        }
+        window.openGstInvoice = async function(){
+            const bill = (window.pastBills || []).find(b => b.id === window.currentPastBillID); if (!bill) return;
+            window.gstForBill = {
+                key: bill.key || ('pos-' + bill.id),      // a bill from before keys were kept
+                label: bill.table, source: String(bill.table || '').indexOf('Web:') === 0 ? 'web' : 'pos',
+                at: bill.id, items: bill.items, total: bill.total,
+                method: bill.method || '', vpas: bill.upi || [], phone: bill.phone || null
+            };
+            window.gstShown = null;
+            ['gst-buyer-name', 'gst-buyer-gstin', 'gst-buyer-address'].forEach(id => { document.getElementById(id).value = ''; });
+            document.getElementById('gst-inv-phone').value = bill.phone || '';
+            document.getElementById('gst-inv-for').textContent = bill.table + ' · ₹' + bill.total + ' · ' + bill.date;
+            document.getElementById('gst-inv-form').hidden = true;
+            document.getElementById('gst-inv-done').hidden = true;
+            gstStatus('Checking…');
+            closeModal('view-past-bill-modal'); openModal('gst-invoice-modal');
+            try {
+                const ref = (await db.ref('gst/byBill/' + window.gstForBill.key).once('value')).val();
+                if (ref) return gstShowIssued(ref);
+            } catch(e){
+                gstStatus('The database refused to look this up. GST invoicing may not be set up yet — ask the owner.');
+                return;
+            }
+            if (window.gstSettingsRefused || !window.gstSettings){
+                gstStatus('GST invoicing is not set up yet. The owner fills in the business details in Admin → GST Invoices.');
+                return;
+            }
+            const missing = IlaGST.settingsProblems(window.gstSettings);
+            if (missing.length){ gstStatus('Before an invoice can be issued, Admin → GST Invoices needs ' + missing.join(', ') + '.'); return; }
+            gstStatus('No invoice yet. Add the customer’s details if they want them on it — a business will want its GSTIN.');
+            gstShowForm();
+        };
+        window.gstIssueFromHistory = async function(){
+            const bill = window.gstForBill; if (!bill) return;
+            const btn = document.getElementById('gst-issue-btn');
+            const buyer = {
+                name: document.getElementById('gst-buyer-name').value.trim(),
+                gstin: IlaGST.normGSTIN(document.getElementById('gst-buyer-gstin').value),
+                address: document.getElementById('gst-buyer-address').value.trim(),
+                phone: bill.phone || null
+            };
+            const problems = IlaGST.buyerProblems(buyer, bill.total);
+            if (problems.length){ gstStatus(problems.join('. ') + '.'); return; }
+            if (btn.disabled) return;
+            btn.disabled = true; gstStatus('Issuing…');
+            try {
+                const r = await gstIssue(gstDraftFor(bill, buyer, 'asked'), bill.key, window.gstSettings);
+                await gstShowIssued(r.ref);
+                if (r.existing) gstStatus('This bill already had an invoice: ' + (window.gstShown ? window.gstShown.no : r.ref) + '. A bill is invoiced once — to change the details on it, the owner cancels it in Admin first.');
+            } catch(e){
+                console.error('gstIssueFromHistory', e);
+                gstStatus('Could not issue the invoice. Check the connection and try again.');
+            } finally { btn.disabled = false; }
+        };
+        function gstLink(){ return window.gstShown ? (location.origin + '/invoice.html?t=' + encodeURIComponent(window.gstShown.token)) : null; }
+        window.gstOpenInvoice = function(){ const u = gstLink(); if (u) window.open(u, '_blank', 'noopener'); };
+        window.gstSendInvoice = function(){
+            const u = gstLink(); if (!u) return;
+            const phone = window.parseMobile ? window.parseMobile(document.getElementById('gst-inv-phone').value) : document.getElementById('gst-inv-phone').value.replace(/\D/g, '').slice(-10);
+            if (!phone || String(phone).length < 10){ gstStatus('Enter the customer’s 10-digit mobile number.'); return; }
+            const text = 'ILA — GST invoice ' + window.gstShown.no + ' for ' + IlaGST.inr(window.gstShown.total) + '\n' + u;
+            window.location.href = 'https://wa.me/91' + String(phone).slice(-10) + '?text=' + encodeURIComponent(text);
+        };
 
         window.openPastBills = function() {
             const list = document.getElementById('past-bills-list');

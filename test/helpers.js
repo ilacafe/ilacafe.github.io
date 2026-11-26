@@ -352,9 +352,17 @@ function multiPathWrites(src) {
       continue;
     }
 
-    // 'a/b/' + something — the literal head is enough to place it.
+    // 'a/b/' + something — the literal head is enough to place it, and whatever follows
+    // it is read the way a db.ref() path's tail is: 'gst/invoices/' + fy + '/' + seq is
+    // gst/invoices/$key/$key. Stopping at the first variable used to place that write one
+    // level ABOVE the node it lands on, where a rule that sits on each invoice (and must,
+    // so the till cannot delete one) is not to be found.
     const head = /^(['"`])([^'"`]*)\1\s*\+/.exec(e);
-    if (head) { out.push(joinPath(base, head[2]) + '/$key'); continue; }
+    if (head) {
+      const tail = head[2].endsWith('/') ? trailingSegments(e.slice(head[0].length - 1)) : '';
+      out.push(joinPath(base, head[2]) + (tail || '/$key'));
+      continue;
+    }
 
     // A bare expression under a known base is one child of it: carry[e.payId]
     // under pos/unverified is pos/unverified/$key.

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#8D6E52">
+    <meta name="robots" content="noindex">
+    <title>ILA Invoice</title>
+    <link rel="icon" href="/icon-customer.png">
+    <link rel="apple-touch-icon" href="/icon-customer.png">
+    <!-- THE PAGE A GST INVOICE LINK OPENS.
+         The till's History → GST Invoice sends this address over WhatsApp, and the owner's
+         screen opens it to show or print an invoice. The link carries one thing: the
+         invoice's token, 20 random characters. gst/public/{token} is readable by whoever
+         holds it and by nobody else — the node above it has no read, so it cannot be
+         listed — and it is read here over REST without signing anybody in, as pay.html
+         reads settings/.
+
+         What it shows is publicCopy() in gst.js: the customer's own name, GSTIN and
+         address if they asked for them, and not their phone, who at the café issued it,
+         or which of the café's accounts was paid.
+
+         An invoice is paper, so the document is white whatever the café's brown is
+         around it, and printing it prints the invoice and nothing else. -->
+    <style>
+        :root { --brand-bg: #8D6E52; --brand-text: #ffffff; color-scheme: light; }
+        html { background-color: var(--brand-bg); }
+        body { background-color: var(--brand-bg); color: var(--brand-text); font-family: "Helvetica Neue", Arial, sans-serif;
+               margin: 0; line-height: 1.5;
+               padding: calc(16px + env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom)); }
+        .bar { max-width: 760px; margin: 0 auto 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+        .bar h1 { font-size: 1.2rem; letter-spacing: 6px; margin: 0; }
+        .btn { padding: 11px 16px; min-height: 44px; border-radius: 6px; font-weight: 700; font-size: 0.9rem; cursor: pointer;
+               font-family: inherit; border: none; text-transform: uppercase; letter-spacing: 1px; background: var(--brand-text); color: var(--brand-bg); }
+        .btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+        .state { max-width: 520px; margin: 40px auto; text-align: center; font-size: 0.95rem; padding: 16px;
+                 border: 1px dashed rgba(255,255,255,0.6); border-radius: 8px; }
+        #doc { overflow-x: auto; }
+        [hidden] { display: none !important; }
+        @media print {
+            html, body { background: #fff; padding: 0; }
+            .bar, .state { display: none !important; }
+        }
+    </style>
+    <style id="gi-css"></style>
+</head>
+<body>
+    <div class="bar">
+        <h1>ILA</h1>
+        <button class="btn" id="inv-print" type="button" hidden>Print / Save PDF</button>
+    </div>
+    <div class="state" id="inv-state" role="status">Opening your invoice…</div>
+    <button class="btn" id="inv-retry" type="button" hidden style="display:block; margin: 0 auto;">Try again</button>
+    <main id="doc" hidden></main>
+
+<script src="/gst.js"></script>
+<script>
+(function(){
+    // The same database as every other page. Only gst/public/{token} is asked for.
+    const DB = 'https://ila-cafe-default-rtdb.asia-southeast1.firebasedatabase.app';
+    const $ = id => document.getElementById(id);
+    const state = msg => { const el = $('inv-state'); el.hidden = false; el.textContent = msg; };
+
+    // The token is the whole link, so anything that is not one is refused before it is
+    // put into a URL.
+    const t = String(new URLSearchParams(location.search).get('t') || '').trim();
+    if (!/^[A-Za-z0-9]{16,40}$/.test(t)){
+        state('This invoice link is incomplete. Ask ILA to send it again.');
+        return;
+    }
+    $('gi-css').textContent = window.IlaGST.CSS;
+    $('inv-print').addEventListener('click', () => window.print());
+    $('inv-retry').addEventListener('click', load);
+
+    async function load(){
+        $('inv-retry').hidden = true;
+        state('Opening your invoice…');
+        let inv = null;
+        try {
+            const r = await fetch(DB + '/gst/public/' + encodeURIComponent(t) + '.json', { cache: 'no-store' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            inv = await r.json();
+        } catch (e) {
+            state('Could not reach ILA just now. Check your connection and try again.');
+            $('inv-retry').hidden = false;
+            return;
+        }
+        if (!inv || !inv.no){
+            state('No invoice was found for this link. Ask ILA to send it again.');
+            return;
+        }
+        document.title = 'Invoice ' + inv.no + ' — ILA';
+        $('doc').innerHTML = window.IlaGST.render(inv);   // render() escapes every value it prints
+        $('doc').hidden = false;
+        $('inv-state').hidden = true;
+        $('inv-print').hidden = false;
+    }
+    load();
+})();
+</script>
+</body>
+</html>

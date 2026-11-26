@@ -50,6 +50,9 @@ const suites = [
   'accessibility.test.js',
   'focus-and-motion.test.js',
   'probe-reachability.test.js',
+  'upi-yearly-cap.test.js',
+  'gst.test.js',
+  'gst-mail.test.js',
 ];
 
 let failed = [];

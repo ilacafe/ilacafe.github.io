@@ -422,7 +422,8 @@ async function main() {
   rules.pushSubscriptions['.read'] = JSON.parse(saved);
 
   // the grants must not have opened anything to the world
-  const PUBLIC_OK = ['menu', 'settings', 'eta', 'orders/track/', 'orders/tableIndex/'];
+  // gst/public/ is one customer's invoice by its unguessable token — see rules.test.js.
+  const PUBLIC_OK = ['menu', 'settings', 'eta', 'orders/track/', 'orders/tableIndex/', 'gst/public/'];
   const leaked = [];
   (function walk(n, p) {
     if (!n || typeof n !== 'object') return;

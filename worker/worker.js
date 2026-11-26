@@ -13,6 +13,16 @@
 //  build if one is ever pasted back in.
 // ============================================================================
 
+// The GST invoice arithmetic and document, shared with the pages. gst.js is a plain
+// script that publishes itself as globalThis.IlaGST, so it is imported for that and
+// read from there — the bundler puts it in front of this file, and the pages load the
+// very same file with a <script> tag. A change to it redeploys this Worker: see the
+// paths in .github/workflows/deploy-worker.yml.
+import '../gst.js';
+// The Workers runtime's own mail type, for the Email Routing send binding (GST_MAIL).
+import { EmailMessage } from 'cloudflare:email';
+const IlaGST = globalThis.IlaGST;
+
 // ---- configuration ---------------------------------------------------------
 // Secrets arrive as env bindings and are cached per isolate. Cloudflare passes
 // env to each handler rather than to module scope, so every entry point
@@ -21,6 +31,7 @@ let VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, FIREBASE_PROJECT;
 let INGEST_SECRET, RECAL_SECRET;
 let ROBOT_EMAIL, ROBOT_PASSWORD, FIREBASE_API_KEY, DB_URL, EMAIL_FORWARD_TO;
 let HEARTBEAT_URL;
+let GST_MAIL, GST_MAIL_FROM;
 
 function loadConfig(env){
   env = env || {};
@@ -41,6 +52,10 @@ function loadConfig(env){
   // Where a finished cron says so. Optional: unset means nothing is watching,
   // which is the state this Worker ran in until it was added.
   HEARTBEAT_URL    = env.HEARTBEAT_URL;
+  // The monthly GST email: a send_email binding, and the café-domain address it is
+  // sent from. Both optional — without them that one job says so and does nothing.
+  GST_MAIL         = env.GST_MAIL;
+  GST_MAIL_FROM    = env.GST_MAIL_FROM;
 }
 
 // Fail closed on a missing binding. Without this an unset secret makes the
@@ -2432,6 +2447,228 @@ async function handleClientError(data, claims){
   return { status: 200, body: { ok: true, stored: true } };
 }
 
+
+// ============================================================================
+//  GST INVOICES TO THE ACCOUNTANT, MONTHLY
+//
+//  The owner's screen can download a month's invoices, but the 1st of the month
+//  comes whether or not anybody opens it, and this is the only component that runs
+//  when nobody is looking — and the only one that can send an email. So on the 1st,
+//  from 10am in India, the hourly tick sends the month just ended to the address in
+//  gst/settings/caEmail: the sums in the body, the register as a CSV, and every
+//  invoice in one printable HTML file. The arithmetic and the document are gst.js,
+//  the same file the till prints from, so the accountant's copy cannot disagree
+//  with the customer's.
+//
+//  It goes through the Email Routing send binding (GST_MAIL in wrangler.toml), from
+//  GST_MAIL_FROM, an address on the café's own domain. Email Routing only delivers
+//  to an address verified as a destination on that account, so the accountant's
+//  address has to be added there once and the link in the verification mail clicked
+//  — until it is, the send is refused and gst/mailLog says so in the owner's card.
+//
+//  gst/mailLog/{YYYY-MM} is this job's memory: a month that went is not sent again
+//  by the schedule, a month that failed is tried again three hours later, and only
+//  during the first week — a toggle switched on on the 20th does not mail last month
+//  out of the blue. The owner's "Email this month now" sends any month, any day.
+// ============================================================================
+const GST_MAIL_HOUR_IST   = 10;                  // the 1st, from 10am IST
+const GST_MAIL_LAST_DAY   = 7;                   // ...and catching up until the 7th
+const GST_MAIL_RETRY_MS   = 3 * 3600 * 1000;
+const GST_BOOK_MAX_CHARS  = 15 * 1000 * 1000;    // Email Routing takes 25 MiB, after base64
+const GST_EMAIL_RE        = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]+$/;
+
+// Is it the time of month the schedule sends? Decided before anything is fetched, so
+// the other seven hundred hourly ticks of the month cost nothing.
+function gstMailWindow(nowMs){
+  const d = new Date(nowMs + IST_OFFSET_MS);
+  const day = d.getUTCDate(), hour = d.getUTCHours();
+  return (day === 1 && hour >= GST_MAIL_HOUR_IST) || (day > 1 && day <= GST_MAIL_LAST_DAY);
+}
+
+function gstB64(text){
+  const bytes = typeof text === 'string' ? _enc.encode(text) : text;
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/.{76}(?=.)/g, '$&\r\n');
+}
+// A header value with anything outside ASCII in it is encoded (RFC 2047), and no
+// header may carry a line break: a subject or a filename is never a way to add one.
+function gstHeader(v){
+  const s = String(v == null ? '' : v).replace(/[\r\n]+/g, ' ').trim();
+  return /^[\x20-\x7e]*$/.test(s) ? s : '=?UTF-8?B?' + btoa(String.fromCharCode.apply(null, _enc.encode(s))) + '?=';
+}
+// One message: text and HTML alternatives, then the attachments. Hand-built because the
+// Worker has no dependencies and this is all of MIME it needs.
+function gstMime(m){
+  const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => b.toString(16).padStart(2, '0')).join('');
+  const mixed = 'ila-mixed-' + rnd(), alt = 'ila-alt-' + rnd();
+  const domain = String(m.from).split('@')[1] || 'localhost';
+  const L = [];
+  L.push('From: ' + gstHeader(m.fromName || 'ILA') + ' <' + m.from + '>');
+  L.push('To: <' + m.to + '>');
+  if (m.replyTo) L.push('Reply-To: <' + m.replyTo + '>');
+  L.push('Subject: ' + gstHeader(m.subject));
+  L.push('Date: ' + new Date(m.date || Date.now()).toUTCString().replace('GMT', '+0000'));
+  L.push('Message-ID: <' + rnd() + '@' + domain + '>');
+  L.push('MIME-Version: 1.0');
+  L.push('Content-Type: multipart/mixed; boundary="' + mixed + '"');
+  L.push('');
+  L.push('--' + mixed);
+  L.push('Content-Type: multipart/alternative; boundary="' + alt + '"');
+  L.push('');
+  L.push('--' + alt);
+  L.push('Content-Type: text/plain; charset=UTF-8');
+  L.push('Content-Transfer-Encoding: base64');
+  L.push('');
+  L.push(gstB64(m.text || ''));
+  L.push('--' + alt);
+  L.push('Content-Type: text/html; charset=UTF-8');
+  L.push('Content-Transfer-Encoding: base64');
+  L.push('');
+  L.push(gstB64(m.html || ''));
+  L.push('--' + alt + '--');
+  for (const a of (m.attachments || [])){
+    const name = String(a.name).replace(/[^A-Za-z0-9._-]/g, '_');
+    L.push('--' + mixed);
+    L.push('Content-Type: ' + a.type + '; name="' + name + '"');
+    L.push('Content-Disposition: attachment; filename="' + name + '"');
+    L.push('Content-Transfer-Encoding: base64');
+    L.push('');
+    L.push(gstB64(a.content));
+  }
+  L.push('--' + mixed + '--');
+  L.push('');
+  return L.join('\r\n');
+}
+
+// The month's invoices, by the date they were issued, which is the index the rules
+// declare on gst/invoices/{fy}. A month never spans two financial years.
+async function gstLoadMonth(token, month){
+  const fy = IlaGST.fyOfMonth(month), r = IlaGST.monthRange(month);
+  if (!fy || !r) throw new Error('not a month: ' + month);
+  const res = await fetch(DB_URL + '/gst/invoices/' + fy + '.json?orderBy=%22at%22&startAt=' + r.start +
+                          '&endAt=' + (r.end - 1) + '&auth=' + token);
+  if (!res.ok) throw new Error('could not read the invoices (' + res.status + ')');
+  const v = (await res.json()) || {};
+  return Object.keys(v).map(k => v[k]).filter(Boolean).sort((a, b) => (a.seq || 0) - (b.seq || 0));
+}
+
+// The email itself, built from the month's invoices. Separate from sending so it can be
+// read in a test without a mail binding.
+function gstMonthMessage(settings, month, invs, from, nowMs){
+  const sm = IlaGST.summary(invs);
+  const seller = (invs[0] && invs[0].seller) || IlaGST.sellerOf(settings);
+  const name = seller.trade || seller.legal || 'ILA';
+  const label = IlaGST.monthLabel(month);
+  const file = 'ILA-GST-invoices-' + month;
+  const csv = IlaGST.csv(invs);
+  let book = IlaGST.book(invs, { title: label, seller: seller });
+  let bookNote = '';
+  if (book.length > GST_BOOK_MAX_CHARS){
+    book = null;
+    bookNote = 'The printable file was too large to attach this month; it can be downloaded from Admin → GST Invoices → Invoices → Printable.';
+  }
+  const rows = [
+    ['GSTIN', seller.gstin || ''],
+    ['Invoices issued', String(sm.issued) + (sm.first ? ' (' + sm.first + ' to ' + sm.last + ')' : '')],
+    ['Cancelled', String(sm.cancelled)],
+    ['To registered buyers (B2B)', String(sm.b2b)],
+    ['To consumers (B2C)', String(sm.b2c)],
+    ['Taxable value', IlaGST.inr(sm.taxable)],
+    ['CGST', IlaGST.inr(sm.cgst)],
+    ['SGST', IlaGST.inr(sm.sgst)],
+    ['Total', IlaGST.inr(sm.total)]
+  ];
+  const attached = ['- ' + file + '.csv — the register, one row per invoice'];
+  if (book) attached.push('- ' + file + '.html — every invoice, printable (open it in a browser, then print or save as PDF)');
+  const text = 'Hello,\n\n' + name + '’s GST invoices for ' + label + ' are attached.\n\n' +
+    rows.map(r => r[0] + ': ' + r[1]).join('\n') + '\n\n' +
+    (invs.length ? 'Attached:\n' + attached.join('\n') + '\n' : 'No invoices were issued this month.\n') +
+    (bookNote ? '\n' + bookNote + '\n' : '') +
+    '\nCancelled invoices are included and marked, so the serial numbers run without a gap. Totals exclude them.\n' +
+    '\nSent automatically by ' + name + '’s billing system' + (seller.email ? '; replies go to ' + seller.email : '') + '.\n';
+  const e = IlaGST.esc;
+  const html = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#111;">' +
+    '<p>Hello,</p><p>' + e(name) + '’s GST invoices for <b>' + e(label) + '</b> are attached.</p>' +
+    '<table style="border-collapse:collapse;">' + rows.map(r => '<tr><td style="padding:3px 14px 3px 0;color:#555;">' + e(r[0]) + '</td><td style="padding:3px 0;"><b>' + e(r[1]) + '</b></td></tr>').join('') + '</table>' +
+    (invs.length ? '<p>Attached:</p><ul>' + attached.map(a => '<li>' + e(a.replace(/^- /, '')) + '</li>').join('') + '</ul>' : '<p>No invoices were issued this month.</p>') +
+    (bookNote ? '<p>' + e(bookNote) + '</p>' : '') +
+    '<p style="color:#555;">Cancelled invoices are included and marked, so the serial numbers run without a gap. Totals exclude them.</p>' +
+    '<p style="color:#555;">Sent automatically by ' + e(name) + '’s billing system' + (seller.email ? '; replies go to ' + e(seller.email) : '') + '.</p></div>';
+  const attachments = [{ name: file + '.csv', type: 'text/csv; charset=UTF-8', content: csv }];
+  if (book) attachments.push({ name: file + '.html', type: 'text/html; charset=UTF-8', content: book });
+  return {
+    from: from, fromName: name, to: settings.caEmail, replyTo: GST_EMAIL_RE.test(seller.email || '') ? seller.email : null,
+    subject: name + ' — GST invoices for ' + label + ' (' + sm.issued + ')',
+    date: nowMs, text: text, html: html, attachments: attachments, count: sm.issued
+  };
+}
+
+// Send one month, and write down what happened either way. how: 'auto' | 'asked'.
+async function gstSendMonth(token, settings, month, how, by, nowMs){
+  const to = String((settings && settings.caEmail) || '').trim();
+  const log = async (rec) => {
+    const res = await dbPut('/gst/mailLog/' + month, Object.assign({ at: nowMs, how: how, by: by || null }, rec));
+    if (!res.ok) console.log('gst-mail: could not record ' + month + ' (' + res.status + ')');
+  };
+  let problem = null;
+  if (!GST_EMAIL_RE.test(to)) problem = 'no valid CA email is set in Admin → GST Invoices';
+  else if (!GST_MAIL || typeof GST_MAIL.send !== 'function') problem = 'the Worker has no GST_MAIL binding yet — see worker/README.md';
+  else if (!GST_EMAIL_RE.test(String(GST_MAIL_FROM || ''))) problem = 'the Worker has no GST_MAIL_FROM address yet — see worker/README.md';
+  if (problem){ await log({ ok: false, error: problem }); return { ok: false, error: problem }; }
+
+  const invs = await gstLoadMonth(token, month);
+  const m = gstMonthMessage(settings, month, invs, GST_MAIL_FROM, nowMs);
+  try {
+    await GST_MAIL.send(new EmailMessage(GST_MAIL_FROM, to, gstMime(m)));
+  } catch (e){
+    const why = String((e && e.message) || e).slice(0, 240);
+    await log({ ok: false, to: to, count: m.count, error: why });
+    return { ok: false, error: 'the mail was refused: ' + why + (/verif|destination/i.test(why) ? ' — the CA’s address has to be a verified destination in Cloudflare Email Routing' : '') };
+  }
+  await log({ ok: true, to: to, count: m.count });
+  console.log('gst-mail: sent ' + month + ' (' + m.count + ' invoices) to ' + to);
+  return { ok: true, month: month, count: m.count, to: to };
+}
+
+// The schedule's half. Throws on a failed send, so reportIfItThrows records it under
+// ops/cronFailure and pushes the owner — at most once in twenty hours.
+async function runGstMonthlyMail(nowMs){
+  const token = await getRobotToken();
+  const settings = await monLoad(token, '/gst/settings');
+  if (!settings || !settings.autoMail) return { skipped: 'off' };
+  const month = IlaGST.prevMonth(nowMs);
+  const prevRes = await fetch(DB_URL + '/gst/mailLog/' + month + '.json?auth=' + token);
+  const prev = prevRes.ok ? await prevRes.json() : null;
+  if (prev && prev.ok) return { skipped: 'already sent', month: month };
+  if (prev && prev.at && nowMs - prev.at < GST_MAIL_RETRY_MS) return { skipped: 'tried recently', month: month };
+  const r = await gstSendMonth(token, settings, month, 'auto', null, nowMs);
+  if (!r.ok) throw new Error(IlaGST.monthLabel(month) + '’s invoices were not emailed to the CA: ' + r.error);
+  return r;
+}
+
+// The owner's "Email this month now". The token says it is the owner; the month is the
+// only thing taken from the caller, and it has to be one.
+async function handleGstMail(data, claims){
+  const month = String((data && data.month) || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return { status: 400, body: { error: 'not a month' } };
+  let token, settings;
+  try { token = await getRobotToken(); settings = await monLoad(token, '/gst/settings'); }
+  catch (e){ return { status: 502, body: { error: 'could not read the settings' } }; }
+  if (!settings) return { status: 409, body: { error: 'GST invoicing is not set up' } };
+  let who = null;
+  try {
+    const res = await fetch(DB_URL + '/users/' + encodeURIComponent(claims.sub) + '/name.json?auth=' + token);
+    who = res.ok ? await res.json() : null;
+  } catch (e){}
+  try {
+    const r = await gstSendMonth(token, settings, month, 'asked', safeText(who || claims.email || 'admin', 60), Date.now());
+    return { status: r.ok ? 200 : 502, body: r };
+  } catch (e){
+    return { status: 502, body: { ok: false, error: String((e && e.message) || e).slice(0, 200) } };
+  }
+}
+
 export default {
   async fetch(request, env){
     loadConfig(env);
@@ -2508,6 +2745,19 @@ export default {
       return json(r.body, r.status);
     }
 
+    // The month's GST invoices to the accountant, now, because the owner asked. Owner
+    // only: it sends the café's whole month of sales to an outside address.
+    if (data && data.action === 'gst-mail') {
+      const who = await verifyIdToken(data.token);
+      if (!who) return json({ error:'unauthorized' }, 401);
+      if (who.firebase && who.firebase.sign_in_provider === 'anonymous') {
+        return json({ error:'forbidden' }, 403);
+      }
+      if ((await staffRoleOf(who.sub)) !== 'admin') return json({ error:'forbidden' }, 403);
+      const r = await handleGstMail(data, who);
+      return json(r.body, r.status);
+    }
+
     // Payment ingest route — separate secret, separate handler.
     if (new URL(request.url).pathname.replace(/\/+$/,'').endsWith('/ingest')) {
       const r = await handleIngest(data);
@@ -2574,6 +2824,9 @@ export default {
       const isMonday = new Date(now).getUTCDay() === 1;   // digest once a week on Monday ticks
       const isWeeklySlot = isMonday && new Date(now).getUTCHours() === 4;   // ~one tick/week (04:00 UTC Mon)
       ctx.waitUntil(reportIfItThrows('monitor', runVerificationMonitor(now, isWeeklySlot), true));
+      // The first week of the month only — every other tick skips it before fetching
+      // anything. Not a heartbeat of its own: monitor's already says the tick runs.
+      if (gstMailWindow(now)) ctx.waitUntil(reportIfItThrows('gst-mail', runGstMonthlyMail(now), false));
     }
   },
 

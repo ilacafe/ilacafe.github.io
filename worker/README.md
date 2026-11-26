@@ -21,6 +21,7 @@ It does four things:
 | **Table index prune** | on the same hourly tick | drops `orders/tableIndex` entries older than six hours |
 | **Cash out of the drawer** | `POST /` with `action: cashout` | verifies a staff token *and* a PIN, then writes the ledger entry itself |
 | **Stock on and off the shelf** | `POST /` with `action: inventory-log` | the same, for a prep or a delivery — and it reads the recipe rather than being told it |
+| **GST invoices to the accountant** | the hourly tick, 1st–7th of the month; `POST /` with `action: gst-mail` | emails last month's invoices to the CA: summary, register (CSV), every invoice (HTML) |
 | **A customer's fault report** | `POST /` with `action: client-error` | the one route an anonymous token may use — writes `ops/clientErrors` as the robot, having trusted nothing the caller sent |
 
 ## Deploying
@@ -94,9 +95,16 @@ Set each of these once, with `npx wrangler secret put <NAME>`:
 | `VAPID_SUBJECT` | `mailto:` contact for VAPID. |
 | `EMAIL_FORWARD_TO` | A verified Email Routing destination; every bank email is forwarded there after processing. |
 | `HEARTBEAT_URL` | **Optional.** Base URL of a dead man's switch. Each finished cron POSTs to `<base>/<job>`. Unset means nothing is watching. |
+| `GST_MAIL_FROM` | **Optional.** The address the monthly GST email is sent from — any address on the domain Email Routing runs on, e.g. `invoices@` that domain. It does not need a mailbox. Unset means the monthly email records that it cannot send, and does nothing else. |
 
-The last three are addresses rather than secrets, but they are personal, so they
-stay out of the repo on the same principle.
+`EMAIL_FORWARD_TO`, `HEARTBEAT_URL` and `GST_MAIL_FROM` are addresses rather than
+secrets, but they are personal, so they stay out of the repo on the same principle.
+
+One binding is not a secret and is declared in `wrangler.toml` instead:
+
+| binding | what it is |
+|---|---|
+| `GST_MAIL` | The Email Routing send binding the monthly GST email goes out through. See [GST invoices to the accountant](#gst-invoices-to-the-accountant). |
 
 ## The dead man's switch
 
@@ -328,6 +336,39 @@ route is ever revisited, that rule staying shut is the first thing to check.
 The robot prunes anything not seen for a fortnight (`pruneClientErrors`), on the same
 argument as the table index: these are diagnostics, not records, and a fault still
 happening rewrites its row and comes straight back.
+
+## GST invoices to the accountant
+
+On the 1st of every month, from 10am IST, the hourly tick emails the month just
+ended to the address in `gst/settings/caEmail`, if **Email last month's invoices on
+the 1st** is on in Admin → GST Invoices. The email carries the month's sums, the
+register as a CSV, and every invoice in one printable HTML file. All three are built
+by `/gst.js`, the same file the till prints invoices from, which this Worker imports
+(so a change to it redeploys the Worker: see the paths in
+`.github/workflows/deploy-worker.yml`).
+
+`gst/mailLog/{YYYY-MM}` records each attempt. A month that went is not sent again
+by the schedule; one that failed is tried again three hours later, until the 7th.
+A failure is also pushed to the owner, through the same `ops/cronFailure` record
+every scheduled job uses. **Email this month now** in Admin sends any month at any
+time, as the signed-in owner (`action: gst-mail`, admin token only).
+
+### Setting it up, once
+
+It goes out through Cloudflare Email Routing, which this Worker already receives
+bank alerts through, so there is no mail service to sign up for. Email Routing only
+delivers to **verified** addresses:
+
+1. **Cloudflare → the domain Email Routing runs on → Email → Email Routing →
+   Destination addresses → Add**: the accountant's address. Cloudflare mails them a
+   link; until they click it, every send is refused, and Admin → GST Invoices says so.
+2. `npx wrangler secret put GST_MAIL_FROM` — an address on that same domain, e.g.
+   `invoices@` it. Mail from any other domain is refused.
+3. The `GST_MAIL` binding is already in `wrangler.toml`; the next deploy creates it.
+4. Admin → GST Invoices: the CA's email (the same address as step 1), switch on the
+   monthly email, and press **Email this month now** once to see it arrive.
+
+Changing the accountant later means verifying the new address in step 1 first.
 
 ## Who may send a push
 

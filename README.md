@@ -21,6 +21,8 @@ the file the counter loads.
 | `sw.js` | — | push notifications, and caches the app shell |
 | `build-check.js` | — | tells a screen that has been open all day that a newer build exists |
 | `qr.js` | — | draws the UPI payment code, on the till and on the customer's phone |
+| `invoice.html` | customers | a GST invoice, opened from the link the till sends |
+| `gst.js` | — | GST invoices: the tax in a bill, the serial numbers, the document, the register |
 
 Each page is self-contained: its own HTML, CSS and JavaScript in one file, with
 Firebase loaded from a CDN. Sign-in is Firebase Auth; the role in
@@ -182,6 +184,78 @@ and, worse, a payment made before the customer had even ordered looks like it co
 be theirs. `bankTime` is null whenever the Worker was not certain of the format,
 and every reader falls back to `at`, so an unrecognised format is not a failure.
 
+**Caps: a month, and a financial year.** Each UPI ID can carry a monthly cap, a
+yearly cap, both, or neither (Admin → UPI Routing). The year is the Indian financial
+year, 1 April to 31 March, because that is the year every bank and tax limit an
+account is held to runs on. There is no stored yearly total: it is the sum of the
+monthly ones under `upiRouting/totals/{YYYY-MM}`, so correcting a month corrects its
+year and the two cannot drift. A monthly cap stops an ID until the 1st; a yearly cap
+stops it until 1 April. Before that a yearly cap is **paced** — what is left of the
+year is shared evenly over the months left of it, and that share is the ID's headroom
+this month — so an account with a big yearly cap does not take most of the money in
+April and drop out by summer. An account ahead of its pace stays in rotation at the
+back of the queue. The weighting is computed in two places, the till after every
+payment and the admin screen while it is open, because both publish `settings/upiList`;
+`upi-yearly-cap.test.js` holds both copies to the same answers. The till only reads the
+year's months when some ID actually has a yearly cap, and pushes at 80% and 100% of
+one as it does for a month.
+
+### GST invoices
+
+A tax invoice for a bill, from `gst.js` — one implementation for the till, the owner's
+screen, the customer's link and the accountant's monthly email, so no two of them can
+disagree about a paisa. **Menu prices already include GST**: an invoice adds nothing
+to the bill, it takes what the customer paid and shows how much of it was tax (5%,
+2.5% CGST + 2.5% SGST, SAC 996331 by default; both are settings). CGST and SGST are each
+rounded once, so they are always equal and taxable + CGST + SGST is the total to the
+paisa. A restaurant's place of supply is where it is (IGST Act s.12(5)), so there is
+never IGST.
+
+**When one is issued.** Admin → GST Invoices chooses what is invoiced without anybody
+asking — *bills paid by UPI into the accounts ticked there* (the default: ILA's
+current account), *every bill*, or *none*. Whatever the setting, a customer who asks
+gets one: the till's **History → GST Invoice**, with their name, GSTIN and address if
+they want them on it (a GSTIN is checked against its check character before anything
+is printed), or **Invoice a past bill** on the owner's screen. A bill is invoiced
+once and **whole**: one paid partly into the current account and partly in cash gets
+one invoice for all of it, and a tip is not part of it.
+
+For that, each UPI payment records which account it went into on the table itself
+(`_via`, beside `_pays`), because the till that closes a bill is the one that issues
+its invoice and it may not be the till that took the UPI. The close then uses one key
+for the bill everywhere — `orders/history/{key}`, its line in `pos/bills`, and
+`gst/byBill/{key}` — so asking from History tomorrow finds tonight's invoice rather than
+issuing a second. A till that could not issue at the close says so, and the owner's
+list of past bills marks any bill paid into a ticked account that has no invoice.
+
+**Numbers.** `PREFIX/YY-YY/NNNN` (`ILA/26-27/0001`), consecutive through the financial
+year and restarting in April (Rule 46: at most 16 characters, unique for the year).
+`gstIssue` — the same function on the till and the owner's screen — writes the year's
+counter, the invoice, the bill's index and the customer's copy in **one** update, and
+the rules refuse it unless the counter moves up by exactly one to the number the
+invoice is written at, the invoice is dated by the server, and the bill has no invoice
+yet. Two tills issuing at once cannot share a number or leave a gap: the second is
+refused and takes the next. An invoice is never deleted or rewritten; the owner can
+**cancel** one, with a reason, which keeps its number, date and money, marks the
+customer's copy cancelled, and can free the bill to be invoiced again with a new number.
+
+**The customer's copy** is `gst/public/{token}`, a 20-character random token that is
+the whole of the link (`invoice.html?t=…`) the till sends over WhatsApp. It is readable
+by whoever holds it and cannot be listed. It carries what the customer asked to be
+printed and not their phone, who issued it, or which of the café's accounts was paid.
+
+**The accountant.** On the 1st of each month, from 10am IST, the Worker emails the
+month just ended to the CA's address in the settings: the sums in the body, the
+register as a CSV, every invoice in one printable file. **Email this month now** sends
+any month on demand. It goes through Cloudflare Email Routing, which only delivers to
+verified addresses — see [`worker/README.md`](worker/README.md#gst-invoices-to-the-accountant)
+for the one-time setup. `gst/mailLog` records what went, and the owner's card shows it.
+
+Everything under `gst/` is the cashier's and the owner's, as the ledger is: the bar,
+the kitchen and the stock screen cannot read the café's turnover or its customers'
+GSTINs. **Deploy the rules before relying on this** — until they are, the database
+refuses `gst/`, the till issues nothing (quietly), and the owner's card says why.
+
 **Three things deploy separately**, and forgetting this is the most common way to
 be confused by this repo:
 
@@ -189,7 +263,7 @@ be confused by this repo:
 |---|---|---|
 | the pages | push to `main` | immediately, via GitHub Pages |
 | the database rules | the **deploy database rules** workflow, by hand | never on a push |
-| the Worker | push to `main` touching `worker/` | via GitHub Actions |
+| the Worker | push to `main` touching `worker/` or `gst.js` | via GitHub Actions |
 
 ## Running it
 
@@ -1035,8 +1109,8 @@ is why `pos` no longer carries a blanket `.read`: it handed the ledger, the bill
 the drawer and the cash-up archive to every signed-in role, including the bar and
 the kitchen, which read none of them. `npm test`
 holds that list — `menu`, `settings`, `eta/model`, `eta/live`, a single
-`orders/track/{trackId}`, and one table's `orders/tableIndex` — and fails on anything
-added to it or removed from it.
+`orders/track/{trackId}`, one table's `orders/tableIndex`, and a single GST invoice's
+`gst/public/{token}` — and fails on anything added to it or removed from it.
 
 `orders/track` was on that list as a whole node until recently, because a customer
 scanning a table QR queried it by `table` and a query needs read on what it queries.

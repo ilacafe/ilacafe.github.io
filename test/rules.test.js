@@ -203,6 +203,10 @@ unruled.forEach(u => note('no rule governs: ' + u));
     // index carrying trackIds and timestamps and nothing else.
     'orders/track/$trackId',
     'orders/tableIndex/$tableLabel',
+    // A customer's GST invoice, by the 20-character token in the link they were sent.
+    // Not the ordering page's, but the same shape as orders/track: one record by an id
+    // nobody can guess, with no read on the node above it so nothing can be listed.
+    'gst/public/$token',
   ];
 
   const publicReads = findOpenNodes(root, [], [])

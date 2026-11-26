@@ -193,6 +193,7 @@
     <link rel="preload" as="script" href="/build-check.js">
     <link rel="preload" as="script" href="/dialogs.js">
     <link rel="preload" as="script" href="/connection.js">
+    <link rel="preload" as="script" href="/gst.js">
 
     <style>
         :root { --brand-bg: #8D6E52; --brand-text: #ffffff;
@@ -350,6 +351,7 @@
            field that belonged to a different page, because in styling terms it did.
            Listing by type is what left the hole; there is no third type in use here, and
            the suite now checks every typed input on every page resolves to this. */
+        #gst-card textarea, #gst-card input[type="month"] { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; background: rgba(255,255,255,0.9); color: #333; resize: vertical; }
         input[type="text"], input[type="number"], input[type="password"], input[type="email"], input[type="tel"], select { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); font-family: 'Quicksand', sans-serif; font-size: 1rem; box-sizing: border-box; background: rgba(255,255,255,0.9); color: #333; }
         /* And the hint inside them. Left to the browser it is #757575, which on this
            near-white field is 4.08:1 — under AA on the line that says what the field
@@ -669,17 +671,105 @@
 
 <div class="admin-card" style="margin-bottom: 25px;">
             <h2>UPI Routing</h2>
-            <p class="rec-note">Payments spread across these UPI IDs in proportion to remaining monthly headroom — an ID that hits its cap stops receiving until the 1st, and the mix continuously rebalances. Totals count confirmed settlements from the POS.</p>
+            <p class="rec-note">Payments spread across these UPI IDs in proportion to remaining headroom — an ID that hits its monthly cap stops receiving until the 1st, and one that hits its yearly cap stops until 1 April. A yearly cap is paced: what is left of the year is shared evenly over the months left, so an account does not use up its year by summer. Years are financial years (April to March). Totals count confirmed settlements from the POS.</p>
             <div class="form-group" style="margin-bottom: 10px;"><input type="text" id="upi-new-id" placeholder="VPA — e.g. name@okaxis"></div>
             <div class="row-group" style="margin-bottom: 15px;">
                 <div class="form-group" style="flex: 1.3; margin: 0;"><input type="text" id="upi-new-label" placeholder="Label (e.g. HDFC S)"></div>
-                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="upi-new-cap" inputmode="decimal" placeholder="Cap ₹/mo (0 = none)"></div>
+                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="upi-new-cap" inputmode="decimal" placeholder="Cap ₹/mo (0 = none)" aria-label="Monthly cap in rupees, 0 for none"></div>
+                <div class="form-group" style="flex: 1; margin: 0;"><input type="number" id="upi-new-ycap" inputmode="decimal" placeholder="Cap ₹/yr (0 = none)" aria-label="Yearly cap in rupees, 0 for none"></div>
                 <button class="btn btn-secondary" style="flex: 0.7;" onclick="upiAdd()">Add</button>
             </div>
             <div id="upi-routing-list"><p style="font-size:0.8rem; letter-spacing:2px; text-transform:uppercase;">Loading&hellip;</p></div>
             <details style="margin-top: 16px;">
                 <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; padding:8px 0;">Month history</summary>
                 <div id="upi-history" style="margin-top: 8px;"></div>
+            </details>
+        </div>
+
+        <!-- GST INVOICES. The arithmetic and the document are /gst.js; issuing is
+             gstIssue, the same function as on the till; the monthly email is the Worker. -->
+        <div class="admin-card" id="gst-card" style="margin-bottom: 25px;">
+            <h2>GST Invoices</h2>
+            <p class="rec-note">Tax invoices for ILA's sales. Menu prices already include GST, so an invoice takes what the customer paid and shows how much of it was tax &mdash; nothing is added to the bill. Numbers run in order through the financial year (April to March) and restart in April. A customer who asks for an invoice gets one from the till's <em>History &rarr; GST Invoice</em>, however they paid.</p>
+            <div id="gst-health" role="status"></div>
+
+            <details id="gst-setup-details">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; padding:8px 0;">Business details</summary>
+                <p class="rec-note">Printed on every invoice, as they are on the day it is issued. Changing them later does not change invoices already sent.</p>
+                <div class="form-group"><label for="gst-legal" style="display:block; margin-bottom:4px;">Legal name (as registered for GST)</label><input type="text" id="gst-legal" maxlength="120" autocomplete="off"></div>
+                <div class="form-group"><label for="gst-trade" style="display:block; margin-bottom:4px;">Trade name</label><input type="text" id="gst-trade" maxlength="120" placeholder="ILA" autocomplete="off"></div>
+                <div class="form-group"><label for="gst-address" style="display:block; margin-bottom:4px;">Address</label><textarea id="gst-address" rows="3" maxlength="300"></textarea></div>
+                <div class="row-group" style="margin-bottom: 15px;">
+                    <div style="flex: 1.4;"><label for="gst-gstin" style="display:block; margin-bottom:4px;">GSTIN</label><input type="text" id="gst-gstin" maxlength="15" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
+                    <div style="flex: 1;"><label for="gst-prefix" style="display:block; margin-bottom:4px;">Number prefix</label><input type="text" id="gst-prefix" maxlength="4" placeholder="ILA" autocapitalize="characters" autocomplete="off"></div>
+                </div>
+                <div class="row-group" style="margin-bottom: 15px;">
+                    <div style="flex: 1;"><label for="gst-phone" style="display:block; margin-bottom:4px;">Phone</label><input type="tel" id="gst-phone" maxlength="30" inputmode="tel"></div>
+                    <div style="flex: 1.4;"><label for="gst-email" style="display:block; margin-bottom:4px;">Email</label><input type="email" id="gst-email" maxlength="120"></div>
+                </div>
+                <div class="row-group" style="margin-bottom: 15px;">
+                    <div style="flex: 1;"><label for="gst-sac" style="display:block; margin-bottom:4px;">SAC</label><input type="text" id="gst-sac" maxlength="8" inputmode="numeric" placeholder="996331"></div>
+                    <div style="flex: 1;"><label for="gst-rate" style="display:block; margin-bottom:4px;">GST rate %</label><input type="number" id="gst-rate" inputmode="decimal" placeholder="5" min="0" max="28" step="0.01"></div>
+                </div>
+                <p class="rec-note" style="margin-top:0;">996331 is restaurant service, including takeaway and delivery. A standalone restaurant charges 5% (2.5% CGST + 2.5% SGST) without input tax credit. Confirm both with the CA.</p>
+                <button class="btn btn-secondary" style="width:100%;" onclick="gstSaveDetails()">Save business details</button>
+            </details>
+
+            <h3 style="margin: 18px 0 6px; font-size: 0.95rem; letter-spacing: 1px; text-transform: uppercase;">Issued automatically</h3>
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label for="gst-mode" style="display:block; margin-bottom:4px;">Which bills get an invoice without anybody asking</label>
+                <select id="gst-mode" onchange="gstSetMode(this.value)">
+                    <option value="accounts">Bills paid by UPI into the accounts ticked below</option>
+                    <option value="all">Every bill, however it was paid</option>
+                    <option value="off">None &mdash; only when a customer asks</option>
+                </select>
+            </div>
+            <div id="gst-accounts"></div>
+            <p class="rec-note">A bill is invoiced whole: one paid partly into a ticked account and partly in cash gets one invoice for all of it. Tips are not part of the invoice.</p>
+
+            <h3 style="margin: 18px 0 6px; font-size: 0.95rem; letter-spacing: 1px; text-transform: uppercase;">Monthly email to the CA</h3>
+            <div class="form-group" style="margin-bottom: 10px;"><label for="gst-ca-email" style="display:block; margin-bottom:4px;">CA's email</label><input type="email" id="gst-ca-email" maxlength="120" autocomplete="off" onchange="gstSaveCA()"></div>
+            <div class="control-row" style="margin-bottom: 10px;">
+                <label style="margin:0; cursor:pointer;" for="gst-auto-mail">Email last month's invoices on the 1st</label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="gst-auto-mail" onchange="gstSetAutoMail(this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="row-group" style="margin-bottom: 10px;">
+                <div style="flex: 1; min-width: min(100%, 11rem);"><input type="month" id="gst-mail-month" aria-label="Month to email"></div>
+                <button class="btn btn-secondary" style="flex: 1;" id="gst-mail-now" onclick="gstMailNow()">Email this month now</button>
+            </div>
+            <div id="gst-mail-status" role="status" class="item-meta"></div>
+            <div id="gst-mail-log" style="margin-top: 8px;"></div>
+            <p class="rec-note">Goes out on the 1st at about 10am, for the month just ended: a summary in the email, the register as a spreadsheet (CSV), and every invoice in one printable file. Cancelled invoices are included and marked, so the serial numbers have no gaps.</p>
+
+            <details id="gst-register-details" style="margin-top: 10px;">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; padding:8px 0;">Invoices</summary>
+                <div class="row-group" style="margin: 8px 0 12px;">
+                    <div style="flex: 1; min-width: min(100%, 11rem);"><input type="month" id="gst-reg-month" aria-label="Month of invoices to show" onchange="gstLoadRegister()"></div>
+                    <button class="btn btn-secondary" style="flex: 0.8;" onclick="gstDownloadCSV()">CSV</button>
+                    <button class="btn btn-secondary" style="flex: 0.8;" onclick="gstDownloadBook()">Printable</button>
+                </div>
+                <div id="gst-reg-kpis" class="rec-kpis"></div>
+                <div id="gst-reg-list" style="margin-top: 12px;"><p style="font-size:0.8rem; letter-spacing:2px; text-transform:uppercase;">Open to load&hellip;</p></div>
+            </details>
+
+            <details id="gst-bills-details">
+                <summary style="cursor:pointer; font-weight:700; letter-spacing:1px; text-transform:uppercase; font-size:0.8rem; padding:8px 0;">Invoice a past bill</summary>
+                <p class="rec-note">The last 60 bills. One paid into a ticked account that has no invoice yet is marked &mdash; that is a till that could not issue it at the time.</p>
+                <div id="gst-bill-form" hidden style="border:1px solid rgba(255,255,255,0.25); border-radius:8px; padding:12px; margin-bottom:12px;">
+                    <div id="gst-bill-for" style="font-weight:700; margin-bottom:8px;"></div>
+                    <div class="form-group" style="margin-bottom:8px;"><input type="text" id="gst-bill-name" maxlength="120" placeholder="Name or business (optional)" aria-label="Customer or business name, optional"></div>
+                    <div class="form-group" style="margin-bottom:8px;"><input type="text" id="gst-bill-gstin" maxlength="15" placeholder="Their GSTIN (optional)" aria-label="Customer GSTIN, optional" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
+                    <div class="form-group" style="margin-bottom:8px;"><input type="text" id="gst-bill-address" maxlength="300" placeholder="Address (optional)" aria-label="Customer address, optional"></div>
+                    <div class="row-group">
+                        <button class="btn btn-secondary" style="flex:1;" id="gst-bill-issue" onclick="gstIssueForBill()">Issue invoice</button>
+                        <button class="btn btn-secondary" style="flex:0.6;" onclick="gstCloseBillForm()">Cancel</button>
+                    </div>
+                    <div id="gst-bill-status" role="status" class="item-meta" style="margin-top:8px;"></div>
+                </div>
+                <div id="gst-bills-list"><p style="font-size:0.8rem; letter-spacing:2px; text-transform:uppercase;">Open to load recent bills&hellip;</p></div>
             </details>
         </div>
 
@@ -876,7 +966,7 @@
     <!-- Watches for a newer deploy and offers a reload. This screen may be open
          all day, and the service worker only applies a new build on the next
          open. Keep data-build in step with build.json — npm test checks it. -->
-    <script src="/build-check.js" data-build="2026-11-12.1"></script>
+    <script src="/build-check.js" data-build="2026-11-26.1"></script>
     <!-- The app's own way of saying something. alert() blocks the event loop, which
          on a till means it stops receiving orders while it is up. See dialogs.js. -->
     <script src="/dialogs.js"></script>
@@ -884,6 +974,9 @@
          on cafe wifi, and the failure is silent by construction: the last data stays
          on screen and new writes wait in memory. See connection.js. -->
     <script src="/connection.js"></script>
+    <!-- GST invoices: the tax in a bill, the numbering and the document. The same file
+         the till, the customer's invoice page and the Worker use. See /gst.js. -->
+    <script src="/gst.js"></script>
 
     <!-- The SDK. It lives here rather than in the head so that everything above it
          can be parsed and painted first; the preload tags up there start the
@@ -1080,6 +1173,7 @@
             populateRecipeDropdowns();
         }, window.ilaRefused("inventory/config/items"));
         loadUPIRouting();
+        loadGST();
         loadUPIVerification();
         loadWebPayments();
         loadRefunds();
@@ -1291,26 +1385,77 @@
         //   each VPA repeated in proportion to remaining headroom; capped-out VPAs removed.
         function upiKey(vpa){ return String(vpa || '').trim().toLowerCase().replace(/[.#$\[\]\/]/g, '_'); }
         function upiMonthKey(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
-        function upiComputeWeights(config, totals){
-            const entries = Object.keys(config || {}).map(k => { const c = config[k] || {}; return { key: k, id: c.id, label: c.label || c.id, cap: parseFloat(c.monthlyCap) || 0, active: c.active !== false, total: parseFloat((totals || {})[k]) || 0 }; }).filter(e => e.active && e.id);
+        // THE YEAR A YEARLY CAP COUNTS IS THE FINANCIAL YEAR, 1 April to 31 March.
+        //
+        // Every limit a bank or the tax office holds an account to runs on it, so a cap
+        // counted Jan-Dec would reset three months away from the limit it is guarding.
+        // There is no yearly total stored anywhere: it is the sum of the monthly totals
+        // already kept under upiRouting/totals/{YYYY-MM}, so an "adjust" on a month is
+        // also an adjustment to its year, and nothing can drift between the two.
+        function upiFYStart(d){ d = d || new Date(); return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; }
+        function upiFYLabel(d){ const y = upiFYStart(d); return y + '-' + String((y + 1) % 100).padStart(2, '0'); }
+        // The months of this financial year so far, current month last.
+        function upiFYMonths(d){
+            d = d || new Date();
+            const y = upiFYStart(d), out = [];
+            for (let i = 0; i < 12; i++){
+                const yy = y + Math.floor((3 + i) / 12), mm = (3 + i) % 12;
+                out.push(yy + '-' + String(mm + 1).padStart(2, '0'));
+                if (yy === d.getFullYear() && mm === d.getMonth()) break;
+            }
+            return out;
+        }
+        // Months left in the year, this one included: November leaves five (Nov-Mar).
+        function upiFYMonthsLeft(d){ return 13 - upiFYMonths(d).length; }
+        // byMonth: { 'YYYY-MM': { key: rupees } } -> { key: rupees this financial year }
+        function upiYearTotals(byMonth, d){
+            const out = {};
+            upiFYMonths(d).forEach(m => { const t = (byMonth || {})[m] || {}; Object.keys(t).forEach(k => { out[k] = (out[k] || 0) + (parseFloat(t[k]) || 0); }); });
+            return out;
+        }
+        // totals: this month, per key. yearTotals: this financial year INCLUDING this month.
+        //
+        // A monthly cap is a hard stop until the 1st, as it always was. A yearly cap is a
+        // hard stop until 1 April, and before that it is PACED: what is left of the year
+        // is shared evenly over the months left of it, and that share is the account's
+        // headroom for this month. Weighted on the raw yearly headroom instead, an account
+        // with ₹12 lakh a year would out-pull one with ₹1 lakh a month twelve to one, eat
+        // its year by summer and drop out for the rest of it. An account that has run
+        // ahead of its pace stays open, just at the back of the queue.
+        function upiComputeWeights(config, totals, yearTotals, monthsLeft){
+            monthsLeft = Math.max(1, parseInt(monthsLeft) || 1);
+            const entries = Object.keys(config || {}).map(k => { const c = config[k] || {}; const total = parseFloat((totals || {})[k]) || 0; return { key: k, id: c.id, label: c.label || c.id, cap: parseFloat(c.monthlyCap) || 0, ycap: parseFloat(c.yearlyCap) || 0, active: c.active !== false, total: total, ytotal: Math.max(total, parseFloat((yearTotals || {})[k]) || 0) }; }).filter(e => e.active && e.id);
             if (!entries.length) return [];
-            const caps = entries.filter(e => e.cap > 0).map(e => e.cap);
+            // A yearly cap stands in for a monthly one at a twelfth of itself, so an
+            // uncapped account is weighed against something of the same size.
+            const caps = entries.map(e => e.cap > 0 ? e.cap : (e.ycap > 0 ? e.ycap / 12 : 0)).filter(c => c > 0);
             const maxCap = caps.length ? Math.max.apply(null, caps) : 0;
             const maxTotal = Math.max.apply(null, entries.map(e => e.total).concat([0]));
             const elig = [];
             for (const e of entries){
-                if (e.cap > 0){ const hr = e.cap - e.total; if (hr > 0) elig.push({ e: e, w: hr }); }
+                if (e.cap > 0 || e.ycap > 0){
+                    const hm = e.cap > 0 ? e.cap - e.total : Infinity;
+                    const hy = e.ycap > 0 ? e.ycap - e.ytotal : Infinity;
+                    if (hm <= 0 || hy <= 0) continue;
+                    const pace = e.ycap > 0 ? (e.ycap - (e.ytotal - e.total)) / monthsLeft - e.total : Infinity;
+                    let w = Math.min(hm, pace);
+                    if (!(w > 0)) w = Math.min(hm, hy, Math.max(1, (maxCap || 1000) * 0.02));
+                    elig.push({ e: e, w: w });
+                }
                 else { const w = maxCap > 0 ? Math.max(maxCap - e.total, maxCap * 0.1) : (maxTotal - e.total + 1000); elig.push({ e: e, w: w }); }
             }
             if (!elig.length){
                 let best = null;
-                for (const e of entries){ const over = e.total - e.cap; if (!best || over < best.over) best = { e: e, over: over }; }
+                for (const e of entries){
+                    const over = Math.max(e.cap > 0 ? e.total - e.cap : -Infinity, e.ycap > 0 ? e.ytotal - e.ycap : -Infinity);
+                    if (!best || over < best.over) best = { e: e, over: over };
+                }
                 return best ? [{ e: best.e, w: 1 }] : [];
             }
             return elig;
         }
-        function upiWeightedList(config, totals){
-            const elig = upiComputeWeights(config, totals);
+        function upiWeightedList(config, totals, yearTotals, monthsLeft){
+            const elig = upiComputeWeights(config, totals, yearTotals, monthsLeft);
             if (!elig.length) return null;
             if (elig.length === 1) return [elig[0].e.id];
             const sum = elig.reduce((a, x) => a + x.w, 0) || 1;
@@ -2132,7 +2277,15 @@
             if (ea) ea.addEventListener('toggle', function(){ if (ea.open) loadETAAccuracy(); });
         });
 
-        let upiCfg = {}, upiTot = {}, upiAllTot = {}, upiMigrated = false;
+        let upiCfg = {}, upiTot = {}, upiAllTot = {}, upiAllLoaded = false, upiMigrated = false;
+        // This financial year per key, with the CURRENT month taken from upiTot — the rolling
+        // feed is the one that is certain to be on this month, and upiAllTot may arrive later.
+        function upiYearNow(){
+            const byMonth = Object.assign({}, upiAllTot || {});
+            byMonth[upiMonthKey()] = upiTot || {};
+            return upiYearTotals(byMonth);
+        }
+        function upiHasYearCaps(){ return Object.keys(upiCfg || {}).some(k => parseFloat((upiCfg[k] || {}).yearlyCap) > 0); }
         function loadUPIRouting(){
             db.ref('upiRouting/config').on('value', snap => {
                 upiCfg = snap.val() || {};
@@ -2149,6 +2302,7 @@
                     return;
                 }
                 renderUPIRouting(); renderUPIHistory(); syncPublicUPIList();
+                if (typeof renderGSTAccounts === 'function'){ renderGSTAccounts(); renderGSTHealth(); }
             }, window.ilaRefused("upiRouting/config"));
             // Rolling: this admin screen is left open, and the key is a MONTH. Frozen on
             // the month it booted in, upiTot goes on describing last month — and it is
@@ -2158,11 +2312,16 @@
             window.upiTotFeed = window.ilaRolling(function(){ return 'upiRouting/totals/' + upiMonthKey(); },
                 snap => { upiTot = snap.val() || {}; renderUPIRouting(); syncPublicUPIList(); },
                 window.ilaRefused("upiRouting/totals"));
-            db.ref('upiRouting/totals').on('value', snap => { upiAllTot = snap.val() || {}; renderUPIHistory(); }, window.ilaRefused("upiRouting/totals"));
+            // The year is the sum of these months, so a yearly cap is only enforceable once
+            // they are in: the routing row and the published list wait for it.
+            db.ref('upiRouting/totals').on('value', snap => { upiAllTot = snap.val() || {}; upiAllLoaded = true; renderUPIRouting(); renderUPIHistory(); syncPublicUPIList(); }, window.ilaRefused("upiRouting/totals"));
         }
         function syncPublicUPIList(){
             if (!Object.keys(upiCfg).length) return;
-            const list = upiWeightedList(upiCfg, upiTot);
+            // Without the earlier months a yearly-capped account looks like it has its whole
+            // year left, and this would put it back into rotation after the cap took it out.
+            if (upiHasYearCaps() && !upiAllLoaded) return;
+            const list = upiWeightedList(upiCfg, upiTot, upiYearNow(), upiFYMonthsLeft());
             if (!list || !list.length) return;
             db.ref('settings/upiList').once('value').then(s => {
                 if (JSON.stringify(s.val() || []) !== JSON.stringify(list)) db.ref('settings/upiList').set(list);
@@ -2174,19 +2333,37 @@
             if (!keys.length){ box.innerHTML = "<p style=' font-size:0.9rem;'>No UPI IDs yet — add one above.</p>"; return; }
             const day = Math.max(1, new Date().getDate());
             const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+            const year = upiYearNow(), fy = upiFYLabel();
+            const fyStart = new Date(upiFYStart(), 3, 1), fyEnd = new Date(upiFYStart() + 1, 2, 31);
+            const fyDays = Math.max(1, Math.round((Date.now() - fyStart.getTime()) / 86400000) + 1);
             let html = '';
             keys.forEach(k => {
                 const c = upiCfg[k]; if (!c) return;
                 const cap = parseFloat(c.monthlyCap) || 0;
+                const ycap = parseFloat(c.yearlyCap) || 0;
                 const total = parseFloat(upiTot[k]) || 0;
+                const ytotal = Math.max(total, parseFloat(year[k]) || 0);
                 const active = c.active !== false;
-                let meta, barHTML = '';
+                let meta, barHTML = '', ymeta, ybarHTML = '';
+                if (ycap > 0){
+                    const yutil = ytotal / ycap;
+                    const ypct = Math.min(100, Math.round(yutil * 100));
+                    const ycol = yutil >= 1 ? 'rgba(244,67,54,0.85)' : (yutil >= 0.8 ? 'rgba(255,193,7,0.85)' : 'rgba(255,255,255,0.45)');
+                    let yproj = '';
+                    if (!upiAllLoaded) yproj = 'adding up the year…';
+                    else if (ytotal >= ycap) yproj = 'capped — resumes 1 April';
+                    else { const rate = ytotal / fyDays; if (rate > 0){ const hit = new Date(Date.now() + (ycap - ytotal) / rate * 86400000); yproj = hit <= fyEnd ? ('on pace to hit cap ~' + hit.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })) : "won't hit cap this year"; } }
+                    ymeta = 'FY ' + fy + ': ' + inr(ytotal) + ' of ' + inr(ycap) + ' · ' + ypct + '%' + (yproj ? ' · ' + yproj : '');
+                    ybarHTML = '<div style="height:6px; border-radius:3px; background:rgba(0,0,0,0.35); margin-top:6px; overflow:hidden;"><div style="height:100%; width:' + ypct + '%; background:' + ycol + ';"></div></div>';
+                } else {
+                    ymeta = 'FY ' + fy + ': ' + (upiAllLoaded ? inr(ytotal) : '…') + ' · no yearly cap';
+                }
                 if (cap > 0){
                     const util = total / cap;
                     const pct = Math.min(100, Math.round(util * 100));
                     const col = util >= 1 ? 'rgba(244,67,54,0.85)' : (util >= 0.8 ? 'rgba(255,193,7,0.85)' : 'rgba(255,255,255,0.45)');
                     let proj = '';
-                    if (total >= cap) proj = 'capped — resumes on the 1st';
+                    if (total >= cap) proj = (ycap > 0 && ytotal >= ycap) ? 'capped' : 'capped — resumes on the 1st';
                     else { const rate = total / day; if (rate > 0){ const daysLeft = (cap - total) / rate; const hit = new Date(Date.now() + daysLeft * 86400000); const monthEnd = new Date(); monthEnd.setMonth(monthEnd.getMonth() + 1, 0); proj = hit <= monthEnd ? ('on pace to hit cap ~' + hit.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })) : "won't hit cap this month"; } }
                     meta = inr(total) + ' of ' + inr(cap) + ' · ' + pct + '%' + (proj ? ' · ' + proj : '');
                     barHTML = '<div style="height:6px; border-radius:3px; background:rgba(0,0,0,0.35); margin-top:8px; overflow:hidden;"><div style="height:100%; width:' + pct + '%; background:' + col + ';"></div></div>';
@@ -2195,14 +2372,18 @@
                 }
                 html += '<div class="list-item" style="display:block;">'
                     + '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">'
-                    + '<div style="min-width:0;"><div class="item-name">' + escapeHTML(c.label || c.id) + (active ? '' : ' <span class="badge">Paused</span>') + '</div><div class="item-meta" style="word-break:break-all;">' + escapeHTML(c.id) + '</div></div>'
+                    + '<div style="min-width:0;"><div class="item-name">' + escapeHTML(c.label || c.id) + (active ? '' : ' <span class="badge">Paused</span>') + (window.gstCfg && window.gstCfg.accounts && window.gstCfg.accounts[k] ? ' <span class="badge">GST invoices</span>' : '') + '</div><div class="item-meta" style="word-break:break-all;">' + escapeHTML(c.id) + '</div></div>'
                     + '<div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">'
                     + '<label class="toggle-switch"><input type="checkbox" ' + (active ? 'checked' : '') + ' onchange="upiToggle(\'' + k + '\')"><span class="slider"></span></label>'
                     + '<button class="btn-action" style="border-color: rgba(255,255,255,0.2);" onclick="upiRemove(\'' + k + '\')">✖</button>'
                     + '</div></div>'
                     + '<div style="display:flex; align-items:center; gap:10px; margin-top:10px;">'
                     + '<label style="margin:0; flex-shrink:0;">Cap ₹/mo</label>'
-                    + '<input type="number" inputmode="decimal" value="' + (cap || '') + '" placeholder="0 = no cap" style="flex:1; padding:8px;" onchange="upiSetCap(\'' + k + '\', this.value)">'
+                    + '<input type="number" inputmode="decimal" value="' + (cap || '') + '" placeholder="0 = no cap" aria-label="Monthly cap in rupees" style="flex:1; padding:8px;" onchange="upiSetCap(\'' + k + '\', this.value)">'
+                    + '</div>'
+                    + '<div style="display:flex; align-items:center; gap:10px; margin-top:8px;">'
+                    + '<label style="margin:0; flex-shrink:0;">Cap ₹/yr</label>'
+                    + '<input type="number" inputmode="decimal" value="' + (ycap || '') + '" placeholder="0 = no cap" aria-label="Yearly cap in rupees, April to March" style="flex:1; padding:8px;" onchange="upiSetYearCap(\'' + k + '\', this.value)">'
                     + '</div>'
                     + '<div style="display:flex; align-items:center; gap:10px; margin-top:8px;">'
                     + '<label style="margin:0; flex-shrink:0;">Bank</label>'
@@ -2210,6 +2391,8 @@
                     + '</div>'
                     + '<div class="item-meta" style="margin-top:8px;">' + meta + ' <button class="rec-mini" style="margin-left:6px;" onclick="upiAdjust(\'' + k + '\')">adjust</button></div>'
                     + barHTML
+                    + '<div class="item-meta" style="margin-top:8px;">' + ymeta + '</div>'
+                    + ybarHTML
                     + '</div>';
             });
             // A REBUILD MUST NOT REACH UNDER SOMEBODY'S CURSOR.
@@ -2232,7 +2415,28 @@
             const months = Object.keys(upiAllTot || {}).sort().reverse();
             if (!months.length){ box.innerHTML = "<p class='rec-note'>No history yet — totals build as UPI payments settle.</p>"; return; }
             const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+            const label = k => escapeHTML((upiCfg[k] && (upiCfg[k].label || upiCfg[k].id)) || k);
+            // Financial years, newest first: April's key starts one.
+            const years = {};
+            months.forEach(m => {
+                const y = parseInt(m.slice(0, 4)), mo = parseInt(m.slice(5, 7));
+                const start = mo >= 4 ? y : y - 1;
+                const fy = start + '-' + String((start + 1) % 100).padStart(2, '0');
+                const t = upiAllTot[m] || {};
+                years[fy] = years[fy] || {};
+                Object.keys(t).forEach(k => { years[fy][k] = (years[fy][k] || 0) + (parseFloat(t[k]) || 0); });
+            });
             let html = '<table class="rec-table"><tbody>';
+            Object.keys(years).sort().reverse().forEach(fy => {
+                const t = years[fy];
+                const parts = Object.keys(t).map(k => {
+                    const yc = parseFloat((upiCfg[k] || {}).yearlyCap) || 0;
+                    return label(k) + ' ' + inr(t[k]) + (yc > 0 ? ' of ' + inr(yc) : '');
+                });
+                const sum = Object.keys(t).reduce((a, k) => a + t[k], 0);
+                html += '<tr><td style="white-space:nowrap;"><strong>FY ' + escapeHTML(fy) + '</strong></td><td>' + parts.join(' · ') + '</td><td class="num">' + inr(sum) + '</td></tr>';
+            });
+            html += '</tbody></table><table class="rec-table" style="margin-top:10px;"><tbody>';
             months.forEach(m => {
                 const t = upiAllTot[m] || {};
                 const parts = Object.keys(t).map(k => escapeHTML((upiCfg[k] && (upiCfg[k].label || upiCfg[k].id)) || k) + ' ' + inr(parseFloat(t[k]) || 0));
@@ -2245,11 +2449,12 @@
             const id = document.getElementById('upi-new-id').value.trim();
             const label = document.getElementById('upi-new-label').value.trim();
             const cap = parseFloat(document.getElementById('upi-new-cap').value) || 0;
+            const ycap = parseFloat(document.getElementById('upi-new-ycap').value) || 0;
             if (!id || id.indexOf('@') < 1) return ilaFieldError('upi-new-id', 'Enter a valid VPA like name@bank');
             const k = upiKey(id);
             if (upiCfg[k]) return ilaToast('That UPI ID is already added');
-            db.ref('upiRouting/config/' + k).set({ id: id, label: label || id.split('@')[0], monthlyCap: cap, active: true });
-            document.getElementById('upi-new-id').value = ''; document.getElementById('upi-new-label').value = ''; document.getElementById('upi-new-cap').value = '';
+            db.ref('upiRouting/config/' + k).set({ id: id, label: label || id.split('@')[0], monthlyCap: cap, yearlyCap: ycap, active: true });
+            document.getElementById('upi-new-id').value = ''; document.getElementById('upi-new-label').value = ''; document.getElementById('upi-new-cap').value = ''; document.getElementById('upi-new-ycap').value = '';
         };
         window.upiRemove = async function(k){
             const c = upiCfg[k]; if (!c) return;
@@ -2269,6 +2474,10 @@
             const cap = parseFloat(val) || 0;
             db.ref('upiRouting/config/' + k + '/monthlyCap').set(cap);
         };
+        window.upiSetYearCap = function(k, val){
+            const ycap = parseFloat(val) || 0;
+            db.ref('upiRouting/config/' + k + '/yearlyCap').set(ycap);
+        };
         window.upiSetBank = function(k, val){
             const bank = String(val || '').trim().toLowerCase();
             db.ref('upiRouting/config/' + k + '/bank').set(bank || null);
@@ -2281,6 +2490,398 @@
             const n = parseFloat(v);
             if (isNaN(n) || n < 0) return ilaToast('Enter a valid amount');
             db.ref('upiRouting/totals/' + upiMonthKey() + '/' + k).set(n);
+        };
+        // ISSUING AN INVOICE. The same function on the till and on the owner's screen.
+        //
+        // One update writes the year's counter, the invoice at that number, the bill's
+        // index and the customer's copy, and the rules refuse it unless the counter moves
+        // up by exactly one to the number the invoice is written at, the invoice is dated
+        // by the server, and the bill has no invoice yet. So two screens issuing at the
+        // same moment cannot share a number or leave a gap: the second is refused, reads
+        // the counter again and takes the next one. A bill that already has an invoice is
+        // answered with it, which is what makes asking twice harmless.
+        //
+        // Resolves { ref, no, token } for a new invoice, { existing: true, ref } for a
+        // bill that had one; rejects when it could not issue at all.
+        async function gstIssue(draft, billKey, settings){
+            const fy = IlaGST.fyOf(Date.now());
+            const prefix = IlaGST.cleanPrefix(settings && settings.prefix);
+            const prior = (await db.ref('gst/byBill/' + billKey).once('value')).val();
+            if (prior) return { existing: true, ref: prior };
+            // floor: the number a refusal says is already taken. A screen's copy of the
+            // counter can lag the server's for a moment after somebody else's invoice, and
+            // reading it again would ask for the same taken number; asking past the one
+            // refused cannot leave a gap, because the rules take only the next one.
+            let lastErr = null, floor = 0;
+            for (let tries = 0; tries < 10; tries++){
+                const cur = parseInt((await db.ref('gst/counter/' + fy).once('value')).val()) || 0;
+                const seq = Math.max(cur, floor) + 1, token = IlaGST.token(), no = IlaGST.invoiceNo(prefix, fy, seq);
+                const inv = Object.assign({}, draft, { no: no, seq: seq, fy: fy, token: token,
+                                                       at: firebase.database.ServerValue.TIMESTAMP });
+                const updates = {};
+                updates['gst/counter/' + fy] = seq;
+                updates['gst/invoices/' + fy + '/' + seq] = inv;
+                updates['gst/byBill/' + billKey] = fy + '/' + seq;
+                updates['gst/public/' + token] = IlaGST.publicCopy(inv);
+                try {
+                    await db.ref().update(updates);
+                    return { ref: fy + '/' + seq, no: no, token: token };
+                } catch (e) {
+                    lastErr = e;
+                    // Refused: somebody took this number, or invoiced this bill, first.
+                    const again = (await db.ref('gst/byBill/' + billKey).once('value')).val();
+                    if (again) return { existing: true, ref: again };
+                    floor = seq;
+                    await new Promise(r => setTimeout(r, 200 + Math.random() * 400));
+                }
+            }
+            throw lastErr || new Error('No invoice number could be taken');
+        }
+
+        // ===== GST INVOICES =====
+        // gst/settings   the business, the mode, the ticked accounts, the CA's address
+        // gst/invoices   {fy}/{seq} — the register, written by gstIssue (here and on the till)
+        // gst/byBill     which invoice a bill has
+        // gst/public     the customer's copy, by token
+        // gst/mailLog    what the Worker did about each month's email
+        //
+        // Read with quiet refusals and said in words on the card instead: until the rules
+        // for gst/ are deployed every one of these is refused, and "Could not load
+        // gst/settings" across the top of the page says less than the card can.
+        window.gstCfg = null;
+        let gstRefused = false, gstMailLog = {}, gstRegRows = [], gstRegMonth = null, gstBills = [], gstBillSel = null;
+        const GST_DEFAULT_GSTIN = '05CPEPP3821F1Z4';
+        function gstWho(){ return (window.currentAdmin && window.currentAdmin.name) || 'admin'; }
+        function loadGST(){
+            db.ref('gst/settings').on('value', s => {
+                window.gstCfg = s.val() || {}; gstRefused = false;
+                renderGSTSettings(); renderGSTAccounts(); renderGSTHealth(); renderUPIRouting();
+            }, function(err){ gstRefused = true; window.ilaRefused.quiet('gst/settings')(err); renderGSTHealth(); });
+            db.ref('gst/mailLog').limitToLast(12).on('value', s => { gstMailLog = s.val() || {}; renderGSTMailLog(); },
+                window.ilaRefused.quiet('gst/mailLog'));
+            const mm = document.getElementById('gst-mail-month'); if (mm && !mm.value) mm.value = IlaGST.prevMonth(Date.now());
+            const rm = document.getElementById('gst-reg-month'); if (rm && !rm.value) rm.value = IlaGST.monthOf(Date.now());
+            const rd = document.getElementById('gst-register-details');
+            if (rd) rd.addEventListener('toggle', function(){ if (rd.open) gstLoadRegister(); });
+            const bd = document.getElementById('gst-bills-details');
+            if (bd) bd.addEventListener('toggle', function(){ if (bd.open) gstLoadBills(); });
+            // One listener per list, reading what to do off the button: nothing is built
+            // into an onclick string, so nothing in an invoice can become code.
+            const reg = document.getElementById('gst-reg-list');
+            if (reg) reg.addEventListener('click', function(ev){
+                const b = ev.target.closest('button[data-gst]'); if (!b) return;
+                if (b.dataset.gst === 'open') gstOpen(b.dataset.token);
+                if (b.dataset.gst === 'cancel') gstCancel(b.dataset.fy, parseInt(b.dataset.seq, 10));
+            });
+            const bl = document.getElementById('gst-bills-list');
+            if (bl) bl.addEventListener('click', function(ev){
+                const b = ev.target.closest('button[data-gst]'); if (!b) return;
+                if (b.dataset.gst === 'open') gstOpen(b.dataset.token);
+                if (b.dataset.gst === 'issue') gstOpenBillForm(b.dataset.key);
+            });
+        }
+        function gstOpen(token){ if (token) window.open('/invoice.html?t=' + encodeURIComponent(token), '_blank', 'noopener'); }
+
+        function renderGSTHealth(){
+            const box = document.getElementById('gst-health'); if (!box) return;
+            const s = window.gstCfg || {};
+            let msg = '', cls = '';
+            if (gstRefused){
+                msg = 'The database is refusing GST data, so nothing can be issued yet. The rules for it have to be deployed: GitHub → Actions → deploy database rules → Run workflow.'; cls = 'bad';
+            } else if (window.gstCfg === null){
+                msg = 'Loading…';
+            } else {
+                const missing = IlaGST.settingsProblems(s);
+                const mode = s.mode || 'accounts';
+                const ticked = Object.keys(s.accounts || {}).filter(k => s.accounts[k] && upiCfg[k]);
+                if (missing.length){ msg = 'Before any invoice can be issued, Business details needs ' + missing.join(', ') + '.'; cls = 'warn'; }
+                else if (mode === 'off') msg = 'Ready. Nothing is invoiced automatically; the till issues one whenever a customer asks.';
+                else if (mode === 'all') msg = 'Ready. Every bill is invoiced when it is settled.';
+                else if (!ticked.length){ msg = 'Ready, but no account is ticked below, so nothing is invoiced automatically yet. Add the current account under UPI Routing, then tick it here.'; cls = 'warn'; }
+                else msg = 'Ready. Bills paid by UPI into ' + ticked.map(k => (upiCfg[k].label || upiCfg[k].id)).join(', ') + ' are invoiced when they are settled.';
+                if (!missing.length && s.autoMail && !s.caEmail){ msg += ' The monthly email is on but has no address to go to.'; cls = 'warn'; }
+            }
+            box.className = 'rec-note' + (cls ? ' rec-kpi ' + cls : '');
+            box.textContent = msg;
+        }
+        // Fill the fields from the settings — except one that is being typed in, which a
+        // write from another screen must not snatch out from under the cursor.
+        function gstFill(id, v){ const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = v == null ? '' : v; }
+        function renderGSTSettings(){
+            const s = window.gstCfg || {};
+            gstFill('gst-legal', s.legalName); gstFill('gst-trade', s.tradeName); gstFill('gst-address', s.address);
+            gstFill('gst-gstin', s.gstin || GST_DEFAULT_GSTIN); gstFill('gst-prefix', s.prefix);
+            gstFill('gst-phone', s.phone); gstFill('gst-email', s.email);
+            gstFill('gst-sac', s.sac); gstFill('gst-rate', s.rate != null ? s.rate : '');
+            gstFill('gst-ca-email', s.caEmail);
+            const mode = document.getElementById('gst-mode'); if (mode) mode.value = s.mode || 'accounts';
+            const am = document.getElementById('gst-auto-mail'); if (am) am.checked = !!s.autoMail;
+            const det = document.getElementById('gst-setup-details');
+            if (det && !det.dataset.touched && IlaGST.settingsProblems(s).length) det.open = true;
+        }
+        function renderGSTAccounts(){
+            const box = document.getElementById('gst-accounts'); if (!box) return;
+            const s = window.gstCfg || {}, acc = s.accounts || {};
+            const keys = Object.keys(upiCfg || {});
+            const mode = s.mode || 'accounts';
+            if (!keys.length){ box.innerHTML = "<p class='rec-note'>No UPI IDs yet — add them under UPI Routing.</p>"; return; }
+            // Not dimmed when they do not apply: said, in a sentence, and the boxes are
+            // disabled — dimmed text is text nobody can read (test/contrast-browser).
+            let html = mode === 'accounts' ? '' : "<p class='rec-note'>The ticks below are only used when the first option is chosen above.</p>";
+            keys.forEach(k => {
+                const c = upiCfg[k]; if (!c) return;
+                html += '<label class="control-row" style="margin-bottom:8px; cursor:pointer; gap:12px;">'
+                      + '<span style="min-width:0;"><span class="item-name">' + escapeHTML(c.label || c.id) + '</span><br><span class="item-meta" style="word-break:break-all;">' + escapeHTML(c.id) + '</span></span>'
+                      + '<input type="checkbox" data-gst-acct="' + escapeHTML(k) + '"' + (acc[k] ? ' checked' : '') + (mode === 'accounts' ? '' : ' disabled') + ' style="width:22px; height:22px; flex-shrink:0;">'
+                      + '</label>';
+            });
+            if (box.innerHTML !== html) box.innerHTML = html;
+        }
+        document.addEventListener('change', function(ev){
+            const t = ev.target; if (!t || !t.dataset || t.dataset.gstAcct === undefined) return;
+            const k = t.dataset.gstAcct;
+            if (!upiCfg[k]) return;
+            db.ref('gst/settings/accounts/' + k).set(t.checked ? true : null)
+                .catch(e => { t.checked = !t.checked; ilaTell('Not saved', e.message); });
+        });
+
+        window.gstSaveDetails = async function(){
+            const v = id => (document.getElementById(id).value || '').trim();
+            const gstin = IlaGST.normGSTIN(v('gst-gstin'));
+            if (!IlaGST.validGSTIN(gstin)) return ilaFieldError('gst-gstin', 'That GSTIN does not check out — look at it again');
+            const rateText = v('gst-rate'), rate = rateText === '' ? IlaGST.DEFAULT_RATE : parseFloat(rateText);
+            if (!(rate >= 0 && rate <= 28)) return ilaFieldError('gst-rate', 'A GST rate between 0 and 28');
+            const sac = v('gst-sac').replace(/\D/g, '');
+            if (sac && sac.length !== 6) return ilaFieldError('gst-sac', 'A SAC is six digits');
+            const email = v('gst-email');
+            if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return ilaFieldError('gst-email', 'That does not look like an email address');
+            if (!v('gst-legal')) return ilaFieldError('gst-legal', 'The legal name is printed on every invoice');
+            if (!v('gst-address')) return ilaFieldError('gst-address', 'The address is printed on every invoice');
+            const upd = {
+                legalName: v('gst-legal'), tradeName: v('gst-trade') || null, address: v('gst-address'),
+                gstin: gstin, prefix: IlaGST.cleanPrefix(v('gst-prefix')), phone: v('gst-phone') || null,
+                email: email || null, sac: sac || IlaGST.DEFAULT_SAC, rate: rate
+            };
+            try { await db.ref('gst/settings').update(upd); ilaToast('Business details saved'); }
+            catch (e){ ilaTell('Not saved', e.message); }
+        };
+        window.gstSetMode = function(v){
+            if (['accounts', 'all', 'off'].indexOf(v) < 0) return;
+            db.ref('gst/settings/mode').set(v).catch(e => ilaTell('Not saved', e.message));
+        };
+        window.gstSaveCA = function(){
+            const el = document.getElementById('gst-ca-email');
+            const v = (el.value || '').trim();
+            if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return ilaFieldError('gst-ca-email', 'That does not look like an email address');
+            db.ref('gst/settings/caEmail').set(v || null).then(() => ilaToast(v ? 'The CA’s email is saved' : 'Removed'), e => ilaTell('Not saved', e.message));
+        };
+        window.gstSetAutoMail = function(on){
+            const s = window.gstCfg || {};
+            if (on && !s.caEmail){
+                document.getElementById('gst-auto-mail').checked = false;
+                return ilaFieldError('gst-ca-email', "Enter the CA's email first");
+            }
+            db.ref('gst/settings/autoMail').set(!!on).catch(e => ilaTell('Not saved', e.message));
+        };
+
+        // ---- the monthly email
+        function renderGSTMailLog(){
+            const box = document.getElementById('gst-mail-log'); if (!box) return;
+            const months = Object.keys(gstMailLog || {}).sort().reverse();
+            if (!months.length){ box.innerHTML = ''; return; }
+            let html = '<table class="rec-table"><tbody>';
+            months.forEach(m => {
+                const r = gstMailLog[m] || {};
+                const what = r.ok
+                    ? 'sent ' + (r.at ? IlaGST.dateTimeText(r.at) : '') + ' · ' + (parseInt(r.count) || 0) + ' invoice' + (parseInt(r.count) === 1 ? '' : 's') + (r.to ? ' · to ' + r.to : '')
+                    : 'NOT sent' + (r.at ? ' (' + IlaGST.dateTimeText(r.at) + ')' : '') + (r.error ? ': ' + r.error : '');
+                html += '<tr><td style="white-space:nowrap;"><strong>' + escapeHTML(IlaGST.monthLabel(m)) + '</strong></td><td>' + escapeHTML(what) + (r.how === 'asked' ? ' · by hand' : '') + '</td></tr>';
+            });
+            box.innerHTML = html + '</tbody></table>';
+        }
+        // The Worker sends it: it is the only thing here that can send email, and the
+        // only thing that runs when nobody has this page open, which is what the 1st of
+        // the month needs. This button asks it to send one now, as the signed-in owner.
+        window.gstMailNow = async function(){
+            const month = document.getElementById('gst-mail-month').value;
+            const status = document.getElementById('gst-mail-status');
+            const btn = document.getElementById('gst-mail-now');
+            if (!/^\d{4}-\d{2}$/.test(month)) return ilaFieldError('gst-mail-month', 'Pick a month');
+            const s = window.gstCfg || {};
+            if (!s.caEmail) return ilaFieldError('gst-ca-email', "Enter the CA's email first");
+            if (!await ilaAsk('Email ' + IlaGST.monthLabel(month) + '’s invoices?', 'To ' + s.caEmail + ': a summary, the register as a spreadsheet, and every invoice in one printable file.', { ok: 'Send', cancel: 'Cancel' })) return;
+            btn.disabled = true; status.textContent = 'Sending…';
+            try {
+                const u = firebase.auth().currentUser;
+                const token = u ? await u.getIdToken() : null;
+                if (!token){ status.textContent = 'Not signed in — reload and sign in, then try again.'; return; }
+                const res = await fetch(ALERT_WORKER_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
+                                                            body: JSON.stringify({ action: 'gst-mail', token: token, month: month }) });
+                const out = await res.json().catch(() => ({}));
+                status.textContent = (res.ok && out.ok)
+                    ? 'Sent — ' + (out.count || 0) + ' invoice' + (out.count === 1 ? '' : 's') + ' for ' + IlaGST.monthLabel(month) + ' to ' + (out.to || s.caEmail) + '.'
+                    : 'Not sent: ' + (out.error || ('the Worker answered ' + res.status));
+            } catch (e){
+                status.textContent = 'Not sent: the Worker could not be reached (' + ((e && e.message) || e) + ').';
+            } finally { btn.disabled = false; }
+        };
+
+        // ---- the register
+        window.gstLoadRegister = async function(){
+            const list = document.getElementById('gst-reg-list'), kpis = document.getElementById('gst-reg-kpis');
+            const month = document.getElementById('gst-reg-month').value || IlaGST.monthOf(Date.now());
+            const fy = IlaGST.fyOfMonth(month), r = IlaGST.monthRange(month);
+            if (!fy || !r) return;
+            list.innerHTML = "<p style='font-size:0.8rem; letter-spacing:2px; text-transform:uppercase;'>Loading&hellip;</p>";
+            try {
+                const snap = await db.ref('gst/invoices/' + fy).orderByChild('at').startAt(r.start).endAt(r.end - 1).once('value');
+                const v = snap.val() || {};
+                gstRegRows = Object.keys(v).map(k => v[k]).filter(Boolean).sort((a, b) => (a.seq || 0) - (b.seq || 0));
+                gstRegMonth = month;
+            } catch (e){
+                list.innerHTML = "<p class='rec-note'>Could not load the invoices: " + escapeHTML(e.message || String(e)) + '</p>';
+                return;
+            }
+            const sm = IlaGST.summary(gstRegRows);
+            const kpi = (lbl, val, sub) => '<div class="rec-kpi"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div>' + (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>';
+            kpis.innerHTML = kpi('Invoices', sm.issued, sm.cancelled ? sm.cancelled + ' cancelled' : (sm.first ? escapeHTML(sm.first) + ' – ' + escapeHTML(sm.last) : ''))
+                           + kpi('Total', escapeHTML(IlaGST.inr(sm.total)), 'taxable ' + escapeHTML(IlaGST.inr(sm.taxable)))
+                           + kpi('CGST', escapeHTML(IlaGST.inr(sm.cgst)), '')
+                           + kpi('SGST', escapeHTML(IlaGST.inr(sm.sgst)), '');
+            if (!gstRegRows.length){ list.innerHTML = "<p class='rec-note'>No invoices in " + escapeHTML(IlaGST.monthLabel(month)) + '.</p>'; return; }
+            let html = '<table class="rec-table"><tbody>';
+            gstRegRows.slice().reverse().forEach(inv => {
+                const b = inv.buyer || {}, cancelled = inv.status === 'cancelled';
+                html += '<tr><td style="white-space:nowrap;"><strong>' + escapeHTML(inv.no) + '</strong><br><span class="item-meta">' + escapeHTML(IlaGST.dateTimeText(inv.at)) + '</span></td>'
+                      + '<td>' + escapeHTML((inv.bill && inv.bill.label) || '') + (b.name ? ' · ' + escapeHTML(b.name) : '') + (b.gstin ? ' · ' + escapeHTML(b.gstin) : '')
+                      + (cancelled ? ' <span class="badge">Cancelled</span>' : '') + (inv.how === 'auto' ? '' : ' <span class="badge">Asked</span>') + '</td>'
+                      + '<td class="num">' + escapeHTML(IlaGST.inr(inv.total)) + '</td>'
+                      + '<td style="white-space:nowrap;"><button class="rec-mini" data-gst="open" data-token="' + escapeHTML(inv.token) + '">open</button>'
+                      + (cancelled ? '' : ' <button class="rec-mini" data-gst="cancel" data-fy="' + escapeHTML(inv.fy) + '" data-seq="' + (parseInt(inv.seq) || 0) + '">cancel</button>') + '</td></tr>';
+            });
+            list.innerHTML = html + '</tbody></table>';
+        };
+        async function gstRowsFor(month){
+            if (gstRegMonth !== month) { document.getElementById('gst-reg-month').value = month; await gstLoadRegister(); }
+            return gstRegRows;
+        }
+        function gstDownload(name, text, type){
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([text], { type: type }));
+            a.download = name;
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        }
+        window.gstDownloadCSV = async function(){
+            const month = document.getElementById('gst-reg-month').value || IlaGST.monthOf(Date.now());
+            const rows = await gstRowsFor(month);
+            gstDownload('ILA-GST-invoices-' + month + '.csv', IlaGST.csv(rows), 'text/csv;charset=utf-8');
+        };
+        window.gstDownloadBook = async function(){
+            const month = document.getElementById('gst-reg-month').value || IlaGST.monthOf(Date.now());
+            const rows = await gstRowsFor(month);
+            gstDownload('ILA-GST-invoices-' + month + '.html', IlaGST.book(rows, { title: IlaGST.monthLabel(month), seller: IlaGST.sellerOf(window.gstCfg) }), 'text/html;charset=utf-8');
+        };
+        // Cancelling leaves the invoice in the register, marked, with its number: a serial
+        // that disappeared would be a gap an accountant has to explain. The customer's
+        // link says CANCELLED from then on.
+        async function gstCancel(fy, seq){
+            const inv = gstRegRows.find(x => x.fy === fy && x.seq === seq); if (!inv) return;
+            const reason = await ilaAskText('Cancel ' + inv.no + '?', 'It stays in the register marked cancelled, and its number is not used again. Why is it being cancelled?', { placeholder: 'e.g. wrong bill, the customer wants their GSTIN on it' });
+            if (reason === null) return;
+            if (!String(reason).trim()) return ilaToast('A reason is needed to cancel an invoice');
+            const why = String(reason).trim().slice(0, 200);
+            const updates = {};
+            updates['gst/invoices/' + fy + '/' + seq + '/status'] = 'cancelled';
+            updates['gst/invoices/' + fy + '/' + seq + '/cancelledAt'] = firebase.database.ServerValue.TIMESTAMP;
+            updates['gst/invoices/' + fy + '/' + seq + '/cancelledBy'] = gstWho();
+            updates['gst/invoices/' + fy + '/' + seq + '/cancelReason'] = why;
+            updates['gst/public/' + inv.token + '/status'] = 'cancelled';
+            updates['gst/public/' + inv.token + '/cancelledAt'] = firebase.database.ServerValue.TIMESTAMP;
+            updates['gst/public/' + inv.token + '/cancelReason'] = why;
+            if (inv.bill && inv.bill.key && await ilaAsk('Invoice this bill again?', 'Say yes if a corrected invoice is to be issued for the same bill — with the customer’s GSTIN on it, say. It will get a new number.', { ok: 'Yes, free the bill', cancel: 'No' }))
+                updates['gst/byBill/' + inv.bill.key] = null;
+            try { await db.ref().update(updates); ilaToast(inv.no + ' cancelled'); gstLoadRegister(); }
+            catch (e){ ilaTell('Not cancelled', e.message); }
+        }
+
+        // ---- a past bill, invoiced from here
+        window.gstLoadBills = async function(){
+            const box = document.getElementById('gst-bills-list');
+            box.innerHTML = "<p style='font-size:0.8rem; letter-spacing:2px; text-transform:uppercase;'>Loading&hellip;</p>";
+            let hist = {};
+            try { hist = (await db.ref('orders/history').limitToLast(60).once('value')).val() || {}; }
+            catch (e){ box.innerHTML = "<p class='rec-note'>Could not load bills: " + escapeHTML(e.message || String(e)) + '</p>'; return; }
+            const keys = Object.keys(hist).reverse().filter(k => hist[k] && !hist[k].rejected && !hist[k].voided && hist[k].payment && parseFloat(hist[k].payment.total) > 0);
+            const refs = await Promise.all(keys.map(k => db.ref('gst/byBill/' + k).once('value').then(s => s.val(), () => undefined)));
+            const invs = await Promise.all(refs.map(r => r ? db.ref('gst/invoices/' + r).once('value').then(s => s.val(), () => null) : null));
+            gstBills = keys.map((k, i) => ({ key: k, h: hist[k], ref: refs[i], inv: invs[i] }));
+            renderGSTBills();
+        };
+        function gstShouldHave(h){
+            const s = window.gstCfg || {}, mode = s.mode || 'accounts';
+            if (mode === 'all') return true;
+            if (mode !== 'accounts') return false;
+            const acc = s.accounts || {};
+            return ((h.payment && h.payment.upi) || []).some(v => acc[upiKey(v)]);
+        }
+        function renderGSTBills(){
+            const box = document.getElementById('gst-bills-list');
+            if (!gstBills.length){ box.innerHTML = "<p class='rec-note'>No settled bills to show.</p>"; return; }
+            let html = '<table class="rec-table"><tbody>';
+            gstBills.forEach(b => {
+                const h = b.h, p = h.payment || {};
+                let right;
+                if (b.ref === undefined) right = '<span class="item-meta">could not check</span>';
+                else if (b.inv) right = '<button class="rec-mini" data-gst="open" data-token="' + escapeHTML(b.inv.token) + '">' + escapeHTML(b.inv.no) + '</button>' + (b.inv.status === 'cancelled' ? ' <span class="badge">Cancelled</span>' : '');
+                else right = (gstShouldHave(h) ? '<span class="badge" style="border-color:rgba(255,193,7,0.8);">Should have one</span> ' : '') + '<button class="rec-mini" data-gst="issue" data-key="' + escapeHTML(b.key) + '">invoice</button>';
+                html += '<tr><td><strong>' + escapeHTML(h.tableOrAddress || h.orderType || '') + '</strong><br><span class="item-meta">' + escapeHTML(h.timestamp || '') + ' · ' + escapeHTML(p.method || '') + '</span></td>'
+                      + '<td class="num">' + escapeHTML(IlaGST.inr(p.total)) + '</td><td style="white-space:nowrap;">' + right + '</td></tr>';
+            });
+            box.innerHTML = html + '</tbody></table>';
+        }
+        function gstOpenBillForm(key){
+            const b = gstBills.find(x => x.key === key); if (!b) return;
+            gstBillSel = b;
+            ['gst-bill-name', 'gst-bill-gstin', 'gst-bill-address'].forEach(id => { document.getElementById(id).value = ''; });
+            document.getElementById('gst-bill-for').textContent = (b.h.tableOrAddress || '') + ' · ' + IlaGST.inr(b.h.payment.total) + ' · ' + (b.h.timestamp || '');
+            document.getElementById('gst-bill-status').textContent = '';
+            const f = document.getElementById('gst-bill-form'); f.hidden = false;
+            f.scrollIntoView({ block: 'nearest' });
+            document.getElementById('gst-bill-name').focus();
+        }
+        window.gstCloseBillForm = function(){ document.getElementById('gst-bill-form').hidden = true; gstBillSel = null; };
+        window.gstIssueForBill = async function(){
+            const b = gstBillSel; if (!b) return;
+            const status = document.getElementById('gst-bill-status'), btn = document.getElementById('gst-bill-issue');
+            const s = window.gstCfg || {};
+            const missing = IlaGST.settingsProblems(s);
+            if (gstRefused){ status.textContent = 'The database is refusing GST data — the rules have not been deployed yet.'; return; }
+            if (missing.length){ status.textContent = 'Business details needs ' + missing.join(', ') + ' first.'; return; }
+            const h = b.h, p = h.payment || {};
+            const buyer = { name: document.getElementById('gst-bill-name').value.trim(),
+                            gstin: IlaGST.normGSTIN(document.getElementById('gst-bill-gstin').value),
+                            address: document.getElementById('gst-bill-address').value.trim(),
+                            phone: h.phone || null };
+            const problems = IlaGST.buyerProblems(buyer, p.total);
+            if (problems.length){ status.textContent = problems.join('. ') + '.'; return; }
+            const acc = s.accounts || {}, vpas = p.upi || [];
+            const draft = IlaGST.draft({
+                settings: s, items: h.items, total: p.total,
+                bill: { key: b.key, label: h.tableOrAddress || h.orderType || '', source: h.source === 'Web App' ? 'web' : 'pos', at: parseInt(b.key, 10) || null },
+                pay: { method: p.method || '', vpa: vpas.find(v => acc[upiKey(v)]) || vpas[0] || null },
+                buyer: buyer, how: 'asked', by: gstWho()
+            });
+            btn.disabled = true; status.textContent = 'Issuing…';
+            try {
+                const r = await gstIssue(draft, b.key, s);
+                const inv = (await db.ref('gst/invoices/' + r.ref).once('value')).val();
+                b.ref = r.ref; b.inv = inv;
+                status.textContent = (r.existing ? 'This bill already had an invoice: ' : 'Issued ') + (inv ? inv.no : r.ref) + '.';
+                renderGSTBills();
+                if (inv && !r.existing) gstOpen(inv.token);
+            } catch (e){ status.textContent = 'Not issued: ' + ((e && e.message) || e); }
+            finally { btn.disabled = false; }
         };
 
         // --- DYNAMIC INVENTORY & RECIPE ENGINE ---

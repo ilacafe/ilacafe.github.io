@@ -81,6 +81,81 @@
         }
       }
     },
+    // GST INVOICES. The arithmetic and the document are gst.js; the writes are gstIssue in
+    // pos.html and admin.html, which put the number, the invoice, the bill's index and the
+    // customer's copy in ONE update — so these rules see all four together and can hold
+    // each to the others.
+    "gst": {
+      // Everything here is the till's and the owner's: the cashier issues, the owner
+      // cancels and reports. The bar, the kitchen and the stock screen have no use for
+      // the café's turnover or its customers' GSTINs, so as with the ledger they are
+      // not given it.
+      //
+      // The business as it is printed on an invoice, which accounts' UPI payments are
+      // invoiced automatically, and where the month's invoices are mailed. The till reads
+      // it to decide whether to issue; only the owner changes it; the Worker reads it for
+      // the accountant's address.
+      "settings": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || (root.child('users').child(auth.uid).child('role').val() === 'cashier' || root.child('users').child(auth.uid).child('role').val() === 'admin'))",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      },
+      // The last serial used in each financial year. Rule 46 wants them consecutive, so
+      // the only write there is is the next number: up by exactly one, never back, never
+      // removed. Two tills asking at once both send N+1 and the second is refused here,
+      // which is what tells it to read the counter again and take N+2.
+      "counter": {
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'cashier' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$fy": {
+          ".write": "auth != null && newData.exists() && (root.child('users').child(auth.uid).child('role').val() === 'cashier' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+          ".validate": "newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1 && newData.parent().parent().child('invoices').child($fy).child('' + newData.val()).exists()"
+        }
+      },
+      "invoices": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || (root.child('users').child(auth.uid).child('role').val() === 'cashier' || root.child('users').child(auth.uid).child('role').val() === 'admin'))",
+        "$fy": {
+          ".indexOn": ["at"],
+          "$seq": {
+            // Created once, by staff, as the number the counter moves to in the same
+            // write, dated by the server rather than by a tablet's clock. After that only
+            // the owner may change it, and only to cancel it: its number, date, money
+            // and link stay what they were, because an invoice that has gone to a
+            // customer cannot be quietly rewritten.
+            ".write": "auth != null && newData.exists() && ((!data.exists() && (root.child('users').child(auth.uid).child('role').val() === 'cashier' || root.child('users').child(auth.uid).child('role').val() === 'admin')) || (data.exists() && root.child('users').child(auth.uid).child('role').val() === 'admin'))",
+            ".validate": "newData.hasChildren(['no','seq','fy','at','total','taxable','cgst','sgst','token','status']) && newData.child('seq').isNumber() && $seq === '' + newData.child('seq').val() && newData.child('fy').val() === $fy && newData.child('total').isNumber() && newData.child('taxable').isNumber() && (data.exists() ? (newData.child('no').val() === data.child('no').val() && newData.child('seq').val() === data.child('seq').val() && newData.child('at').val() === data.child('at').val() && newData.child('total').val() === data.child('total').val() && newData.child('taxable').val() === data.child('taxable').val() && newData.child('cgst').val() === data.child('cgst').val() && newData.child('sgst').val() === data.child('sgst').val() && newData.child('token').val() === data.child('token').val()) : (newData.child('seq').val() === newData.parent().parent().parent().child('counter').child($fy).val() && newData.child('status').val() === 'issued' && newData.child('at').val() === now && newData.parent().parent().parent().child('public').child(newData.child('token').val()).child('no').val() === newData.child('no').val()))",
+            "status": { ".validate": "newData.val() === 'issued' || newData.val() === 'cancelled'" },
+            "token": { ".validate": "newData.isString() && newData.val().length >= 16 && newData.val().length <= 40" }
+          }
+        }
+      },
+      // Which invoice a bill has, so a bill is invoiced once however many tills or
+      // screens ask. Created with its invoice; removed only by the owner, when that
+      // invoice is cancelled and the bill is to be invoiced again.
+      "byBill": {
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'cashier' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$bill": {
+          ".write": "auth != null && ((!data.exists() && newData.exists() && (root.child('users').child(auth.uid).child('role').val() === 'cashier' || root.child('users').child(auth.uid).child('role').val() === 'admin')) || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        }
+      },
+      // The customer's own invoice, by a 20-character random token that is the whole of
+      // their link. Readable by whoever holds the token and by nobody else — there is no
+      // read on the node above, so it cannot be listed. It carries what the customer
+      // asked to be printed (their name, GSTIN, address) and nothing they did not: see
+      // publicCopy in gst.js, which drops their phone and the café's account.
+      "public": {
+        "$token": {
+          ".read": true,
+          ".write": "auth != null && newData.exists() && ((!data.exists() && (root.child('users').child(auth.uid).child('role').val() === 'cashier' || root.child('users').child(auth.uid).child('role').val() === 'admin')) || (data.exists() && root.child('users').child(auth.uid).child('role').val() === 'admin'))",
+          ".validate": "$token.length >= 16 && $token.length <= 40 && newData.hasChildren(['no','total','status']) && (data.exists() ? newData.child('no').val() === data.child('no').val() && newData.child('total').val() === data.child('total').val() : newData.child('at').val() === now)"
+        }
+      },
+      // What the Worker did about each month's email to the accountant. Its record, so
+      // only it writes here; the owner's screen reads it to say whether a month went.
+      "mailLog": {
+        ".read": "auth != null && (auth.token.email === 'robot@cafeila.app' || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && auth.token.email === 'robot@cafeila.app'"
+      }
+    },
     "orders": {
       "pendingWeb": {
         ".read": "auth != null && root.child('users').child(auth.uid).child('role').exists()",
