@@ -361,8 +361,10 @@ delivers **from** an address on the domain it runs on, and only **to** an addres
 verified as a destination. Both are handled by `.github/workflows/gst-mail-setup.yml`
 (`tools/gst-mail-setup.js`), every three hours:
 
-- it finds the domain by its MX records (public DNS) and puts `GST_MAIL_FROM` =
-  `invoices@` that domain on this Worker, once;
+- it finds the domain by its MX records (public DNS) — `ila.cafe` — and makes sure
+  this Worker has `GST_MAIL_FROM` = `invoices@ila.cafe`, asking the Worker each run
+  rather than remembering (a deploy running at the same moment once dropped it; the
+  two workflows now share a concurrency group, and a dropped one is put back);
 - it reads the CA's address from `gst/settings/caEmail` with the service account and
   registers it as a destination, which makes Cloudflare email the CA a link to confirm
   it. The repository and its Actions logs are public and the owner chose to keep the

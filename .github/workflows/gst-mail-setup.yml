@@ -18,6 +18,14 @@ on:
     branches: [main]
     paths: ['tools/gst-mail-setup.js', '.github/workflows/gst-mail-setup.yml']
 
+# One thing changes the ila-push Worker at a time. A deploy publishes a version built
+# on the secrets as they were when it started, so a secret put by the GST mail setup
+# job in the middle of a deploy was dropped by it. Both workflows share this group, so
+# whichever starts second waits for the first.
+concurrency:
+  group: ila-push-worker
+  cancel-in-progress: false
+
 jobs:
   setup:
     name: sending domain and the CA's address
@@ -37,18 +45,27 @@ jobs:
         run: node tools/gst-mail-setup.js
 
       # The address is the café's own (invoices@ the Email Routing domain), not a secret,
-      # but the Worker reads it as a binding and a deploy does not carry one — so it is
-      # put once, and again only if the domain ever changes.
+      # but the Worker reads it as a binding. It is put when the domain changes AND
+      # whenever the Worker does not have it — asked of the Worker, not remembered: the
+      # first run put it while a deploy was mid-upload, and the deploy published a version
+      # built on the secrets from before it, without this one. Asking every run is what
+      # makes a race like that heal itself.
       - name: point the Worker's GST mail at that domain
-        if: steps.setup.outputs.from_changed == 'true'
+        if: steps.setup.outputs.from != ''
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FROM: ${{ steps.setup.outputs.from }}
+          CHANGED: ${{ steps.setup.outputs.from_changed }}
         run: |
           set -euo pipefail
           npm install --no-audit --no-fund
-          printf '%s' "$FROM" | npx wrangler secret put GST_MAIL_FROM
-          cd .. && node tools/gst-mail-setup.js --mark-from "$FROM"
+          have=$(npx wrangler secret list | tr -d ' "' | tr ',' '\n' | sed -n 's/^name://p')
+          if [ "$CHANGED" = "true" ] || ! echo "$have" | grep -qx GST_MAIL_FROM; then
+            printf '%s' "$FROM" | npx wrangler secret put GST_MAIL_FROM
+            (cd .. && node tools/gst-mail-setup.js --mark-from "$FROM")
+          else
+            echo "the Worker already sends the GST mail from $FROM"
+          fi

@@ -21,7 +21,7 @@ function harness(o) {
   const deps = {
     log: (m) => st.logs.push(String(m)),
     mask: (v) => st.masked.push(v),
-    dbToken: 'db', cfToken: o.cfToken === undefined ? 'cf' : o.cfToken, cfAccount: 'acct',
+    dbToken: 'db', cfToken: o.cfToken === undefined ? 'cf' : o.cfToken, cfAccount: o.cfAccount === undefined ? 'acct' : o.cfAccount,
     now: () => 1790000000000,
     resolveMx: async (d) => { const mx = (o.mx || { 'ila.cafe': CF_MX })[d]; if (!mx) throw new Error('ENODATA'); return mx; },
     fetch: async (url, init) => {
@@ -33,6 +33,7 @@ function harness(o) {
         return json(200, db[m[1]] === undefined ? null : db[m[1]]);
       }
       st.cfCalls.push({ url, method: init.method || 'GET', body: init.body || null });
+      if (/\/accounts\?per_page/.test(url)) return json(200, { success: true, result: o.accounts || [{ id: 'found-acct', name: 'ILA' }] });
       if (/email\/routing\/addresses\?/.test(url)) return o.list ? o.list() : json(200, { success: true, result: [] });
       if (/email\/routing\/addresses$/.test(url) && init.method === 'POST')
         return o.add ? o.add() : json(200, { success: true, result: { email: CA, verified: null } });
@@ -107,6 +108,17 @@ const leaks = (st) => st.logs.some(l => l.toLowerCase().indexOf(CA) >= 0) ||
     const { deps } = harness({ cfToken: '' });
     const r = await run(deps);
     check('with no Cloudflare credential it says so rather than guessing', r.report.routing === 'no-credential');
+  }
+  {
+    const { deps, st } = harness({ cfAccount: '' });
+    const r = await run(deps);
+    check('with no account named, the one account the token reaches is used',
+          r.report.routing === 'ok' && st.cfCalls.some(c => /\/accounts\/found-acct\/email\/routing\/addresses/.test(c.url)));
+  }
+  {
+    const { deps, st } = harness({ cfAccount: '', accounts: [{ id: 'a' }, { id: 'b' }] });
+    const r = await run(deps);
+    check('but with two it does not guess', r.report.routing === 'no-credential' && st.logs.some(l => /CLOUDFLARE_ACCOUNT_ID/.test(l)));
   }
   note('the CA still has to click Cloudflare’s link: that is the one step Email Routing will not skip');
   done();

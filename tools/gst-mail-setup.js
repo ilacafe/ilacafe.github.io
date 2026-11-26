@@ -84,6 +84,14 @@ async function run(deps) {
 
   // ---- the CA's address, as an Email Routing destination
   const report = { at: deps.now(), domain: domain, from: from, routing: 'unknown', ca: ca ? 'unknown' : 'none' };
+  // The repository need not name its Cloudflare account — wrangler finds it from the
+  // token, and so does this: a token that reaches exactly one account means that one.
+  if (deps.cfToken && !deps.cfAccount) {
+    const accts = await cf('/accounts?per_page=5');
+    const list = (accts.ok && Array.isArray(accts.body.result)) ? accts.body.result : [];
+    if (list.length === 1 && list[0] && list[0].id) deps.cfAccount = String(list[0].id);
+    else log('could not tell which Cloudflare account to use (' + accts.status + ', ' + list.length + ' account(s)) — set CLOUDFLARE_ACCOUNT_ID');
+  }
   if (!deps.cfToken || !deps.cfAccount) {
     report.routing = 'no-credential';
     log('CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set — destinations not checked');

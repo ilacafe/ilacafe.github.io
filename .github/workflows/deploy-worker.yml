@@ -15,6 +15,14 @@ on:
     paths: ['worker/**', 'gst.js', '.github/workflows/deploy-worker.yml']
   workflow_dispatch:        # and a button, for deploying without a code change
 
+# One thing changes the ila-push Worker at a time. A deploy publishes a version built
+# on the secrets as they were when it started, so a secret put by the GST mail setup
+# job in the middle of a deploy was dropped by it. Both workflows share this group, so
+# whichever starts second waits for the first.
+concurrency:
+  group: ila-push-worker
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: deploy ila-push
@@ -75,3 +83,6 @@ jobs:
           # EMAIL_FORWARD_TO is deliberately not required: the code guards it, and
           # without it bank emails simply are not forwarded on.
           echo "$have" | grep -qx EMAIL_FORWARD_TO || echo "::warning::EMAIL_FORWARD_TO unset — bank emails will not be forwarded to an inbox"
+          # Put by .github/workflows/gst-mail-setup.yml, which checks for it every three
+          # hours and puts it back — a deploy racing that job can drop it.
+          echo "$have" | grep -qx GST_MAIL_FROM || echo "::warning::GST_MAIL_FROM unset — the monthly GST email cannot go until the gst mail setup job next runs"
